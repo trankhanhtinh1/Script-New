@@ -49,9 +49,12 @@ inline int ToSpellSlotIndex(int slotIndex) {
 }
 
 inline uintptr_t InventoryComponent(uintptr_t object) {
-    return Globals::IsValidPtr(object)
-        ? object + Offset::ItemRuntime::InventoryComponent
-        : 0;
+    if (!Globals::IsValidPtr(object)) {
+        return 0;
+    }
+    const uintptr_t component = Globals::Read<uintptr_t>(
+        object + Offset::ItemRuntime::InventoryComponent);
+    return Globals::IsValidPtr(component) ? component : 0;
 }
 
 inline uintptr_t SlotArray(uintptr_t object) {
@@ -136,6 +139,16 @@ inline int ParseItemId(const char* text) {
 }
 
 inline int GetItemIdFromInfo(uintptr_t info) {
+    if (!Globals::IsValidPtr(info)) {
+        return 0;
+    }
+
+    const int itemId = Globals::Read<int>(
+        info + Offset::ItemRuntime::DataItemId);
+    if (itemId > 0 && itemId <= 999999) {
+        return itemId;
+    }
+
     char text[16] = {};
     return ReadItemIdText(info, text, static_cast<int>(sizeof(text)))
         ? ParseItemId(text)
@@ -213,7 +226,7 @@ inline ItemSlot ReadSlot(uintptr_t object, int slotIndex) {
     out.infoPtr = GetItemInfo(object, slotIndex);
     if (out.infoPtr) {
         ReadItemIdText(out.infoPtr, out.idText, static_cast<int>(sizeof(out.idText)));
-        out.id = ParseItemId(out.idText);
+        out.id = GetItemIdFromInfo(out.infoPtr);
     }
     return out;
 }

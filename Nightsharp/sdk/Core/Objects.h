@@ -815,8 +815,8 @@ public:
     float BoundingRadius() const {
         const uintptr_t a = Address();
         if (!a) return 0.0f;
-        const float r = *reinterpret_cast<const float*>(a + Offset::All::Radius);
-        return (r == r && r >= 0.0f && r <= 10000.0f) ? r : 65.0f;
+        const float radius = ::Core::Objects::ReadBoundingRadius(a);
+        return radius > 0.0f ? radius : 65.0f;
     }
 
     Vector3 Position() const {

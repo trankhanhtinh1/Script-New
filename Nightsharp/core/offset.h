@@ -135,7 +135,7 @@ namespace DrawingRuntime {
     constexpr auto ViewProjOffset = 0x1FB81F0;
     // qword_1EEFD00: stats manager. Owns a std::map<uint32_t, vector<StatBlock*>>
     // at +0x30 keyed by team ID (100=ORDER, 200=CHAOS). Each StatBlock is 8128
-    // bytes allocated by sub_2FDB70 and initialised by sub_2EA000.
+    // bytes allocated by sub_2FDB70 and initialised by sub_2EF380.
     // Verified current dump: the constructor publishes `this` in qword_1EEFD00.
     // The stats readers walk *(statsManager+0x30), find the node by
     // teamId, double-dereferences vector begin to get StatBlock*.
@@ -147,19 +147,22 @@ namespace DrawingRuntime {
 namespace StatsRuntime {
     // Tree container at StatsManager + 0x30 (std::map layout, MSVC).
     constexpr auto TreeOffset = 0x30;
-    // Tree node layout (MSVC std::_Tree_node):
-    //   +0x00 _Left, +0x08 _Right, +0x10 _Parent,
+    // Tree node layout used by the current stats map walker:
+    //   +0x00 _Left, +0x08 _Parent, +0x10 _Right,
     //   +0x18 _Color(byte), +0x19 _Isnil(byte),
     //   +0x20 key(uint32 teamId),
     //   +0x28 value(vector<StatBlock*>::begin)
     constexpr auto NodeKey = 0x20;
     constexpr auto NodeIsNil = 0x19;
     constexpr auto NodeValueBegin = 0x28;
-    constexpr auto SentinelParent = 0x10;
+    constexpr auto NodeLeft = 0x00;
+    constexpr auto NodeParent = 0x08;
+    constexpr auto NodeRight = 0x10;
+    constexpr auto SentinelParent = NodeParent;
     // Stat entry layout: +0x00 vtable, +0x08 std::string name,
     //   +0x18 type(int), +0x1C flags, +0x20 value(int).
     constexpr auto StatEntryValue = 0x20;
-    // Offsets of stat entries within StatBlock (from sub_2EA000).
+    // Offsets of stat entries within StatBlock (from sub_2EF380).
     constexpr auto DragonKillsEntry = 0x688;
     constexpr auto ElderDragonKillsEntry = 0x6B0;
     constexpr auto RiftHeraldKillsEntry = 0x6D8;
@@ -253,10 +256,10 @@ namespace HudSpellTargetingLayout {
 
 // HudZoomLayout removed Apr 25/2026 - duplicate of ZoomRuntime::ZC_MinZoom/ZC_MaxZoom
 
-// Struct field offsets (relative). Verified stable on 26.6 by spot-checks
-// against the disassembly of the call sites that consume them.
 namespace HudInputLayout {
-    constexpr auto SelectedObjNetId = 0x64;
+    // Legacy HudInput+0x64 reader was disproven on 16.15. Target selection
+    // now comes from HudSpellTargetingLayout::{State,ObjectIndex}.
+    constexpr auto SelectedObjNetId = 0;
 } // namespace HudInputLayout
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -430,7 +433,9 @@ namespace ControlRuntime {
 // BasicAttackRuntime removed Apr 25/2026 - replaced by AIBaseClient::GetAutoAttackDamage()
 
 namespace BuffManagerRuntime {
-    constexpr auto BuffManagerOffset = 0x2E78;
+    // AIBaseClient vfunc +0x7A0 returns the embedded manager at +0x2E58.
+    // Its entry vector therefore begins at object+0x2E70.
+    constexpr auto BuffManagerOffset = 0x2E58;
 } // namespace BuffManagerRuntime
 
 // Buff system layouts: all RELATIVE struct field offsets, not RVAs.
@@ -460,22 +465,24 @@ namespace BuffDataLayout {
     constexpr auto BuffEndTime = 0x1C;
     // Stack array (StlVector of StlSharedPtr<BuffScriptInstance>).
     // Each entry is 16 bytes: {BuffScriptInstance*, refcount*}.
-    // IDA 13337: sub_91BD20 (HasBuff-by-hash iterator, reached from HasBuff
-    // wrapper 0x2844A0 via vfunc +0x7A0) reads buff+0x30 as stack-array begin
+    // IDA 13337: sub_918C40 (HasBuff-by-hash iterator, reached from wrapper
+    // sub_2887F0) reads buff+0x30 as stack-array begin
     // and buff+0x38 as the LIVE stack count (end = begin + 0x10*count); the
     // `cmp [buff+0x38], 0 / jle` there is the liveness gate. (Older notes cited
     // sub_91BC60, which actually falls inside the unrelated decoder sub_91BAC0.)
     constexpr auto BuffStackArrayBegin = 0x30;
     constexpr auto BuffStackCount = 0x38;
     constexpr auto BuffStacks = 0x38;
-    constexpr auto BuffStacksAlt = 0x3C;
+    // +0x3C is not an alternate stack counter. Keep the legacy symbol as a
+    // safe alias so old callers cannot read an unrelated field.
+    constexpr auto BuffStacksAlt = BuffStackCount;
     constexpr auto BuffCounterCurrent = 0x8C;
     constexpr auto BuffCounterMax = 0x90;
 } // namespace BuffDataLayout
 
 // BuffScriptInstance is obtained by dereferencing the first 8 bytes of each
 // 16-byte entry in the stack array at BuffDataLayout::BuffStackArrayBegin.
-// IDA 13337: sub_91BD20 compares BuffScriptInstance+0x4 with the source
+    // IDA 13337: sub_918C40 compares BuffScriptInstance+0x4 with the source
 // object's network ID (mov rdx,[rcx]; cmp [rdx+4], eax), confirming +0x4 is
 // the caster's network ID.
 namespace BuffScriptInstanceLayout {
@@ -495,7 +502,7 @@ namespace NavGridRuntime {
     // IDA 13337: 0x1243760 is a path-neighbor expansion helper that calls
     // sub_124AEA0; CoreNavGrid reads cell flags directly instead of calling it.
     constexpr auto GetCollisionFlags = 0x1288340;
-    constexpr auto GetAiManager = 0x281FA0; // inner AiManager pointer resolver
+    constexpr auto GetAiManager = 0x283190; // decodes wrapper and returns wrapper+0x10 inner pointer
 } // namespace NavGridRuntime
 
 namespace SpellRuntime {
@@ -509,9 +516,10 @@ namespace SpellRuntime {
 
 namespace RuneManagerRuntime {
     // AIHeroClient::GetRuneManager virtual getter. IDA 13337:
-    // /liveclientdata/activeplayerrunes calls localPlayer->vfunc[0x808],
+    // /liveclientdata/activeplayerrunes calls localPlayer->vfunc[0x800],
     // then reads the returned manager at the RuneManagerLayout offsets below.
-    constexpr auto GetRuneManagerVFunc = 0x808;
+    // 16.14 used vfunc +0x808.
+    constexpr auto GetRuneManagerVFunc = 0x800;
 } // namespace RuneManagerRuntime
 
 namespace RuneManagerLayout {
@@ -546,9 +554,16 @@ namespace RuneTreeDataLayout {
 } // namespace RuneTreeDataLayout
 
 namespace SpellBookLayout {
-    constexpr auto Owner = 0x08;        // SpellBookClient -> owner AIBaseClient
-    constexpr auto CasterNetId = 0xA8;  // SpellBookClient caster network id
-    constexpr auto ActiveSlot = 0xB4;   // Current/last cast slot used by stop-cast
+    // SpellBookClient is embedded at owner + SpellRuntime::SpellBookOffset;
+    // there is no owner pointer at +0x08 (the constructor stores -1 there).
+    constexpr auto Owner = 0;
+    // sub_97A620 copies owner+All::Index into SpellBookClient+0x30.
+    // Resolve this object index first, then read All::NetId from the object.
+    constexpr auto CasterIndex = 0x30;
+    constexpr auto CasterNetId = 0;
+    // +0xB4 lies in the middle of an internal qword. The active slot lives on
+    // the outer object referenced by SpellRuntime::ActiveSpellCast.
+    constexpr auto ActiveSlot = 0;
     constexpr auto SpellSlotArray = 0xAE0;
 } // namespace SpellBookLayout
 
@@ -642,38 +657,57 @@ namespace SpellBookLayout {
     // =========================================================================
     // SpellCastInfo layout — read by OnStopCast / OnFinishCast / channel poller
     // =========================================================================
-    // Obtained at runtime as:  *( hero + SpellRuntime::ActiveSpellCast )
-    // (which resolves to  hero->spellBook->activeSpellCast  -- a pointer that
-    // is null when the hero is NOT currently casting anything).
+    // Obtained at runtime as:
+    //   *(hero + SpellRuntime::SpellBookOffset + SpellRuntime::ActiveSpellCast)
+    // and null when the object is not currently casting.
     //
-    // Field offsets below match build 26.6; re-verify via IDA if it changes.
-    // Use `GetSpellCastInfo` (ControlRuntime) as the canonical getter when you
-    // want the SpellCastInfo for a specific slot instead of the active cast.
-    // Two underlying structs share these field names:
-    //   * Per-slot SpellCastInfo (from `GetSpellCastInfo`): 408-byte (0x198)
-    //     entries packed in `hero[+0x4038..+0x4040]`. Only fields with
-    //     offset < 0x198 are valid here (i.e. all except CasterNetId).
-    //   * Active SpellCast (from `hero + ActiveSpellCast`): a fully
-    //     populated >= 0x300-byte struct allocated only while a cast is in
-    //     flight. ALL the offsets below apply, including `CasterNetId`.
+    // GetSpellCastInfo returns the 0x198-byte inner record. Book+0x38 points
+    // to an outer polymorphic active-cast object that embeds this record at
+    // +0x08; inner offsets must not be applied directly to the outer pointer.
     // Verified current dump:
     //   * `GetSpellCastInfo` (sub_27B340) computes
-    //   `(a1+0x4040 - a1+0x4038) / 408` to count slots and returns
+    //   `(a1+0x4038 - a1+0x4030) / 408` to count slots and returns
     //   `array_begin + 408 * slot`, confirming the 0x198 stride.
-    //   * process-spell setup writes caster position to SpellCastInfo+0xD0
-    //     and the decrypted cast/end position to SpellCastInfo+0xDC.
+    //   * process-spell setup writes start/end positions at inner +0xD0/+0xDC.
+    //   * target entries store ObjectIndex values in a vector at inner+0x110.
     namespace SpellCastInfoLayout {
-        constexpr auto SpellSlot     = 0x08;   // uint8  0..3 = QWER, 4..5 = D/F, 64=attack
+        constexpr auto SpellSlot     = 0x154;  // int32 0..3 = QWER, 4..5 = D/F, 64=attack
         constexpr auto State         = 0x0C;   // uint32 enum (Ready/Cast/Channel/Finished)
-        constexpr auto StartTime     = 0x28;   // float  game time when cast started
-        constexpr auto EndTime       = 0x2C;   // float  game time the cast finishes
-        constexpr auto ChannelStart  = 0x30;   // float  0 when not channeled
-        constexpr auto ChannelEnd    = 0x34;   // float  0 when not channeled
+        // +0x28..+0x34 belongs to std::string storage, not cast times.
+        constexpr auto StartTime     = 0;
+        constexpr auto EndTime       = 0;
+        constexpr auto ChannelStart  = 0;
+        constexpr auto ChannelEnd    = 0;
         constexpr auto StartPosition = 0xD0;   // Vec3   cast start/caster position
         constexpr auto EndPosition   = 0xDC;   // Vec3   cast end/cast position
-        constexpr auto TargetNetId   = 0x138;  // uint32 primary target (0xFFFFFFFF if unit-less)
-        constexpr auto CasterNetId   = 0x2DC;  // uint32 caster net id  (active-cast only - per-slot stride is 0x198)
+        constexpr auto CasterIndex   = 0xA0;
+        constexpr auto TargetArrayPtr = 0x110;
+        constexpr auto TargetArrayCount = 0x118;
+        constexpr auto TargetArrayCapacity = 0x11C;
+        constexpr auto TargetArrayEntryStride = 0x20;
+        constexpr auto TargetArrayEntryIndex = 0x00;
+        constexpr auto TargetNetId   = 0;
+        constexpr auto CasterNetId   = 0;
     } // namespace SpellCastInfoLayout
+
+    namespace ActiveSpellCastLayout {
+        constexpr auto InnerRecord   = 0x08;
+        constexpr auto SpellSlot     = 0x15C; // InnerRecord + SpellCastInfoLayout::SpellSlot
+        constexpr auto StartPosition = InnerRecord + SpellCastInfoLayout::StartPosition;
+        constexpr auto EndPosition   = InnerRecord + SpellCastInfoLayout::EndPosition;
+        constexpr auto CasterIndex   = 0xA8; // InnerRecord + SpellCastInfoLayout::CasterIndex
+        constexpr auto TargetArrayPtr = 0x118;
+        constexpr auto TargetArrayCount = 0x120;
+        constexpr auto TargetArrayCapacity = 0x124;
+        constexpr auto CastExecuteTime = 0x1A4;
+        constexpr auto CastExpireTime  = 0x1A8;
+        constexpr auto PhaseDeadline   = 0x1AC;
+        constexpr auto StartTime     = 0;
+        constexpr auto EndTime       = CastExpireTime;
+        constexpr auto ChannelStart  = 0;
+        constexpr auto ChannelEnd    = 0;
+        constexpr auto TargetNetId   = 0;
+    } // namespace ActiveSpellCastLayout
 
     // =========================================================================
     // AIBaseClient layout — REMOVED (fully covered by `All` / `AttackableUnit`
@@ -684,34 +718,35 @@ namespace SpellBookLayout {
     // attackable unit, champion). Its values have been folded into the
     // canonical verified namespaces further down:
     //
-    //     AIBaseClientLayout::NetId       -> All::NetId         (0xCC)
-    //     AIBaseClientLayout::Team        -> All::Team          (0x259, uint8)
-    //     AIBaseClientLayout::Position    -> All::Position      (0x25C)
-    //     AIBaseClientLayout::IsDead      -> All::Dead (0x11B, byte flag)
-    //     AIBaseClientLayout::Health      -> AttackableUnit::HP (0x1080)
-    //     AIBaseClientLayout::MaxHealth   -> AttackableUnit::MaxHP (0x10A8)
-    //     AIBaseClientLayout::Mana        -> AIHeroClient::MP     (0x360)
-    //     AIBaseClientLayout::MaxMana     -> AIHeroClient::MaxMP  (0x388)
-    //     AIBaseClientLayout::Experience  -> AIHeroClient::Exp    (0x4D28)
-    //     AIBaseClientLayout::LevelRef    -> AIHeroClient::LevelRef (0x4D50)
+    //     AIBaseClientLayout::NetId       -> All::NetId         (0xBC)
+    //     AIBaseClientLayout::Team        -> All::Team          (0x239, uint8)
+    //     AIBaseClientLayout::Position    -> All::Position      (0x23C)
+    //     AIBaseClientLayout::IsDead      -> native ControlRuntime::IsAlive (inverted)
+    //     AIBaseClientLayout::Health      -> AttackableUnit::HP (0x1060)
+    //     AIBaseClientLayout::MaxHealth   -> AttackableUnit::MaxHP (0x1088)
+    //     AIBaseClientLayout::Mana        -> AIHeroClient::MP     (0x340)
+    //     AIBaseClientLayout::MaxMana     -> AIHeroClient::MaxMP  (0x368)
+    //     AIBaseClientLayout::Experience  -> AIHeroClient::Exp    (0x4D48)
+    //     AIBaseClientLayout::LevelRef    -> AIHeroClient::LevelRef (0x4D70)
     //
     // The old 0x250 "dead" byte was proven wrong in runtime logs. Any downstream code that
     // still references `AIBaseClientLayout::*` needs to be migrated to the
     // dedicated runtime IsDead offset.
 
     // AiManager field offsets are relative to the inner pointer returned by
-    // NavGridRuntime::GetAiManager (RVA 0x281FA0). IDA confirms that function
-    // decodes hero + 0x4250 and dereferences wrapper + 0x10 before returning.
+    // NavGridRuntime::GetAiManager (RVA 0x283190) decodes hero + 0x4248 and
+    // returns wrapper+0x10. The 16.14 build used hero+0x4250 and the same
+    // inner-pointer dereference.
     namespace AiManager
     {
-        constexpr auto AiManager = 0x4250;
+        constexpr auto AiManager = 0x4248;
         constexpr auto CurrentSegment = 0x320;
         constexpr auto DashSpeed = 0x360;
         constexpr auto IsDashing = 0x384;
         constexpr auto IsMoving = 0x31C;
         constexpr auto MoveVec3 = 0x480;
         constexpr auto NavArray = 0x348;
-        constexpr auto ObjectOffset = 0x4250;
+        constexpr auto ObjectOffset = 0x4248;
         constexpr auto PathState = 0x320;
         constexpr auto SegmentsCount = 0x350;
         constexpr auto ServerPos = 0x474;
@@ -913,7 +948,9 @@ namespace SpellBookLayout {
     //   node + ItemData           → item-data ptr
     //   item-data + DataItemId    → item ID
     namespace ItemRuntime {
-        constexpr auto InventoryComponent = 0x4DD8;
+        // sub_27FEA0 returns *(hero+0x2C80); this is a pointer, not an
+        // embedded component at the legacy +0x4DD8 location.
+        constexpr auto InventoryComponent = 0x2C80;
         constexpr auto SlotArray          = 0x50;
         constexpr auto SlotCount          = 0x2D;
         constexpr auto ItemNode           = 0x10;
@@ -935,8 +972,9 @@ namespace SpellBookLayout {
     // manager lists plus lightweight replicated fields/name scans.
 
     namespace MinionClassRuntime {
-        // Current minion-class byte resolved from the lane/jungle classifiers.
-        constexpr auto TypeOffset        = 0x4CF9;
+        // Legacy raw byte was a rotating encrypted slot, not a stable enum.
+        // Classification falls back to the existing character-name logic.
+        constexpr auto TypeOffset        = 0;
         constexpr auto Unset             = 0x0;
         constexpr auto Pet               = 0x1;
         constexpr auto JungleMonster     = 0x2;
@@ -945,11 +983,12 @@ namespace SpellBookLayout {
         constexpr auto RangedLaneMinion  = 0x5;
         constexpr auto SiegeLaneMinion   = 0x6;
         constexpr auto SuperLaneMinion   = 0x7;
-        constexpr auto FollowTargetNetId = 0x6A8;
+        constexpr auto FollowTargetNetId = 0x2DA0;
     } // namespace MinionClassRuntime
 
     namespace JungleTypeRuntime {
-        constexpr auto TypeOffset = 0x4CB9;
+        // No stable raw field is proven for the current build.
+        constexpr auto TypeOffset = 0;
         constexpr uint8_t SmallJungle      = 0x0;
         constexpr uint8_t NormalJungle      = 0x1;
         constexpr uint8_t LargeJungle      = 0x2;
@@ -995,8 +1034,8 @@ namespace SpellBookLayout {
     // native IsAlive RVA (ControlRuntime::IsAlive = 0x2B6690), inverted.
     // Do NOT call the native IsDead RVA (0x287230) — it decrypts an
     // encrypted blob and crashes the game on 26.6. All::Dead (0x11B) is
-    // kept as a diagnostic field only; it is NOT authoritative across
-    // spawn/respawn transitions.
+    // disabled: +0x11B is the rotating slot index of an encrypted dword
+    // container, not a dead-state byte.
     namespace All {
         constexpr auto Index               = 0x20;    // GetID/sub_371690 -> obj+0x20; slot-array lookup sub_54EF60 keys (index & 0xFFFF) and validates obj+0x20
         constexpr auto Team                = 0x239;  // byte team index
@@ -1018,27 +1057,29 @@ namespace SpellBookLayout {
         // (live sample: 604.0, 183.57, 612.0).
         constexpr auto Position            = 0x23C;
         constexpr auto PositionX           = Position;
-        constexpr auto PositionY           = 0x260;
-        constexpr auto PositionZ           = 0x264;
-        constexpr auto Dead                = 0x11B; //tìm thủ công qua CE
+        constexpr auto PositionY           = 0x240;
+        constexpr auto PositionZ           = 0x244;
+        constexpr auto Dead                = 0;
         constexpr auto Visible             = 0x2E8;   // GameObject visible flag. tìm thủ công qua CE
-        constexpr auto IsInvulnerable      = 0x5A0;   // Legacy/debug only; IsInvulnerable is native/buff logic, not this byte.
+        // No byte access at legacy +0x5A0 exists in the current object code.
+        // IsInvulnerable is native/buff logic.
+        constexpr auto IsInvulnerable      = 0x28BE80;
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair
         // free `[obj+0xF48]` when `[obj+0xF54] >= 0`). The real recall
         // channel state should be derived from SpellRuntime::ActiveSpellCast.
-        // Keeping the constant for ABI compatibility but new code MUST NOT
-        // read it.
-        constexpr auto RecallState         = 0xF48;
-        constexpr auto Radius              = 0x738;
-        constexpr auto CharacterData       = 0x4058;
-        constexpr auto CharacterName       = 0x4380;
-        constexpr auto Direction           = 0x21D8;  // legacy alias; do not read Vec3 directly from this field
+        constexpr auto RecallState         = 0;
+        // Legacy +0x738 is unrelated to the native bounding-radius result.
+        // Use ControlRuntime::GetBoundingRadius; no stable raw field is exposed.
+        constexpr auto Radius              = 0;
+        constexpr auto CharacterData       = 0x4050;
+        constexpr auto CharacterName       = 0x4378;
+        constexpr auto Direction           = 0;       // no direct Vec3 field proven; use the component/vfunc chain below
         constexpr auto DirectionComponent  = 0x1268;  // object + component -> vfunc +0xA8 -> holder
         constexpr auto DirectionVFunc      = 0xA8;
         constexpr auto DirectionVector     = 0x20;    // holder + 0x20 -> facing direction Vec3
         constexpr auto MissileClientHandle = 0x2D8;
-        constexpr auto ItemList            = 0x4DD8;  // = InventoryComponent
+        constexpr auto ItemList            = ItemRuntime::InventoryComponent;
     } // namespace All
 
     namespace AttackableUnit {
@@ -1056,18 +1097,21 @@ namespace SpellBookLayout {
         constexpr auto IsTargetable    = 0xEB0;
         constexpr auto TargetableFlags = 0xED8;
         constexpr auto ActionStateBase = 0x1450;
-        constexpr auto ActionState1    = 0x1480;
-        constexpr auto ActionState2    = 0x14A8;
-        constexpr auto CharacterState  = ActionState1 + 0x30;
+        constexpr auto ActionState1    = ActionStateBase + 0x30;
+        constexpr auto ActionState2    = ActionStateBase + 0x58;
+        // +0x14B0 is a QWORD-owned pointer/container, not action-state flags.
+        constexpr auto CharacterState  = ActionState1;
     } // namespace AttackableUnit
 
     namespace AIHeroClient {
         constexpr auto MP                       = 0x340;
         constexpr auto MaxMP                    = 0x368;
-        constexpr auto PAR                      = 0xE00;
-        constexpr auto MaxPAR                   = 0xE28;
-        constexpr auto SAR                      = 0x108;
-        constexpr auto MaxSAR                   = 0x130;
+        // Reflection names are mPAR/mMaxPAR/mSAR/mMaxSAR. MP/MaxMP are the
+        // legacy SDK aliases for the primary resource pair.
+        constexpr auto PAR                      = 0x340;
+        constexpr auto MaxPAR                   = 0x368;
+        constexpr auto SAR                      = 0x448;
+        constexpr auto MaxSAR                   = 0x470;
         constexpr auto PhysDmgPercent           = 0x1D08;
         constexpr auto MagicDmgPercent          = 0x1DA8;
         constexpr auto AbilityHaste             = 0x1BA0;
@@ -1078,7 +1122,7 @@ namespace SpellBookLayout {
         constexpr auto BaseAtkDmgSansScale      = 0x1F10;
         constexpr auto FlatBaseAtkDmgMod        = 0x1F38;
         constexpr auto PercentBaseAtkDmgMod     = 0x1F60;
-        constexpr auto BaseAbilityDamage        = 0x1D80;
+        constexpr auto BaseAbilityDamage        = 0x1F88;
         constexpr auto CritDamageMultiplier     = 0x1FB0;
         constexpr auto Dodge                    = 0x2000;
         constexpr auto Crit                     = 0x2028;
@@ -1108,11 +1152,9 @@ namespace SpellBookLayout {
         constexpr auto Exp                      = 0x4D48;
         constexpr auto LevelRef                 = 0x4D70;
         constexpr auto LevelUpPoints            = 0x4D98;
-        // Community reverse confirmation + IDA 13337 parity path:
-        // AIHeroClient::GetRuneManager returns the same manager consumed by
-        // /liveclientdata/activeplayerrunes. The manager layout is documented
-        // in RuneManagerLayout above.
-        constexpr auto RuneManager              = 0x50E8;
+        // vfunc GetRuneManager returns this embedded sub-object. Runtime code
+        // still resolves through the vfunc so a future layout shift is safe.
+        constexpr auto RuneManager              = 0x50B8;
         constexpr auto VisionScore              = 0x5578;
         constexpr auto ShutdownValue            = 0x55A0;
         constexpr auto BaseGoldOnDeath          = 0x55C8;
@@ -1206,13 +1248,14 @@ namespace SpellBookLayout {
 
         // R3nzSkin-style runtime path, updated from R3nzSkin 16.13.1
         // signature set / newoffset 16.13.
-        // local + CharacterDataStack -> std::vector + base_skin.
+        // local + CharacterDataStack -> std::vector + base_skin. The member
+        // moved from +0x40E8 to +0x40E0 in 16.15 with the surrounding block.
         // base_skin.skin = stack + BaseSkin + CharacterStackSkin.
         // CharacterDataStackUpdate is the current stack-update routine.
         // CharacterDataStackPush is sub_22D590(this, model, skin, id, ...).
-        constexpr auto CharacterDataStack       = 0x40E8;
+        constexpr auto CharacterDataStack       = 0x40E0;
         constexpr auto CharacterDataStackUpdate = 0x212840;
-        constexpr auto CharacterDataStackPush   = 0x22D590; // Push(this=hero+0x40E8, model, skin, id, ...). 160-byte entries, calls Update after push.
+        constexpr auto CharacterDataStackPush   = 0x22D590; // Push(this=hero+0x40E0, model, skin, id, ...). 160-byte entries, calls Update after push.
         constexpr auto CharacterDataStackBegin  = 0x00;
         constexpr auto CharacterDataStackEnd    = 0x08;
         constexpr auto CharacterDataStackCap    = 0x10;

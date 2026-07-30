@@ -2247,11 +2247,11 @@
       "required": true,
       "expected": {
         "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x27EF30",
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x281FA0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x283190"
       },
       "locators": [
         {
-          "pattern": "0F 82 DE 00 00 00 48 8D 42 F8 4A 8D 04 C0 4C 8D 14 24 4E 8D 4C C4 F8 4C 3B D0 77 09 4C 3B CA 0F 83 BF 00 00 00 4D 8B D0 48 89 5C 24 20 49 83 E2 F8 48 89 7C 24 10 66 0F 6F 15 96 90 79 01",
+          "pattern": "48 8B 04 24 48 8B 40 10 48 83 C4 18 C3 49 8B 41 10 48 83 C4 18 C3",
           "sections": [
             ".text"
           ],
@@ -2262,27 +2262,7 @@
             "target_sections": [
               ".text"
             ]
-          },
-          "fixtures": [
-            "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6"
-          ]
-        },
-        {
-          "pattern": "0F 82 DE 00 00 00 48 8D 42 F8 4A 8D 04 C0 4C 8D 14 24 4E 8D 4C C4 F8 4C 3B D0 77 09 4C 3B CA 0F 83 BF 00 00 00 4D 8B D0 48 89 5C 24 20 49 83 E2 F8 48 89 7C 24 10 66 0F 6F 15 46 B6 7A 01",
-          "sections": [
-            ".text"
-          ],
-          "resolver": {
-            "kind": "function_start"
-          },
-          "validations": {
-            "target_sections": [
-              ".text"
-            ]
-          },
-          "fixtures": [
-            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
-          ]
+          }
         }
       ]
     },
@@ -3379,6 +3359,2550 @@
             "target_sections": [
               ".text"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AiManager::AiManager",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4250",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4248"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 04 24 48 8B 40 10 48 83 C4 18 C3 49 8B 41 10 48 83 C4 18 C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start_u32",
+            "target_value_offset": 7
+          },
+          "validations": {
+            "minimum": 4096,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AiManager::ObjectOffset",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4250",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4248"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 04 24 48 8B 40 10 48 83 C4 18 C3 49 8B 41 10 48 83 C4 18 C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "function_start_u32",
+            "target_value_offset": 7
+          },
+          "validations": {
+            "minimum": 4096,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AiManager::IsDashing",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x384",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x384"
+      },
+      "locators": [
+        {
+          "pattern": "41 8B 5E 08 F3 0F 10 B5 ?? ?? 00 00 48 8D 53 04",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 8
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::HP",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1060",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1060"
+      },
+      "locators": [
+        {
+          "property": "mHP",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::MaxHP",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1088",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1088"
+      },
+      "locators": [
+        {
+          "property": "mMaxHP",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::HPMaxPenalty",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x10B0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10B0"
+      },
+      "locators": [
+        {
+          "property": "mHPMaxPenalty",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::AllShield",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1100",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1100"
+      },
+      "locators": [
+        {
+          "property": "mAllShield",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::PhysicalShield",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1128",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1128"
+      },
+      "locators": [
+        {
+          "property": "mPhysicalShield",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::MagicalShield",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1150",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1150"
+      },
+      "locators": [
+        {
+          "property": "mMagicalShield",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::ChampSpecific",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1178",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1178"
+      },
+      "locators": [
+        {
+          "property": "mChampSpecificHealth",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::InHealAllied",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x11A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11A0"
+      },
+      "locators": [
+        {
+          "property": "mIncomingHealingAllied",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::InHealEnemy",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x11C8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11C8"
+      },
+      "locators": [
+        {
+          "property": "mIncomingHealingEnemy",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::InDamage",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x11F0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11F0"
+      },
+      "locators": [
+        {
+          "property": "mIncomingDamage",
+          "base_registers": [
+            "rbx"
+          ],
+          "base_addend": 4192,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MP",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x340",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x340"
+      },
+      "locators": [
+        {
+          "property": "mPAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MaxMP",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x368",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x368"
+      },
+      "locators": [
+        {
+          "property": "mMaxPAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PAR",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x340",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x340"
+      },
+      "locators": [
+        {
+          "property": "mPAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MaxPAR",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x368",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x368"
+      },
+      "locators": [
+        {
+          "property": "mMaxPAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::SAR",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x448",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x448"
+      },
+      "locators": [
+        {
+          "property": "mSAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MaxSAR",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x470",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x470"
+      },
+      "locators": [
+        {
+          "property": "mMaxSAR",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 832,
+          "validations": {
+            "minimum": 256,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::Gold",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2848",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2848"
+      },
+      "locators": [
+        {
+          "property": "mGold",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 8192,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::GoldTotal",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2870",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2870"
+      },
+      "locators": [
+        {
+          "property": "mGoldTotal",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 8192,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::Exp",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4D48",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D48"
+      },
+      "locators": [
+        {
+          "property": "mExp",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::LevelRef",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4D70",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D70"
+      },
+      "locators": [
+        {
+          "property": "mLevelRef",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::LevelUpPoints",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4D98",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D98"
+      },
+      "locators": [
+        {
+          "property": "mSkillUpLevelDeltaReplicate",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::VisionScore",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x5578",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5578"
+      },
+      "locators": [
+        {
+          "property": "mVisionScore",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::ShutdownValue",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x55A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55A0"
+      },
+      "locators": [
+        {
+          "property": "mShutdownValue",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BaseGoldOnDeath",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x55C8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55C8"
+      },
+      "locators": [
+        {
+          "property": "mBaseGoldGivenOnDeath",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::NeutralMinionsKilled",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x55F0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55F0"
+      },
+      "locators": [
+        {
+          "property": "mNumNeutralMinionsKilled",
+          "base_registers": [
+            "r14"
+          ],
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::IsTargetable",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xEB0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xEB0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 99 ?? ?? ?? ?? 45 0F B6 E1",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 1024,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::TargetableFlags",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xED8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xED8"
+      },
+      "locators": [
+        {
+          "pattern": "49 8D 9D ?? ?? ?? ?? C6 44 24",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 1024,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::StopShieldFade",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1218",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1218"
+      },
+      "locators": [
+        {
+          "pattern": "E8 ?? ?? ?? ?? 48 81 C7 ?? ?? 00 00 C6 44 24 ?? ?? 4C 8B C7 4C 8D 0D ?? ?? ?? ?? 49 8B D7 49 8B CE E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 8
+          },
+          "validations": {
+            "minimum": 1024,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::BuffManagerRuntime::BuffManagerOffset",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2E58",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2E58"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 81 ?? ?? 00 00 C3 CC CC CC CC CC CC CC CC 48 8D 05 ?? ?? ?? ?? C3 CC CC CC CC CC CC CC CC 48 81 C1 78 FD FF FF E9",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8192,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::MinionClassRuntime::FollowTargetNetId",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2DA0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2DA0"
+      },
+      "locators": [
+        {
+          "property": "mFollowTargetNetID",
+          "base_registers": [
+            "rsi"
+          ],
+          "validations": {
+            "minimum": 4096,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ItemRuntime::InventoryComponent",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2C80",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2C80"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 81 ?? ?? 00 00 C3 CC CC CC CC CC CC CC CC 8B 41 20 89 02 48 8B C2 C3 CC CC CC CC CC CC CC 33 C0 83 F9 01 74 07 85 C9 0F 95 C0 FF C0 C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 4096,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ItemRuntime::ItemNode",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 41 ?? 48 8B 40 ?? 8B 80 ?? ?? ?? ?? C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8,
+            "maximum": 128,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ItemRuntime::ItemData",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x38",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x38"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 41 ?? 48 8B 40 ?? 8B 80 ?? ?? ?? ?? C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 7
+          },
+          "validations": {
+            "minimum": 8,
+            "maximum": 128,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ItemRuntime::DataItemId",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xB4",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xB4"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 41 ?? 48 8B 40 ?? 8B 80 ?? ?? ?? ?? C3",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 10
+          },
+          "validations": {
+            "minimum": 64,
+            "maximum": 1024,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::Index",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x20",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x20"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 41 ?? C3 CC CC CC CC CC CC CC CC CC CC CC 48 89 5C 24 ?? 48 89 6C 24",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8,
+            "maximum": 256,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::Team",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x239",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x239"
+      },
+      "locators": [
+        {
+          "pattern": "0F B6 81 ?? ?? ?? ?? 88 02 48 8B C2 C3 CC CC CC 8B 81",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 128,
+            "maximum": 2048,
+            "alignment": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::NetId",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xBC",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xBC"
+      },
+      "locators": [
+        {
+          "pattern": "44 89 86 ?? ?? ?? ?? 48 8B 0D",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 64,
+            "maximum": 1024,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::CharacterData",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4058",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4050"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 8B ?? ?? 00 00 48 8D 15 ?? ?? ?? ?? 44 8B F0 48 85 C9 74 04 48 8B 51 30 48 8D BB ?? ?? 00 00 48 83 7F 18 0F",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 12288,
+            "maximum": 24576,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::CharacterName",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x4380",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4378"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 8B ?? ?? 00 00 48 8D 15 ?? ?? ?? ?? 44 8B F0 48 85 C9 74 04 48 8B 51 30 48 8D BB ?? ?? 00 00 48 83 7F 18 0F",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 26,
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 12288,
+            "maximum": 24576,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::Position",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x23C",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x23C"
+      },
+      "locators": [
+        {
+          "pattern": "8B 86 ?? ?? 00 00 89 83 D0 00 00 00 8B 86 ?? ?? 00 00 89 83 D4 00 00 00 8B 86 ?? ?? 00 00 89 83 D8 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 256,
+            "maximum": 2048,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::PositionY",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x240",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x240"
+      },
+      "locators": [
+        {
+          "pattern": "8B 86 ?? ?? 00 00 89 83 D0 00 00 00 8B 86 ?? ?? 00 00 89 83 D4 00 00 00 8B 86 ?? ?? 00 00 89 83 D8 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 12,
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 256,
+            "maximum": 2048,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::All::PositionZ",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x244",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x244"
+      },
+      "locators": [
+        {
+          "pattern": "8B 86 ?? ?? 00 00 89 83 D0 00 00 00 8B 86 ?? ?? 00 00 89 83 D4 00 00 00 8B 86 ?? ?? 00 00 89 83 D8 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 24,
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 256,
+            "maximum": 2048,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AttackableUnit::ActionStateBase",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1450",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1450"
+      },
+      "locators": [
+        {
+          "pattern": "49 8D 96 ?? ?? 00 00 49 8B CE E8 ?? ?? ?? ?? 49 8B 07 4C 8D 05 ?? ?? ?? ?? 41 B1 04 48 89 44 24 20 49 8D 96 ?? ?? 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 4096,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SkinRuntime::CharacterDataStack",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x40E8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x40E0"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 8D ?? ?? 00 00 44 8B 8C 24 ?? ?? 00 00 45 8B C7 48 89 84 24 ?? ?? 00 00 49 8B D5",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 12288,
+            "maximum": 24576,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::RuneManagerRuntime::GetRuneManagerVFunc",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x808",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x800"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 01 48 89 B4 24 ?? 00 00 00 FF 90 ?? ?? 00 00 48 89 45 28 48 8B F0 49 8B CF 48 85 C0",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 11,
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 256,
+            "maximum": 8192,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::RuneManager",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x50B8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x50B8"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 81 ?? ?? 00 00 C3 CC CC CC CC CC CC CC CC 48 8D 81 68 3E 00 00 C3 CC CC CC CC CC CC CC CC 48 89 5C 24 10 48 89 6C 24 18",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 16384,
+            "maximum": 32768,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellRuntime::SpellBookOffset",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x3108",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x3108"
+      },
+      "locators": [
+        {
+          "pattern": "48 8D 81 ?? ?? 00 00 C3 CC CC CC CC CC CC CC CC 48 8D 81 ?? ?? 00 00 C3 CC CC CC CC CC CC CC CC 48 81 C1 88 2D 00 00 E9",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 16,
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8192,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::BuffManagerLayout::EntriesStart",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x18",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x18"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 71 ?? 41 8B D8 4C 8B 61 ?? 4C 8B FA 49 3B F4 0F 84 ?? ?? 00 00 41 BE FF FF FF FF",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8,
+            "maximum": 128,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::BuffManagerLayout::EntriesEnd",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x20",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x20"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B 71 ?? 41 8B D8 4C 8B 61 ?? 4C 8B FA 49 3B F4 0F 84 ?? ?? 00 00 41 BE FF FF FF FF",
+          "sections": [
+            ".text"
+          ],
+          "instruction_offset": 7,
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 8,
+            "maximum": 128,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::AbilityHaste",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1BA0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1BA0"
+      },
+      "locators": [
+        {
+          "property": "mAbilityHasteMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::FlatPhysicalDmgMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1CE0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1CE0"
+      },
+      "locators": [
+        {
+          "property": "mFlatPhysicalDamageMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PhysDmgPercent",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1D08",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1D08"
+      },
+      "locators": [
+        {
+          "property": "mPercentPhysicalDamageMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MagicDmgPercent",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1DA8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1DA8"
+      },
+      "locators": [
+        {
+          "property": "mPercentMagicDamageMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::AttackSpeedMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1E48",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1E48"
+      },
+      "locators": [
+        {
+          "property": "mAttackSpeedMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentAttackSpeedMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1E70",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1E70"
+      },
+      "locators": [
+        {
+          "property": "mPercentAttackSpeedMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BaseAttackDamage",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1EE8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1EE8"
+      },
+      "locators": [
+        {
+          "property": "mBaseAttackDamage",
+          "base_registers": [
+            "rdx"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::Armor",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2078",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2078"
+      },
+      "locators": [
+        {
+          "property": "mArmor",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::SpellBlock",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x20C8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x20C8"
+      },
+      "locators": [
+        {
+          "property": "mSpellBlock",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MoveSpeed",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2168",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2168"
+      },
+      "locators": [
+        {
+          "property": "mMoveSpeed",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::AttackRange",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x21B8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21B8"
+      },
+      "locators": [
+        {
+          "property": "mAttackRange",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::FlatArmorPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2230",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2230"
+      },
+      "locators": [
+        {
+          "property": "mFlatArmorPenetration",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentArmorPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2280",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2280"
+      },
+      "locators": [
+        {
+          "property": "mPercentArmorPenetration",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::FlatMagicPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2320",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2320"
+      },
+      "locators": [
+        {
+          "property": "mFlatMagicPenetration",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentMagicPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2370",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2370"
+      },
+      "locators": [
+        {
+          "property": "mPercentMagicPenetration",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BaseAtkDmgSansScale",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F10",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F10"
+      },
+      "locators": [
+        {
+          "property": "mBaseAttackDamageSansPercentScale",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::FlatBaseAtkDmgMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F38",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F38"
+      },
+      "locators": [
+        {
+          "property": "mFlatBaseAttackDamageMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentBaseAtkDmgMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F60",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F60"
+      },
+      "locators": [
+        {
+          "property": "mPercentBaseAttackDamageMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::CritDamageMultiplier",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1FB0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1FB0"
+      },
+      "locators": [
+        {
+          "property": "mCritDamageMultiplier",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::Dodge",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2000",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2000"
+      },
+      "locators": [
+        {
+          "property": "mDodge",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::Crit",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2028",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2028"
+      },
+      "locators": [
+        {
+          "property": "mCrit",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BonusArmor",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x20A0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x20A0"
+      },
+      "locators": [
+        {
+          "property": "mBonusArmor",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BonusSpellBlock",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x20F0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x20F0"
+      },
+      "locators": [
+        {
+          "property": "mBonusSpellBlock",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::HPRegenRate",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2118",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2118"
+      },
+      "locators": [
+        {
+          "property": "mHPRegenRate",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BaseHPRegenRate",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2140",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2140"
+      },
+      "locators": [
+        {
+          "property": "mBaseHPRegenRate",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PhysicalLethality",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2258",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2258"
+      },
+      "locators": [
+        {
+          "property": "mPhysicalLethality",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentBonusArmorPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x22A8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x22A8"
+      },
+      "locators": [
+        {
+          "property": "mPercentBonusArmorPenetration",
+          "base_registers": [
+            "rdx"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::MagicLethality",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2348",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2348"
+      },
+      "locators": [
+        {
+          "property": "mMagicLethality",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentBonusMagicPen",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2398",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2398"
+      },
+      "locators": [
+        {
+          "property": "mPercentBonusMagicPenetration",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentLifeSteal",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x23C0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x23C0"
+      },
+      "locators": [
+        {
+          "property": "mPercentLifeStealMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentSpellVamp",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x23E8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x23E8"
+      },
+      "locators": [
+        {
+          "property": "mPercentSpellVampMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentOmnivamp",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2410",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2410"
+      },
+      "locators": [
+        {
+          "property": "mPercentOmnivampMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::PercentCCReduction",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x2488",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2488"
+      },
+      "locators": [
+        {
+          "property": "mPercentCCReduction",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::FlatBaseAttackSpeedMod",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x25C8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x25C8"
+      },
+      "locators": [
+        {
+          "property": "mFlatBaseAttackSpeedMod",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::AIHeroClient::BaseAbilityDamage",
+      "mode": "reflection_field",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F88",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F88"
+      },
+      "locators": [
+        {
+          "property": "mBaseAbilityDamage",
+          "base_registers": [
+            "rdi"
+          ],
+          "base_addend": 7032,
+          "validations": {
+            "minimum": 4096,
+            "maximum": 16384,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellBookLayout::CasterIndex",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x30",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30"
+      },
+      "locators": [
+        {
+          "pattern": "45 8B 46 ?? 4C 8D 4C 24 ?? 8B D7 C7 44 24 ?? 00 00 00 00 48 8B CE E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellRuntime::ActiveSpellCast",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x38",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x38"
+      },
+      "locators": [
+        {
+          "pattern": "48 83 79 ?? 00 0F 95 C0 C3 CC CC CC CC CC CC CC 48 63 C2",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u8",
+            "value_offset": 3
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellCastInfoLayout::SpellSlot",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x154",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x154"
+      },
+      "locators": [
+        {
+          "pattern": "8B 8F ?? ?? 00 00 E8 ?? ?? ?? ?? 84 C0 75 ?? 8B 8F ?? ?? 00 00 E8 ?? ?? ?? ?? 84 C0 75 ?? 48 63 87 ?? ?? 00 00 83 F8 3F 48 8D 04 C5 ?? ?? 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2,
+            "addend": -8
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::SpellSlot",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x15C",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x15C"
+      },
+      "locators": [
+        {
+          "pattern": "8B 8F ?? ?? 00 00 E8 ?? ?? ?? ?? 84 C0 75 ?? 8B 8F ?? ?? 00 00 E8 ?? ?? ?? ?? 84 C0 75 ?? 48 63 87 ?? ?? 00 00 83 F8 3F 48 8D 04 C5 ?? ?? 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellCastInfoLayout::CasterIndex",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xA0",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xA0"
+      },
+      "locators": [
+        {
+          "pattern": "8B 97 ?? ?? 00 00 89 B7 ?? ?? 00 00 48 8B 0D ?? ?? ?? ?? E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2,
+            "addend": -8
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::CasterIndex",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xA8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xA8"
+      },
+      "locators": [
+        {
+          "pattern": "8B 97 ?? ?? 00 00 89 B7 ?? ?? 00 00 48 8B 0D ?? ?? ?? ?? E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 2
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellCastInfoLayout::TargetArrayPtr",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x110",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x110"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellCastInfoLayout::TargetArrayCount",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x118",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x118"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14,
+            "addend": 8
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::SpellCastInfoLayout::TargetArrayCapacity",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x11C",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11C"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14,
+            "addend": 12
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::TargetArrayPtr",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x118",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x118"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14,
+            "addend": 8
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::TargetArrayCount",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x120",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x120"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14,
+            "addend": 16
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::TargetArrayCapacity",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x124",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x124"
+      },
+      "locators": [
+        {
+          "pattern": "48 8B FA 48 8B F1 BA 01 00 00 00 48 81 C1 ?? ?? 00 00 4D 8B F1 41 8B D8 E8",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 14,
+            "addend": 20
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::CastExecuteTime",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1A4",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1A4"
+      },
+      "locators": [
+        {
+          "pattern": "F3 0F 58 87 ?? ?? 00 00 C6 87 ?? ?? 00 00 00 0F 28 C8 F3 0F 58 8F ?? ?? 00 00 F3 0F 58 87 ?? ?? 00 00 F3 0F 11 8F ?? ?? 00 00 F3 0F 11 87 ?? ?? 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 38
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "Offset::ActiveSpellCastLayout::CastExpireTime",
+      "mode": "scan",
+      "target_kind": "field",
+      "required": true,
+      "expected": {
+        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1A8",
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1A8"
+      },
+      "locators": [
+        {
+          "pattern": "F3 0F 58 87 ?? ?? 00 00 C6 87 ?? ?? 00 00 00 0F 28 C8 F3 0F 58 8F ?? ?? 00 00 F3 0F 58 87 ?? ?? 00 00 F3 0F 11 8F ?? ?? 00 00 F3 0F 11 87 ?? ?? 00 00",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "u32",
+            "value_offset": 46
+          },
+          "validations": {
+            "minimum": 1,
+            "maximum": 4096,
+            "alignment": 4
           }
         }
       ]

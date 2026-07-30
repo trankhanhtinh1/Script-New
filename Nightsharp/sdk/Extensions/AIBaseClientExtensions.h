@@ -38,19 +38,19 @@ inline uint32_t ReadCharacterState(const AIBaseClient& source) {
 }
 
 inline bool CanAttack(const AIBaseClient& source) {
-    return (ReadCharacterState(source) & 0x1u) != 0u;
+    return CoreAttackableUnit::CanAttack(source.Address());
 }
 
 inline bool CanCast(const AIBaseClient& source) {
-    return (ReadCharacterState(source) & 0x4u) != 0u;
+    return CoreAttackableUnit::CanCast(source.Address());
 }
 
 inline bool CanMove(const AIBaseClient& source) {
-    return (ReadCharacterState(source) & 0x8u) != 0u;
+    return CoreAttackableUnit::CanMove(source.Address());
 }
 
 inline bool CanWalk(const AIBaseClient& source) {
-    return (ReadCharacterState(source) & 0x10u) == 0u;
+    return CoreAttackableUnit::CanWalk(source.Address());
 }
 
 // ── Buff type check ──

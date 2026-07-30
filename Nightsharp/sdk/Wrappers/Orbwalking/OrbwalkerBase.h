@@ -3166,13 +3166,11 @@ protected:
     }
 
     bool PlayerCanAttack(const AIHeroClient& player) const {
-        constexpr std::uint32_t canAttack = 0x1;
-        return (CoreAttackableUnit::ActionState1(player.Address()) & canAttack) != 0;
+        return CoreAttackableUnit::CanAttack(player.Address());
     }
 
     bool PlayerCanMove(const AIHeroClient& player) const {
-        constexpr std::uint32_t canMove = 0x4;
-        return (CoreAttackableUnit::ActionState1(player.Address()) & canMove) != 0;
+        return CoreAttackableUnit::CanMove(player.Address());
     }
 
     bool CanAttackWithWindWall(const AttackableUnit& target) const {

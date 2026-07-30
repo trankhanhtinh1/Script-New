@@ -315,7 +315,7 @@ private:
             ? Globals::Read<std::uint32_t>(target + Offset::All::Index)
             : 0;
         const std::uint32_t rawTeam = Globals::IsValidPtr(target)
-            ? Globals::Read<std::uint32_t>(target + Offset::All::Team)
+            ? Globals::Read<std::uint8_t>(target + Offset::All::Team)
             : 0;
         const float rawHealth = Globals::IsValidPtr(target)
             ? Globals::Read<float>(target + Offset::AttackableUnit::HP)

@@ -373,12 +373,10 @@ inline bool CanIssueOrder() {
 }
 
 inline bool PatchHudAttackInput(const Vec3& position,
-                                uintptr_t target,
                                 uintptr_t& hudInput,
-                                Vec3& originalMousePos,
-                                std::uint32_t& originalSelectedNetId) {
+                                Vec3& originalMousePos) {
     const auto& ctx = CoreRuntime::GetContext();
-    if (!Globals::IsValidPtr(target) || !Globals::IsValidPtr(ctx.hudInstance)) {
+    if (!Globals::IsValidPtr(ctx.hudInstance)) {
         return false;
     }
 
@@ -388,35 +386,17 @@ inline bool PatchHudAttackInput(const Vec3& position,
     }
 
     originalMousePos = Globals::Read<Vec3>(hudInput + Offset::HudRuntime::MouseWorldPos);
-    originalSelectedNetId =
-        Globals::Read<std::uint32_t>(hudInput + Offset::HudInputLayout::SelectedObjNetId);
-
-    const std::uint32_t targetNetId =
-        Globals::Read<std::uint32_t>(target + Offset::All::NetId);
-    if (targetNetId == 0 || targetNetId == 0xFFFFFFFFu) {
-        hudInput = 0;
-        return false;
-    }
-
-    const bool wroteMouse =
-        Globals::Write<Vec3>(hudInput + Offset::HudRuntime::MouseWorldPos, position);
-    const bool wroteSelected = Globals::Write<std::uint32_t>(
-        hudInput + Offset::HudInputLayout::SelectedObjNetId,
-        targetNetId);
-    return wroteMouse && wroteSelected;
+    return Globals::Write<Vec3>(
+        hudInput + Offset::HudRuntime::MouseWorldPos, position);
 }
 
 inline void RestoreHudAttackInput(uintptr_t hudInput,
-                                  const Vec3& originalMousePos,
-                                  std::uint32_t originalSelectedNetId) {
+                                  const Vec3& originalMousePos) {
     if (!Globals::IsValidPtr(hudInput)) {
         return;
     }
 
     Globals::Write<Vec3>(hudInput + Offset::HudRuntime::MouseWorldPos, originalMousePos);
-    Globals::Write<std::uint32_t>(
-        hudInput + Offset::HudInputLayout::SelectedObjNetId,
-        originalSelectedNetId);
 }
 
 inline OrderIssueResult IssueOrderDetailed(
@@ -490,7 +470,6 @@ inline OrderIssueResult IssueOrderDetailed(
     bool patchedHudInput = false;
     uintptr_t hudInput = 0;
     Vec3 originalMousePos = {};
-    std::uint32_t originalSelectedNetId = 0;
 
     __try {
         NightSharpDebug::CrashTrace::Record(
@@ -500,10 +479,8 @@ inline OrderIssueResult IssueOrderDetailed(
         if (isAttack && NeedsTarget(order)) {
             patchedHudInput = PatchHudAttackInput(
                 position,
-                target,
                 hudInput,
-                originalMousePos,
-                originalSelectedNetId);
+                originalMousePos);
         }
 
         CoreBypass::PrepareIssueOrder(static_cast<std::uint8_t>(order));
@@ -525,7 +502,7 @@ inline OrderIssueResult IssueOrderDetailed(
     }
 
     if (patchedHudInput) {
-        RestoreHudAttackInput(hudInput, originalMousePos, originalSelectedNetId);
+        RestoreHudAttackInput(hudInput, originalMousePos);
     }
 
     if (bypassTouched) {

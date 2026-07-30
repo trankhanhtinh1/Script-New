@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreAttackableUnit.h"
+#include "CoreRuneManager.h"
 #include "Globals.h"
 #include "offset.h"
 
@@ -273,9 +274,7 @@ inline int LevelUpPoints(uintptr_t object) {
 }
 
 inline uintptr_t RuneManager(uintptr_t object) {
-    return Globals::IsValidPtr(object)
-        ? object + Offset::AIHeroClient::RuneManager
-        : 0;
+    return CoreRuneManager::Resolve(object);
 }
 
 inline float VisionScore(uintptr_t object) {

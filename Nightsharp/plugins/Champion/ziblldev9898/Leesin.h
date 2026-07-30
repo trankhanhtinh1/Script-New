@@ -282,11 +282,7 @@ static int DetectPassiveStacks() {
             continue;
         }
 
-        const int raw38 = Globals::Read<int>(
-            buff.address + Offset::BuffDataLayout::BuffStacks);
-        const int raw3C = Globals::Read<int>(
-            buff.address + Offset::BuffDataLayout::BuffStacksAlt);
-        fallbackStacks = std::max(fallbackStacks, raw3C > 0 ? raw3C : raw38);
+        fallbackStacks = std::max(fallbackStacks, buff.GetStacks());
 
         const int current = buff.GetCounterCurrent();
         const int maximum = buff.GetCounterMax();
