@@ -202,7 +202,7 @@ inline bool CastQReset(const AIHeroClient& target, Mode mode, bool afterAttack) 
 inline bool CastW(const AIHeroClient& target, Mode mode, bool defensive = false) {
     if (!Engine::ValidEnemy(target, kWRange + 45.0f) || TargetCannotBeDamaged(target) ||
         !Ready(1, mode) || !Throttle(1, 90) ||
-        !HasResource(1, mode == Mode::Harass ? Slider(WMenu, "HarassReserve", 85) : 0)) return false;
+        !HasResource(1, mode == Mode::Harass ? static_cast<float>(Slider(WMenu, "HarassReserve", 85)) : 0.0f)) return false;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const auto prediction = Engine::RuntimeSpells[1]->GetPrediction(target);
@@ -300,7 +300,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
         PlannedLanding = landing;
         return true;
     }
-    if (!HasResource(2, mode == Mode::Harass ? Slider(EMenu, "HarassReserve", 110) : 0) ||
+    if (!HasResource(2, mode == Mode::Harass ? static_cast<float>(Slider(EMenu, "HarassReserve", 110)) : 0.0f) ||
         (!fleeing && TargetCannotBeDamaged(target))) return false;
     const bool lethal = !fleeing && Lethal(target,
         EDamage(target) + Q1Damage(target) + AutoDamage(target));

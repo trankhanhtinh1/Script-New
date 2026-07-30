@@ -250,7 +250,10 @@ inline bool SetTemporaryOrbwalkerFocus(const AIHeroClient& target,
         OrbwalkerAttackProjectileBlocked(target)) {
         return false;
     }
-    Orbwalker::ForceTarget(AttackableUnit(target.Handle()));
+    const auto current = Orbwalker::ForceTarget();
+    if (!current.IsValid() || current.NetworkId() != target.NetworkId()) {
+        Orbwalker::ForceTarget(AttackableUnit(target.Handle()));
+    }
     ownedNetworkId = static_cast<int>(target.NetworkId());
     ownedUntilTick = ControllerHelpers::Now() + std::max(0, lifetimeMs);
     return true;

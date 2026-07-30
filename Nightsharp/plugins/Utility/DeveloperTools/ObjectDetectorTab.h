@@ -833,6 +833,11 @@ private:
                     }
                     if (plugin_->scanMinions_) {
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MinionsList);
+                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::PetsList);
+                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllySpecialMinionsList);
+                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemySpecialMinionsList);
+                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyIgnoredMinionsList);
+                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyIgnoredMinionsList);
                     }
                     if (plugin_->scanTurrets_) {
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);

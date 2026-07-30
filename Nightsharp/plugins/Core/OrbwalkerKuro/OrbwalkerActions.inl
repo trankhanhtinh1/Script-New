@@ -103,7 +103,10 @@ inline void OrbwalkerBase::CheckAttackCastedBefore() {
     }
     ReadAttackTimingsFromMemory(player);
     const int now = Tick();
-    const int windupEnd = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
+    const int animGap = (!context_.pendingAttack && context_.lastAttackOrderToAnimGapMs > 0)
+        ? context_.lastAttackOrderToAnimGapMs
+        : 0;
+    const int windupEnd = context_.lastAutoAttackTick + animGap + static_cast<int>(context_.attackWindupMs);
     if (now >= windupEnd) {
         context_.attackCastComplete = true;
     }
@@ -548,14 +551,18 @@ inline void OrbwalkerBase::ReadAttackTimingsFromMemory(const AIHeroClient& playe
 
 inline int OrbwalkerBase::AttackCastDoneTick(const AIHeroClient& player) {
     ReadAttackTimingsFromMemory(player);
-    const int attackTick = context_.pendingAttack
+    const bool pending = context_.pendingAttack;
+    const int attackTick = pending
         ? context_.pendingAttackTick
         : context_.lastAutoAttackTick;
     if (attackTick <= 0) {
         return Tick();
     }
+    const int animGap = (!pending && context_.lastAttackOrderToAnimGapMs > 0)
+        ? context_.lastAttackOrderToAnimGapMs
+        : 0;
     return static_cast<int>(std::ceil(
-        static_cast<float>(attackTick) + context_.attackWindupMs + MoveSafetyMs()));
+        static_cast<float>(attackTick + animGap) + context_.attackWindupMs + MoveSafetyMs()));
 }
 
 inline int OrbwalkerBase::AttackReadyTick(const AIHeroClient& player) {

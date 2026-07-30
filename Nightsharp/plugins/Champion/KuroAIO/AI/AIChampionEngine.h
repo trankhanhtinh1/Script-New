@@ -432,7 +432,10 @@ inline void ConfigureRuntimeSpell(int index, bool force = false) {
         return;
     }
     const auto instance = player.Spellbook().GetSpell(ActiveProfile->Spells[index].Slot);
-    const std::string runtimeName = instance.IsValid() ? instance.Name() : std::string();
+    if (!instance.IsValid()) {
+        return;
+    }
+    const std::string runtimeName = instance.Name();
     if (!force && RuntimeSpells[index] && runtimeName == RuntimeSpellNames[index]) {
         return;
     }
@@ -535,28 +538,49 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
         range = MaximumTargetRange();
     }
 
+    const int currentTick = SDK::Variables::TickCount();
+    static int lastSelectTick = -1;
+    static float lastSelectRange = -1.0f;
+    static AIHeroClient cachedTarget{};
+
+    if (currentTick == lastSelectTick && std::abs(range - lastSelectRange) < 1.0f) {
+        if (ValidEnemy(cachedTarget, range)) {
+            return cachedTarget;
+        }
+    }
+
+    AIHeroClient result{};
     if (ActiveProfile->PreferSelectedTarget && Bool(HumanMenu, "PreferSelected", true)) {
         if (auto* selector = SDK::TargetSelector::Instance()) {
             const auto selected = selector->GetSelectedTarget();
             if (ValidEnemy(selected, range)) {
-                return selected;
+                result = selected;
             }
         }
     }
 
-    const auto locked = EnemyByNetworkId(LockedTargetNetworkId);
-    if (ValidEnemy(locked, range)) {
-        return locked;
-    }
-
-    SDK::DamageType damage = SDK::DamageType::True;
-    for (const auto& spec : ResolvedSpecs) {
-        if (Has(spec.Intents, Intent::Damage)) {
-            damage = spec.Damage;
-            break;
+    if (!result.IsValid()) {
+        const auto locked = EnemyByNetworkId(LockedTargetNetworkId);
+        if (ValidEnemy(locked, range)) {
+            result = locked;
         }
     }
-    return Plugins::KuroAIO::GetTarget(range, damage);
+
+    if (!result.IsValid()) {
+        SDK::DamageType damage = SDK::DamageType::True;
+        for (const auto& spec : ResolvedSpecs) {
+            if (Has(spec.Intents, Intent::Damage)) {
+                damage = spec.Damage;
+                break;
+            }
+        }
+        result = Plugins::KuroAIO::GetTarget(range, damage);
+    }
+
+    lastSelectTick = currentTick;
+    lastSelectRange = range;
+    cachedTarget = result;
+    return result;
 }
 
 inline float EstimatedDamage(const AIHeroClient& target, int excludedSlot = -1) {
@@ -1430,11 +1454,6 @@ inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
     if (!Loaded || !ActiveProfile) {
         return;
     }
-    RefreshRuntimeSpells();
-    PruneTrackedObjects();
-    if (!CanAct(false)) {
-        return;
-    }
 
     const int now = SDK::Variables::TickCount();
     const int decisionDelay = (Orbwalker::ActiveMode() == OrbwalkingMode::Combo)
@@ -1444,6 +1463,12 @@ inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
         return;
     }
     LastDecisionTick = now;
+
+    RefreshRuntimeSpells();
+    PruneTrackedObjects();
+    if (!CanAct(false)) {
+        return;
+    }
 
     const Mode mode = CurrentMode();
     const auto controllerTarget = SelectTarget();

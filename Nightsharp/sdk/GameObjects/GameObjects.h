@@ -309,7 +309,8 @@ namespace detail {
             "annietibbers", "elisespiderling", "heimertyellow",
             "heimertblue", "ivernminion", "malzaharvoidling",
             "shacobox", "teemomushroom", "yorickghoulmelee",
-            "yorickbigghoul", "zyrathornplant", "zyragraspingplant"
+            "yorickbigghoul", "zyrathornplant", "zyragraspingplant",
+            "azirsolider", "azirsoldier"
         });
     }
 
@@ -525,7 +526,12 @@ namespace detail {
                     PushUniqueByNetworkId(AllyLaneMinionsList, minion);
                     PushUniqueByNetworkId(AllyList, AIBaseClient(object.Handle()));
                 }
+                break;
             }
+
+            // Fallback for any unclassified AIMinionClient (e.g. AzirSoldier, custom pets, untargetable minions)
+            if (enemy) PushUniqueByNetworkId(EnemySpecialMinionsList, minion);
+            else PushUniqueByNetworkId(AllySpecialMinionsList, minion);
             break;
         }
         // REMOVED: Turret/Inhibitor/Nexus class disabled by user request

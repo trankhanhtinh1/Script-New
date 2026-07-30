@@ -296,7 +296,10 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
             OrbwalkingDetail::FireAfterAttack(afterArgs);
         }
     } else {
-        const int windupEndTick = context_.lastAutoAttackTick + static_cast<int>(context_.attackWindupMs);
+        const int animGap = (!context_.pendingAttack && context_.lastAttackOrderToAnimGapMs > 0)
+            ? context_.lastAttackOrderToAnimGapMs
+            : 0;
+        const int windupEndTick = context_.lastAutoAttackTick + animGap + static_cast<int>(context_.attackWindupMs);
         int delayMs = windupEndTick - now;
         if (delayMs < 0) {
             delayMs = 0;
