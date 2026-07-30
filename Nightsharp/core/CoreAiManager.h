@@ -35,7 +35,6 @@ struct Snapshot {
     uintptr_t navArray = 0;
     int currentSegment = 0;
     int segmentsCount = 0;
-    int pathState = 0;
     bool isMoving = false;
     bool isDashing = false;
     float moveSpeed = 0.0f;
@@ -231,7 +230,7 @@ inline int GetTotalSegments(uintptr_t object) {
 }
 
 inline int GetPathState(uintptr_t object) {
-    return ReadSnapshot(object).pathState;
+    return ReadSnapshot(object).currentSegment;
 }
 
 inline int GetWaypointCount(uintptr_t object) {
@@ -522,7 +521,6 @@ inline Snapshot ReadSnapshot(uintptr_t object) {
     snapshot.navArray = manager.Read<uintptr_t>(Offset::AiManager::NavArray);
     snapshot.currentSegment = manager.Read<int>(Offset::AiManager::CurrentSegment);
     snapshot.segmentsCount = manager.Read<int>(Offset::AiManager::SegmentsCount);
-    snapshot.pathState = manager.Read<int>(Offset::AiManager::PathState);
     snapshot.isDashing = manager.Read<std::uint8_t>(Offset::AiManager::IsDashing) != 0;
     const float moveSpeed = manager.Read<float>(Offset::AiManager::Velocity);
     snapshot.moveSpeed = IsSaneSpeed(moveSpeed, 5000.0f) ? moveSpeed : 0.0f;

@@ -672,7 +672,6 @@ namespace SpellBookLayout {
     //   * target entries store ObjectIndex values in a vector at inner+0x110.
     namespace SpellCastInfoLayout {
         constexpr auto SpellSlot     = 0x154;  // int32 0..3 = QWER, 4..5 = D/F, 64=attack
-        constexpr auto State         = 0x0C;   // uint32 enum (Ready/Cast/Channel/Finished)
         // +0x28..+0x34 belongs to std::string storage, not cast times.
         constexpr auto StartTime     = 0;
         constexpr auto EndTime       = 0;
@@ -701,7 +700,6 @@ namespace SpellBookLayout {
         constexpr auto TargetArrayCapacity = 0x124;
         constexpr auto CastExecuteTime = 0x1A4;
         constexpr auto CastExpireTime  = 0x1A8;
-        constexpr auto PhaseDeadline   = 0x1AC;
         constexpr auto StartTime     = 0;
         constexpr auto EndTime       = CastExpireTime;
         constexpr auto ChannelStart  = 0;
@@ -747,7 +745,6 @@ namespace SpellBookLayout {
         constexpr auto MoveVec3 = 0x480;
         constexpr auto NavArray = 0x348;
         constexpr auto ObjectOffset = 0x4248;
-        constexpr auto PathState = 0x320;
         constexpr auto SegmentsCount = 0x350;
         constexpr auto ServerPos = 0x474;
         constexpr auto StartPath = 0x330;
@@ -1078,7 +1075,6 @@ namespace SpellBookLayout {
         constexpr auto DirectionComponent  = 0x1268;  // object + component -> vfunc +0xA8 -> holder
         constexpr auto DirectionVFunc      = 0xA8;
         constexpr auto DirectionVector     = 0x20;    // holder + 0x20 -> facing direction Vec3
-        constexpr auto MissileClientHandle = 0x2D8;
         constexpr auto ItemList            = ItemRuntime::InventoryComponent;
     } // namespace All
 
