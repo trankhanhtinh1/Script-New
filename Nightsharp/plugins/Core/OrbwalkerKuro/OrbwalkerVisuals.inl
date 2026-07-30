@@ -219,7 +219,7 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
             // 2. Draw Auto-Attack Range around soldier (375 range)
             Drawing::DrawCircle(
                 pos,
-                AzirSoldierSupport::kPrimaryAttackRange,
+                AzirSoldierRules::kPrimaryAttackRange,
                 0xFF00E5FFu, // Gold/Cyan AA range
                 2.0f,
                 64);
@@ -231,7 +231,7 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
             // Out of command range (dimmed circle)
             Drawing::DrawCircle(
                 pos,
-                AzirSoldierSupport::kPrimaryAttackRange,
+                AzirSoldierRules::kPrimaryAttackRange,
                 0x55888888u,
                 1.0f,
                 32);
@@ -242,7 +242,7 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
     if (hasCommandableSoldier) {
         Drawing::DrawCircle(
             player.Position(),
-            AzirSoldierSupport::kCommandRadius,
+            AzirSoldierRules::kCommandRadius,
             0x4400E5FFu,
             1.25f,
             72);

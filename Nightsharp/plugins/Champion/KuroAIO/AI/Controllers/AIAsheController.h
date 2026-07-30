@@ -2365,7 +2365,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Ashe";
     controller.ControllerId = "champion.kuroaio.ai.ashe.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAshe.md";
     controller.ImplementationSummary =
         "Four-stack after-attack AA-Q-AA policy; rank-dependent 7-11 ray "

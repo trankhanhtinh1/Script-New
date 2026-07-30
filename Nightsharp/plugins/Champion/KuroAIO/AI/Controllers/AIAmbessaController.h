@@ -2058,7 +2058,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Ambessa";
     controller.ControllerId = "champion.kuroaio.ai.ambessa.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAmbessa.md";
     controller.ImplementationSummary =
         "Eight-posture energy skirmisher with player-owned dash/no-dash "

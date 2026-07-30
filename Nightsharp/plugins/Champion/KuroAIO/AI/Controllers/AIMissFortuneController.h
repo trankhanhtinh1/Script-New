@@ -57,9 +57,8 @@ inline bool LoveTapMarked(const AIBaseClient& target) {
 
 inline bool RecentlyAttacked(const AIBaseClient& target,
                              int windowMs = 430) {
-    return target.IsValid() && LastAfterAttackTick > 0 &&
-           Now() - LastAfterAttackTick <= windowMs &&
-           LastAfterAttackTargetId == static_cast<int>(target.NetworkId());
+    return RecentlyAttackedTarget(
+        target, LastAfterAttackTargetId, LastAfterAttackTick, windowMs);
 }
 
 inline bool BulletTimeActive() {
@@ -759,14 +758,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-    if (LastAfterAttackTargetId == OwnedFocusTargetId) {
-        ClearTemporaryOrbwalkerFocus(
-            OwnedFocusTargetId, OwnedFocusUntil);
-    }
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -845,9 +836,8 @@ inline constexpr ChampionController Controller = [] {
     controller.ChampionName = "MissFortune";
     controller.ControllerId =
         "champion.kuroaio.ai.missfortune.onetrick";
-    controller.KitRevision = "CommunityDragon current / TestOrbwalker port";
-    controller.ResearchArtifact =
-        "C:/Users/funny/Downloads/TestOrbwalker/TestOrbwalker/AllChampions/MissFortune.cs";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
+    controller.ResearchArtifact = "AI/Research/AIMissFortune.md";
     controller.ImplementationSummary =
         "Direct and collision-ranked bounce Q, Love Tap orbwalker steering, "
         "BeforeAttack W, E setup/peel and owned safe Bullet Time channel.";
@@ -860,7 +850,10 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack =
+        &CaptureAfterAttackAndReleaseOwnedFocusEvent<
+            &LastAfterAttackTargetId, &LastAfterAttackTick,
+            &OwnedFocusTargetId, &OwnedFocusUntil>;
     controller.OnGapcloser = &OnGapcloser;
     return controller;
 }();

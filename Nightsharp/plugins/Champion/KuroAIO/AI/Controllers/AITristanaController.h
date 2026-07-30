@@ -501,14 +501,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     (void)CastQ(focus, LastMode);
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-    if (LastAfterAttackTargetId == OwnedFocusTargetId) {
-        ClearTemporaryOrbwalkerFocus(
-            OwnedFocusTargetId, OwnedFocusUntil);
-    }
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -575,9 +567,8 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Tristana";
     controller.ControllerId = "champion.kuroaio.ai.tristana.onetrick";
-    controller.KitRevision = "CommunityDragon current / TestOrbwalker port";
-    controller.ResearchArtifact =
-        "C:/Users/funny/Downloads/TestOrbwalker/TestOrbwalker/AllChampions/Tristana.cs";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
+    controller.ResearchArtifact = "AI/Research/AITristana.md";
     controller.ImplementationSummary =
         "Dynamic attack-linked E/R range, BeforeAttack E-Q sequencing, charged "
         "target focus, safe lethal-only W and detonation/peel R policy.";
@@ -590,7 +581,10 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveLocalSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack =
+        &CaptureAfterAttackAndReleaseOwnedFocusEvent<
+            &LastAfterAttackTargetId, &LastAfterAttackTick,
+            &OwnedFocusTargetId, &OwnedFocusUntil>;
     controller.OnGapcloser = &OnGapcloser;
     return controller;
 }();

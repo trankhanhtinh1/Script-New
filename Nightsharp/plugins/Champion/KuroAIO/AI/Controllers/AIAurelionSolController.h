@@ -2437,7 +2437,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "AurelionSol";
     controller.ControllerId = "champion.kuroaio.ai.aurelionsol.controller";
-    controller.KitRevision = "Riot 26.14 / CommunityDragon PC 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAurelionSol.md";
     controller.ImplementationSummary =
         "First-body continuous Q, sampled offset/reset W, Stardust/execute E, "

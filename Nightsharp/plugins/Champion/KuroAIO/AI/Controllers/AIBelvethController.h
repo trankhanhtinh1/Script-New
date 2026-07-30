@@ -204,8 +204,9 @@ inline int RecentEnhancedSourceUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastAutoProcessTick = 0;
-inline int EstimatedPassiveAttacks = 0;
-inline int PassiveExpireTick = 0;
+inline bool PassiveSheenActive = false;
+inline int PassiveSheenExpireTick = 0;
+inline int LavenderStacks = 0;
 inline RPassiveTracker RAttackTracker = {};
 
 inline EPlan LastEPlan = {};
@@ -254,10 +255,15 @@ inline float TrueFormSecondsRemaining() {
         : 0.0f;
 }
 
+inline void SetFormExpiryFromStacks(int now) {
+    const float duration = RFormDurationSeconds(LavenderStacks);
+    TrueFormExpireTick = std::isinf(duration)
+        ? std::numeric_limits<int>::max()
+        : now + static_cast<int>(duration * 1000.0f);
+}
+
 inline bool HasEnhancedForm() {
-    if (!HasTrueForm()) return false;
-    if (EnhancedFormActive) return true;
-    return TrueFormSecondsRemaining() > 90.0f;
+    return HasTrueForm() && EnhancedFormActive;
 }
 
 inline bool EnemyCommitted(int networkId) {
@@ -737,7 +743,8 @@ inline bool CastQPlan(const QPlan& plan, bool reactive = false) {
     QDirections.Spend(
         plan.Direction, now,
         QPerDirectionCooldownSeconds(
-            SpellRank(0), BonusAttackSpeedPercent()));
+            SpellRank(0), BonusAttackSpeedPercent()),
+        QGlobalLockSeconds(SpellRank(0)));
     PendingHudPreviousMask = LastHudMask;
     PendingHudSpent = plan.Direction;
     PendingHudSpentUntil = now + kQHudLearnMs;
@@ -1432,15 +1439,13 @@ inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
     RChannelActive = true;
     RChannelUntil = LastRCastTick + static_cast<int>(
         (kRChannelSeconds + kRPostLockSeconds) * 1000.0f);
-    const float updatedForm = UpdatedFormSeconds(
-        plan.Context.CurrentFormSeconds,
-        plan.Context.CurrentlyEnhanced,
-        plan.Context.AnyEnhancedCoral);
+    const float formDuration = RFormDurationSeconds(LavenderStacks);
     TrueFormActive = true;
     EnhancedFormActive = plan.Context.AnyEnhancedCoral ||
         plan.Context.CurrentlyEnhanced;
-    TrueFormExpireTick = LastRCastTick + static_cast<int>(
-        updatedForm * 1000.0f);
+    TrueFormExpireTick = std::isinf(formDuration)
+        ? std::numeric_limits<int>::max()
+        : LastRCastTick + static_cast<int>(formDuration * 1000.0f);
     switch (plan.Reason) {
     case RReason::Execute:
         ActiveSequence = Sequence::CoralExecute;
@@ -1657,7 +1662,7 @@ inline bool TryCombo(const AIHeroClient& target) {
     }
 
     // Preserve the A in AA-Q-AA. A generic dash-first loop loses both the Q
-    // reset and passive same-target ramp whenever an attack is already ready.
+    // reset and an available every-application R passive ramp.
     if (InAutoAttackRange(target, 25.0f) && Orbwalker::CanAttack() &&
         !Engine::IsHardCrowdControlled(target)) return false;
 
@@ -1767,6 +1772,23 @@ inline bool TryFarm(Mode mode) {
 inline void RefreshRuntimeState() {
     const int now = Now();
     SyncQHud();
+    const auto player = GameObjects::Player();
+    if (player.IsValid()) {
+        LavenderStacks = std::max(
+            LavenderStacks,
+            ControllerHelpers::MaximumBuffCount(
+                player, { "BelvethPassiveStacks", "belvethpassivestacks" }));
+        if (player.HasBuff("BelvethPassiveSheen") &&
+            !PassiveSheenActive) {
+            PassiveSheenActive = true;
+            PassiveSheenExpireTick = now + static_cast<int>(
+                kPassiveSheenDurationSeconds * 1000.0f);
+        }
+        if (player.HasBuff("BelvethRSteroid")) {
+            TrueFormActive = true;
+            if (TrueFormExpireTick <= now) SetFormExpiryFromStacks(now);
+        }
+    }
     ScanCorals();
     if (GapcloserExpireTick < now) {
         GapcloserTargetId = 0;
@@ -1780,7 +1802,7 @@ inline void RefreshRuntimeState() {
         IncomingLineStart = IncomingLineEnd = {};
         IncomingLineWidth = 0.0f;
     }
-    if (PassiveExpireTick < now) EstimatedPassiveAttacks = 0;
+    if (PassiveSheenExpireTick < now) PassiveSheenActive = false;
     if (RChannelUntil < now) RChannelActive = false;
     if (TrueFormExpireTick < now) {
         TrueFormActive = false;
@@ -1868,11 +1890,10 @@ inline Vector3 EventCastPosition(
     return args.StartPosition;
 }
 
-inline void AddPassiveAttacks() {
-    EstimatedPassiveAttacks = std::min(
-        kPassiveMaximumAttacks, EstimatedPassiveAttacks + 2);
-    PassiveExpireTick = Now() + static_cast<int>(
-        kPassiveDurationSeconds * 1000.0f);
+inline void ActivatePassiveSheen() {
+    PassiveSheenActive = true;
+    PassiveSheenExpireTick = Now() + static_cast<int>(
+        kPassiveSheenDurationSeconds * 1000.0f);
 }
 
 inline void ObserveLocalSpell(
@@ -1886,7 +1907,7 @@ inline void ObserveLocalSpell(
             static_cast<int>(kEEarlyCancelSeconds * 1000.0f) - 80 &&
         now <= EEndTick + 220;
     LastLocalSpellTick = now;
-    if (!eRecast) AddPassiveAttacks();
+    if (!eRecast) ActivatePassiveSheen();
 
     if (slot == 0) {
         const auto player = GameObjects::Player();
@@ -1899,7 +1920,8 @@ inline void ObserveLocalSpell(
             QDirections.Spend(
                 direction, now,
                 QPerDirectionCooldownSeconds(
-                    SpellRank(0), BonusAttackSpeedPercent()));
+                    SpellRank(0), BonusAttackSpeedPercent()),
+                QGlobalLockSeconds(SpellRank(0)));
             PendingHudPreviousMask = LastHudMask;
             PendingHudSpent = direction;
             PendingHudSpentUntil = now + kQHudLearnMs;
@@ -2034,13 +2056,9 @@ inline void ObserveAttack(int targetId) {
     LastAutoTick = now;
     const AIBaseClient target = UnitByNetworkId(targetId);
     const bool epic = target.IsValid() && IsEpicMonster(target);
-    (void)RAttackTracker.ObserveAttack(
+    (void)RAttackTracker.ObserveApplication(
         targetId, now, SpellRank(3),
         GameObjects::Player().BonusAttackDamage(), epic);
-    if (EstimatedPassiveAttacks > 0) {
-        --EstimatedPassiveAttacks;
-        if (EstimatedPassiveAttacks == 0) PassiveExpireTick = 0;
-    }
 }
 
 inline void OnProcessSpell(
@@ -2058,22 +2076,6 @@ inline void OnDoCast(
     }
 }
 
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (!args.Target.IsValid() ||
-        !Bool(PassiveMenu, "ProtectSameTarget", true) ||
-        Engine::CurrentMode() != Mode::Combo ||
-        RAttackTracker.TargetId == 0 ||
-        RAttackTracker.TargetId != LastDecisionTargetId) return;
-    const int requestedId = static_cast<int>(args.Target.NetworkId());
-    if (requestedId == RAttackTracker.TargetId) return;
-    const AIHeroClient chained = HeroByNetworkId(RAttackTracker.TargetId);
-    if (!Engine::ValidEnemy(chained) ||
-        !InAutoAttackRange(chained, 20.0f)) return;
-    const AIBaseClient requested(args.Target.Handle());
-    if (requested.IsValid() && requested.IsMinion()) {
-        args.Process = false;
-    }
-}
 
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     int targetId = 0;
@@ -2133,21 +2135,26 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
         if (BuffNameIs(args, { "belvethrsteroid" })) {
             TrueFormActive = added;
             if (added) {
-                TrueFormExpireTick = ControllerHelpers::BuffExpireTick(
-                    args, static_cast<int>(kRNormalFormSeconds * 1000.0f));
-                const float remaining = static_cast<float>(
-                    TrueFormExpireTick - now) / 1000.0f;
-                EnhancedFormActive = remaining > 90.0f;
+                const float duration = RFormDurationSeconds(LavenderStacks);
+                TrueFormExpireTick = std::isinf(duration)
+                    ? std::numeric_limits<int>::max()
+                    : ControllerHelpers::BuffExpireTick(
+                        args, static_cast<int>(duration * 1000.0f));
             } else {
                 TrueFormExpireTick = now;
                 EnhancedFormActive = false;
             }
         }
         if (BuffNameIs(args, { "belvethpassivestacks" })) {
-            EstimatedPassiveAttacks = added
-                ? std::clamp(args.Count, 0, kPassiveMaximumAttacks) : 0;
-            PassiveExpireTick = added
-                ? ControllerHelpers::BuffExpireTick(args, 5000) : 0;
+            LavenderStacks = added ? std::max(0, args.Count) : 0;
+        }
+        if (BuffNameIs(args, { "belvethpassivesheen" })) {
+            PassiveSheenActive = added;
+            PassiveSheenExpireTick = added
+                ? ControllerHelpers::BuffExpireTick(
+                    args, static_cast<int>(
+                        kPassiveSheenDurationSeconds * 1000.0f))
+                : 0;
         }
         return;
     }
@@ -2308,11 +2315,14 @@ inline void OnDraw() {
             char state[640]{};
             _snprintf_s(
                 state, sizeof(state), _TRUNCATE,
-                "Bel'Veth OTP | %s | %s | Q %d/4 | passive %d | R %s | corals %d | form %.0fs",
+                "Bel'Veth OTP | %s | %s | Q %d/4 | lavender %d | sheen %s | R %s | corals %d | form %.0fs%s",
                 PostureName(CurrentPosture), SequenceName(ActiveSequence),
-                ReadyDirectionCount(), EstimatedPassiveAttacks,
+                ReadyDirectionCount(), LavenderStacks,
+                PassiveSheenActive ? "active" : "idle",
                 RReasonName(LastRReason), ActiveCoralCount(),
-                TrueFormSecondsRemaining());
+                TrueFormSecondsRemaining(),
+                TrueFormExpireTick == std::numeric_limits<int>::max()
+                    ? " permanent" : "");
             Drawing::DrawText(
                 screen.x - 300.0f, screen.y - 112.0f,
                 0xFFE8C5FFu, state);
@@ -2336,14 +2346,10 @@ inline void BuildMenu(Menu* root) {
         "Bel'Veth waits for enemy"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "DeathInLavender", "Passive weave and R same-target ramp"));
-    PassiveMenu->Add(new MenuBool(
-        "ProtectSameTarget",
-        "Reject an orbwalker minion",
-        true));
+        "DeathInLavender", "Three-second spell haste and persistent R ramp"));
     PassiveMenu->Add(new MenuSeparator(
         "Weave",
-        "Every spell grants two"));
+        "Each ability starts the passive attack-speed window"));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
         "VoidSurge", "Four map-fixed Q sectors and AA reset"));
@@ -2477,7 +2483,8 @@ inline void OnLoad() {
     RecentEnhancedSourcePosition = {};
     RecentEnhancedSourceUntil = 0;
     LastAutoTargetId = LastAutoTick = LastAutoProcessTick = 0;
-    EstimatedPassiveAttacks = PassiveExpireTick = 0;
+    PassiveSheenActive = false;
+    PassiveSheenExpireTick = LavenderStacks = 0;
     RAttackTracker.Reset();
     EnemyWindows.fill({});
     IncomingThreatUntil = IncomingImpactTick = 0;
@@ -2497,39 +2504,39 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Pin live behavior to Riot 26.14 and CommunityDragon PC 16.14",
-    "Reject the July 2026 PBE Bel'Veth midscope because it is not live",
-    "Use Riot 25.15 live Q total-AD ratio and monster modifier",
-    "Use Riot 26.3 live health growth and R passive proc values",
-    "Use Riot 25.12 rank-scaled coral cast range",
+    "Pin live behavior to Riot 26.15 and CommunityDragon PC 16.15",
+    "Migrate the complete live Bel'Veth scaling update without PBE exclusions",
+    "Use the pinned CommunityDragon 16.15 champion bin as machine data",
+    "Preserve Riot 25.12 rank-scaled coral cast range",
     "Treat attacks and movement as player-orbwalker owned",
     "Never automate Flash or Smite",
     "Yield a configurable ownership window after every manual spell",
     "Resume only after the player's ownership window expires",
-    "Keep selected-target intent when protecting R passive ramp",
-    "Add two temporary passive attacks after an observed ability cast",
-    "Clamp temporary passive attacks to six",
-    "Expire temporary passive attacks after five seconds",
-    "Consume one estimated passive attack after each confirmed attack",
-    "Repair passive attack count from BelvethPassiveStacks buff events",
-    "Track same-target R passive attacks in pairs",
-    "Reset R passive ramp when the attacked target changes",
-    "Reset stale R passive ramp after the live mark duration",
-    "Cap epic-monster R procs at five actual procs",
-    "Do not confuse the ten internal alternating states with ten epic procs",
-    "Reject an orbwalker minion swap only when the selected champion ramp is live",
-    "Allow intentional target changes outside combo mode",
+    "Keep selected-target intent without overriding orbwalker attacks",
+    "Start the passive 20-percent attack-speed window after an observed ability",
+    "Keep the passive attack-speed window for three seconds rather than charges",
+    "Repair passive attack-speed state from BelvethPassiveSheen",
+    "Read permanent Lavender stacks from BelvethPassiveStacks",
+    "Reconcile Lavender stacks by event and polling telemetry",
+    "Apply R passive true damage on every observed attack",
+    "Retain R passive ramp when the attacked target changes",
+    "Reset stale R passive ramp only after its live stack duration",
+    "Cap epic-monster R passive ramp at eight applications",
+    "Permit Q and E to apply R passive without prior target priming",
+    "Do not invent unobserved Q or E passive applications in telemetry",
+    "Never reject an orbwalker target merely to preserve R passive ramp",
+    "Allow intentional target changes in every orbwalker mode",
     "Represent Q as four independent map-fixed diagonal sectors",
     "Aim freely inside each Q sector rather than at its center only",
     "Bias Q near a sector boundary to preserve near-parallel double-Q tech",
-    "Track the one-second global Q lock separately from sector cooldowns",
-    "Apply Q cooldown haste from bonus attack speed",
+    "Track the rank-scaled Q global lock separately from sector cooldowns",
+    "Apply the live 0.2 Q haste conversion from bonus attack speed",
     "Read every BelvethQHudIcon0 through BelvethQHudIcon15 state",
     "Learn HUD-bit-to-world-sector mapping from an actual spent Q",
     "Learn HUD-bit refresh mapping from an actual W hit",
     "Never hard-code CommunityDragon HUD bit ordering",
     "Repair internal Q estimates from learned HUD bits",
-    "Treat Q as a 400-unit open-ground dash",
+    "Use fixed 850 open-ground Q speed across ranks over its 400-unit dash",
     "Treat Q as a 625-unit maximum true-form terrain crossing",
     "Trace NavMesh samples for every proposed Q endpoint",
     "Stop normal-form Q at the last open sample before terrain",
@@ -2541,7 +2548,7 @@ inline constexpr const char* Scenarios[] = {
     "Preserve an available auto attack before ordinary Q",
     "Calculate current Q damage with live rank scaling and total AD",
     "Apply the live Q monster bonus",
-    "Apply the live Q minion modifier",
+    "Apply no separate Q minion damage modifier",
     "Model Q as a capsule with its real gameplay half-width",
     "Order every Q collision body along the dash segment",
     "Prefer the intended target as the first Q collision body",
@@ -2566,7 +2573,7 @@ inline constexpr const char* Scenarios[] = {
     "Use W gameplay range 660 rather than resource-only values",
     "Use W cast time 0.5 seconds for every prediction",
     "Model W as a 200-wide line",
-    "Calculate current W magic damage from bonus AD and AP",
+    "Calculate current W magic damage from rank base and 150-percent AP",
     "Reject W while E is active",
     "Reject ordinary W during an attack windup",
     "Allow reactive W to interrupt despite an attack windup",
@@ -2596,11 +2603,11 @@ inline constexpr const char* Scenarios[] = {
     "Permit jungle E when the forced victim is a monster",
     "Reject E while Blind prevents declaring attacks",
     "Reject E while Disarm prevents declaring attacks",
-    "Use live six-plus-bonus-AS E strike count",
+    "Use six E strikes plus one per 40-percent bonus attack speed",
     "Recompute missing-health multiplier after every simulated E strike",
-    "Use live one-to-four E missing-health damage ramp",
-    "Use live reduced on-hit effectiveness in the deterministic model",
-    "Apply the live 150-percent E monster modifier",
+    "Use live one-to-two E missing-health damage ramp",
+    "Use live 12-percent on-hit effectiveness in the deterministic model",
+    "Apply the live 200-percent E monster modifier",
     "Calculate mitigated physical E damage against the actual forced victim",
     "Use E late when the actual forced champion is executable",
     "Use E after a recent Q or W only on a secured low target",
@@ -2611,7 +2618,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject unsafe offensive E without a returning Q escape",
     "Use E defensively only against meaningful incoming reducible burst",
     "Never claim E damage reduction against true-damage-only pressure",
-    "Use current rank-scaled E non-true damage reduction",
+    "Use rank-scaled 20-60 percent E reduction and 20-40 percent lifesteal",
     "Use jungle E for sustain only below the modeled health thresholds",
     "Use E to secure a low epic monster only when it is the forced victim",
     "Keep E channel for its first mandatory 0.75 seconds",
@@ -2622,12 +2629,12 @@ inline constexpr const char* Scenarios[] = {
     "Recast E early only for explicit cursor retreat after danger ends",
     "Never cancel E for ordinary damage optimization before 0.75 seconds",
     "Track E start and end from both local spell and buff events",
-    "Use live R passive base damage 6, 10 and 14",
-    "Use live R passive 12-percent bonus-AD ratio",
+    "Use live R passive base damage 2, 4 and 6",
+    "Use live R passive 3-percent bonus-AD ratio",
     "Track R coral lifetime as fifteen seconds",
-    "Track ordinary true form as sixty seconds",
-    "Track enhanced true form as 180 seconds",
-    "Infer enhanced form from a buff duration above ninety seconds",
+    "Track true form as 45, 90 or permanent at 0, 40 or 80 stacks",
+    "Apply the same stack duration rule to ordinary and enhanced form",
+    "Never infer enhanced form from duration after the 26.15 migration",
     "Identify Baron, Rift Herald and Voidgrub as enhanced-coral sources",
     "Do not treat ordinary champion coral as enhanced",
     "Treat Voidgrubs as one enhanced-source group through the live coral event",
@@ -2638,11 +2645,11 @@ inline constexpr const char* Scenarios[] = {
     "Predict enemy positions to the R explosion time",
     "Model R explosion as a 500-radius circle",
     "Use live R true damage base 150, 200 and 250",
-    "Use live R 100-percent AP ratio",
-    "Use live R 25-percent target missing-health scaling",
+    "Use live R 150-percent AP ratio",
+    "Use live R 20-percent target missing-health scaling",
     "Cap R damage to monsters at 1500",
     "Count exact R hits and kills at each candidate coral",
-    "Use live R heal with 120-percent bonus AD and 90-percent AP",
+    "Use live R heal bases 100, 250, 400 with 150-percent bonus AD and AP",
     "Value meaningful survival heal against tracked incoming pressure",
     "Reject R channel at an unsafe nonlethal coral",
     "Reject ordinary nonlethal R under enemy turret",
@@ -2663,8 +2670,8 @@ inline constexpr const char* Scenarios[] = {
     "Allow meaningful survival heal to override ordinary form waste",
     "Use enhanced coral before a safe wave-macro window",
     "Use enhanced coral around a live epic-objective window",
-    "Extend enhanced form by sixty seconds when consuming ordinary coral",
-    "Reset form to 180 seconds when any consumed coral is enhanced",
+    "Reset ordinary and enhanced form to the stack-derived duration",
+    "Treat 80 Lavender stacks as permanent form until death",
     "Enter multi-enemy fights second rather than acting as primary engage",
     "Recognize enemy casts, dashes and crowd control as a second-entry signal",
     "Recognize allied proximity to a low target as a second-entry signal",
@@ -2690,7 +2697,7 @@ inline constexpr const char* Scenarios[] = {
     "Draw the selected W line rather than a generic range",
     "Draw E radius and the current forced target",
     "Draw ordinary and enhanced coral payoff circles separately",
-    "Expose posture, sequence, passive attacks, Q count and form duration",
+    "Expose posture, sequence, Lavender stacks, passive sheen, Q count and form duration",
     "Own Bel'Veth's complete spell loop without generic Q-W-E-R fallback",
 };
 
@@ -2698,7 +2705,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Belveth";
     controller.ControllerId = "champion.kuroaio.ai.belveth.controller";
-    controller.KitRevision = "Riot 26.14 / CommunityDragon PC 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIBelveth.md";
     controller.ImplementationSummary =
         "Self-calibrating four-sector AA-Q-AA logic with W multi-sector "
@@ -2718,7 +2725,6 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
     controller.OnBuffUpdate = &OnBuffUpdate;
-    controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable = &OnInterruptable;

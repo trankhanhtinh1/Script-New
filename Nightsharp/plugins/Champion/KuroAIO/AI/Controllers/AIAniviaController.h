@@ -3027,7 +3027,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Anivia";
     controller.ControllerId = "champion.kuroaio.ai.anivia.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAnivia.md";
     controller.ImplementationSummary =
         "Nine-posture control mage with real Q missile/pass/explosion and "

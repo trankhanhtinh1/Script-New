@@ -497,14 +497,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-    if (LastAfterAttackTargetId == OwnedFocusTargetId) {
-        ClearTemporaryOrbwalkerFocus(
-            OwnedFocusTargetId, OwnedFocusUntil);
-    }
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -568,9 +560,8 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Twitch";
     controller.ControllerId = "champion.kuroaio.ai.twitch.onetrick";
-    controller.KitRevision = "CommunityDragon current / TestOrbwalker port";
-    controller.ResearchArtifact =
-        "C:/Users/funny/Downloads/TestOrbwalker/TestOrbwalker/AllChampions/Twitch.cs";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
+    controller.ResearchArtifact = "AI/Research/AITwitch.md";
     controller.ImplementationSummary =
         "Stack-aware mixed E damage, venom orbwalker focus, range-loss execute, "
         "safe Q approach, predictive W peel and BeforeAttack R activation.";
@@ -583,7 +574,10 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack =
+        &CaptureAfterAttackAndReleaseOwnedFocusEvent<
+            &LastAfterAttackTargetId, &LastAfterAttackTick,
+            &OwnedFocusTargetId, &OwnedFocusUntil>;
     controller.OnGapcloser = &OnGapcloser;
     return controller;
 }();

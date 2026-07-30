@@ -407,7 +407,8 @@ inline void RefreshSoldiers() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
-    const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
+    const auto& soldiers =
+        ::OrbwalkerKuro::AzirSoldierSupport::GetAzirSandSoldiers(player);
     for (const auto& minion : soldiers) {
         if (!minion.IsValid() || minion.IsDead() || minion.Team() != player.Team()) {
             continue;
@@ -466,7 +467,8 @@ inline GameObject LiveSoldier(int networkId) {
     if (networkId == 0) return {};
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
-    const auto& soldiers = SoldierRules::GetAzirSandSoldiers(player);
+    const auto& soldiers =
+        ::OrbwalkerKuro::AzirSoldierSupport::GetAzirSandSoldiers(player);
     for (const auto& obj : soldiers) {
         if (obj.IsValid() && !obj.IsDead() &&
             static_cast<int>(obj.NetworkId()) == networkId) {
@@ -2785,7 +2787,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Azir";
     controller.ControllerId = "champion.kuroaio.ai.azir.controller";
-    controller.KitRevision = "Riot 26.14 / CommunityDragon PC 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAzir.md";
     controller.ImplementationSummary =
         "Soldier-aware W-AA-Q-AA and OrbwalkerKuro kiting, multi-soldier "

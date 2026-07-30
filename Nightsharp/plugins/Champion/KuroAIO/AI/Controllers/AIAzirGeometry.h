@@ -6,7 +6,7 @@
 // policies so the difficult parts remain independently testable.
 
 #include "../AIGeometry.h"
-#include "../../../../Core/OrbwalkerKuro/AzirSoldierSupport.h"
+#include "../../../../Core/OrbwalkerKuro/AzirSoldierRules.h"
 
 #include <algorithm>
 #include <array>
@@ -23,7 +23,7 @@ using SharedGeometry::ProjectPointToSegment2D;
 using SharedGeometry::RankValue;
 using SharedGeometry::Rotate2D;
 using SharedGeometry::kPi;
-namespace SoldierRules = ::OrbwalkerKuro::AzirSoldierSupport;
+namespace SoldierRules = ::OrbwalkerKuro::AzirSoldierRules;
 
 inline constexpr float kQCastRange = 720.0f;
 inline constexpr float kQDisplayRange = 740.0f;
@@ -837,9 +837,9 @@ inline bool MayStartShuffle(const ShuffleGate& gate) {
         !gate.QReady || !gate.RReady) {
         return false;
     }
-    // Manual key override: player explicitly pressed the shuffle hotkey!
+    // Manual key overrides tactical economy, never a known lethal endpoint.
     if (gate.ManualKey) {
-        return true;
+        return !gate.TurretRisk && !gate.TerrainRisk;
     }
     if (!gate.AutomaticEnabled || !gate.CursorAgrees || !gate.AlliedFollowup ||
         !gate.ExitAvailable || gate.TurretRisk || gate.TerrainRisk) {

@@ -4,7 +4,7 @@
 // NavMesh tracing, HUD-buff observation and casts live in AIBelvethController;
 // this file owns the four independent Q directions, AA-reset economics, W
 // direction refresh, E's forced lowest-health target, R coral/global-form
-// decision and live 26.14 damage data so each dangerous edge is testable.
+// decision and live 26.15 damage data so each dangerous edge is testable.
 
 #include "../AIGeometry.h"
 
@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace Plugins::KuroAIO::AI::Controllers::Belveth::Geometry {
@@ -25,7 +26,6 @@ using SharedGeometry::RankValue;
 inline constexpr float kQOpenDashDistance = 400.0f;
 inline constexpr float kQTrueFormWallDistance = 625.0f;
 inline constexpr float kQHalfWidth = 100.0f;
-inline constexpr float kQGlobalLockSeconds = 1.0f;
 inline constexpr float kWGameplayRange = 660.0f;
 inline constexpr float kWHalfWidth = 100.0f;
 inline constexpr float kWCastSeconds = 0.50f;
@@ -34,13 +34,13 @@ inline constexpr float kEDurationSeconds = 1.50f;
 inline constexpr float kEEarlyCancelSeconds = 0.75f;
 inline constexpr float kRRadius = 500.0f;
 inline constexpr float kRCoralSeconds = 15.0f;
-inline constexpr float kRNormalFormSeconds = 60.0f;
-inline constexpr float kREnhancedFormSeconds = 180.0f;
+inline constexpr float kRShortFormSeconds = 45.0f;
+inline constexpr float kRLongFormSeconds = 90.0f;
 inline constexpr float kRChannelSeconds = 1.0f;
-inline constexpr float kRPostLockSeconds = 0.5f;
-inline constexpr float kPassiveDurationSeconds = 5.0f;
-inline constexpr int kPassiveMaximumAttacks = 6;
-inline constexpr int kRMaximumEpicProcs = 5;
+inline constexpr float kRPostLockSeconds = 0.25f;
+inline constexpr float kPassiveSheenDurationSeconds = 3.0f;
+inline constexpr float kRPassiveStackDurationSeconds = 5.0f;
+inline constexpr int kRMaximumEpicProcs = 8;
 
 // Q arrows are map-fixed diagonal quadrants. A cast is still aimed precisely
 // inside its 90-degree sector; aiming near a sector boundary is how an OTP can
@@ -170,17 +170,22 @@ inline float QPerDirectionCooldownSeconds(int rank,
         16.0f, 16.0f, 15.0f, 14.0f, 13.0f, 12.0f,
     };
     const float base = RankValue(cooldown, rank);
-    // Live tooltip: each 1% bonus AS grants the equivalent of 0.25 Q haste.
-    const float haste = std::max(0.0f, bonusAttackSpeedPercent) * 0.25f;
+    // Live tooltip: each 1% bonus AS grants the equivalent of 0.2 Q haste.
+    const float haste = std::max(0.0f, bonusAttackSpeedPercent) * 0.20f;
     return base * 100.0f / (100.0f + haste);
 }
 
-inline float QDashSpeed(int rank, float movementSpeed, bool throughWall) {
-    if (throughWall) return 1500.0f;
-    static constexpr std::array<float, 6> base = {
-        800.0f, 800.0f, 850.0f, 900.0f, 950.0f, 1000.0f,
+inline float QGlobalLockSeconds(int rank) {
+    static constexpr std::array<float, 6> cooldown = {
+        4.0f, 4.0f, 3.25f, 2.50f, 1.75f, 1.0f,
     };
-    return RankValue(base, rank) + std::max(0.0f, movementSpeed);
+    return RankValue(cooldown, rank);
+}
+
+inline float QDashSpeed(int rank, float movementSpeed, bool throughWall) {
+    (void)rank;
+    (void)movementSpeed;
+    return throughWall ? 1500.0f : 850.0f;
 }
 
 struct DirectionState {
@@ -204,14 +209,15 @@ struct DirectionState {
 
     void Spend(Quadrant quadrant,
                int now,
-               float perDirectionCooldownSeconds) {
+               float perDirectionCooldownSeconds,
+               float globalLockSeconds) {
         const int index = QuadrantIndex(quadrant);
         if (index < 0) return;
         ReadyTick[static_cast<std::size_t>(index)] = now +
             static_cast<int>(std::max(0.0f, perDirectionCooldownSeconds) * 1000.0f);
         GlobalLockUntil = std::max(
             GlobalLockUntil,
-            now + static_cast<int>(kQGlobalLockSeconds * 1000.0f));
+            now + static_cast<int>(std::max(0.0f, globalLockSeconds) * 1000.0f));
     }
 
     void Refresh(std::uint8_t quadrants, int now) {
@@ -342,18 +348,13 @@ inline float QRawDamage(int rank,
                         bool monster = false,
                         bool minion = false) {
     static constexpr std::array<float, 6> base = {
-        0.0f, 0.0f, 5.0f, 10.0f, 15.0f, 20.0f,
-    };
-    static constexpr std::array<float, 6> monsterBonus = {
-        0.0f, 55.0f, 65.0f, 75.0f, 85.0f, 95.0f,
-    };
-    static constexpr std::array<float, 6> minionModifier = {
-        0.0f, 0.60f, 0.70f, 0.80f, 0.90f, 1.00f,
+        0.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f,
     };
     if (rank <= 0) return 0.0f;
-    float damage = RankValue(base, rank) + std::max(0.0f, totalAd);
-    if (monster) damage += RankValue(monsterBonus, rank);
-    if (minion) damage *= RankValue(minionModifier, rank);
+    float damage = RankValue(base, rank) +
+        1.05f * std::max(0.0f, totalAd);
+    if (monster) damage += 70.0f;
+    (void)minion;
     return damage;
 }
 
@@ -530,11 +531,12 @@ inline std::uint8_t WResetMask(const Vec3& castOrigin,
 
 inline float WRawDamage(int rank, float bonusAd, float abilityPower) {
     static constexpr std::array<float, 6> base = {
-        0.0f, 70.0f, 110.0f, 150.0f, 190.0f, 230.0f,
+        0.0f, 80.0f, 140.0f, 200.0f, 260.0f, 320.0f,
     };
     if (rank <= 0) return 0.0f;
-    return RankValue(base, rank) + std::max(0.0f, bonusAd) +
-        1.25f * std::max(0.0f, abilityPower);
+    (void)bonusAd;
+    return RankValue(base, rank) +
+        1.50f * std::max(0.0f, abilityPower);
 }
 
 struct WContext {
@@ -613,7 +615,7 @@ inline int SelectETargetIndex(const Vec3& center,
 
 inline int EStrikeCount(float bonusAttackSpeedPercent) {
     return 6 + static_cast<int>(std::floor(
-        std::max(0.0f, bonusAttackSpeedPercent) / 33.333333f + 0.0001f));
+        std::max(0.0f, bonusAttackSpeedPercent) / 40.0f + 0.0001f));
 }
 
 inline float EMissingHealthMultiplier(float currentHealth,
@@ -621,7 +623,7 @@ inline float EMissingHealthMultiplier(float currentHealth,
     if (maximumHealth <= 0.001f) return 1.0f;
     const float missing = std::clamp(
         1.0f - currentHealth / maximumHealth, 0.0f, 1.0f);
-    return 1.0f + 3.0f * missing;
+    return 1.0f + missing;
 }
 
 inline float EStrikeRawDamage(int rank,
@@ -630,19 +632,19 @@ inline float EStrikeRawDamage(int rank,
                               float maximumHealth,
                               bool monster = false) {
     static constexpr std::array<float, 6> base = {
-        0.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f,
+        0.0f, 10.0f, 12.0f, 14.0f, 16.0f, 18.0f,
     };
     if (rank <= 0) return 0.0f;
     float damage = (RankValue(base, rank) +
-        0.08f * std::max(0.0f, totalAd)) *
+        0.12f * std::max(0.0f, totalAd)) *
         EMissingHealthMultiplier(currentHealth, maximumHealth);
-    if (monster) damage *= 1.50f;
+    if (monster) damage *= 2.0f;
     return damage;
 }
 
 inline float EOnHitEffectiveness(float currentHealth,
                                  float maximumHealth) {
-    return 0.08f * EMissingHealthMultiplier(
+    return 0.12f * EMissingHealthMultiplier(
         currentHealth, maximumHealth);
 }
 
@@ -670,9 +672,16 @@ inline float ESimulatedRawDamage(int rank,
 
 inline float EDamageReduction(int rank) {
     static constexpr std::array<float, 6> reduction = {
-        0.0f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f,
+        0.0f, 0.20f, 0.30f, 0.40f, 0.50f, 0.60f,
     };
     return RankValue(reduction, rank);
+}
+
+inline float ELifesteal(int rank) {
+    static constexpr std::array<float, 6> lifesteal = {
+        0.0f, 0.20f, 0.25f, 0.30f, 0.35f, 0.40f,
+    };
+    return RankValue(lifesteal, rank);
 }
 
 struct EStartContext {
@@ -780,45 +789,41 @@ inline float RPassiveProcRawDamage(int rank,
                                    int existingProcStacks,
                                    bool epicMonster) {
     static constexpr std::array<float, 4> base = {
-        0.0f, 6.0f, 10.0f, 14.0f,
+        0.0f, 2.0f, 4.0f, 6.0f,
     };
     if (rank <= 0) return 0.0f;
     const int stack = epicMonster
         ? std::clamp(existingProcStacks, 0, kRMaximumEpicProcs)
         : std::max(0, existingProcStacks);
-    if (epicMonster && stack >= kRMaximumEpicProcs) {
-        return (RankValue(base, rank) + 0.12f * std::max(0.0f, bonusAd)) *
-            static_cast<float>(kRMaximumEpicProcs);
-    }
-    return (RankValue(base, rank) + 0.12f * std::max(0.0f, bonusAd)) *
-        static_cast<float>(stack + 1);
+    const int multiplier = epicMonster && stack >= kRMaximumEpicProcs
+        ? kRMaximumEpicProcs : stack + 1;
+    return (RankValue(base, rank) +
+            0.03f * std::max(0.0f, bonusAd)) *
+        static_cast<float>(multiplier);
 }
 
 struct RPassiveTracker {
     int TargetId = 0;
-    int LastAttackTick = 0;
-    int AttacksOnMark = 0;
+    int LastApplicationTick = 0;
     int ProcStacks = 0;
     bool EpicMonster = false;
 
     void Reset() { *this = {}; }
 
-    float ObserveAttack(int targetId,
-                        int now,
-                        int rank,
-                        float bonusAd,
-                        bool epicMonster) {
+    float ObserveApplication(int targetId,
+                             int now,
+                             int rank,
+                             float bonusAd,
+                             bool epicMonster) {
         if (targetId == 0) return 0.0f;
-        if (TargetId != targetId || LastAttackTick <= 0 ||
-            now - LastAttackTick > static_cast<int>(kPassiveDurationSeconds * 1000.0f)) {
-            TargetId = targetId;
-            AttacksOnMark = 0;
+        if (LastApplicationTick <= 0 ||
+            now - LastApplicationTick >
+                static_cast<int>(kRPassiveStackDurationSeconds * 1000.0f)) {
             ProcStacks = 0;
         }
-        LastAttackTick = now;
+        TargetId = targetId;
+        LastApplicationTick = now;
         EpicMonster = epicMonster;
-        ++AttacksOnMark;
-        if ((AttacksOnMark & 1) != 0) return 0.0f;
         const float damage = RPassiveProcRawDamage(
             rank, bonusAd, ProcStacks, epicMonster);
         if (!epicMonster || ProcStacks < kRMaximumEpicProcs) ++ProcStacks;
@@ -838,28 +843,26 @@ inline float RExplosionRawDamage(int rank,
     const float missing = std::max(
         0.0f, targetMaximumHealth - targetCurrentHealth);
     float damage = RankValue(base, rank) +
-        std::max(0.0f, abilityPower) + 0.25f * missing;
+        1.50f * std::max(0.0f, abilityPower) + 0.20f * missing;
     if (monster) damage = std::min(1500.0f, damage);
     return damage;
 }
 
 inline float RHeal(int rank, float bonusAd, float abilityPower) {
     static constexpr std::array<float, 4> base = {
-        0.0f, 100.0f, 150.0f, 200.0f,
+        0.0f, 100.0f, 250.0f, 400.0f,
     };
     if (rank <= 0) return 0.0f;
-    return RankValue(base, rank) + 1.20f * std::max(0.0f, bonusAd) +
-        0.90f * std::max(0.0f, abilityPower);
+    return RankValue(base, rank) + 1.50f * std::max(0.0f, bonusAd) +
+        1.50f * std::max(0.0f, abilityPower);
 }
 
-inline float UpdatedFormSeconds(float currentSeconds,
-                                bool currentlyEnhanced,
-                                bool anyEnhancedCoral) {
-    if (anyEnhancedCoral) return kREnhancedFormSeconds;
-    if (currentlyEnhanced) {
-        return std::max(0.0f, currentSeconds) + kRNormalFormSeconds;
+inline float RFormDurationSeconds(int lavenderStacks) {
+    if (lavenderStacks >= 80) {
+        return std::numeric_limits<float>::infinity();
     }
-    return kRNormalFormSeconds;
+    return lavenderStacks >= 40
+        ? kRLongFormSeconds : kRShortFormSeconds;
 }
 
 struct Coral {

@@ -2833,7 +2833,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Aurora";
     controller.ControllerId = "champion.kuroaio.ai.aurora.controller";
-    controller.KitRevision = "Riot 26.14 / CommunityDragon PC 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAurora.md";
     controller.ImplementationSummary =
         "Three-hit/player-auto weaving, multi-mark Q2 return alignment, safe "

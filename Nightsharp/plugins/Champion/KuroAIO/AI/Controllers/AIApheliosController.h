@@ -3083,7 +3083,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Aphelios";
     controller.ControllerId = "champion.kuroaio.ai.aphelios.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAphelios.md";
     controller.ImplementationSummary =
         "Five-weapon state machine with hybrid live/event ammo, independent "

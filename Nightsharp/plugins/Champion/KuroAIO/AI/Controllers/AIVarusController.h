@@ -675,9 +675,8 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Varus";
     controller.ControllerId = "champion.kuroaio.ai.varus.onetrick";
-    controller.KitRevision = "TestOrbwalker C# port / KuroAI reach policy";
-    controller.ResearchArtifact =
-        "C:/Users/funny/Downloads/TestOrbwalker/TestOrbwalker/AllChampions/Varus.cs";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
+    controller.ResearchArtifact = "AI/Research/AIVarus.md";
     controller.ImplementationSummary =
         "Orbwalker-owned Blight focus with BeforeAttack redirection; safe-third-"
         "stack hold; current-range charged Q start/release state; committed W-Q "

@@ -122,10 +122,10 @@ inline constexpr ChampionProfile Alistar = [] {
         "angles, prime the fifth Trample pulse inside the AA windup, and use "
         "Unbreakable Will as either a critical cleanse or a timed tank window.";
     p.ResearchSummary =
-        "CommunityDragon PC 16.14 bin/game data, Riot 13.3 and 26.14 notes, "
-        "current Season 16 build data, Challenger/OTP Alistar material, "
-        "Alicopter roaming concepts, pro support peel/dive patterns, combo "
-        "demonstrations, and deterministic geometry/timing regressions.";
+        "Riot 26.15 and CommunityDragon PC 16.15 data, current Season 16 "
+        "build data, Challenger/OTP Alistar material, Alicopter roaming "
+        "concepts, pro support peel/dive patterns, combo demonstrations, "
+        "and deterministic geometry/timing regressions.";
     return p;
 }();
 

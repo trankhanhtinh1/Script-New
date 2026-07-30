@@ -1304,7 +1304,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Aatrox";
     controller.ControllerId = "champion.kuroaio.ai.aatrox.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAatrox.md";
     controller.ImplementationSummary =
         "Per-stage Q geometry, in-windup E sweetspot solver, W pull timing, "

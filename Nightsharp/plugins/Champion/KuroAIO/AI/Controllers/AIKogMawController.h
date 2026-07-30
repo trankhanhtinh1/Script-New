@@ -493,14 +493,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-    if (LastAfterAttackTargetId == OwnedFocusTargetId) {
-        ClearTemporaryOrbwalkerFocus(
-            OwnedFocusTargetId, OwnedFocusUntil);
-    }
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -562,9 +554,8 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "KogMaw";
     controller.ControllerId = "champion.kuroaio.ai.kogmaw.onetrick";
-    controller.KitRevision = "CommunityDragon current / TestOrbwalker port";
-    controller.ResearchArtifact =
-        "C:/Users/funny/Downloads/TestOrbwalker/TestOrbwalker/AllChampions/PortKogMaw.cs";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
+    controller.ResearchArtifact = "AI/Research/AIKogMaw.md";
     controller.ImplementationSummary =
         "Dynamic W/R reach, attack-preserving Q/E, stack-aware missing-health "
         "artillery, anti-gapcloser ooze and owned orbwalker focus lifecycle.";
@@ -577,7 +568,10 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveLocalSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack =
+        &CaptureAfterAttackAndReleaseOwnedFocusEvent<
+            &LastAfterAttackTargetId, &LastAfterAttackTick,
+            &OwnedFocusTargetId, &OwnedFocusUntil>;
     controller.OnGapcloser = &OnGapcloser;
     return controller;
 }();

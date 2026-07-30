@@ -316,6 +316,42 @@ inline bool RedirectBeforeAttackToFocus(
     return true;
 }
 
+inline bool RecentlyAttackedTarget(const AIBaseClient& target,
+                                   int lastTargetNetworkId,
+                                   int lastAttackTick,
+                                   int windowMs) {
+    return target.IsValid() && lastAttackTick > 0 &&
+           ControllerHelpers::Now() - lastAttackTick <=
+               std::max(0, windowMs) &&
+           lastTargetNetworkId ==
+               static_cast<int>(target.NetworkId());
+}
+
+inline void CaptureAfterAttackAndReleaseOwnedFocus(
+    SDK::OrbwalkingActionArgs& args,
+    int& lastTargetNetworkId,
+    int& lastAttackTick,
+    int& ownedTargetNetworkId,
+    int& ownedUntilTick) {
+    (void)ControllerHelpers::CaptureAfterAttack(
+        args, lastTargetNetworkId, lastAttackTick);
+    if (lastTargetNetworkId == ownedTargetNetworkId) {
+        ClearTemporaryOrbwalkerFocus(
+            ownedTargetNetworkId, ownedUntilTick);
+    }
+}
+
+template <int* LastTargetNetworkId,
+          int* LastAttackTick,
+          int* OwnedTargetNetworkId,
+          int* OwnedUntilTick>
+inline void CaptureAfterAttackAndReleaseOwnedFocusEvent(
+    SDK::OrbwalkingActionArgs& args) {
+    CaptureAfterAttackAndReleaseOwnedFocus(
+        args, *LastTargetNetworkId, *LastAttackTick,
+        *OwnedTargetNetworkId, *OwnedUntilTick);
+}
+
 inline bool CastThrottlePassed(int lastCastTick, int minimumMs) {
     return lastCastTick <= 0 ||
            ControllerHelpers::Now() - lastCastTick >= std::max(0, minimumMs);

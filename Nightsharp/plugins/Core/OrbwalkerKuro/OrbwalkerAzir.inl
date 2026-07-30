@@ -11,16 +11,16 @@ struct AzirSoldierFrameCache {
 
 inline bool IsAzirPlayer(const AIHeroClient& player) {
     return player.IsValid() &&
-           AzirSoldierSupport::IsAzirChampionName(player.CharacterName());
+           AzirSoldierRules::IsAzirChampionName(player.CharacterName());
 }
 
 inline bool IsAzirSandSoldier(const GameObject& obj) {
     return obj.IsValid() &&
-           (AzirSoldierSupport::IsSandSoldierName(obj.CharacterName()) ||
-            AzirSoldierSupport::IsSandSoldierName(obj.Name()));
+           (AzirSoldierRules::IsSandSoldierName(obj.CharacterName()) ||
+            AzirSoldierRules::IsSandSoldierName(obj.Name()));
 }
 
-inline AzirSoldierSupport::Point2 PlanarPoint(const Vector3& position) {
+inline AzirSoldierRules::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
@@ -55,7 +55,7 @@ inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
     const float playerRadius = player.BoundingRadius();
     return IsAzirPlayer(player) && soldier.IsValid() && !soldier.IsDead() &&
            soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
-           AzirSoldierSupport::IsCommandable(
+           AzirSoldierRules::IsCommandable(
                PlanarPoint(player.Position()),
                PlanarPoint(soldier.Position()),
                soldierRadius,
@@ -86,20 +86,20 @@ inline bool IsWardOrTrapTarget(const AttackableUnit& target) {
 
     const AIMinionClient minion(target.Handle());
     return HasFlag(minion.GetMinionType(), MinionTypes::Ward) ||
-           AzirSoldierSupport::IsWardOrTrapName(minion.CharacterName()) ||
-           AzirSoldierSupport::IsWardOrTrapName(minion.Name());
+           AzirSoldierRules::IsWardOrTrapName(minion.CharacterName()) ||
+           AzirSoldierRules::IsWardOrTrapName(minion.Name());
 }
 
-inline AzirSoldierSupport::TargetKind GetAzirSoldierTargetKind(
+inline AzirSoldierRules::TargetKind GetAzirSoldierTargetKind(
     const AttackableUnit& target
 ) {
     if (IsStructureTarget(target)) {
-        return AzirSoldierSupport::TargetKind::Structure;
+        return AzirSoldierRules::TargetKind::Structure;
     }
     if (IsWardOrTrapTarget(target)) {
-        return AzirSoldierSupport::TargetKind::WardOrTrap;
+        return AzirSoldierRules::TargetKind::WardOrTrap;
     }
-    return AzirSoldierSupport::TargetKind::OrdinaryUnit;
+    return AzirSoldierRules::TargetKind::OrdinaryUnit;
 }
 
 inline int AzirSoldierAttackCount(const AIHeroClient& player,
@@ -107,7 +107,7 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
                                   float rangeScale = 1.0f) {
     if (!IsAzirPlayer(player) || !target.IsValid() ||
         (target.IsDead() && !target.IsZombie()) ||
-        !AzirSoldierSupport::CanUseSoldierAttack(
+        !AzirSoldierRules::CanUseSoldierAttack(
             GetAzirSoldierTargetKind(target))) {
         return 0;
     }
@@ -115,15 +115,15 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
     const auto playerPoint = PlanarPoint(player.Position());
     const auto targetPoint = PlanarPoint(target.Position());
     const float targetRadius = target.BoundingRadius();
-    const float attackRange = AzirSoldierSupport::kPrimaryAttackRange *
+    const float attackRange = AzirSoldierRules::kPrimaryAttackRange *
                               std::max(0.0f, rangeScale);
     int count = 0;
     const float playerRadius = player.BoundingRadius();
     for (const auto& soldier : GetAzirSandSoldiers(player)) {
         const float soldierRadius = soldier.BoundingRadius();
-        if (!AzirSoldierSupport::IsCommandable(
+        if (!AzirSoldierRules::IsCommandable(
                 playerPoint, PlanarPoint(soldier.Position()), soldierRadius, playerRadius) ||
-            !AzirSoldierSupport::CanReachPrimaryTarget(
+            !AzirSoldierRules::CanReachPrimaryTarget(
                 PlanarPoint(soldier.Position()),
                 targetPoint,
                 targetRadius * std::max(0.0f, rangeScale),
@@ -173,7 +173,7 @@ inline float GetCurrentAutoAttackDamage(const AIHeroClient& player,
         return Damage::GetAutoAttackDamage(player, target);
     }
 
-    const float rawDamage = AzirSoldierSupport::MultiSoldierRawDamage(
+    const float rawDamage = AzirSoldierRules::MultiSoldierRawDamage(
         player.Level(), wRank, player.AP(), soldierCount);
     float damage = player.CalculateMagicDamage(target, rawDamage);
 
@@ -186,7 +186,7 @@ inline float GetCurrentAutoAttackDamage(const AIHeroClient& player,
         Damage::GetAutoAttackDamage(player, target, false);
     const float directOnHitDamage =
         std::max(0.0f, ordinaryWithPassives - ordinaryWithoutPassives);
-    damage += directOnHitDamage * AzirSoldierSupport::kOnHitEffectiveness;
+    damage += directOnHitDamage * AzirSoldierRules::kOnHitEffectiveness;
     return damage;
 }
 
@@ -237,12 +237,12 @@ inline float GetPredictedAutoAttackDamage(const AIHeroClient& player,
 inline bool IsAzirSoldierAttackEvent(
     const Events::ProcessSpellEventArgs& args
 ) {
-    return AzirSoldierSupport::IsSoldierAttackSpellName(args.SpellName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.MissileName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.ScriptName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.SpellSlotName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.PayloadSpellName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.PayloadMissileName);
+    return AzirSoldierRules::IsSoldierAttackSpellName(args.SpellName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.MissileName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.ScriptName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.SpellSlotName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.PayloadSpellName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.PayloadMissileName);
 }
 
 inline bool IsOwnedAzirSoldierSender(
@@ -251,8 +251,8 @@ inline bool IsOwnedAzirSoldierSender(
 ) {
     if (!IsAzirPlayer(player) || !sender.IsValid() ||
         sender.Team != static_cast<std::uint32_t>(player.Team()) ||
-        (!AzirSoldierSupport::IsSandSoldierName(sender.CharacterName) &&
-         !AzirSoldierSupport::IsSandSoldierName(sender.Name))) {
+        (!AzirSoldierRules::IsSandSoldierName(sender.CharacterName) &&
+         !AzirSoldierRules::IsSandSoldierName(sender.Name))) {
         return false;
     }
 
@@ -267,14 +267,14 @@ inline bool IsOwnedAzirSoldierSender(
     // Object lifecycle and cast bridges may expose the Sand Soldier before
     // ObjectManager has refreshed its handle.  The team/name/tether fallback
     // still rejects enemy soldiers and distant allied Azirs' pets.
-    return AzirSoldierSupport::IsCommandable(
+    return AzirSoldierRules::IsCommandable(
         PlanarPoint(player.Position()),
         { sender.Position.x, sender.Position.z });
 }
 
 inline bool IsAzirSoldierAttackMissileName(const Events::ObjectEventArgs& args) {
-    return AzirSoldierSupport::IsSoldierAttackSpellName(args.SpellName) ||
-           AzirSoldierSupport::IsSoldierAttackSpellName(args.MissileName);
+    return AzirSoldierRules::IsSoldierAttackSpellName(args.SpellName) ||
+           AzirSoldierRules::IsSoldierAttackSpellName(args.MissileName);
 }
 
 } // namespace OrbwalkerKuro::OrbwalkingDetail

@@ -2402,8 +2402,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Ryze";
     controller.ControllerId = "champion.kuroaio.ai.ryze.controller";
-    controller.KitRevision =
-        "Riot/CDragon 16.14 + Riot 25.11/25.13/26.3/26.12 reconciliation";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIRyze.md";
     controller.ImplementationSummary =
         "Analytical moving first-body Q, independent four-second Flux and "

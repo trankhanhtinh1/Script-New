@@ -2458,8 +2458,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Blitzcrank";
     controller.ControllerId = "champion.kuroaio.ai.blitzcrank.controller";
-    controller.KitRevision =
-        "Riot/CDragon 16.14 + Riot 25.08/25.22/13.17 reconciliation";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIBlitzcrank.md";
     controller.ImplementationSummary =
         "Moving first-body/lollipop Q with pull-value and dangerous-delivery "

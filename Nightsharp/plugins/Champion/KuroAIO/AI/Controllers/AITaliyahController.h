@@ -2650,7 +2650,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Taliyah";
     controller.ControllerId = "kuroaio.ai.taliyah.onetrick";
-    controller.KitRevision = "PC 16.14 / Riot 26.9 / CDragon 2026-07-15";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AITaliyah.md";
     controller.ImplementationSummary =
         "Accelerating/fixed Q first-body and AoE, Worked Ground ledger, timed 22-mine E, vector W branch planner, player-cooperative assists, carry peel and manual partition-safe R.";

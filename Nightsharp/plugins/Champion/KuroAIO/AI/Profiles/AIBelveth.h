@@ -141,11 +141,11 @@ inline constexpr ChampionProfile Belveth = [] {
         "consume corals by valuing all globally lost corals, AoE, heal, form "
         "duration, enhanced macro and endpoint safety together.";
     p.ResearchSummary =
-        "Pinned to live Riot 26.14 and CommunityDragon PC 16.14; reconciled "
-        "Riot 25.12, 25.15 and 26.3 notes, current League mechanics, OP.GG "
-        "Q-E-W order, Sinerias' Season 16 guide, Sawyer's 2026 guide, "
-        "KingKong combo demonstrations and community one-trick edge cases; "
-        "the July 2026 PBE midscope is explicitly excluded until live.";
+        "Pinned to Riot 26.15 and CommunityDragon PC 16.15; migrated the "
+        "complete live scaling update across passive, Q, W, E and R while "
+        "retaining the verified Q-E-W order, Sinerias' Season 16 guide, "
+        "Sawyer's 2026 guide, KingKong combo demonstrations and community "
+        "one-trick positioning rules as behavioral context only.";
     return p;
 }();
 

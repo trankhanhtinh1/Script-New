@@ -2840,7 +2840,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Bard";
     controller.ControllerId = "champion.kuroaio.ai.bard.controller";
-    controller.KitRevision = "Riot 26.14 / CommunityDragon PC 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIBard.md";
     controller.ImplementationSummary =
         "Ordered two-stage Q with meep-first weaving and exact stasis/portal "

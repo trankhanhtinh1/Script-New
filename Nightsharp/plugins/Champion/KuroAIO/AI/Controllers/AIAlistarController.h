@@ -1839,6 +1839,7 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
+    "Read the live 335 base movement speed from SDK state without a hardcode",
     "Route every combat tick through peel, engage, insec, disrupt, dive or escape posture",
     "Select a protected ally from damage, range, health and nearby threat rather than nearest ally",
     "Abandon an engage when the protected carry is actively being dived",
@@ -1923,7 +1924,7 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionName = "Alistar";
     controller.ControllerId = "champion.kuroaio.ai.alistar.onetrick";
-    controller.KitRevision = "League 26.14 / CommunityDragon 16.14";
+    controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAlistar.md";
     controller.ImplementationSummary =
         "Peel-first six-posture controller, radius-correct W-Q buffering, "

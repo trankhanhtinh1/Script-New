@@ -23,6 +23,29 @@
 #include "Profiles/AIJhin.h"
 #include "Profiles/AIKogMaw.h"
 #include "Profiles/AIMissFortune.h"
+#include "Profiles/AIQiyana.h"
+#include "Profiles/AIYone.h"
+#include "Profiles/AICassiopeia.h"
+#include "Profiles/AIJayce.h"
+#include "Profiles/AIJax.h"
+#include "Profiles/AIKSante.h"
+#include "Profiles/AICorki.h"
+#include "Profiles/AIYunara.h"
+#include "Profiles/AIIrelia.h"
+#include "Profiles/AINocturne.h"
+#include "Profiles/AIGnar.h"
+#include "Profiles/AIJarvanIV.h"
+#include "Profiles/AICamille.h"
+#include "Profiles/AIOrianna.h"
+#include "Profiles/AILeeSin.h"
+#include "Profiles/AINaafiri.h"
+#include "Profiles/AIViego.h"
+#include "Profiles/AIRumble.h"
+#include "Profiles/AIGwen.h"
+#include "Profiles/AILeblanc.h"
+#include "Profiles/AIPantheon.h"
+#include "Profiles/AIXinZhao.h"
+#include "Profiles/AIVi.h"
 #include "Profiles/AIRyze.h"
 #include "Profiles/AITaliyah.h"
 #include "Profiles/AITristana.h"
@@ -50,6 +73,29 @@
 #include "Controllers/AIJhinController.h"
 #include "Controllers/AIKogMawController.h"
 #include "Controllers/AIMissFortuneController.h"
+#include "Controllers/AIQiyanaController.h"
+#include "Controllers/AIYoneController.h"
+#include "Controllers/AICassiopeiaController.h"
+#include "Controllers/AIJayceController.h"
+#include "Controllers/AIJaxController.h"
+#include "Controllers/AIKSanteController.h"
+#include "Controllers/AICorkiController.h"
+#include "Controllers/AIYunaraController.h"
+#include "Controllers/AIIreliaController.h"
+#include "Controllers/AINocturneController.h"
+#include "Controllers/AIGnarController.h"
+#include "Controllers/AIJarvanIVController.h"
+#include "Controllers/AICamilleController.h"
+#include "Controllers/AIOriannaController.h"
+#include "Controllers/AILeeSinController.h"
+#include "Controllers/AINaafiriController.h"
+#include "Controllers/AIViegoController.h"
+#include "Controllers/AIRumbleController.h"
+#include "Controllers/AIGwenController.h"
+#include "Controllers/AILeblancController.h"
+#include "Controllers/AIPantheonController.h"
+#include "Controllers/AIXinZhaoController.h"
+#include "Controllers/AIViController.h"
 #include "Controllers/AIRyzeController.h"
 #include "Controllers/AITaliyahController.h"
 #include "Controllers/AITristanaController.h"
@@ -66,7 +112,7 @@ struct ChampionEntry {
     const ChampionController* Controller = nullptr;
 };
 
-inline constexpr std::array<ChampionEntry, 27> AllChampions = {
+inline constexpr std::array<ChampionEntry, 50> AllChampions = {
     ChampionEntry{ &Profiles::Aatrox, &Controllers::Aatrox::Controller },
     ChampionEntry{ &Profiles::Ahri, &Controllers::Ahri::Controller },
     ChampionEntry{ &Profiles::Akali, &Controllers::Akali::Controller },
@@ -92,6 +138,29 @@ inline constexpr std::array<ChampionEntry, 27> AllChampions = {
     ChampionEntry{ &Profiles::KogMaw, &Controllers::KogMaw::Controller },
     ChampionEntry{ &Profiles::MissFortune,
                    &Controllers::MissFortune::Controller },
+    ChampionEntry{ &Profiles::Qiyana, &Controllers::Qiyana::Controller },
+    ChampionEntry{ &Profiles::Cassiopeia, &Controllers::Cassiopeia::Controller },
+    ChampionEntry{ &Profiles::Jayce, &Controllers::Jayce::Controller },
+    ChampionEntry{ &Profiles::Jax, &Controllers::Jax::Controller },
+    ChampionEntry{ &Profiles::KSante, &Controllers::KSante::Controller },
+    ChampionEntry{ &Profiles::Corki, &Controllers::Corki::Controller },
+    ChampionEntry{ &Profiles::Yunara, &Controllers::Yunara::Controller },
+    ChampionEntry{ &Profiles::Irelia, &Controllers::Irelia::Controller },
+    ChampionEntry{ &Profiles::Nocturne, &Controllers::Nocturne::Controller },
+    ChampionEntry{ &Profiles::Gnar, &Controllers::Gnar::Controller },
+    ChampionEntry{ &Profiles::JarvanIV, &Controllers::JarvanIV::Controller },
+    ChampionEntry{ &Profiles::Camille, &Controllers::Camille::Controller },
+    ChampionEntry{ &Profiles::Orianna, &Controllers::Orianna::Controller },
+    ChampionEntry{ &Profiles::LeeSin, &Controllers::LeeSin::Controller },
+    ChampionEntry{ &Profiles::Naafiri, &Controllers::Naafiri::Controller },
+    ChampionEntry{ &Profiles::Viego, &Controllers::Viego::Controller },
+    ChampionEntry{ &Profiles::Rumble, &Controllers::Rumble::Controller },
+    ChampionEntry{ &Profiles::Gwen, &Controllers::Gwen::Controller },
+    ChampionEntry{ &Profiles::Leblanc, &Controllers::Leblanc::Controller },
+    ChampionEntry{ &Profiles::Pantheon, &Controllers::Pantheon::Controller },
+    ChampionEntry{ &Profiles::XinZhao, &Controllers::XinZhao::Controller },
+    ChampionEntry{ &Profiles::Vi, &Controllers::Vi::Controller },
+    ChampionEntry{ &Profiles::Yone, &Controllers::Yone::Controller },
     ChampionEntry{ &Profiles::Ryze, &Controllers::Ryze::Controller },
     ChampionEntry{ &Profiles::Taliyah, &Controllers::Taliyah::Controller },
     ChampionEntry{ &Profiles::Tristana, &Controllers::Tristana::Controller },
