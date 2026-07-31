@@ -137,8 +137,12 @@ namespace CoreZoomHack {
             }
         }
 
-        const auto direct = Globals::ReadPtr(Globals::base + Offset::ZoomRuntime::CameraInstance);
-        return IsUsableCamera(direct) ? direct : 0;
+        if (Globals::base && Offset::ZoomRuntime::CameraInstance != 0) {
+            const auto direct =
+                Globals::ReadPtr(Globals::base + Offset::ZoomRuntime::CameraInstance);
+            return IsUsableCamera(direct) ? direct : 0;
+        }
+        return 0;
     }
 
     inline void WriteZoomLimit(uintptr_t cfg, float maxZoom) {

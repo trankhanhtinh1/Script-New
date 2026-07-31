@@ -1059,8 +1059,7 @@ namespace SpellBookLayout {
         constexpr auto Dead                = 0;
         constexpr auto Visible             = 0x2E8;   // GameObject visible flag. tìm thủ công qua CE
         // No byte access at legacy +0x5A0 exists in the current object code.
-        // IsInvulnerable is native/buff logic.
-        constexpr auto IsInvulnerable      = 0x28BE80;
+        // IsInvulnerable is resolved through native/buff logic; no raw field exists.
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
         // pointer on 26.6 (sub_9F18FE constructor / sub_9F18A0 destructor pair
         // free `[obj+0xF48]` when `[obj+0xF54] >= 0`). The real recall

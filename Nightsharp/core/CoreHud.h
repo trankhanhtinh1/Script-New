@@ -186,7 +186,7 @@ inline uintptr_t Camera() {
 
     const auto& ctx = CoreRuntime::GetContext();
     const uintptr_t base = ctx.moduleBase ? ctx.moduleBase : Globals::base;
-    if (base) {
+    if (base && Offset::ZoomRuntime::CameraInstance != 0) {
         const uintptr_t candidate =
             Globals::Read<uintptr_t>(base + Offset::ZoomRuntime::CameraInstance);
         if (Globals::IsValidPtr(candidate)) {
