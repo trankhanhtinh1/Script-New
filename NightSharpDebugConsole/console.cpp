@@ -34,7 +34,15 @@ std::wstring ArgumentValue(
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
+    SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
+    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdOut != INVALID_HANDLE_VALUE && hStdOut != nullptr) {
+        DWORD mode = 0;
+        if (GetConsoleMode(hStdOut, &mode)) {
+            SetConsoleMode(hStdOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        }
+    }
     nsmonitor::MonitorOptions options{};
     options.testMode = HasArgument(argc, argv, L"--test-mode");
     options.noWer = HasArgument(argc, argv, L"--no-wer");
@@ -64,9 +72,8 @@ int wmain(int argc, wchar_t** argv) {
         if (!result.ok) {
             std::fprintf(
                 stderr,
-                "WER setup failed: %lu (run as Administrator)\n",
+                "[notice] WER setup skipped: %lu (run as Administrator for WER crash dumps)\n",
                 result.error);
-            return 3;
         }
     }
 

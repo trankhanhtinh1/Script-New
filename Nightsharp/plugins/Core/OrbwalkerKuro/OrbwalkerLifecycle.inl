@@ -90,12 +90,9 @@ inline void OrbwalkerBase::ResetAutoAttackTimerWithReason(
     const int now = Tick();
 
     NightSharpDebug::Logf(
-        "[OrbwalkerKuro][AAReset] reason=%s source=%s match=%s tick=%d "
-        "champion=%s spell=%s slot=%d sender=%s missile=%s senderNet=%u sourceNet=%u "
-        "pre={lastAA=%d attackOrder=%d attackOrderTarget=%d attackConfirm=%d "
-        "pending=%d pendingTick=%d pendingTarget=%d allPause=%d attackPause=%d "
-        "movePause=%d confirmed=%d castComplete=%d doCastRequired=%d "
-        "doCastComplete=%d doCastWait=%d}",
+        "[<b-cyan>OrbwalkerKuro</b-cyan>][<b-yellow>AAReset</b-yellow>] reason=<yellow>%s</yellow> | source=<cyan>%s</cyan> | match=<cyan>%s</cyan> | tick=%d\n"
+        "  champion=<magenta>%s</magenta> | spell=<magenta>%s</magenta> (slot=%d)\n"
+        "  state={lastAA=%d, pending=<green>%d</green>, confirmed=<green>%d</green>, castComplete=%d}\n",
         reason && reason[0] ? reason : "unknown",
         source && source[0] ? source : "unknown",
         matchType && matchType[0] ? matchType : "none",
@@ -103,25 +100,10 @@ inline void OrbwalkerBase::ResetAutoAttackTimerWithReason(
         championName && championName[0] ? championName : "none",
         spellName && spellName[0] ? spellName : "none",
         spellSlot,
-        senderName && senderName[0] ? senderName : "none",
-        missileName && missileName[0] ? missileName : "none",
-        static_cast<unsigned>(senderNetworkId),
-        static_cast<unsigned>(sourceNetworkId),
         context_.lastAutoAttackTick,
-        context_.lastAttackOrderTick,
-        context_.lastAttackOrderNetworkId,
-        context_.lastAttackConfirmTick,
         context_.pendingAttack ? 1 : 0,
-        context_.pendingAttackTick,
-        context_.pendingAttackTargetNetworkId,
-        context_.allPauseTick,
-        context_.attackPauseTick,
-        context_.movePauseTick,
         context_.hasConfirmedAttack ? 1 : 0,
-        context_.attackCastComplete ? 1 : 0,
-        context_.lastAttackRequiresDoCastBeforeMove ? 1 : 0,
-        context_.lastAttackDoCastComplete ? 1 : 0,
-        context_.lastAttackDoCastWaitTick);
+        context_.attackCastComplete ? 1 : 0);
 
     context_.lastAutoAttackTick = 0;
     context_.lastAttackOrderTick = 0;

@@ -94,14 +94,123 @@ inline void Phase(const char* phase) {
     WriteRaw("\r\n");
 }
 
+enum class Color {
+    Default = 0,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+    BrightRed,
+    BrightGreen,
+    BrightYellow,
+    BrightBlue,
+    BrightMagenta,
+    BrightCyan,
+    BrightWhite,
+    Gray
+};
+
+namespace ANSI {
+    inline constexpr const char* Reset = "\033[0m";
+    inline constexpr const char* Red = "\033[31m";
+    inline constexpr const char* Green = "\033[32m";
+    inline constexpr const char* Yellow = "\033[33m";
+    inline constexpr const char* Blue = "\033[34m";
+    inline constexpr const char* Magenta = "\033[35m";
+    inline constexpr const char* Cyan = "\033[36m";
+    inline constexpr const char* White = "\033[37m";
+    inline constexpr const char* BrightRed = "\033[1;31m";
+    inline constexpr const char* BrightGreen = "\033[1;32m";
+    inline constexpr const char* BrightYellow = "\033[1;33m";
+    inline constexpr const char* BrightBlue = "\033[1;34m";
+    inline constexpr const char* BrightMagenta = "\033[1;35m";
+    inline constexpr const char* BrightCyan = "\033[1;36m";
+    inline constexpr const char* BrightWhite = "\033[1;37m";
+    inline constexpr const char* Gray = "\033[90m";
+
+    inline const char* Code(Color color) {
+        switch (color) {
+            case Color::Red:           return Red;
+            case Color::Green:         return Green;
+            case Color::Yellow:        return Yellow;
+            case Color::Blue:          return Blue;
+            case Color::Magenta:       return Magenta;
+            case Color::Cyan:          return Cyan;
+            case Color::White:         return White;
+            case Color::BrightRed:     return BrightRed;
+            case Color::BrightGreen:   return BrightGreen;
+            case Color::BrightYellow:  return BrightYellow;
+            case Color::BrightBlue:    return BrightBlue;
+            case Color::BrightMagenta: return BrightMagenta;
+            case Color::BrightCyan:    return BrightCyan;
+            case Color::BrightWhite:   return BrightWhite;
+            case Color::Gray:          return Gray;
+            default:                   return Reset;
+        }
+    }
+} // namespace ANSI
+
+inline void ProcessColorTags(const char* input, char* output, size_t outputSize) {
+    if (!input || !output || outputSize == 0) return;
+
+    size_t inIdx = 0;
+    size_t outIdx = 0;
+    const size_t maxOut = outputSize - 1;
+
+    auto appendStr = [&](const char* s) {
+        while (*s && outIdx < maxOut) {
+            output[outIdx++] = *s++;
+        }
+    };
+
+    while (input[inIdx] && outIdx < maxOut) {
+        if (input[inIdx] == '<') {
+            const char* tagStart = input + inIdx;
+            const char* tagEnd = strchr(tagStart, '>');
+            if (tagEnd) {
+                const size_t tagLen = tagEnd - tagStart + 1;
+                const char* ansi = nullptr;
+
+                if (_strnicmp(tagStart, "<red>", 5) == 0) ansi = "\033[31m";
+                else if (_strnicmp(tagStart, "<green>", 7) == 0) ansi = "\033[32m";
+                else if (_strnicmp(tagStart, "<yellow>", 8) == 0) ansi = "\033[33m";
+                else if (_strnicmp(tagStart, "<blue>", 6) == 0) ansi = "\033[34m";
+                else if (_strnicmp(tagStart, "<magenta>", 9) == 0) ansi = "\033[35m";
+                else if (_strnicmp(tagStart, "<cyan>", 6) == 0) ansi = "\033[36m";
+                else if (_strnicmp(tagStart, "<white>", 7) == 0) ansi = "\033[37m";
+                else if (_strnicmp(tagStart, "<gray>", 6) == 0) ansi = "\033[90m";
+                else if (_strnicmp(tagStart, "<b-red>", 7) == 0) ansi = "\033[1;31m";
+                else if (_strnicmp(tagStart, "<b-green>", 9) == 0) ansi = "\033[1;32m";
+                else if (_strnicmp(tagStart, "<b-yellow>", 10) == 0) ansi = "\033[1;33m";
+                else if (_strnicmp(tagStart, "<b-blue>", 8) == 0) ansi = "\033[1;34m";
+                else if (_strnicmp(tagStart, "<b-magenta>", 11) == 0) ansi = "\033[1;35m";
+                else if (_strnicmp(tagStart, "<b-cyan>", 8) == 0) ansi = "\033[1;36m";
+                else if (_strnicmp(tagStart, "<b-white>", 9) == 0) ansi = "\033[1;37m";
+                else if (tagStart[1] == '/' || _strnicmp(tagStart, "<reset>", 7) == 0) ansi = "\033[0m";
+
+                if (ansi) {
+                    appendStr(ansi);
+                    inIdx += tagLen;
+                    continue;
+                }
+            }
+        }
+        output[outIdx++] = input[inIdx++];
+    }
+    output[outIdx] = '\0';
+}
+
 inline void Logf(const char* fmt, ...) {
-    char buffer[1536] = {};
+    char rawBuf[1536] = {};
 
     SYSTEMTIME st = {};
     GetLocalTime(&st);
     int prefix = _snprintf_s(
-        buffer,
-        sizeof(buffer),
+        rawBuf,
+        sizeof(rawBuf),
         _TRUNCATE,
         "[%02u:%02u:%02u.%03u T%u] ",
         static_cast<unsigned>(st.wHour),
@@ -115,6 +224,48 @@ inline void Logf(const char* fmt, ...) {
 
     va_list args;
     va_start(args, fmt);
+    int body = _vsnprintf_s(rawBuf + prefix, sizeof(rawBuf) - prefix, _TRUNCATE, fmt, args);
+    va_end(args);
+    if (body < 0) {
+        body = 0;
+    }
+
+    char processedBuf[2048] = {};
+    ProcessColorTags(rawBuf, processedBuf, sizeof(processedBuf));
+
+    size_t total = strlen(processedBuf);
+    if (total > sizeof(processedBuf) - 3) {
+        total = sizeof(processedBuf) - 3;
+    }
+
+    processedBuf[total++] = '\r';
+    processedBuf[total++] = '\n';
+    processedBuf[total] = '\0';
+    WriteRaw(processedBuf);
+}
+
+inline void LogColorf(Color color, const char* fmt, ...) {
+    char buffer[1536] = {};
+
+    SYSTEMTIME st = {};
+    GetLocalTime(&st);
+    int prefix = _snprintf_s(
+        buffer,
+        sizeof(buffer),
+        _TRUNCATE,
+        "[%02u:%02u:%02u.%03u T%u] %s",
+        static_cast<unsigned>(st.wHour),
+        static_cast<unsigned>(st.wMinute),
+        static_cast<unsigned>(st.wSecond),
+        static_cast<unsigned>(st.wMilliseconds),
+        static_cast<unsigned>(GetCurrentThreadId()),
+        ANSI::Code(color));
+    if (prefix < 0) {
+        prefix = 0;
+    }
+
+    va_list args;
+    va_start(args, fmt);
     int body = _vsnprintf_s(buffer + prefix, sizeof(buffer) - prefix, _TRUNCATE, fmt, args);
     va_end(args);
     if (body < 0) {
@@ -122,9 +273,14 @@ inline void Logf(const char* fmt, ...) {
     }
 
     int total = prefix + body;
-    if (total > static_cast<int>(sizeof(buffer)) - 3) {
-        total = static_cast<int>(sizeof(buffer)) - 3;
+    if (total > static_cast<int>(sizeof(buffer)) - 8) {
+        total = static_cast<int>(sizeof(buffer)) - 8;
     }
+
+    const char* resetStr = ANSI::Reset;
+    const int resetLen = 4;
+    memcpy(buffer + total, resetStr, resetLen);
+    total += resetLen;
 
     buffer[total++] = '\r';
     buffer[total++] = '\n';

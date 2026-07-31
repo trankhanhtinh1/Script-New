@@ -87,13 +87,19 @@ bool MonitorSession::AcceptHello(nscrash::HelloPacket& hello) {
         nscrash::kPipeName,
         PIPE_ACCESS_INBOUND,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
-        1,
+        PIPE_UNLIMITED_INSTANCES,
         64 * 1024,
         64 * 1024,
         0,
         nullptr);
     if (pipe_ == INVALID_HANDLE_VALUE) {
-        std::fprintf(stderr, "[monitor] CreateNamedPipe failed: %lu\n", GetLastError());
+        const DWORD err = GetLastError();
+        if (err == ERROR_PIPE_BUSY || err == ERROR_ACCESS_DENIED) {
+            std::fprintf(stderr, "[monitor] Pipe busy/in use (error %lu). Another console instance is already running.\n", err);
+            Sleep(2000);
+        } else {
+            std::fprintf(stderr, "[monitor] CreateNamedPipe failed: %lu\n", err);
+        }
         return false;
     }
     const BOOL connected = ConnectNamedPipe(pipe_, nullptr)
@@ -438,6 +444,28 @@ DWORD WINAPI MonitorSession::PipeReaderEntry(LPVOID parameter) {
     return static_cast<MonitorSession*>(parameter)->PipeReaderLoop();
 }
 
+static inline void WriteUnicodeLog(const char* text, std::size_t length) {
+    if (!text || length == 0) return;
+
+    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode = 0;
+    const bool isConsole = (hStdOut != INVALID_HANDLE_VALUE && hStdOut != nullptr && GetConsoleMode(hStdOut, &mode));
+
+    if (isConsole) {
+        int wideLen = MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), nullptr, 0);
+        if (wideLen > 0) {
+            std::wstring wideStr(wideLen, L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), &wideStr[0], wideLen);
+            DWORD written = 0;
+            WriteConsoleW(hStdOut, wideStr.c_str(), static_cast<DWORD>(wideStr.size()), &written, nullptr);
+            return;
+        }
+    }
+
+    std::fwrite(text, 1, length, stdout);
+    std::fflush(stdout);
+}
+
 DWORD MonitorSession::PipeReaderLoop() {
     while (InterlockedCompareExchange(&stopPipe_, 0, 0) == 0) {
         nscrash::LogPacket packet{};
@@ -454,8 +482,7 @@ DWORD MonitorSession::PipeReaderLoop() {
         packet.text[sizeof(packet.text) - 1] = '\0';
         const std::size_t length = std::min<std::size_t>(
             packet.length, strnlen_s(packet.text, sizeof(packet.text)));
-        fwrite(packet.text, 1, length, stdout);
-        fflush(stdout);
+        WriteUnicodeLog(packet.text, length);
         std::lock_guard<std::mutex> lock(liveLogMutex_);
         if (liveLogs_.size() == 512) {
             liveLogs_.erase(liveLogs_.begin());
