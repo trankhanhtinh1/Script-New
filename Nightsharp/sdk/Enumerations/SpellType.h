@@ -19,6 +19,7 @@ enum class SpellType : std::int32_t {
     SkillshotCircle = Circle,
     SkillshotCone = Cone,
     SkillshotArc = Arc,
+    Circular = Circle,
 
     SkillshotMissileLine = 10,
     SkillshotMissileCircle = 11,

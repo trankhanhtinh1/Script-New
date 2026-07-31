@@ -65,12 +65,9 @@ inline RLine LastRLine = {};
 inline Vector3 LastQAim = {};
 inline Vector3 LastEAim = {};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int slot, Mode mode) {
-    return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
-        Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool TargetCannotBeDamaged(const AIHeroClient& target,
                                   bool projectile = false) {
@@ -175,10 +172,7 @@ inline bool HeatAllows(int slot,
                             followupRequired));
 }
 
-inline bool PreserveAttack(bool reactive) {
-    return !reactive && Orbwalker::IsWindingUp() &&
-        Bool(Engine::HumanMenu, "PreserveAttacks", true);
-}
+using ControllerHelpers::PreserveAttack;
 
 inline Vector3 PredictedAim(const AIHeroClient& target,
                             int slot,
@@ -534,11 +528,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args, bool added) 
             { "RumbleShield", "rumbleshield" })) ShieldUntil = added ? Now() + 1500 : 0;
     ReconcileState(true);
 }
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, args.EndTime > Game::Time()); }
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) { (void)args; }
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) { (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick); }
 
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (ControllerHelpers::CaptureGapcloser(args, GapcloserTargetId, GapcloserEnd,
@@ -546,10 +535,6 @@ inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) 
         IncomingThreatTargetId = GapcloserTargetId;
         IncomingThreatUntil = std::max(IncomingThreatUntil, Now() + 800);
     }
-}
-inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    ControllerHelpers::CaptureInterruptable(args, InterruptTargetId,
-        InterruptExpireTick, 1500, 250, 6000);
 }
 
 inline const char* HeatBandName() {
@@ -664,10 +649,10 @@ inline constexpr ChampionController Controller = [] {
     controller.OnLoad = &OnLoad; controller.OnUnload = &OnUnload;
     controller.BuildMenu = &BuildMenu; controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw; controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnBuffAdd = &OnBuffAdd; controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate; controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack; controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>; controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardExpiringBuffStateEvent<&UpdateBuffState>;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>; controller.OnGapcloser = &OnGapcloser;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1500, 250, 6000>;
     return controller;
 }();
 

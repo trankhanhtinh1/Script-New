@@ -47,12 +47,9 @@ inline int RExpireTick = 0;
 inline bool RActive = false;
 inline Vector3 LastLeapEndpoint = {};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int index, int delayMs) {
     const int tick = index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -101,9 +98,7 @@ inline float EDamage(const AIHeroClient& target) {
     return player.CalculatePhysicalDamage(target, raw);
 }
 
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline void ReconcileState() {
     const auto player = GameObjects::Player();
@@ -447,9 +442,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
@@ -585,7 +577,7 @@ inline constexpr ChampionController Controller = [] {
         &LastLocalAutoTargetId, &LastLocalAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

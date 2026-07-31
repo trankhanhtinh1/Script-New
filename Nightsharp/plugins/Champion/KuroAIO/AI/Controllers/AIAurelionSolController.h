@@ -1917,17 +1917,7 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -1939,12 +1929,6 @@ inline void OnGapcloser(
     }
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    ControllerHelpers::CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1200, 250, 6000);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (QActive && Bool(BreathMenu, "ProtectChannel", true)) {
@@ -2455,12 +2439,12 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::DispatchLocalOrOtherSpellEvent<
             &ObserveLocalSpell, &RecordEnemySpell>;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1200, 250, 6000>;
     return controller;
 }();
 

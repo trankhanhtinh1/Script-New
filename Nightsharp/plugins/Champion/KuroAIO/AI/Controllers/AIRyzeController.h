@@ -1815,20 +1815,8 @@ inline void OnProcessSpell(
     else ObserveEnemySpell(args);
 }
 
-inline void OnDoCast(
-    const SDK::Events::ProcessSpellEventArgs& args) {
-    OnProcessSpell(args);
-}
 
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)ControllerHelpers::CaptureBeforeAttack(
-        args, LastBeforeAttackTargetId, LastBeforeAttackTick);
-}
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -1844,10 +1832,6 @@ inline void OnGapcloser(
     }
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(args, InterruptTargetId, InterruptExpireTick);
-}
 
 inline bool BuffContains(const SDK::Events::BuffEventArgs& args,
                          const char* token) {
@@ -1904,17 +1888,8 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
 
 inline const char* PostureName(Posture posture) {
     switch (posture) {
@@ -2418,14 +2393,14 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
-    controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnDoCast = &OnProcessSpell;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackEvent<&LastBeforeAttackTargetId, &LastBeforeAttackTick>;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick>;
     return controller;
 }();
 

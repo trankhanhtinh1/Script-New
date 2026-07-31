@@ -2018,21 +2018,8 @@ inline void OnProcessSpell(
         args, LastLocalAutoTargetId, LastLocalAutoTick);
 }
 
-inline void OnDoCast(
-    const SDK::Events::ProcessSpellEventArgs& args) {
-    (void)CaptureLocalAutoAttack(
-        args, LastLocalAutoTargetId, LastLocalAutoTick);
-}
 
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureBeforeAttack(
-        args, LastBeforeAttackTargetId, LastBeforeAttackTick);
-}
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAfterAttackTargetId, LastAfterAttackTick);
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -2047,12 +2034,6 @@ inline void OnGapcloser(
     }
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1200, 250, 6500);
-}
 
 inline bool BuffContains(const SDK::Events::BuffEventArgs& args,
                          std::initializer_list<const char*> tokens) {
@@ -2085,17 +2066,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
 inline bool MissileNameContains(
     const SDK::Events::ObjectEventArgs& args,
@@ -2663,14 +2633,14 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
-    controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastLocalAutoTargetId, &LastLocalAutoTick>;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackEvent<&LastBeforeAttackTargetId, &LastBeforeAttackTick>;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1200, 250, 6500>;
     controller.OnMissileCreate = &OnMissileCreate;
     return controller;
 }();

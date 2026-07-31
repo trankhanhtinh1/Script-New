@@ -551,18 +551,9 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs& args, bool added) {
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuff(args, args.EndTime > Game::Time());
-}
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     int id = 0, tick = 0;
     if (CaptureAfterAttack(args, id, tick)) ObserveAttack(id, tick);
-}
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
-                           GapcloserExpireTick, 650.0f, 900);
 }
 
 inline void OnDraw() {
@@ -681,11 +672,11 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardExpiringBuffStateEvent<&UpdateBuff>;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 650, 900>;
     return controller;
 }();
 

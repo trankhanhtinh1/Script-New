@@ -1693,7 +1693,7 @@ inline void OnDraw() {
                 PostureName(CurrentPosture), CurrentResource(),
                 HasPassiveWeapon() ? "kama" : (PassiveRingActive ? "ring" : "none"),
                 PassiveExitRemaining, EMarkName(CurrentEMark),
-                R2Unlocked() ? "ready" : "hold", 
+                R2Unlocked() ? "ready" : "hold",
                 RWindowActive ? std::max(0, RWindowExpireTick - now) : 0,
                 static_cast<int>(ActiveSequence));
             Drawing::DrawText(screen.x - 190.0f, screen.y - 122.0f,

@@ -409,9 +409,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args, bool added) 
     LastStateObservationTick = Now();
     RefreshRuntimeRange();
 }
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, true); }
 
 inline void ObserveSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!ControllerHelpers::IsLocalPlayer(args.Sender) || args.IsAutoAttack) return;
@@ -439,10 +436,6 @@ inline void ObserveSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     RefreshRuntimeRange();
 }
 
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
-                           GapcloserExpireTick, 700.0f, 900);
-}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -522,12 +515,12 @@ inline constexpr ChampionController Controller = [] {
     controller.BuildMenu = &BuildMenu;
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveSpell;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnAfterAttack =
         &CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
-    controller.OnGapcloser = &OnGapcloser;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 700, 900>;
     return controller;
 }();
 

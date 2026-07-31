@@ -121,6 +121,21 @@ inline float PlayerManaPercent() {
     return Engine::ManaPercent(GameObjects::Player());
 }
 
+inline float AP() {
+    const auto player = GameObjects::Player();
+    return player.IsValid() ? player.AP() : 0.0f;
+}
+
+inline float BonusAttackDamage() {
+    const auto player = GameObjects::Player();
+    return player.IsValid() ? player.BonusAttackDamage() : 0.0f;
+}
+
+inline float TotalAttackDamage() {
+    const auto player = GameObjects::Player();
+    return player.IsValid() ? player.TotalAttackDamage() : 0.0f;
+}
+
 inline bool PlayerMobilityLocked() {
     const auto player = GameObjects::Player();
     return player.IsValid() &&
@@ -166,6 +181,20 @@ inline bool CaptureBeforeAttack(const SDK::OrbwalkingActionArgs& args,
     return CaptureAfterAttack(args, targetNetworkId, attackTick);
 }
 
+template <int* TargetNetworkId>
+inline void CaptureBeforeAttackTargetEvent(
+    SDK::OrbwalkingActionArgs& args) {
+    if (args.Target.IsValid()) {
+        *TargetNetworkId = static_cast<int>(args.Target.NetworkId());
+    }
+}
+
+template <int* TargetNetworkId, int* CaptureTick>
+inline void CaptureBeforeAttackEvent(
+    SDK::OrbwalkingActionArgs& args) {
+    (void)CaptureBeforeAttack(args, *TargetNetworkId, *CaptureTick);
+}
+
 // Record only the neutral facts common to local basic-attack callbacks.
 // What the attack means (passive consumption, a weave window, an empowered
 // hit, and so on) remains the owning champion controller's responsibility.
@@ -201,6 +230,49 @@ inline void ForwardBuffStateEvent(
     UpdateState(args, Added);
 }
 
+template <void (*OnBuffAdd)(
+              const SDK::Events::BuffEventArgs&)>
+inline void ForwardActiveBuffEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    if (args.EndTime > Game::Time()) OnBuffAdd(args);
+}
+
+template <void (*OnBuffAdd)(
+              const SDK::Events::BuffEventArgs&)>
+inline void ForwardLocalActiveBuffEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    if (IsLocalPlayer(args.Sender) && args.EndTime > Game::Time()) {
+        OnBuffAdd(args);
+    }
+}
+
+template <void (*UpdateState)(
+              const SDK::Events::BuffEventArgs&, bool),
+          bool Added>
+inline void ForwardActiveBuffStateEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    if (args.EndTime > Game::Time()) UpdateState(args, Added);
+}
+
+template <void (*UpdateState)(
+              const SDK::Events::BuffEventArgs&, bool)>
+inline void ForwardExpiringBuffStateEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    UpdateState(args, args.EndTime > Game::Time());
+}
+
+template <void (*Handler)()>
+inline void ForwardNoArgBuffEvent(
+    const SDK::Events::BuffEventArgs&) {
+    Handler();
+}
+template <void (*UpdateState)(
+              const SDK::Events::BuffEventArgs&)>
+inline void ForwardBuffEvent(
+    const SDK::Events::BuffEventArgs& args) {
+    UpdateState(args);
+}
+
 template <void (*OnLocal)(
               const SDK::Events::ProcessSpellEventArgs&),
           void (*OnOther)(
@@ -212,6 +284,14 @@ inline void DispatchLocalOrOtherSpellEvent(
     } else {
         OnOther(args);
     }
+}
+
+inline bool Bool(Menu* menu, const char* key, bool fallback = true) {
+    return ::Plugins::KuroAIO::Bool(menu, key, fallback);
+}
+
+inline int Slider(Menu* menu, const char* key, int fallback = 0) {
+    return ::Plugins::KuroAIO::Slider(menu, key, fallback);
 }
 
 inline bool SpellEnabled(int index, Mode mode) {
@@ -387,6 +467,14 @@ inline AIHeroClient PlayerSelectedEnemy(float range = FLT_MAX) {
         if (Engine::ValidEnemy(selected, range)) return selected;
     }
     return {};
+}
+
+inline AIHeroClient PreferredEnemyTarget(const AIHeroClient& selected,
+                                         float range) {
+    if (Engine::ValidEnemy(selected, range)) return selected;
+    const auto orbTarget = OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbTarget, range)) return orbTarget;
+    return Engine::SelectTarget(range);
 }
 
 inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
@@ -697,6 +785,30 @@ inline bool Ready(int index) {
     return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
            Engine::RuntimeSpells[index]->IsReady();
 }
+inline bool Ready(int index, Mode mode) {
+    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
+           Engine::RuntimeSpells[index]->IsReady() &&
+           SpellEnabled(index, mode);
+}
+
+inline bool Lethal(const AIHeroClient& target, float damage) {
+    return Engine::ValidEnemy(target) &&
+           damage >= target.Health() + target.AllShield();
+}
+inline bool Lethal(const AIBaseClient& target, float damage) {
+    return target.IsValid() &&
+           damage >= target.Health() + target.AllShield();
+}
+
+inline bool Protected(const AIHeroClient& target) {
+    return !Engine::ValidEnemy(target) || target.IsInvulnerable() ||
+           HasSpellShieldOrImmunity(target);
+}
+
+inline bool PreserveAttack(bool reactive, bool exception = false) {
+    return !reactive && !exception && Orbwalker::IsWindingUp() &&
+           Bool(Engine::HumanMenu, "PreserveAttacks", true);
+}
 
 inline bool HasCurrentResource(float amount) {
     return CurrentResource() + 0.5f >= std::max(0.0f, amount);
@@ -731,6 +843,20 @@ inline bool CastThrottleReady(int index,
     const int now = SDK::Variables::TickCount();
     return Engine::LastActionTick <= 0 ||
            now - Engine::LastActionTick >= minimum;
+}
+template <std::size_t N>
+inline bool CastThrottleReady(const int (&lastCastTicks)[N],
+                              int index,
+                              int delay) {
+    return index >= 0 && index < static_cast<int>(N) &&
+           lastCastTicks[index] + delay <= Now();
+}
+template <std::size_t N>
+inline bool CastThrottleReady(const std::array<int, N>& lastCastTicks,
+                              int index,
+                              int delay) {
+    return index >= 0 && index < static_cast<int>(N) &&
+           lastCastTicks[static_cast<std::size_t>(index)] + delay <= Now();
 }
 
 // Shared responsive policy for champions whose recast/arrival branches need
@@ -1116,13 +1242,13 @@ inline bool CaptureGapcloser(
 template <int* TargetNetworkId,
           Vector3* Endpoint,
           int* ExpireTick,
-          int NearbyEndpointRange,
-          int LifetimeMs>
+          auto NearbyEndpointRange,
+          auto LifetimeMs>
 inline void CaptureGapcloserEvent(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     (void)CaptureGapcloser(
         args, *TargetNetworkId, *Endpoint, *ExpireTick,
-        static_cast<float>(NearbyEndpointRange), LifetimeMs);
+        static_cast<float>(NearbyEndpointRange), static_cast<int>(LifetimeMs));
 }
 
 inline int RemainingMilliseconds(float endTime,
@@ -1158,14 +1284,15 @@ inline void CaptureInterruptable(
 
 template <int* TargetNetworkId,
           int* ExpireTick,
-          int FallbackMs = 900,
-          int MinimumMs = 250,
-          int MaximumMs = 5000>
+          auto FallbackMs = 900,
+          auto MinimumMs = 250,
+          auto MaximumMs = 5000>
 inline void CaptureInterruptableEvent(
     const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
     CaptureInterruptable(
         args, *TargetNetworkId, *ExpireTick,
-        FallbackMs, MinimumMs, MaximumMs);
+        static_cast<int>(FallbackMs), static_cast<int>(MinimumMs),
+        static_cast<int>(MaximumMs));
 }
 
 } // namespace Plugins::KuroAIO::AI::ControllerHelpers

@@ -57,15 +57,12 @@ inline Vector3 WallAnchor = {};
 inline Vector3 PlannedLanding = {};
 inline Vector3 ArenaCenter = {};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 inline int SpellRank(int index) {
     if (index < 0 || index >= 4 || !Engine::RuntimeSpells[index]) return 1;
     return std::clamp(Engine::RuntimeSpells[index]->Level(), 1, index == 3 ? 3 : 5);
 }
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 inline bool Throttle(int index, int milliseconds) {
     return index >= 0 && index < 4 && Now() - CastTicks[index] >= milliseconds;
 }
@@ -123,9 +120,7 @@ inline float AutoDamage(const AIHeroClient& target) {
     return player.IsValid() && Engine::ValidEnemy(target)
         ? SDK::Damage::GetAutoAttackDamage(player, target, true) : 0.0f;
 }
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 inline bool PassiveShieldActive() {
     return ShieldType != PassiveShieldType::None && PassiveShieldExpireTick > Now();
 }
@@ -478,9 +473,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         ArenaActive = false; ArenaTargetId = 0; ArenaCenter = {};
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid() && PlayerOverrideUntil > Now()) args.Process = true;
 }
@@ -591,7 +583,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

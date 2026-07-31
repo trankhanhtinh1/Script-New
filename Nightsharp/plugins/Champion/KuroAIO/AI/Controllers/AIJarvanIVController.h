@@ -52,16 +52,13 @@ inline bool ArenaActive = false;
 inline Vector3 ArenaCenter = {}, ArenaLanding = {};
 inline int ArenaExpire = 0, ArenaTargetId = 0;
 inline constexpr int kManualMs = 520, kFlagMs = 8000, kArenaMs = 3500;
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 inline int Rank(int i) {
   return i >= 0 && i < 4 && Engine::RuntimeSpells[i]
              ? std::max(0, Engine::RuntimeSpells[i]->Level())
              : 0;
 }
-inline bool Ready(int i, Mode m) {
-  return i >= 0 && i < 4 && Engine::RuntimeSpells[i] &&
-         Engine::RuntimeSpells[i]->IsReady() && SpellEnabled(i, m);
-}
+using ControllerHelpers::Ready;
 inline bool Throttle(int i, int ms) {
   const int tick = i == 0 ? QTick : i == 1 ? WTick : i == 2 ? ETick : RTick;
   return Now() - tick >= ms;
@@ -130,9 +127,7 @@ inline float PassiveDamage(const AIHeroClient &t) {
              ? p.CalculatePhysicalDamage(t, PassiveRawDamage(t.Health()))
              : 0.0f;
 }
-inline bool Lethal(const AIHeroClient &t, float damage) {
-  return Engine::ValidEnemy(t) && damage >= t.Health() + t.AllShield();
-}
+using ControllerHelpers::Lethal;
 inline bool FlagUsable() {
   return Standard.Position.IsValid() && !Standard.Position.IsZero() &&
          Standard.ExpireTick > Now();
@@ -552,8 +547,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs &a) {
     ArenaExpire = 0;
   }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs &a) { OnBuffAdd(a); }
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) { (void)a; }
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs &a) {
   if (CaptureAfterAttack(a, LastAutoId, LastAutoTick))
     SpendPassive(LastAutoId);
@@ -698,8 +691,7 @@ inline constexpr ChampionController Controller = [] {
                                                                &LastAutoTick>;
   c.OnBuffAdd = &OnBuffAdd;
   c.OnBuffRemove = &OnBuffRemove;
-  c.OnBuffUpdate = &OnBuffUpdate;
-  c.OnBeforeAttack = &OnBeforeAttack;
+  c.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
   c.OnAfterAttack = &OnAfterAttack;
   c.OnObjectCreate = &OnObjectCreate;
   c.OnObjectDelete = &OnObjectDelete;

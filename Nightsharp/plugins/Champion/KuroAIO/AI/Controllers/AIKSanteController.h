@@ -45,7 +45,7 @@ inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 inline bool AllOut() { return CurrentStance == Stance::AllOut; }
 inline bool Ready(int i, Mode m, bool windup = false) {
   return i >= 0 && i < 4 && Engine::RuntimeSpells[i] &&
@@ -573,37 +573,14 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs &a, bool add) {
   }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs &a) {
-  UpdateBuff(a, true);
-}
-
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs &a) {
-  UpdateBuff(a, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs &a) {
-  UpdateBuff(a, true);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) {
   if (Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsCharging())
     a.Process = false;
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs &a) {
-  (void)CaptureAfterAttack(a, LastAutoTargetId, LastAutoTick);
-}
 
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs &a) {
-  (void)CaptureGapcloser(a, GapcloserTargetId, GapcloserEndpoint,
-                         GapcloserExpireTick, 700, 950);
-}
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs &a) {
-  CaptureInterruptable(a, InterruptTargetId, InterruptExpireTick, 1400, 250,
-                       5000);
-}
 
 inline void OnDraw() {
   if (!Bool(TacticsMenu, "DrawRanges", false))
@@ -703,13 +680,13 @@ inline constexpr ChampionController Controller = [] {
   c.OnUpdate = &OnUpdate;
   c.OnDraw = &OnDraw;
   c.OnProcessSpell = &OnProcessSpell;
-  c.OnBuffAdd = &OnBuffAdd;
-  c.OnBuffRemove = &OnBuffRemove;
-  c.OnBuffUpdate = &OnBuffUpdate;
+  c.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
+  c.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
+  c.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
   c.OnBeforeAttack = &OnBeforeAttack;
-  c.OnAfterAttack = &OnAfterAttack;
-  c.OnGapcloser = &OnGapcloser;
-  c.OnInterruptable = &OnInterruptable;
+  c.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
+  c.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 700, 950>;
+  c.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1400, 250, 5000>;
   return c;
 }();
 } // namespace Plugins::KuroAIO::AI::Controllers::KSante

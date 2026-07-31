@@ -2322,17 +2322,7 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     if (!CaptureAfterAttack(
@@ -2851,9 +2841,9 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::DispatchLocalOrOtherSpellEvent<
             &ObserveLocalSpell, &RecordEnemySpell>;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
     return controller;

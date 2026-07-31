@@ -17,11 +17,8 @@ inline int ManualUntil = 0;
 inline int ThreatUntil = 0;
 inline int LastTarget = 0;
 inline int LastTick = 0;
-inline int Now() { return SDK::Variables::TickCount(); }
-inline bool Ready(int s, Mode m) {
-  return s >= 0 && s < 4 && Engine::RuntimeSpells[s] &&
-         Engine::RuntimeSpells[s]->IsReady() && SpellEnabled(s, m);
-}
+using ControllerHelpers::Now;
+using ControllerHelpers::Ready;
 inline bool Hammer() { return Form == 1; }
 inline bool Blocked(const AIHeroClient &t) {
   return !Engine::ValidEnemy(t) || t.IsInvulnerable() || t.HasBuff("SivirE") ||
@@ -140,10 +137,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
   else
     ManualUntil = Now() + 500;
 }
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) { (void)a; }
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs &a) {
-  (void)ControllerHelpers::CaptureAfterAttack(a, LastTarget, LastTick);
-}
 inline void OnDraw() {
   if (!Bool(MenuRoot, "DrawRanges", false))
     return;
@@ -197,8 +190,7 @@ inline constexpr ChampionController Controller = [] {
   controller.OnUpdate = &OnUpdate;
   controller.OnDraw = &OnDraw;
   controller.OnProcessSpell = &OnProcessSpell;
-  controller.OnBeforeAttack = &OnBeforeAttack;
-  controller.OnAfterAttack = &OnAfterAttack;
+  controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastTarget, &LastTick>;
   return controller;
 }();
 } // namespace Plugins::KuroAIO::AI::Controllers::Jayce

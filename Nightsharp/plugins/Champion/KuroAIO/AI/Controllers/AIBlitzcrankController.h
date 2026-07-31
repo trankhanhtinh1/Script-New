@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -1894,12 +1894,6 @@ inline void OnGapcloser(
     }
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1050, 250, 6500);
-}
 
 inline bool BuffNameContains(
     const SDK::Events::BuffEventArgs& args,
@@ -1968,17 +1962,6 @@ inline void UpdateBuffState(
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
-
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
 inline void OnMissileCreate(
     const SDK::Events::ObjectEventArgs& args) {
@@ -2474,13 +2457,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1050, 250, 6500>;
     controller.OnMissileCreate = &OnMissileCreate;
     controller.OnMissileDelete = &OnMissileDelete;
     return controller;

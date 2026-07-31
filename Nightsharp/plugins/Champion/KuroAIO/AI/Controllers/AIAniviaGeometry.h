@@ -148,6 +148,7 @@ inline bool FrostbiteWillBeEmpowered(int nowTick,
                                      int chillExpireTick,
                                      int scheduledChillTick = 0,
                                      int safetyMs = 35) {
+    (void)nowTick;
     const int safeImpact = impactTick + std::max(0, safetyMs);
     const bool alreadyChilled = chillExpireTick >= safeImpact;
     const bool chillBeforeImpact = scheduledChillTick > 0 &&

@@ -9,7 +9,7 @@
 namespace Plugins::KuroAIO::AI::Controllers::Ornn::Geometry {
 
 using SharedGeometry::Direction2D;
-using Vec3 = SharedGeometry::Vec3;
+using Vec3 = ::Vec3;
 
 inline constexpr float kQRange = 800.0f;
 inline constexpr float kQWidth = 65.0f;
@@ -90,7 +90,7 @@ inline bool WallImpactCanHit(const Vec3& origin,
                              const Vec3& wallImpact,
                              const Vec3& target,
                              float targetRadius = 0.0f) {
-    if (origin.IsZero() || wallImpact.IsZero() || target.IsZero() ||
+    if (wallImpact.IsZero() || target.IsZero() ||
         origin.Distance2D(wallImpact) > kERange + 0.01f) return false;
     return target.Distance2D(wallImpact) <=
            kEShockwaveRadius + std::max(0.0f, targetRadius);
@@ -156,7 +156,10 @@ inline bool ShouldCallRam(const UltimateContext& context) {
 inline bool ShouldHeadbuttRam(const UltimateContext& context,
                              bool ramObservable,
                              bool headingTowardContact) {
-    return ramObservable && headingTowardContact && ShouldCallRam(context);
+    if (!ramObservable || !headingTowardContact) return false;
+    UltimateContext recast = context;
+    recast.ProjectileWall = false;
+    return ShouldCallRam(recast);
 }
 
 struct AutomaticContext {

@@ -67,12 +67,9 @@ inline bool WWasManual = false;
 inline bool EWasManual = false;
 inline bool RWasManual = false;
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int index, int delay) {
     const int tick = index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -136,9 +133,7 @@ inline float EDamage(const AIHeroClient& target, bool mimic = false,
     return player.CalculateMagicDamage(target, raw + MarkDetonationRaw(target));
 }
 
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline bool IsReturnName(const std::string& name) {
     return Engine::TextContains(name.c_str(), "return") || Engine::TextContains(name.c_str(), "returnm");
@@ -646,11 +641,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args, bool added) 
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuffState(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime > Game::Time()) UpdateBuffState(args, true);
-}
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid() || !ObjectEventIsAllied(args)) return;
@@ -676,9 +666,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (Engine::ValidEnemy(tether)) (void)RedirectBeforeAttackToFocus(args, tether);
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
-}
 
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (ControllerHelpers::CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
@@ -687,9 +674,6 @@ inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) 
     }
 }
 
-inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    ControllerHelpers::CaptureInterruptable(args, InterruptTargetId, InterruptExpireTick, 1800, 250, 5000);
-}
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -800,13 +784,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1800, 250, 5000>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     return controller;

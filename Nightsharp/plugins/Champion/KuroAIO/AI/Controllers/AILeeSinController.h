@@ -61,7 +61,7 @@ inline bool RWasManual = false;
 inline constexpr int kManualOwnershipMs = 520;
 inline constexpr int kCastThrottleMs = 70;
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
 inline int SpellRank(int index) {
     return index >= 0 && index < 4 && Engine::RuntimeSpells[index]
@@ -70,10 +70,7 @@ inline int SpellRank(int index) {
         : 1;
 }
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline int LastCastTick(int index) {
     return index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -143,9 +140,7 @@ inline float RawR() {
         ? RRawDamage(SpellRank(3), player.BonusAttackDamage()) : 0.0f;
 }
 
-inline bool Lethal(const AIBaseClient& target, float rawDamage) {
-    return target.IsValid() && rawDamage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline bool EnergyFor(int index, float reserve = 0.0f) {
     return HasEnergy(CurrentResource(), SpellCost(index), reserve);
@@ -691,9 +686,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || FlurryStacks <= 0) return;
@@ -840,7 +832,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

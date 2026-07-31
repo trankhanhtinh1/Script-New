@@ -48,24 +48,15 @@ inline int PassiveStacks = 0;
 inline int PassiveExpireTick = 0;
 inline Mode LastMode = Mode::None;
 
-inline bool Ready(int slot, Mode mode) {
-    return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
-        Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int slot, int delay = 70) {
-    return slot >= 0 && slot < 4 && LastCastTick[slot] + delay <= Now();
+    return ControllerHelpers::CastThrottleReady(LastCastTick, slot, delay);
 }
 
-inline bool Protected(const AIHeroClient& target) {
-    return !Engine::ValidEnemy(target) || target.IsInvulnerable() ||
-        HasSpellShieldOrImmunity(target);
-}
+using ControllerHelpers::Protected;
 
-inline float AP() {
-    const auto player = GameObjects::Player();
-    return player.IsValid() ? player.AP() : 0.0f;
-}
+using ControllerHelpers::AP;
 
 inline float QDamage(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
@@ -91,10 +82,7 @@ inline float RDamage(const AIHeroClient& target) {
         ? player.CalculateMagicDamage(target,
             RRawDamage(SpellRank(3), AP())) : 0.0f;
 }
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) &&
-        damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline Vector3 AttachedPosition(int networkId) {
     const auto player = GameObjects::Player();
@@ -422,9 +410,6 @@ inline void UpdateAttachment(const SDK::Events::BuffEventArgs& args, bool added)
     const Vector3 position = AttachedPosition(id);
     if (position.IsValid() && !position.IsZero()) AttachBallTo(id, position);
 }
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateAttachment(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateAttachment(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { UpdateAttachment(args, true); }
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
@@ -444,14 +429,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         PassiveStacks = 0;
     }
     PassiveExpireTick = Now() + 4000;
-}
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)ControllerHelpers::CaptureGapcloser(args, GapcloserTargetId,
-        GapcloserEndpoint, GapcloserExpireTick, 900.0f, 1000);
-}
-inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    ControllerHelpers::CaptureInterruptable(args, InterruptTargetId,
-        InterruptExpireTick, 1400, 250, 5000);
 }
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -551,13 +528,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<
         &LastAutoTargetId, &LastAutoTick>;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateAttachment, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateAttachment, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateAttachment, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 900, 1000>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1400, 250, 5000>;
     return controller;
 }();
 

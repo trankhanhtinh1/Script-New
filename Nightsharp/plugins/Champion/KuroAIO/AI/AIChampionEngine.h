@@ -691,6 +691,10 @@ inline bool UltimateAllowed(const SpellSpec& spec,
             (targetHp <= ActiveProfile->UltimateTargetHealthPercent ||
              enemies >= ActiveProfile->UltimateMinimumTargets ||
              player.HealthPercent() <= ActiveProfile->DefensiveHealthPercent);
+    case UltimatePolicy::SingleTarget:
+        return mode == Mode::Combo && target.IsValid() &&
+            (targetHp <= ActiveProfile->UltimateTargetHealthPercent ||
+             damage >= target.Health());
     case UltimatePolicy::MultiTarget:
         return mode == Mode::Combo && enemies >= ActiveProfile->UltimateMinimumTargets;
     case UltimatePolicy::Defensive:

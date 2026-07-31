@@ -497,7 +497,7 @@ static AIHeroClient BestDaggerTarget(float range) {
 
         const int daggersNear = CountOwnDaggersNear(target, 350.0f);
         float score = target.Health() - PassiveDamage(target) * static_cast<float>(daggersNear);
-        
+
         if (daggersNear > 0) {
             score -= 1000.0f;
         }
@@ -605,7 +605,7 @@ static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
     if (player.Distance(castPos) <= E.Range && AllowDashTo(castPos)) {
         return CastE(castPos);
     }
-    
+
     Vector3 fallbackPos = target.Position().Extend(player.Position(), -50.0f);
     fallbackPos.y = NavMesh::GetHeightForPosition(fallbackPos);
     if (player.Distance(fallbackPos) <= E.Range && AllowDashTo(fallbackPos)) {

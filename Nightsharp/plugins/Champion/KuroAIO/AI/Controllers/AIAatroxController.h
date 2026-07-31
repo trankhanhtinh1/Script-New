@@ -1042,10 +1042,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
 }
 
-inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
-    (void)CaptureLocalAutoAttack(
-        args, LastAutoTargetId, PendingAutoResetTick);
-}
 
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     const int now = SDK::Variables::TickCount();
@@ -1099,10 +1095,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(
-        args, LastAutoTargetId, PendingAutoResetTick);
-}
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -1319,12 +1311,12 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnDoCast = &OnDoCast;
+    controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &PendingAutoResetTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
     controller.OnBuffUpdate = &OnBuffUpdate;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &PendingAutoResetTick>;
     controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable =
         &ControllerHelpers::CaptureInterruptableEvent<

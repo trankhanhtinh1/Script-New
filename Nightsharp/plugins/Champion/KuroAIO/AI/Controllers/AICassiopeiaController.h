@@ -30,11 +30,8 @@ inline int LastAutoTick = 0;
 inline Vector3 LastQPosition = {};
 inline Vector3 LastWPosition = {};
 inline Vector3 LastRPosition = {};
-inline int Now() { return SDK::Variables::TickCount(); }
-inline bool Ready(int slot, Mode mode) {
-  return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
-         Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode);
-}
+using ControllerHelpers::Now;
+using ControllerHelpers::Ready;
 inline bool Poisoned(const AIHeroClient &target) {
   return Engine::ValidEnemy(target) && (target.HasBuff("CassiopeiaQPoison") ||
                                         target.HasBuff("CassiopeiaWPoison") ||
@@ -48,10 +45,7 @@ inline bool TargetCannotBeDamaged(const AIHeroClient &t) {
          t.HasBuff("EdgeOfNight") || t.HasBuff("VladimirSanguinePool") ||
          t.HasBuff("KayleR");
 }
-inline float AP() {
-  const auto p = GameObjects::Player();
-  return p.IsValid() ? p.AP() : 0.0f;
-}
+using ControllerHelpers::AP;
 inline float QDamage(const AIHeroClient &t) {
   return Engine::ValidEnemy(t)
              ? QRawDamage(std::clamp(Engine::RuntimeSpells[0]->Level(), 1, 5),
@@ -76,9 +70,7 @@ inline float RDamage(const AIHeroClient &t) {
                           AP())
              : 0.0f;
 }
-inline bool Lethal(const AIHeroClient &t, float d) {
-  return Engine::ValidEnemy(t) && d >= t.Health() + t.AllShield();
-}
+using ControllerHelpers::Lethal;
 inline bool HasWall(const Vector3 &a, const Vector3 &b) {
   return SDK::NavMesh::IsWallBetween(a, b, 25.0f);
 }
@@ -284,9 +276,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) {
   if (!a.Target.IsValid())
     return;
 }
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs &a) {
-  (void)CaptureAfterAttack(a, LastAutoTargetId, LastAutoTick);
-}
 inline void OnDraw() {
   const auto p = GameObjects::Player();
   if (!p.IsValid() || !Bool(CoachMenu, "DrawRanges", false))
@@ -385,7 +374,7 @@ inline constexpr ChampionController Controller = [] {
   controller.OnBuffRemove = &OnBuffRemove;
   controller.OnBuffUpdate = &OnBuffUpdate;
   controller.OnBeforeAttack = &OnBeforeAttack;
-  controller.OnAfterAttack = &OnAfterAttack;
+  controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
   return controller;
 }();
 } // namespace Plugins::KuroAIO::AI::Controllers::Cassiopeia

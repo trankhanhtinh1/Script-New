@@ -447,12 +447,6 @@ inline void UpdateBuffState(
     }
 }
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEndpoint,
-        GapcloserUntil, 700.0f, 850);
-}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -539,7 +533,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserUntil, 700, 850>;
     return controller;
 }();
 

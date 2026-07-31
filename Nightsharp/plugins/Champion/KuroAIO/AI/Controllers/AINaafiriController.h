@@ -89,12 +89,9 @@ inline Vector3 LastQAim = {};
 inline Vector3 LastWPathEnd = {};
 inline Vector3 LastEEndpoint = {};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int index, int delayMs) {
     const int tick = index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -278,9 +275,7 @@ inline float EDamage(const AIHeroClient& target, const EHitResult& hit) {
         : 0.0f;
 }
 
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline std::vector<LineBody> QPathBodies(const AIHeroClient& target,
                                          const Vector3& targetPrediction) {
@@ -742,9 +737,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid() || !ObjectEventIsAllied(args) ||
@@ -770,9 +762,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
-}
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -937,9 +926,9 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     return controller;

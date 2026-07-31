@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../AIChampionEngine.h"
 #include "../AIControllerHelpers.h"
@@ -2163,19 +2163,7 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     LastBeforeAttackHadMeep = false;
 }
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEndpoint,
-        GapcloserExpireTick, 900.0f, 1250);
-}
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1050, 300, 6000);
-}
 
 inline bool BuffNameIs(const SDK::Events::BuffEventArgs& args,
                        std::initializer_list<const char*> names) {
@@ -2250,17 +2238,6 @@ inline void UpdateBardBuffState(
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBardBuffState(args, true);
-}
-
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBardBuffState(args, false);
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBardBuffState(args, true);
-}
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
@@ -2856,13 +2833,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 900, 1250>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1050, 300, 6000>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     return controller;

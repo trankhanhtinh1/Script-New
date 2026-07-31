@@ -1708,6 +1708,8 @@ namespace SDK {
         class Menu : public ::SDK::UI::Menu {
         public:
             Menu() = default;
+            Menu(const char* name)
+                : Menu(name, name) {}
             Menu(const char* name, const char* displayName, bool root = false,
                  const char* uniqueString = "")
                 : ::SDK::UI::Menu(name, displayName, root, uniqueString) {}

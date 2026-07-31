@@ -595,19 +595,7 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
 }
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEndpoint,
-        GapcloserExpireTick, 720.0f, 900);
-}
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1500, 250, 5000);
-}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -691,8 +679,8 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &ObserveLocalSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 720, 900>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1500, 250, 5000>;
     return controller;
 }();
 

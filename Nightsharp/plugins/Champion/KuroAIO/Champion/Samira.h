@@ -628,7 +628,7 @@ static bool TryQCombo() {
         return false;
     }
 
-    if (Player().IsDashing() || LastE + 700 > SDK::Variables::TickCount()) {   
+    if (Player().IsDashing() || LastE + 700 > SDK::Variables::TickCount()) {
         return Bool(EMenu, "EQ") && Q.Cast(target.Position());
     }
 

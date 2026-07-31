@@ -1834,12 +1834,6 @@ inline void OnGapcloser(
     }
 }
 
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    ControllerHelpers::CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        1900, 250, 6000);
-}
 
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!MissileEventIsLocal(args) ||
@@ -2393,7 +2387,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1900, 250, 6000>;
     controller.OnMissileCreate = &OnMissileCreate;
     controller.OnMissileDelete = &OnMissileDelete;
     return controller;

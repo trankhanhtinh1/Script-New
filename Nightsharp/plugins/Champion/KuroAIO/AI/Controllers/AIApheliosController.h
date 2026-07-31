@@ -3088,7 +3088,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Five-weapon state machine with hybrid live/event ammo, independent "
         "per-gun Q cooldowns, standard and green-blue cycle policy, all twenty "
-        "main/off-hand Q interactions, low-ammo Incoming Weapon chains, mark/" 
+        "main/off-hand Q interactions, low-ammo Incoming Weapon chains, mark/"
         "root/chakram/Sentry lifecycle tracking, first-champion R collision "
         "geometry, five scored R variants and player-owned attack/positioning.";
     controller.Scenarios = Scenarios;

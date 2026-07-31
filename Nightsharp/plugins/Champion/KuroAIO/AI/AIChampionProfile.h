@@ -78,6 +78,7 @@ enum class UltimatePolicy : std::uint8_t {
     DisabledByDefault,
     Execute,
     AllIn,
+    SingleTarget,
     MultiTarget,
     Defensive,
     SaveAlly,
@@ -112,7 +113,17 @@ enum class Intent : std::uint32_t {
     Channel       = 1u << 21,
     AutoReset     = 1u << 22,
     AllyUtility   = 1u << 23,
+    Mark          = 1u << 24,
+    AutoWeave     = 1u << 25,
+    SpellShield   = 1u << 26,
+    MissingHealth = 1u << 27,
+    Global        = 1u << 28,
+    Revive        = 1u << 29,
 };
+
+#ifdef Global
+#undef Global
+#endif
 
 enum class Mechanic : std::uint64_t {
     None             = 0,

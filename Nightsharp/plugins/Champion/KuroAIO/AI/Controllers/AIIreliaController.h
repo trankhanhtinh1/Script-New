@@ -42,7 +42,7 @@ inline int BladeWallExpireTick = 0, FocusTargetId = 0, IncomingThreatId = 0,
            RCastTick = 0, LastAutoTargetId = 0, LastAutoTick = 0;
 inline Vector3 GapcloserEnd{};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 inline bool Ready(int i, Mode m, bool windup = false) {
   return i >= 0 && i < 4 && Engine::RuntimeSpells[i] &&
          Engine::RuntimeSpells[i]->IsReady() && SpellEnabled(i, m) &&
@@ -129,9 +129,7 @@ inline float RDamage(const AIBaseClient &target) {
                                           0.70f * p.AP())
              : 0.0f;
 }
-inline bool Lethal(const AIBaseClient &target, float damage) {
-  return target.IsValid() && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline void ReconcileState() {
   const auto p = GameObjects::Player();
@@ -613,10 +611,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs &args) {
   } else if (Engine::TextContains(args.BuffName, "ireliamark"))
     ClearMark(static_cast<int>(args.Sender.NetworkId));
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs &args) {
-  if (args.EndTime > Game::Time())
-    OnBuffAdd(args);
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &args) {
   const auto p = GameObjects::Player();
   if (!p.IsValid() || !args.Target.IsValid() || !FocusTargetId ||
@@ -628,9 +622,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &args) {
       static_cast<int>(args.Target.NetworkId()) != FocusTargetId)
     args.Process = false;
 }
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs &args) {
-  (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
-}
 inline void
 OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs &args) {
   if (ControllerHelpers::CaptureGapcloser(args, GapcloserTargetId, GapcloserEnd,
@@ -639,11 +630,6 @@ OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs &args) {
     IncomingThreatUntil = std::max(IncomingThreatUntil, Now() + 750);
     IncomingImpactTick = Now() + 180;
   }
-}
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs &args) {
-  ControllerHelpers::CaptureInterruptable(args, InterruptTargetId,
-                                          InterruptExpireTick, 1900, 250, 5500);
 }
 inline void OnDraw() {
   const auto p = GameObjects::Player();
@@ -775,11 +761,11 @@ inline constexpr ChampionController Controller = [] {
                                                       &LastAutoTick>;
   c.OnBuffAdd = &OnBuffAdd;
   c.OnBuffRemove = &OnBuffRemove;
-  c.OnBuffUpdate = &OnBuffUpdate;
+  c.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
   c.OnBeforeAttack = &OnBeforeAttack;
-  c.OnAfterAttack = &OnAfterAttack;
+  c.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
   c.OnGapcloser = &OnGapcloser;
-  c.OnInterruptable = &OnInterruptable;
+  c.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1900, 250, 5500>;
   return c;
 }();
 } // namespace Plugins::KuroAIO::AI::Controllers::Irelia

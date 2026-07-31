@@ -18,15 +18,15 @@ inline void DrawRingImGui(const Vector3& center, float outerRadius, float fadeWi
     constexpr int kVerticesPerRing = kSegments + 1;
     constexpr int kVertexCount = (kRings + 1) * kVerticesPerRing;
     constexpr int kIndexCount = kRings * kSegments * 6;
-    
+
     ImVec2 vertices[kVertexCount] = {};
     ImU32 colors[kVertexCount] = {};
-    
+
     unsigned char a = (color >> 24) & 0xFF;
     unsigned char r = (color >> 16) & 0xFF;
     unsigned char g = (color >> 8) & 0xFF;
     unsigned char b = color & 0xFF;
-    
+
     const int maxAlpha = std::clamp(static_cast<int>(a) * opacityPercent / 100, 0, 255);
     if (outerRadius <= 0.0f || fadeWidth <= 0.0f || maxAlpha <= 0) {
         return;

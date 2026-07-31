@@ -64,7 +64,7 @@ inline Vector3 SoulPosition = {};
 inline Vector3 MistCastPosition = {};
 inline Vector3 LastRLanding = {};
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 inline Vec2 ToVec2(const Vector3& value) { return { value.x, value.z }; }
 
 inline bool RuntimeNameContains(int index, const char* token) {
@@ -548,9 +548,6 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs& args, bool added) {
         }
     }
 }
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, true); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, true); }
 
 inline bool SoulObject(const SDK::Events::ObjectEventArgs& args) {
     return args.Sender.IsValid() && ControllerHelpers::AnyTextContains(
@@ -583,14 +580,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         QMarkTargetId = LastAutoTargetId;
         QMarkExpireTick = std::max(QMarkExpireTick, Now() + 180);
     }
-}
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
-                           GapcloserExpireTick, 760.0f, 900);
-}
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(args, InterruptTargetId, InterruptExpireTick, 1400, 250, 5000);
 }
 
 inline void OnDraw() {
@@ -693,13 +682,13 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<
         &LastAutoTargetId, &LastAutoTick>;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 760, 900>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1400, 250, 5000>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     return controller;

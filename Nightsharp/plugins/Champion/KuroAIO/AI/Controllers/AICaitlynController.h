@@ -424,12 +424,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEndpoint,
-        GapcloserExpireTick, 760.0f, 900);
-}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -508,7 +502,7 @@ inline constexpr ChampionController Controller = [] {
         &CaptureAfterAttackAndReleaseOwnedFocusEvent<
             &LastAfterAttackTargetId, &LastAfterAttackTick,
             &OwnedFocusTargetId, &OwnedFocusUntil>;
-    controller.OnGapcloser = &OnGapcloser;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 760, 900>;
     return controller;
 }();
 

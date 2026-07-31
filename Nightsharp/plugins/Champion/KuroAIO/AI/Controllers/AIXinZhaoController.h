@@ -834,9 +834,6 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs& args, bool removed) {
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, false); }
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { UpdateBuff(args, true); }
 
 inline void BuildMenu(Menu* root) {
     TacticsMenu = root->AddSubMenu(new Menu(
@@ -980,9 +977,9 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<

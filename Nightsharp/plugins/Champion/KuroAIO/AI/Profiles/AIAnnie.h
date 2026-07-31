@@ -131,7 +131,7 @@ inline constexpr ChampionProfile Annie = [] {
         "the correct ally without stealing an intended stack sequence, and "
         "micro Tibbers through enrage, aura contact, turret and leash states.";
     p.ResearchSummary =
-        "Pinned to Riot 26.4/25.18/25.8 and CommunityDragon 16.14. Cross-" 
+        "Pinned to Riot 26.4/25.18/25.8 and CommunityDragon 16.14. Cross-"
         "checked current Challenger Annie trading, Faker and EUW Challenger "
         "replays, combo catalogs, AnnieMains landing-order mechanics and both "
         "local OneKeyToWin implementations; rejected their obsolete ranges, "

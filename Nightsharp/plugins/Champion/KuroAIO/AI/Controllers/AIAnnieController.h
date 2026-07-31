@@ -2937,7 +2937,7 @@ inline constexpr ChampionController Controller = [] {
         "Eleven-posture burst/catch controller with cast-versus-impact "
         "Pyromania simulation, hidden three-stack Q-E and two-stack landing "
         "races, projectile-wall-aware refund Q, cast-end W/Flash cone geometry, "
-        "impact-timed ally E protection, scored R stun selection, and manual-" 
+        "impact-timed ally E protection, scored R stun selection, and manual-"
         "locking turret/leash/enrage-aware soft Tibbers micro.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);

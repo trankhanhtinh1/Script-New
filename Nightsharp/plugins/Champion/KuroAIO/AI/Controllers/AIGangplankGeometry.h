@@ -137,7 +137,7 @@ inline bool ChainHitsPosition(
 }
 
 inline Vec3 ChainPlacement(const Vec3& anchor, const Vec3& desired) {
-    if (!anchor.IsValid() || !desired.IsValid()) return {};
+    if (!anchor.IsValid() || anchor.IsZero() || !desired.IsValid()) return {};
     const Vec3 direction = SharedGeometry::Direction2D(anchor, desired);
     if (direction.IsZero()) return anchor;
     const float distance = std::min(kBarrelChainRange - 20.0f,
@@ -250,4 +250,73 @@ inline bool ShouldCastCannonBarrage(const RPolicyContext& context) {
         (context.TargetImmobile || context.TargetLikelyToRemain);
 }
 
+enum class CannonUpgrade : std::uint8_t {
+    None,
+    DeathsDaughter,
+    FireAtWill,
+    RaiseMorale,
+};
+
+inline CannonUpgrade ChooseCannonUpgrade(
+    bool objectiveFight,
+    bool allyInDanger,
+    int enemiesInZone,
+    int alliesInZone,
+    bool alreadyDeathsDaughter,
+    bool alreadyFireAtWill,
+    bool alreadyRaiseMorale) {
+    if (alreadyDeathsDaughter || alreadyFireAtWill || alreadyRaiseMorale) {
+        return CannonUpgrade::None;
+    }
+    if (objectiveFight || enemiesInZone >= 3) {
+        return CannonUpgrade::DeathsDaughter;
+    }
+    if (allyInDanger && alliesInZone > 0) {
+        return CannonUpgrade::FireAtWill;
+    }
+    return CannonUpgrade::RaiseMorale;
+}
+
+inline bool IsBarrelExpired(const BarrelState& barrel, int now) {
+    return !barrel.Alive || barrel.SpawnTick <= 0 ||
+        now >= barrel.SpawnTick + kBarrelLifetimeMs;
+}
+
+inline BarrelState ReconcileBarrelObservation(
+    BarrelState previous,
+    int networkId,
+    const Vec3& position,
+    int observedHealth,
+    bool allied,
+    int now) {
+    if (networkId == 0 || !position.IsValid() || position.IsZero()) {
+        return previous;
+    }
+    if (previous.NetworkId != networkId) previous = {};
+    if (previous.SpawnTick <= 0) previous.SpawnTick = now;
+    previous.NetworkId = networkId;
+    previous.Position = position;
+    previous.LastSeenTick = now;
+    previous.ObservedHealth = std::clamp(observedHealth, 1, 3);
+    previous.ObservedHealthTick = now;
+    previous.Allied = allied;
+    previous.Alive = true;
+    return previous;
+}
+
+inline bool IsBarrelTriggerTarget(
+    const BarrelState& barrel,
+    const Vec3& playerPosition,
+    float attackRange,
+    int level,
+    int now) {
+    return barrel.Alive && barrel.ObservedHealth == 1 &&
+        PredictedBarrelHealth(barrel, level, now) == 1 &&
+        barrel.Position.IsValid() &&
+        playerPosition.Distance2D(barrel.Position) <= std::max(0.0f, attackRange);
+}
+
+inline int MinimumBarrelsForChain(const BarrelChain& chain) {
+    return std::max(1, chain.Count);
+}
 } // namespace Plugins::KuroAIO::AI::Controllers::Gangplank::Geometry

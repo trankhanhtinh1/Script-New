@@ -67,12 +67,9 @@ inline constexpr int kWPostCastMs = 70;
 inline constexpr int kEPostCastMs = 80;
 inline constexpr int kRPostCastMs = 120;
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int index, int minimumMs) {
     const int last = index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -202,9 +199,7 @@ inline float RawR(const AIHeroClient& target) {
                      target.MaxHealth()) : 0.0f;
 }
 
-inline bool Lethal(const AIHeroClient& target, float rawDamage) {
-    return Engine::ValidEnemy(target) && rawDamage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline bool CursorAgrees(const Vector3& endpoint, const Vector3& origin) {
     const Vec3 cursorDirection = Direction2D(origin, Game::CursorPos());
@@ -542,9 +537,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "Passive")) PassiveState = {};
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !HasElement()) return;
@@ -699,7 +691,7 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnObjectCreate = &OnObjectCreate;

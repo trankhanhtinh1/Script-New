@@ -737,31 +737,9 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, true);
-}
 
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, false);
-}
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateBuffState(args, args.EndTime > Game::Time());
-}
 
-inline void OnGapcloser(
-    const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(
-        args, GapcloserTargetId, GapcloserEnd,
-        GapcloserExpireTick, 850.0f, 1100);
-}
-
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(
-        args, InterruptTargetId, InterruptExpireTick,
-        650, 220, 2600);
-}
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -930,12 +908,12 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardExpiringBuffStateEvent<&UpdateBuffState>;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEnd, &GapcloserExpireTick, 850, 1100>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 650, 220, 2600>;
     return controller;
 }();
 

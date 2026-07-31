@@ -579,27 +579,6 @@ inline void UpdateTransformBuff(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    UpdateTransformBuff(args, true);
-}
-inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    UpdateTransformBuff(args, false);
-}
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    UpdateTransformBuff(args, true);
-}
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) { (void)args; }
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(args, LastAfterAttackTargetId, LastAfterAttackTick);
-}
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    (void)CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
-                           GapcloserExpireTick, 650.0f, 1100);
-}
-inline void OnInterruptable(
-    const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(args, InterruptTargetId, InterruptExpireTick);
-}
 
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!MissileEventIsLocal(args) || !IsQMissile(args)) return;
@@ -773,13 +752,12 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
-    controller.OnBuffAdd = &OnBuffAdd;
-    controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
-    controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
+    controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, true>;
+    controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, false>;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, true>;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
+    controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 650, 1100>;
+    controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick>;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     controller.OnMissileCreate = &OnMissileCreate;

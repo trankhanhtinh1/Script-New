@@ -51,12 +51,9 @@ inline bool WWasManual = false;
 inline bool EWasManual = false;
 inline bool RWasManual = false;
 
-inline int Now() { return SDK::Variables::TickCount(); }
+using ControllerHelpers::Now;
 
-inline bool Ready(int index, Mode mode) {
-    return index >= 0 && index < 4 && Engine::RuntimeSpells[index] &&
-           Engine::RuntimeSpells[index]->IsReady() && SpellEnabled(index, mode);
-}
+using ControllerHelpers::Ready;
 
 inline bool Throttle(int index, int delay) {
     const int tick = index == 0 ? QCastTick : index == 1 ? WCastTick :
@@ -104,10 +101,7 @@ inline void ReconcileState() {
     }
 }
 
-inline float TotalAttackDamage() {
-    const auto player = GameObjects::Player();
-    return player.IsValid() ? player.TotalAttackDamage() : 0.0f;
-}
+using ControllerHelpers::TotalAttackDamage;
 
 inline float QDamage(const AIHeroClient& target, int bodyIndex = 0) {
     return Engine::ValidEnemy(target) ?
@@ -128,9 +122,7 @@ inline float RDamage(const AIHeroClient& target) {
                    TotalAttackDamage(), 100.0f - target.HealthPercent()) : 0.0f;
 }
 
-inline bool Lethal(const AIHeroClient& target, float damage) {
-    return Engine::ValidEnemy(target) && damage >= target.Health() + target.AllShield();
-}
+using ControllerHelpers::Lethal;
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool defensive = false) {
     if (!Engine::ValidEnemy(target, kQRange + 40.0f) || !Ready(0, mode) ||
@@ -385,9 +377,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && args.EndTime > Game::Time()) OnBuffAdd(args);
-}
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !SpiritActive) return;
@@ -396,9 +385,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (target.HealthPercent() > 70.0f && Orbwalker::IsWindingUp()) args.Process = true;
 }
 
-inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
-    (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
-}
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -517,9 +503,9 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     return controller;
 }();
 
