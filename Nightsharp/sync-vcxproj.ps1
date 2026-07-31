@@ -61,6 +61,28 @@ function Test-IsExcluded {
     return $false
 }
 
+function Get-ProjectFiles {
+    $pending = [System.Collections.Generic.Stack[IO.DirectoryInfo]]::new()
+    $pending.Push([IO.DirectoryInfo]::new($ProjectDir))
+
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($entry in Get-ChildItem -LiteralPath $directory.FullName) {
+            if ($entry -is [IO.DirectoryInfo]) {
+                if ($ExcludedDirectories -contains $entry.Name) {
+                    continue
+                }
+                if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    continue
+                }
+                $pending.Push($entry)
+            } elseif ($entry -is [IO.FileInfo]) {
+                $entry
+            }
+        }
+    }
+}
+
 function Get-ProjectItems {
     $items = @{
         ClCompile = [System.Collections.Generic.List[string]]::new()
@@ -68,13 +90,13 @@ function Get-ProjectItems {
         MASM = [System.Collections.Generic.List[string]]::new()
     }
 
-    Get-ChildItem -LiteralPath $ProjectDir -File -Recurse | ForEach-Object {
-        $relativePath = Get-RelativeProjectPath $_.FullName
-        if (Test-IsExcluded -File $_ -RelativePath $relativePath) {
-            return
+    foreach ($file in Get-ProjectFiles) {
+        $relativePath = Get-RelativeProjectPath $file.FullName
+        if (Test-IsExcluded -File $file -RelativePath $relativePath) {
+            continue
         }
 
-        $extension = $_.Extension.ToLowerInvariant()
+        $extension = $file.Extension.ToLowerInvariant()
         if ($HeaderExtensions -contains $extension) {
             $items.ClInclude.Add($relativePath)
         } elseif ($SourceExtensions -contains $extension) {
@@ -151,17 +173,32 @@ function Save-XmlDocument {
         [Parameter(Mandatory)][string]$Path
     )
 
+    $encoding = [System.Text.UTF8Encoding]::new($false)
     $settings = [System.Xml.XmlWriterSettings]::new()
-    $settings.Encoding = [System.Text.UTF8Encoding]::new($false)
+    $settings.Encoding = $encoding
     $settings.Indent = $true
     $settings.NewLineChars = "`r`n"
 
-    $writer = [System.Xml.XmlWriter]::Create($Path, $settings)
+    $stream = [IO.MemoryStream]::new()
+    $writer = [System.Xml.XmlWriter]::Create($stream, $settings)
     try {
         $Document.Save($writer)
+        $writer.Flush()
+        $content = $encoding.GetString($stream.ToArray())
     } finally {
         $writer.Dispose()
+        $stream.Dispose()
     }
+
+    if ([IO.File]::Exists($Path)) {
+        $current = [IO.File]::ReadAllText($Path)
+        if ([string]::Equals($current, $content, [StringComparison]::Ordinal)) {
+            return $false
+        }
+    }
+
+    [IO.File]::WriteAllText($Path, $content, $encoding)
+    return $true
 }
 
 function Update-ProjectFile {
@@ -298,10 +335,12 @@ function Update-FiltersFile {
 }
 
 $items = Get-ProjectItems
-Update-ProjectFile -Items $items
-Update-FiltersFile -Items $items
+$projectChanged = Update-ProjectFile -Items $items
+$filtersChanged = Update-FiltersFile -Items $items
 
 Write-Host "Synced NightSharp.vcxproj"
+Write-Host "  Project: $(if ($projectChanged) { 'updated' } else { 'unchanged' })"
+Write-Host "  Filters: $(if ($filtersChanged) { 'updated' } else { 'unchanged' })"
 Write-Host "  Sources: $($items.ClCompile.Count)"
 Write-Host "  Headers: $($items.ClInclude.Count)"
 Write-Host "  MASM:    $($items.MASM.Count)"

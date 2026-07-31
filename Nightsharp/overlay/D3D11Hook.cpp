@@ -30,6 +30,7 @@
 
 #include <d3d11.h>
 #include <dxgi.h>
+#include <windowsx.h>
 #include <cstdlib>
 #include <new>
 

@@ -287,20 +287,20 @@ static void Obj_AI_Base_OnProcessSpellCast(const ProcessSpellEventArgs& args) {
         const std::string spellName = args.SpellName;
         if (spellName == "XerathArcanopulseChargeUp" ||
             spellName == "XerathArcanopulse2") {
-            Q.LastCastAttemptT = Variables::TickCount();
+            Q.LastCastAttemptT = SDK::Variables::TickCount();
         }
         if (spellName == "XerathArcaneBarrage2") {
-            W.LastCastAttemptT = Variables::TickCount();
+            W.LastCastAttemptT = SDK::Variables::TickCount();
         }
         if (spellName == "XerathMageSpear") {
-            E.LastCastAttemptT = Variables::TickCount();
+            E.LastCastAttemptT = SDK::Variables::TickCount();
         }
     }
 
     const AIBaseClient sender(args.Sender.Ptr);
     if (sender.IsValid() && sender.IsAlly() &&
         std::string(args.SpellName) == "YasuoWMovingWall") {
-        WallCastT = Variables::TickCount();
+        WallCastT = SDK::Variables::TickCount();
         YasuoWallCastedPos = sender.Position().To2D();
     }
 }

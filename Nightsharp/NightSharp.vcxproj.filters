@@ -124,6 +124,9 @@
     <Filter Include="Plugins\KuroEvade\Native\SpecialSpells">
       <UniqueIdentifier>{68CA55F2-5233-94F0-A34C-6250F25DFC44}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Registration">
+      <UniqueIdentifier>{50DCA7B4-0BEC-E8EB-944F-724470950E58}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{250EA8A9-EF5D-1946-AE05-CEA506516D80}</UniqueIdentifier>
     </Filter>
@@ -288,6 +291,12 @@
     </ClCompile>
     <ClCompile Include="overlay\OverlayManager.cpp">
       <Filter>overlay</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\PluginBootstrap.cpp">
+      <Filter>Plugins</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp">
       <Filter>SDK\Data</Filter>
@@ -2624,6 +2633,9 @@
       <Filter>Plugins</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\PluginManager.h">
+      <Filter>Plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\PluginRegistrars.h">
       <Filter>Plugins</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\PluginRegistry.h">

@@ -110,6 +110,8 @@
     <ClCompile Include="overlay\D3D11Hook.cpp" />
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
+    <ClCompile Include="Plugins\PluginBootstrap.cpp" />
+    <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp" />
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
@@ -897,6 +899,7 @@
     <ClInclude Include="Plugins\KuroEvade\Native\SpellTargets.h" />
     <ClInclude Include="Plugins\PluginBootstrap.h" />
     <ClInclude Include="Plugins\PluginManager.h" />
+    <ClInclude Include="Plugins\PluginRegistrars.h" />
     <ClInclude Include="Plugins\PluginRegistry.h" />
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h" />
     <ClInclude Include="Plugins\Utility\DeveloperTools\EventLoggerTab.h" />
