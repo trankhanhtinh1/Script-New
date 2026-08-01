@@ -28,10 +28,14 @@ inline std::uint32_t ImageSize(HMODULE module) {
     return nt->OptionalHeader.SizeOfImage;
 }
 
-inline bool Install(HMODULE module) {
+inline bool Install(HMODULE module, std::uint32_t moduleSize) {
     return g_client.Install(
         reinterpret_cast<std::uintptr_t>(module),
-        ImageSize(module));
+        moduleSize);
+}
+
+inline bool Install(HMODULE module) {
+    return Install(module, ImageSize(module));
 }
 
 inline void Uninstall() {

@@ -301,7 +301,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         // OnProcessSpell is called when the attack animation actually starts on the server.
         // attackWindupMs is the total windup duration from this animation start.
         // Therefore, the exact windup completion tick is (now + attackWindupMs).
-        const int windupEndTick = now + static_cast<int>(context_.attackWindupMs);
+        const int windupEndTick = now + context_.lastAttackOrderToAnimGapMs + static_cast<int>(context_.attackWindupMs);
         int delayMs = windupEndTick - now;
         if (delayMs < 0) {
             delayMs = 0;

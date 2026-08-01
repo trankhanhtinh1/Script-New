@@ -626,6 +626,13 @@ namespace ConfigStore {
         ApplyLoaded(root);
     }
 
+    inline void OnMenuRemoved(Menu* root) {
+        if (!root || g_applying) return;
+        // Native plugin menus can be destroyed on Unload before the normal
+        // debounce tick. Save the tree while it is still complete.
+        SaveRoot(root);
+    }
+
     inline void CheckCoreChanged() {
         const CoreSnap now = CaptureCore();
         if (!CoreEquals(now, g_lastCore)) {
@@ -688,6 +695,7 @@ namespace ConfigStore {
         g_ChampionNameFn = championFn;
         SDK::UI::g_MenuValueChangedHook = &OnMenuValueChanged;
         SDK::UI::g_MenuAttachedHook     = &OnMenuAttached;
+        SDK::UI::g_MenuRemovedHook      = &OnMenuRemoved;
         LoadCore();
         LoadSkins();
         // Roots that attached before this hook was installed (the SDK's

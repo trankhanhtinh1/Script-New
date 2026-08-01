@@ -49,9 +49,15 @@ bool CrashClient::Install(std::uintptr_t moduleBase, std::uint32_t moduleSize) {
     FormatCrashReadyEventName(pid_, readyName, sizeof(readyName));
     FormatDumpCompleteEventName(pid_, completeName, sizeof(completeName));
 
+    LocalObjectSecurity security;
+    if (!security.Valid()) {
+        CloseResources();
+        return false;
+    }
+
     mapping_ = CreateFileMappingA(
         INVALID_HANDLE_VALUE,
-        nullptr,
+        &security.attributes,
         PAGE_READWRITE,
         0,
         sizeof(SharedState),
@@ -81,8 +87,8 @@ bool CrashClient::Install(std::uintptr_t moduleBase, std::uint32_t moduleSize) {
     state_->heartbeatTick = GetTickCount64();
     strcpy_s(state_->phase, "bridge-install");
 
-    crashReady_ = CreateEventA(nullptr, FALSE, FALSE, readyName);
-    dumpComplete_ = CreateEventA(nullptr, FALSE, FALSE, completeName);
+    crashReady_ = CreateEventA(&security.attributes, FALSE, FALSE, readyName);
+    dumpComplete_ = CreateEventA(&security.attributes, FALSE, FALSE, completeName);
     if (!crashReady_ || !dumpComplete_) {
         CloseResources();
         return false;

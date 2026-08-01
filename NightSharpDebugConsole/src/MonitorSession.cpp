@@ -83,6 +83,14 @@ MonitorSession::~MonitorSession() {
 }
 
 bool MonitorSession::AcceptHello(nscrash::HelloPacket& hello) {
+    nscrash::LocalObjectSecurity security;
+    if (!security.Valid()) {
+        std::fprintf(
+            stderr,
+            "[monitor] security descriptor setup failed: %lu\n",
+            GetLastError());
+        return false;
+    }
     pipe_ = CreateNamedPipeA(
         nscrash::kPipeName,
         PIPE_ACCESS_INBOUND,
@@ -91,7 +99,7 @@ bool MonitorSession::AcceptHello(nscrash::HelloPacket& hello) {
         64 * 1024,
         64 * 1024,
         0,
-        nullptr);
+        &security.attributes);
     if (pipe_ == INVALID_HANDLE_VALUE) {
         const DWORD err = GetLastError();
         if (err == ERROR_PIPE_BUSY || err == ERROR_ACCESS_DENIED) {
@@ -131,21 +139,36 @@ bool MonitorSession::OpenTarget(const nscrash::HelloPacket& hello) {
     nscrash::FormatMappingName(pid_, mappingName, sizeof(mappingName));
     nscrash::FormatCrashReadyEventName(pid_, readyName, sizeof(readyName));
     nscrash::FormatDumpCompleteEventName(pid_, completeName, sizeof(completeName));
-    if (!std::memchr(hello.mappingName, '\0', sizeof(hello.mappingName)) ||
-        !std::memchr(
+    const bool objectNamesTerminated =
+        std::memchr(hello.mappingName, '\0', sizeof(hello.mappingName)) != nullptr &&
+        std::memchr(
             hello.crashReadyEventName,
             '\0',
-            sizeof(hello.crashReadyEventName)) ||
-        !std::memchr(
+            sizeof(hello.crashReadyEventName)) != nullptr &&
+        std::memchr(
             hello.dumpCompleteEventName,
             '\0',
-            sizeof(hello.dumpCompleteEventName)) ||
-        std::strcmp(mappingName, hello.mappingName) != 0 ||
-        std::strcmp(readyName, hello.crashReadyEventName) != 0 ||
-        std::strcmp(completeName, hello.dumpCompleteEventName) != 0 ||
-        hello.moduleBase == 0 || hello.moduleSize == 0 ||
-        hello.moduleSize > 512u * 1024u * 1024u) {
-        std::fprintf(stderr, "[monitor] HELLO object metadata rejected\n");
+            sizeof(hello.dumpCompleteEventName)) != nullptr;
+    const bool objectNamesMatch =
+        objectNamesTerminated &&
+        std::strcmp(mappingName, hello.mappingName) == 0 &&
+        std::strcmp(readyName, hello.crashReadyEventName) == 0 &&
+        std::strcmp(completeName, hello.dumpCompleteEventName) == 0;
+    // A zero image size is valid when PE headers were erased before the
+    // deferred worker could inspect them. The module base is still checked
+    // against a committed region below.
+    const bool moduleMetadataValid =
+        hello.moduleBase != 0 &&
+        (hello.moduleSize == 0 ||
+         hello.moduleSize <= 512u * 1024u * 1024u);
+    if (!objectNamesMatch || !moduleMetadataValid) {
+        std::fprintf(
+            stderr,
+            "[monitor] HELLO object metadata rejected pid=%lu names=%d base=%p size=0x%X\n",
+            static_cast<unsigned long>(pid_),
+            objectNamesMatch ? 1 : 0,
+            reinterpret_cast<void*>(hello.moduleBase),
+            hello.moduleSize);
         return false;
     }
     mapping_ = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, mappingName);

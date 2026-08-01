@@ -1,13 +1,54 @@
 #pragma once
 
 #include <Windows.h>
+#include <sddl.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <type_traits>
 
+#pragma comment(lib, "advapi32.lib")
+
 namespace nscrash {
+
+inline constexpr char kLocalObjectSecuritySddl[] =
+    "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;AU)S:(ML;;NW;;;ME)";
+
+// The monitor and the injected client can run at different integrity levels.
+// Keep these local named objects readable/writable by authenticated users while
+// preventing a lower-integrity process from writing up into a medium object.
+struct LocalObjectSecurity {
+    PSECURITY_DESCRIPTOR descriptor{};
+    SECURITY_ATTRIBUTES attributes{};
+
+    LocalObjectSecurity() {
+        attributes.nLength = sizeof(attributes);
+        attributes.bInheritHandle = FALSE;
+        if (ConvertStringSecurityDescriptorToSecurityDescriptorA(
+                kLocalObjectSecuritySddl,
+                SDDL_REVISION_1,
+                &descriptor,
+                nullptr)) {
+            attributes.lpSecurityDescriptor = descriptor;
+        }
+    }
+
+    ~LocalObjectSecurity() {
+        if (descriptor) {
+            LocalFree(descriptor);
+            descriptor = nullptr;
+        }
+    }
+
+    LocalObjectSecurity(const LocalObjectSecurity&) = delete;
+    LocalObjectSecurity& operator=(const LocalObjectSecurity&) = delete;
+
+    bool Valid() const {
+        return descriptor != nullptr && attributes.lpSecurityDescriptor != nullptr;
+    }
+};
+
 
 inline constexpr std::uint32_t kMagic = 0x5243534Eu; // NSCR
 inline constexpr std::uint16_t kVersion = 1;

@@ -8,6 +8,7 @@
 #include "PluginManager.h"
 #include "PluginRegistrars.h"
 #include "PluginRegistry.h"
+#include "AwarenessActivator/AwarenessActivatorPlugin.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
@@ -147,6 +148,7 @@ void EnsureRegistered() {
 
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
+    PluginManager::Get().Register<NightSharp::Companion::AwarenessActivatorPlugin>();
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
     PluginManager::Get().Register<Orbwalker7UPPlugin>();
     PluginManager::Get().Register<KuroTargetSelector::KuroTargetSelectorPlugin>();

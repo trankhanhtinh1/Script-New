@@ -23,8 +23,9 @@ namespace Plugins::KuroTargetSelector {
 class KuroTargetSelectorService final : public ::SDK::ITargetSelector,
                                         public ::SDK::KuroTargetSelector::IKuroTargetSelector {
 public:
-    explicit KuroTargetSelectorService(::SDK::Menu* parent)
-        : menu_(new Menu(parent)), drawing_(new Drawing(menu_)) {
+    explicit KuroTargetSelectorService(
+        ::SDK::Menu* parent, bool parentIsRoot = false)
+        : menu_(new Menu(parent, parentIsRoot)), drawing_(new Drawing(menu_)) {
         // Construction registers the menu/drawing objects, but the registry
         // owns activation.  Start suspended so a merely loaded plugin cannot
         // duplicate SDK/Impulse callbacks before it becomes current.
@@ -634,8 +635,9 @@ public:
         if (implementation_) return;
 
         DestroyMenu();
-        menu_ = new ::SDK::Menu(GetInternalId(), GetName(), true);
-        implementation_ = new KuroTargetSelectorService(menu_);
+        menu_ = new ::SDK::Menu(
+            GetInternalId(), "Kuro Target Selector", true);
+        implementation_ = new KuroTargetSelectorService(menu_, true);
         menu_->Attach();
 
         const bool added = ::SDK::TargetSelector::AddTargetSelector(

@@ -23,7 +23,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <cstdio>
-
+#include <cstring>
 namespace NightSharpMenu {
 
     inline ImFont* InstallBgxFont(float sizePixels = 16.0f) {
@@ -101,6 +101,7 @@ namespace NightSharpMenu {
     inline ImU32 COL_BORDER = IM_COL32(88, 100, 148, 255);
 
     inline SDK::UI::Menu* ensoulCoreRoot = nullptr;
+    inline SDK::UI::Menu* ensoulPluginRoot = nullptr;
     inline SDK::UI::MenuList* ensoulLanguage = nullptr;
     inline SDK::UI::MenuBool* ensoulSkinChanger = nullptr;
     inline SDK::UI::MenuSlider* ensoulSkinId = nullptr;
@@ -120,6 +121,7 @@ namespace NightSharpMenu {
     inline SDK::UI::MenuBool* ensoulProfilerLog = nullptr;
     inline SDK::UI::MenuRuntime* ensoulProfilerRuntime = nullptr;
     inline SDK::UI::MenuRuntime* ensoulPluginSelectorRuntime = nullptr;
+    inline SDK::UI::Menu* ensoulPluginSelectorMenu = nullptr;
     inline SDK::UI::Menu* ensoulRuntimeMenus = nullptr;
 
     inline void DrawPluginSelectorRuntimeBridge(void*);
@@ -162,12 +164,29 @@ namespace NightSharpMenu {
     inline RuntimeMenuBinding ensoulRuntimeBindings[PluginRegistry::MAX_PLUGINS] = {};
     inline int ensoulRuntimeBindingCount = 0;
 
+    struct NativePluginMenuBinding {
+        int registryIndex = -1;
+        SDK::UI::Menu* menu = nullptr;
+        SDK::UI::MenuSeparator* status = nullptr;
+        SDK::UI::MenuBool* loaded = nullptr;
+        SDK::UI::MenuBool* alwaysLoad = nullptr;
+    };
+
+    inline NativePluginMenuBinding ensoulNativePluginBindings[
+        PluginRegistry::MAX_PLUGINS] = {};
+    inline int ensoulNativePluginBindingCount = 0;
+
     inline void ResetMenuSystem() {
+        if (ensoulPluginRoot) {
+            SDK::UI::MenuManager::Instance().Remove(ensoulPluginRoot);
+            delete ensoulPluginRoot;
+        }
         if (ensoulCoreRoot) {
             SDK::UI::MenuManager::Instance().Remove(ensoulCoreRoot);
             delete ensoulCoreRoot;
         }
         ensoulCoreRoot = nullptr;
+        ensoulPluginRoot = nullptr;
         ensoulLanguage = nullptr;
         ensoulSkinChanger = nullptr;
         ensoulSkinId = nullptr;
@@ -187,8 +206,8 @@ namespace NightSharpMenu {
         ensoulProfilerLog = nullptr;
         ensoulProfilerRuntime = nullptr;
         ensoulPluginSelectorRuntime = nullptr;
+        ensoulPluginSelectorMenu = nullptr;
         ensoulRuntimeMenus = nullptr;
-        ensoulTextColor = nullptr;
         ensoulHoverColor = nullptr;
         ensoulRootContainerColor = nullptr;
         ensoulContainerSelectedColor = nullptr;
@@ -209,6 +228,7 @@ namespace NightSharpMenu {
         ensoulMenuStyle = nullptr;
         ensoulMaxItemsPerColumn = nullptr;
         ensoulRuntimeBindingCount = 0;
+        ensoulNativePluginBindingCount = 0;
         EnsoulSharpTheme::OpenList = nullptr;
         EnsoulSharpTheme::OpenColor = nullptr;
         EnsoulSharpTheme::OpenRuntime = nullptr;
@@ -460,6 +480,128 @@ namespace NightSharpMenu {
             static_cast<SDK::UI::MenuBool*>(sender)->Value);
     }
 
+    inline SDK::UI::Menu* NativePluginCategoryMenu(
+        SDK::UI::Menu* selector,
+        const char* name,
+        const char* displayName) {
+        if (!selector) {
+            return nullptr;
+        }
+        return selector->AddSubMenu(new SDK::UI::Menu(name, displayName));
+    }
+
+    inline void BuildNativePluginSelectorMenu() {
+        if (!ensoulPluginRoot || ensoulPluginSelectorMenu) {
+            return;
+        }
+
+        ensoulPluginSelectorMenu = ensoulPluginRoot->AddSubMenu(
+            new SDK::UI::Menu("PluginSelector", "Plugin Selector"));
+        ensoulPluginSelectorMenu->Add(new SDK::UI::MenuSeparator(
+            "NativeControls", "Native plugin controls"));
+
+        SDK::UI::Menu* categoryMenus[4] = {
+            NativePluginCategoryMenu(
+                ensoulPluginSelectorMenu,
+                "Core", "Core Plugins"),
+            NativePluginCategoryMenu(
+                ensoulPluginSelectorMenu,
+                "Champion", "Champion Scripts"),
+            NativePluginCategoryMenu(
+                ensoulPluginSelectorMenu,
+                "Utility", "Utility Plugins"),
+            NativePluginCategoryMenu(
+                ensoulPluginSelectorMenu,
+                "Misc", "Misc Plugins")
+        };
+
+        for (int i = 0;
+             i < PluginRegistry::PluginCount &&
+             ensoulNativePluginBindingCount < PluginRegistry::MAX_PLUGINS;
+             ++i) {
+            auto& plugin = PluginRegistry::Plugins[i];
+            if (!plugin.InternalId || !plugin.Name) {
+                continue;
+            }
+
+            int categoryIndex = 0;
+            switch (plugin.Category) {
+            case PluginRegistry::PluginCategory::Champion:
+                categoryIndex = 1;
+                break;
+            case PluginRegistry::PluginCategory::Utility:
+                categoryIndex = 2;
+                break;
+            case PluginRegistry::PluginCategory::Misc:
+                categoryIndex = 3;
+                break;
+            default:
+                categoryIndex = 0;
+                break;
+            }
+
+            SDK::UI::Menu* category = categoryMenus[categoryIndex];
+            if (!category) {
+                continue;
+            }
+            auto* pluginMenu = category->AddSubMenu(
+                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
+            if (!pluginMenu) {
+                continue;
+            }
+
+            auto* status = pluginMenu->Add(new SDK::UI::MenuSeparator(
+                "Status", plugin.Loaded ? "[ON] Loaded" : "[--] Not loaded"));
+            auto* loaded = pluginMenu->Add(new SDK::UI::MenuBool(
+                "Loaded", "Loaded", plugin.Loaded));
+            loaded->ValueChanged = &OnPluginLoadedChanged;
+            loaded->ValueChangedUd = reinterpret_cast<void*>(
+                static_cast<intptr_t>(i + 1));
+
+            auto* alwaysLoad = pluginMenu->Add(new SDK::UI::MenuBool(
+                "AlwaysLoad", "Always Load", plugin.AlwaysLoad));
+            alwaysLoad->ValueChanged = &OnPluginAlwaysLoadChanged;
+            alwaysLoad->ValueChangedUd = reinterpret_cast<void*>(
+                static_cast<intptr_t>(i + 1));
+
+            ensoulNativePluginBindings[ensoulNativePluginBindingCount++] = {
+                i, pluginMenu, status, loaded, alwaysLoad
+            };
+        }
+    }
+
+    inline void SyncNativePluginSelector() {
+        if (!ensoulPluginSelectorMenu) {
+            return;
+        }
+
+        for (int i = 0; i < ensoulNativePluginBindingCount; ++i) {
+            auto& binding = ensoulNativePluginBindings[i];
+            if (binding.registryIndex < 0 ||
+                binding.registryIndex >= PluginRegistry::PluginCount) {
+                continue;
+            }
+
+            auto& plugin = PluginRegistry::Plugins[binding.registryIndex];
+            const bool canLoad = PluginRegistry::CanPluginLoad(
+                binding.registryIndex);
+            if (binding.menu) {
+                binding.menu->Visible = canLoad || plugin.Loaded;
+            }
+            if (binding.loaded) {
+                binding.loaded->Value = plugin.Loaded;
+            }
+            if (binding.alwaysLoad) {
+                binding.alwaysLoad->Value = plugin.AlwaysLoad;
+            }
+            if (binding.status) {
+                binding.status->DisplayName = plugin.Loaded
+                    ? "[ON] Loaded"
+                    : (canLoad ? "[--] Not loaded" : "[NC] Not available");
+            }
+        }
+    }
+
     inline void BindCoreBool(SDK::UI::MenuBool* item, int settingId) {
         if (!item) return;
         item->ValueChanged = &OnCoreBoolChanged;
@@ -467,23 +609,129 @@ namespace NightSharpMenu {
     }
 
     inline void KeepCoreMenuFirst() {
-        if (!ensoulCoreRoot) return;
         auto& menus = SDK::UI::MenuManager::Instance().Menus;
-        if (menus.empty() || menus[0] == ensoulCoreRoot) return;
 
-        int idx = -1;
+        int coreIndex = -1;
         for (int i = 0; i < menus.size(); ++i) {
             if (menus[i] == ensoulCoreRoot) {
-                idx = i;
+                coreIndex = i;
                 break;
             }
         }
-        if (idx > 0) {
-            SDK::UI::Menu* core = menus[idx];
-            for (int i = idx; i > 0; --i) {
+        if (coreIndex > 0) {
+            SDK::UI::Menu* core = menus[coreIndex];
+            for (int i = coreIndex; i > 0; --i) {
                 menus[i] = menus[i - 1];
             }
             menus[0] = core;
+        }
+
+        int pluginIndex = -1;
+        for (int i = 0; i < menus.size(); ++i) {
+            if (menus[i] == ensoulPluginRoot) {
+                pluginIndex = i;
+                break;
+            }
+        }
+        if (pluginIndex > 1) {
+            SDK::UI::Menu* plugins = menus[pluginIndex];
+            for (int i = pluginIndex; i > 1; --i) {
+                menus[i] = menus[i - 1];
+            }
+            menus[1] = plugins;
+        }
+    }
+
+    inline bool IsMenuNameDelimiter(char value) {
+        return value == '\0' || value == '.' || value == '_' ||
+               value == '-' || value == ' ';
+    }
+
+    inline bool ContainsMenuTokenInsensitive(
+        const char* value, const char* token) {
+        if (!value || !token || !token[0]) {
+            return false;
+        }
+        const std::size_t tokenLength = std::strlen(token);
+        for (const char* at = value; *at; ++at) {
+            if (_strnicmp(at, token, tokenLength) != 0) {
+                continue;
+            }
+            const bool leftBoundary = at == value ||
+                IsMenuNameDelimiter(at[-1]);
+            const bool rightBoundary = IsMenuNameDelimiter(at[tokenLength]);
+            if (leftBoundary && rightBoundary) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    inline bool MatchesChampionPluginRoot(
+        const SDK::UI::Menu* root,
+        const PluginRegistry::PluginEntry& plugin) {
+        if (!root || !plugin.InternalId ||
+            !plugin.ChampionName || !plugin.ChampionName[0]) {
+            return false;
+        }
+
+        const char* firstDot = std::strchr(plugin.InternalId, '.');
+        if (!firstDot || firstDot[1] == '\0') {
+            return false;
+        }
+
+        const char* familyEnd = std::strchr(firstDot + 1, '.');
+        if (!familyEnd) {
+            familyEnd = plugin.InternalId + std::strlen(plugin.InternalId);
+        }
+        char family[64] = {};
+        const std::size_t familyLength =
+            static_cast<std::size_t>(familyEnd - firstDot - 1);
+        if (familyLength == 0 || familyLength >= sizeof(family)) {
+            return false;
+        }
+
+        std::memcpy(family, firstDot + 1, familyLength);
+        family[familyLength] = '\0';
+
+        const char* rootName = root->Name.c_str();
+        return ContainsMenuTokenInsensitive(rootName, family) &&
+               ContainsMenuTokenInsensitive(rootName, plugin.ChampionName);
+    }
+
+    inline int PluginIndexForMenuRoot(const SDK::UI::Menu* root) {
+        if (!root) {
+            return -1;
+        }
+        for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
+            const auto& plugin = PluginRegistry::Plugins[i];
+            if (!plugin.InternalId) {
+                continue;
+            }
+            if (root->Name.equals(plugin.InternalId) ||
+                (plugin.Name && root->Name.equals(plugin.Name)) ||
+                (plugin.Name && root->DisplayName.equals(plugin.Name)) ||
+                MatchesChampionPluginRoot(root, plugin)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    inline void SyncNativePluginRoots() {
+        auto& menus = SDK::UI::MenuManager::Instance().Menus;
+        for (int i = 0; i < menus.size(); ++i) {
+            SDK::UI::Menu* root = menus[i];
+            if (!root || root == ensoulCoreRoot || root == ensoulPluginRoot) {
+                continue;
+            }
+            const int pluginIndex = PluginIndexForMenuRoot(root);
+            if (pluginIndex < 0) {
+                continue;
+            }
+            root->Visible =
+                PluginRegistry::Plugins[pluginIndex].Loaded &&
+                PluginRegistry::CanPluginLoad(pluginIndex);
         }
     }
 
@@ -698,50 +946,7 @@ namespace NightSharpMenu {
         ensoulThemeTextPadding->ValueChanged = &OnThemeSliderFChanged;
         ensoulThemeTextPadding->ValueChangedUd = reinterpret_cast<void*>(static_cast<intptr_t>(4));
 
-        // 4. Plugins Manager
-        auto* plugins = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("Plugins", "Plugins"));
-        ensoulPluginSelectorRuntime = plugins->Add(new SDK::UI::MenuRuntime(
-            "PluginSelector",
-            "Plugin Selector",
-            &DrawPluginSelectorRuntimeBridge,
-            nullptr,
-            550.0f));
-        ensoulPluginSelectorRuntime->Open = true; // Default to open!
-
-        ensoulRuntimeMenus = ensoulCoreRoot->AddSubMenu(
-            new SDK::UI::Menu("RuntimeMenus", "Runtime Panels"));
-        for (int i = 0;
-             i < PluginRegistry::PluginCount &&
-             ensoulRuntimeBindingCount < PluginRegistry::MAX_PLUGINS;
-             ++i) {
-            auto& plugin = PluginRegistry::Plugins[i];
-            if (!plugin.Name || !plugin.InternalId) {
-                continue;
-            }
-            if (plugin.Category == PluginRegistry::PluginCategory::Champion &&
-                !PluginRegistry::CanPluginLoad(i)) {
-                continue;
-            }
-            if (!PluginRegistry::HasPluginMenuCallback(i)) {
-                continue;
-            }
-
-            auto* runtimeMenu = ensoulRuntimeMenus->AddSubMenu(
-                new SDK::UI::Menu(plugin.InternalId, plugin.Name));
-            auto* runtime = runtimeMenu->Add(new SDK::UI::MenuRuntime(
-                "RuntimePanel",
-                "Open Runtime Panel",
-                &DrawRuntimeMenuBridge,
-                reinterpret_cast<void*>(static_cast<intptr_t>(i + 1)),
-                360.0f));
-            runtimeMenu->Visible = plugin.Loaded;
-            ensoulRuntimeBindings[ensoulRuntimeBindingCount++] = {
-                i, runtimeMenu, runtime
-            };
-        }
-
-        // 5. Debug & Profiler
+        // 4. Debug & Profiler
         auto* debug = ensoulCoreRoot->AddSubMenu(
             new SDK::UI::Menu("DebugInfo", "Debug & Profiler"));
         debug->SetFontColor(IM_COL32(120, 235, 120, 255));
@@ -771,6 +976,21 @@ namespace NightSharpMenu {
         themeTests->Add(new SDK::UI::MenuBool(
             "CustomColor", "Custom component font color", true))
             ->SetFontColor(IM_COL32(64, 210, 255, 255));
+        // 5. Plugins root is a sibling of NightSharp, not a child of it.
+        ensoulPluginRoot = new SDK::UI::Menu(
+            "nightsharp.plugins", "Plugins", true);
+        BuildNativePluginSelectorMenu();
+        ensoulPluginSelectorMenu->Toggled = true;
+        ensoulPluginSelectorRuntime = ensoulPluginRoot->Add(
+            new SDK::UI::MenuRuntime(
+                "PluginTable",
+                "Open Plugin Table",
+                &DrawPluginSelectorRuntimeBridge,
+                nullptr,
+                550.0f));
+
+        ensoulRuntimeMenus = ensoulPluginRoot->AddSubMenu(
+            new SDK::UI::Menu("RuntimeMenus", "Runtime Panels"));
         ensoulRuntimeBindingCount = 0;
         for (int i = 0;
              i < PluginRegistry::PluginCount &&
@@ -781,6 +1001,11 @@ namespace NightSharpMenu {
                 !plugin.InternalId || !plugin.Name) {
                 continue;
             }
+            if (plugin.Category == PluginRegistry::PluginCategory::Champion &&
+                !PluginRegistry::CanPluginLoad(i)) {
+                continue;
+            }
+
             auto* runtimeMenu = ensoulRuntimeMenus->AddSubMenu(
                 new SDK::UI::Menu(plugin.InternalId, plugin.Name));
             auto* runtime = runtimeMenu->Add(new SDK::UI::MenuRuntime(
@@ -796,7 +1021,9 @@ namespace NightSharpMenu {
         }
 
         ensoulCoreRoot->Attach();
+        ensoulPluginRoot->Attach();
         KeepCoreMenuFirst();
+        SyncNativePluginRoots();
 
         // Copy loaded configuration values to theme globals on startup
         if (ensoulThemePreset) {
@@ -875,6 +1102,10 @@ namespace NightSharpMenu {
         if (ensoulMaxItemsPerColumn) ensoulMaxItemsPerColumn->Value = Config::MenuStyle::maxItemsPerColumn;
 
 
+        if (ensoulPluginRoot) {
+            ensoulPluginRoot->Visible = true;
+        }
+
         bool anyRuntimeVisible = false;
         for (int i = 0; i < ensoulRuntimeBindingCount; ++i) {
             auto& binding = ensoulRuntimeBindings[i];
@@ -889,7 +1120,11 @@ namespace NightSharpMenu {
                 EnsoulSharpTheme::OpenRuntime = nullptr;
             }
         }
-        ensoulRuntimeMenus->Visible = anyRuntimeVisible;
+        if (ensoulRuntimeMenus) {
+            ensoulRuntimeMenus->Visible = anyRuntimeVisible;
+        }
+        SyncNativePluginSelector();
+        SyncNativePluginRoots();
     }
 
     struct SidebarEntry {
@@ -898,15 +1133,14 @@ namespace NightSharpMenu {
 
     constexpr int PRIMARY_COUNT = 1;
     inline const SidebarEntry PRIMARY[PRIMARY_COUNT] = {
-        { "Core" },
+        { "NightSharp" },
     };
 
-    constexpr int CORE_SECONDARY_COUNT = 5;
+    constexpr int CORE_SECONDARY_COUNT = 4;
     inline const SidebarEntry CORE_SECONDARY[CORE_SECONDARY_COUNT] = {
         { "Features & Tools" },
         { "Permashow" },
         { "Menu & Theme" },
-        { "Plugins" },
         { "Debug & Profiler" },
     };
 
@@ -1705,9 +1939,10 @@ namespace NightSharpMenu {
 
             for (int catIdx = 0; catIdx < 4; ++catIdx) {
                 if (ImGui::BeginTabItem(tabNames[catIdx])) {
-                    if (ImGui::BeginTable("PluginSelectorTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300.0f))) {
+                    if (ImGui::BeginTable("PluginSelectorTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 300.0f))) {
                         ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthStretch);
                         ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                        ImGui::TableSetupColumn("Always Load", ImGuiTableColumnFlags_WidthFixed, 120.0f);
                         ImGui::TableHeadersRow();
 
                         for (int i = 0; i < PluginRegistry::PluginCount; ++i) {
@@ -1744,6 +1979,12 @@ namespace NightSharpMenu {
                                     PluginRegistry::LoadPlugin(i);
                                 }
                             }
+                            // Always Load column: this preference controls the next startup.
+                            ImGui::TableNextColumn();
+                            bool alwaysLoad = p.AlwaysLoad;
+                            if (ImGui::Checkbox("Always Load", &alwaysLoad)) {
+                                PluginRegistry::SetAlwaysLoad(i, alwaysLoad);
+                            }
 
                             ImGui::PopID();
                         }
@@ -1756,9 +1997,6 @@ namespace NightSharpMenu {
         }
     }
 
-    inline void DrawPluginsSection() {
-        DrawPluginSelectorContent();
-    }
 
     inline void DrawPluginSelectorRuntimeBridge(void*) {
         DrawPluginSelectorContent();
@@ -1988,64 +2226,39 @@ namespace NightSharpMenu {
         } else if (secondaryIdx == 2) {
             DrawMenuSection();
         } else if (secondaryIdx == 3) {
-            DrawPluginsSection();
-        } else if (secondaryIdx == 4) {
             DrawDebugSection();
         } else {
             DrawFeaturesSection();
         }
     }
 
+    inline SDK::UI::Menu* FindPluginSdkMenu(int pluginIdx);
+
     inline bool IsPrimaryPluginEntry(const PluginRegistry::PluginEntry& p, int idx) {
         return idx >= 0 &&
             p.Name &&
             p.Loaded &&
             PluginRegistry::CanPluginLoad(idx) &&
+            FindPluginSdkMenu(idx) != nullptr &&
             (p.Kind == PluginRegistry::PluginKind::SDK ||
              p.Kind == PluginRegistry::PluginKind::Plugin ||
              p.Kind == PluginRegistry::PluginKind::External);
     }
 
-    inline SDK::UI::Menu* FindMenuByPluginName(SDK::UI::Menu* menu, const char* internalId, const char* displayName) {
-        if (!menu) {
-            return nullptr;
-        }
-
-        if ((internalId && menu->Name.equals(internalId)) ||
-            (displayName && menu->Name.equals(displayName)) ||
-            (displayName && menu->DisplayName.equals(displayName))) {
-            return menu;
-        }
-
-        for (int i = 0; i < menu->Components.size(); ++i) {
-            auto* component = menu->Components[i];
-            if (!component || !component->IsMenu()) {
-                continue;
-            }
-
-            if (auto* found = FindMenuByPluginName(static_cast<SDK::UI::Menu*>(component), internalId, displayName)) {
-                return found;
-            }
-        }
-
-        return nullptr;
-    }
 
     inline SDK::UI::Menu* FindPluginSdkMenu(int pluginIdx) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
             return nullptr;
         }
 
-        auto& p = PluginRegistry::Plugins[pluginIdx];
         auto& mm = SDK::UI::MenuManager::Instance();
         for (int i = 0; i < mm.Menus.size(); ++i) {
             SDK::UI::Menu* root = mm.Menus[i];
-            if (!root || !p.InternalId) {
+            if (!root || root == ensoulCoreRoot || root == ensoulPluginRoot) {
                 continue;
             }
-
-            if (auto* menu = FindMenuByPluginName(root, p.InternalId, p.Name)) {
-                return menu;
+            if (PluginIndexForMenuRoot(root) == pluginIdx) {
+                return root;
             }
         }
 
@@ -2080,17 +2293,10 @@ namespace NightSharpMenu {
         }
         return count;
     }
-
-    inline int GetPluginSecondaryCount(int pluginIdx) {
-        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
+    inline int GetMenuSecondaryCount(SDK::UI::Menu* menu) {
+        if (!menu) {
             return 0;
         }
-
-        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
-        if (!menu) {
-            return 1;
-        }
-
         const int subMenus = CountRootSubMenus(menu);
         const bool hasLeafItems = HasRootLeafItems(menu);
         if (subMenus <= 0) {
@@ -2099,8 +2305,8 @@ namespace NightSharpMenu {
         return subMenus + (hasLeafItems ? 1 : 0);
     }
 
-    inline SDK::UI::Menu* GetPluginSecondaryMenu(int pluginIdx, int secondaryIdx) {
-        SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
+    inline SDK::UI::Menu* GetMenuSecondaryMenu(
+        SDK::UI::Menu* root, int secondaryIdx) {
         if (!root || secondaryIdx < 0) {
             return nullptr;
         }
@@ -2111,46 +2317,75 @@ namespace NightSharpMenu {
             if (!component || !component->Visible || !component->IsMenu()) {
                 continue;
             }
-
             if (seen == secondaryIdx) {
                 return static_cast<SDK::UI::Menu*>(component);
             }
             ++seen;
         }
-
         return nullptr;
     }
 
-    inline bool IsPluginLeafSection(int pluginIdx, int secondaryIdx) {
-        SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
+    inline bool IsMenuLeafSection(
+        SDK::UI::Menu* root, int secondaryIdx) {
         if (!root || secondaryIdx < 0) {
             return false;
         }
-
-        const int subMenus = CountRootSubMenus(root);
-        return HasRootLeafItems(root) && secondaryIdx == subMenus;
+        return HasRootLeafItems(root) &&
+               secondaryIdx == CountRootSubMenus(root);
     }
 
-    inline const char* GetPluginSecondaryLabel(int pluginIdx, int secondaryIdx) {
+    inline const char* GetMenuSecondaryLabel(
+        SDK::UI::Menu* root, int secondaryIdx) {
+        if (!root || secondaryIdx < 0) {
+            return "?";
+        }
+        if (SDK::UI::Menu* section =
+                GetMenuSecondaryMenu(root, secondaryIdx)) {
+            return section->DisplayName.c_str();
+        }
+        if (IsMenuLeafSection(root, secondaryIdx)) {
+            for (int i = 0; i < root->Components.size(); ++i) {
+                auto* component = root->Components[i];
+                if (!component || !component->Visible || component->IsMenu()) {
+                    continue;
+                }
+                if (component->Kind() == SDK::UI::MenuValueType::Runtime) {
+                    return component->DisplayName.c_str();
+                }
+            }
+            return CountRootSubMenus(root) > 0 ? "General" : "Menu";
+        }
+        return "?";
+    }
+
+    inline int GetPluginSecondaryCount(int pluginIdx) {
+        if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
+            return 0;
+        }
+        SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
+        return menu ? GetMenuSecondaryCount(menu) : 1;
+    }
+
+    inline SDK::UI::Menu* GetPluginSecondaryMenu(
+        int pluginIdx, int secondaryIdx) {
+        return GetMenuSecondaryMenu(
+            FindPluginSdkMenu(pluginIdx), secondaryIdx);
+    }
+
+    inline bool IsPluginLeafSection(int pluginIdx, int secondaryIdx) {
+        return IsMenuLeafSection(
+            FindPluginSdkMenu(pluginIdx), secondaryIdx);
+    }
+
+    inline const char* GetPluginSecondaryLabel(
+        int pluginIdx, int secondaryIdx) {
         if (pluginIdx < 0 || pluginIdx >= PluginRegistry::PluginCount) {
             return "?";
         }
-
-        if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
-            return section->DisplayName.c_str();
+        if (SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx)) {
+            return GetMenuSecondaryLabel(root, secondaryIdx);
         }
-
-        if (IsPluginLeafSection(pluginIdx, secondaryIdx)) {
-            SDK::UI::Menu* root = FindPluginSdkMenu(pluginIdx);
-            return CountRootSubMenus(root) > 0 ? "General" : "Menu";
-        }
-
-        auto& p = PluginRegistry::Plugins[pluginIdx];
-        if (p.RuntimeMenu) {
-            return "Menu";
-        }
-
-        return "?";
+        return PluginRegistry::Plugins[pluginIdx].RuntimeMenu ? "Menu" : "?";
     }
 
     inline void DrawRootLeafItems(SDK::UI::Menu* menu) {
@@ -2178,6 +2413,26 @@ namespace NightSharpMenu {
         if (!drewAny) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No items in this section.");
         }
+    }
+    inline bool DrawMenuRootContentPanel(
+        SDK::UI::Menu* root, int secondaryIdx) {
+        if (!root) {
+            return false;
+        }
+        if (SDK::UI::Menu* section =
+                GetMenuSecondaryMenu(root, secondaryIdx)) {
+            section->DrawChildren();
+            return true;
+        }
+        if (IsMenuLeafSection(root, secondaryIdx) ||
+            CountRootSubMenus(root) <= 0) {
+            DrawRootLeafItems(root);
+            return true;
+        }
+        ImGui::TextColored(
+            ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
+            "No menu section selected.");
+        return true;
     }
 
     inline void ApplyFunctionalMenuSidebarStyle() {
@@ -2293,8 +2548,8 @@ namespace NightSharpMenu {
             rows = 14;
             rowW = 360.0f;
         } else if (secondaryIdx == 3) {
-            rows = MaxI(4, PluginRegistry::PluginCount + 3);
-            rowW = 420.0f;
+            rows = 8;
+            rowW = 300.0f;
         }
         outW = rowW + 24.0f;
         outBodyH = static_cast<float>(rows) * ITEM_H;
@@ -2347,18 +2602,7 @@ namespace NightSharpMenu {
         }
 
         SDK::UI::Menu* menu = FindPluginSdkMenu(pluginIdx);
-        if (menu) {
-            if (SDK::UI::Menu* section = GetPluginSecondaryMenu(pluginIdx, secondaryIdx)) {
-                section->DrawChildren();
-                return;
-            }
-
-            if (IsPluginLeafSection(pluginIdx, secondaryIdx) || CountRootSubMenus(menu) <= 0) {
-                DrawRootLeafItems(menu);
-                return;
-            }
-
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No menu section selected.");
+        if (menu && DrawMenuRootContentPanel(menu, secondaryIdx)) {
             return;
         }
 
@@ -2374,6 +2618,9 @@ namespace NightSharpMenu {
 
 
 
+    inline constexpr int kCoreMenuMap = -1;
+    inline constexpr int kPluginManagerMenuMap = -2;
+
     inline void RenderLegacy();
 
     inline void Render() {
@@ -2385,6 +2632,7 @@ namespace NightSharpMenu {
             ResetMouseInputCapture();
             EnsoulSharpTheme::CancelRootDrag();
             ClearFunctionalMenuSidebarStyle();
+
             isPermaDragging = false;
             permaShowBoundsRight = 0.0f;
             permaShowBoundsBottom = 0.0f;
@@ -2435,9 +2683,16 @@ namespace NightSharpMenu {
         const char* primaryLabels[MAX_PRIMARY] = {};
         int primaryPluginMap[MAX_PRIMARY] = {};
         int primaryCount = 0;
-        primaryLabels[0] = "Core";
-        primaryPluginMap[0] = -1;
+        primaryLabels[0] = "NightSharp";
+        primaryPluginMap[0] = kCoreMenuMap;
         primaryCount = 1;
+
+        if (ensoulPluginRoot && ensoulPluginRoot->Visible &&
+            primaryCount < MAX_PRIMARY) {
+            primaryLabels[primaryCount] = "Plugins";
+            primaryPluginMap[primaryCount] = kPluginManagerMenuMap;
+            ++primaryCount;
+        }
 
         for (int i = 0; i < PluginRegistry::PluginCount && primaryCount < MAX_PRIMARY; ++i) {
             auto& p = PluginRegistry::Plugins[i];
@@ -2512,9 +2767,13 @@ namespace NightSharpMenu {
         int activePluginMap = -1;
         if (showSecondary && activePrimaryIdx >= 0 && activePrimaryIdx < primaryCount) {
             activePluginMap = primaryPluginMap[activePrimaryIdx];
-            secCount = activePluginMap < 0
-                ? CORE_SECONDARY_COUNT
-                : GetPluginSecondaryCount(activePluginMap);
+            if (activePluginMap == kCoreMenuMap) {
+                secCount = CORE_SECONDARY_COUNT;
+            } else if (activePluginMap == kPluginManagerMenuMap) {
+                secCount = GetMenuSecondaryCount(ensoulPluginRoot);
+            } else {
+                secCount = GetPluginSecondaryCount(activePluginMap);
+            }
         }
 
         const float primaryH = HEADER_H + ITEM_H * static_cast<float>(MaxI(1, primaryCount)) + 4.0f;
@@ -2578,9 +2837,13 @@ namespace NightSharpMenu {
 
         activePluginMap = primaryPluginMap[activePrimaryIdx];
         activePluginIdx = activePluginMap;
-        secCount = activePluginMap < 0
-            ? CORE_SECONDARY_COUNT
-            : GetPluginSecondaryCount(activePluginMap);
+        if (activePluginMap == kCoreMenuMap) {
+            secCount = CORE_SECONDARY_COUNT;
+        } else if (activePluginMap == kPluginManagerMenuMap) {
+            secCount = GetMenuSecondaryCount(ensoulPluginRoot);
+        } else {
+            secCount = GetPluginSecondaryCount(activePluginMap);
+        }
         if (activeSecondaryIdx >= secCount) {
             activeSecondaryIdx = -1;
             secondarySelected = false;
@@ -2615,9 +2878,11 @@ namespace NightSharpMenu {
 
         y = secondaryPos.y + HEADER_H + 2.0f;
         for (int i = 0; i < secCount; ++i) {
-            const char* secLabel = activePluginMap < 0
+            const char* secLabel = activePluginMap == kCoreMenuMap
                 ? CORE_SECONDARY[i].label
-                : GetPluginSecondaryLabel(activePluginMap, i);
+                : (activePluginMap == kPluginManagerMenuMap
+                    ? GetMenuSecondaryLabel(ensoulPluginRoot, i)
+                    : GetPluginSecondaryLabel(activePluginMap, i));
             if (!secLabel) {
                 secLabel = "?";
             }
@@ -2653,20 +2918,20 @@ namespace NightSharpMenu {
             contentPanelSizeKey = sizeKey;
             float estW = CONTENT_MIN_W;
             float estBodyH = ITEM_H;
-            if (activePluginMap < 0) {
+            if (activePluginMap == kCoreMenuMap) {
                 EstimateCoreContentSize(activeSecondaryIdx, estW, estBodyH);
             } else {
-                SDK::UI::Menu* section = GetPluginSecondaryMenu(activePluginMap, activeSecondaryIdx);
-                const bool leafOnly =
-                    IsPluginLeafSection(activePluginMap, activeSecondaryIdx) ||
-                    (!section && CountRootSubMenus(FindPluginSdkMenu(activePluginMap)) <= 0);
+                SDK::UI::Menu* root = activePluginMap == kPluginManagerMenuMap
+                    ? ensoulPluginRoot
+                    : FindPluginSdkMenu(activePluginMap);
+                SDK::UI::Menu* section = GetMenuSecondaryMenu(root, activeSecondaryIdx);
+                const bool leafOnly = IsMenuLeafSection(root, activeSecondaryIdx) ||
+                    (!section && CountRootSubMenus(root) <= 0);
                 SDK::UI::Menu* measureMenu = section
                     ? section
-                    : (leafOnly ? FindPluginSdkMenu(activePluginMap) : nullptr);
+                    : (leafOnly ? root : nullptr);
                 EstimateSdkMenuContentSize(measureMenu, leafOnly && !section, estW, estBodyH);
             }
-            contentPanelW = ClampContentWidth(estW);
-            contentPanelBodyH = MaxF(ITEM_H, estBodyH);
         }
 
         const float maxTotalH = GetContentMaxTotalHeight();
@@ -2690,8 +2955,11 @@ namespace NightSharpMenu {
             0.0f);
 
         const char* sectionLabel = "?";
-        if (activePluginMap < 0 && activeSecondaryIdx < CORE_SECONDARY_COUNT) {
+        if (activePluginMap == kCoreMenuMap &&
+            activeSecondaryIdx < CORE_SECONDARY_COUNT) {
             sectionLabel = CORE_SECONDARY[activeSecondaryIdx].label;
+        } else if (activePluginMap == kPluginManagerMenuMap) {
+            sectionLabel = GetMenuSecondaryLabel(ensoulPluginRoot, activeSecondaryIdx);
         } else if (activePluginMap >= 0) {
             sectionLabel = GetPluginSecondaryLabel(activePluginMap, activeSecondaryIdx);
         }
@@ -2742,8 +3010,10 @@ namespace NightSharpMenu {
 
         ImGui::Begin("##ns_content", nullptr, contentFlags);
 
-        if (activePluginMap < 0) {
+        if (activePluginMap == kCoreMenuMap) {
             DrawCoreContentPanel(activeSecondaryIdx);
+        } else if (activePluginMap == kPluginManagerMenuMap) {
+            DrawMenuRootContentPanel(ensoulPluginRoot, activeSecondaryIdx);
         } else {
             DrawPluginContentPanel(activePluginMap, activeSecondaryIdx);
         }

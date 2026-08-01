@@ -126,6 +126,7 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 // Overlay worker thread
 // ========================================================================
 static volatile LONG g_workerStarted = 0;
+static std::uint32_t g_workerModuleSize = 0;
 static volatile LONG g_selfUnloading = 0;
 static HANDLE g_crcThread = nullptr;
 static HANDLE g_ioctlThread = nullptr;
@@ -171,8 +172,7 @@ static void ShutdownNightSharpRuntime() {
 static DWORD WINAPI OverlayWorker(LPVOID param) {
     HMODULE module = reinterpret_cast<HMODULE>(param);
 
-    NightSharpDebug::CrashBridge::Install(module);
-    NightSharpDebug::CrashReporter::StartGuard();
+    NightSharpDebug::CrashBridge::Install(module, g_workerModuleSize);
     NightSharpDebug::CrashTrace::Record(
         nscrash::TraceTag::OverlayWorkerEnter,
         reinterpret_cast<std::uintptr_t>(module));
@@ -207,10 +207,11 @@ static DWORD WINAPI OverlayWorker(LPVOID param) {
     return 0;
 }
 
-static void StartOverlayWorker(HMODULE module) {
+static void StartOverlayWorker(HMODULE module, std::uint32_t moduleSize) {
     if (InterlockedCompareExchange(&g_workerStarted, 1, 0) != 0) {
         return;
     }
+    g_workerModuleSize = moduleSize;
 
     HANDLE hThread = CoreBypass::CreateThreadSpoofed(OverlayWorker, module);
     if (hThread) {
@@ -317,7 +318,13 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             g_ioctlThread = hIoctl;
         }
 
-        StartOverlayWorker(hModule);
+        const std::uint32_t moduleSize =
+            NightSharpDebug::CrashBridge::ImageSize(hModule);
+        NightSharpDebug::Logf(
+            "[NightSharp] Captured module metadata base=%p size=0x%X before header scrub",
+            hModule,
+            moduleSize);
+        StartOverlayWorker(hModule, moduleSize);
 
         // Module E — PEB Ldr Unlink. Gọi CUỐI, sau khi overlay worker
         // + deferred CRC thread đã spawn (không cần module lookup nữa).

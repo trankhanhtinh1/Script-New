@@ -19,11 +19,14 @@ namespace Plugins::KuroTargetSelector {
 // while keeping all input and persistence concerns in one small owner.
 class Menu final {
 public:
-    explicit Menu(::SDK::Menu* parent)
+    explicit Menu(::SDK::Menu* parent, bool parentIsRoot = false)
         : parent_(parent) {
         if (parent_) {
-            native_ = parent_->AddSubMenu(
-                new ::SDK::Menu("KuroTargetSelector", "Kuro Target Selector"));
+            native_ = parentIsRoot
+                ? parent_
+                : parent_->AddSubMenu(
+                    new ::SDK::Menu(
+                        "KuroTargetSelector", "Kuro Target Selector"));
         }
         BuildMenu();
         RefreshHeroes();

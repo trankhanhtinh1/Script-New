@@ -199,6 +199,32 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
     }
     return written;
 }
+// Awareness/structure consumers need the same guarded object-array walk as
+// EnumerateAll, but the general object cache intentionally excludes structures
+// for legacy orbwalker behavior. Keep that behavior unchanged and expose an
+// explicit opt-in traversal instead.
+inline int EnumerateAllIncludingStructures(uintptr_t* out, int maxOut) {
+    if (!out || maxOut <= 0) {
+        return 0;
+    }
+
+    const ManagerView view = ReadObjectArrayView(GetManagerAddress(ManagerKind::Objects));
+    if (!view.IsValid()) {
+        return 0;
+    }
+
+    int written = 0;
+    for (std::uint32_t i = 0; i < view.count && written < maxOut; ++i) {
+        const uintptr_t entry =
+            Globals::Read<uintptr_t>(view.items + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
+        if (!IsLiveEntry(entry)) {
+            continue;
+        }
+        out[written++] = entry;
+    }
+    return written;
+}
+
 
 inline int EnumerateMissileManagerList(uintptr_t manager, uintptr_t* out, int maxOut) {
     if (!out || maxOut <= 0) {

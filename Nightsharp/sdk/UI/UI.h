@@ -101,8 +101,11 @@ namespace SDK { namespace UI {
     //       config store can debounce-save the owning root menu.
     //   g_MenuAttachedHook     — fired when a root Menu attaches to MenuManager, so
     //       the config store can apply previously-saved values to the fresh menu.
+    //   g_MenuRemovedHook      — fired before a root is removed, so pending native
+    //       menu values are flushed before the plugin destroys its tree.
     inline void (*g_MenuValueChangedHook)(MenuItem*) = nullptr;
     inline void (*g_MenuAttachedHook)(Menu*)        = nullptr;
+    inline void (*g_MenuRemovedHook)(Menu*)         = nullptr;
     inline void (*g_MenuSystemResetHook)()          = nullptr;
 
     // NightSharp sidebar-like chrome for functional items (MenuBool, MenuList, …).
@@ -1412,11 +1415,24 @@ namespace SDK { namespace UI {
 
         void Remove(Menu* m) {
             for (int i = 0; i < Menus.size(); ++i) {
-                if (Menus[i] == m) { Menus.erase(i); return; }
+                if (Menus[i] == m) {
+                    if (g_MenuRemovedHook) {
+                        g_MenuRemovedHook(m);
+                    }
+                    Menus.erase(i);
+                    return;
+                }
             }
         }
 
         void Clear() {
+            if (g_MenuRemovedHook) {
+                for (int i = 0; i < Menus.size(); ++i) {
+                    if (Menus[i]) {
+                        g_MenuRemovedHook(Menus[i]);
+                    }
+                }
+            }
             Menus.clear();
         }
 

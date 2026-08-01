@@ -730,10 +730,10 @@ inline bool Orbwalker7UPImpl::CanAttack(float extraWindup) {
     if (tahmKenchInGame_ && player.HasBuff("tahmkenchwhasdevouredtarget")) {
         return false;
     }
-    if (SDK::HasBuffOfType(player, BuffType::Fear)) {
+    if (SDK::HasBuffOfType(player, ::SDK::BuffType::Fear)) {
         return false;
     }
-    if (SDK::HasBuffOfType(player, BuffType::Polymorph) || player.HasBuff("Polymorph")) {
+    if (SDK::HasBuffOfType(player, ::SDK::BuffType::Polymorph) || player.HasBuff("Polymorph")) {
         return false;
     }
     if (!isKalista_ && player.HasBuff("blindingdart")) {
