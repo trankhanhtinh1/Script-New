@@ -1,10 +1,13 @@
 #pragma once
 
 #include "../Helper/KuroAIOCommon.h"
+#include "KindredTargetPolicy.h"
+#include "../../../../core/KuroCombatCoordinator.h"
 
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -28,6 +31,10 @@ inline Spell R{ SpellSlot::R, 500.0f };
 
 inline bool Loaded = false;
 inline bool ForcedETarget = false;
+inline int KindredFocusUntil = 0;
+inline constexpr std::uint32_t kFocusLeaseOwnerId = 0x4B494E44u; // "KIND"
+inline SDK::KuroTargetSelector::ProviderToken KindredProviderToken = 0;
+inline SDK::KuroTargetSelector::IKuroTargetSelector* KindredProviderService = nullptr;
 
 static bool SameUnit(const GameObject& left, const GameObject& right) {
     if (!left.IsValid() || !right.IsValid()) {
@@ -421,22 +428,346 @@ static Vector3 FindDashPosition(const AIHeroClient& target, bool asap = false) {
     return result;
 }
 
-static AIHeroClient KindredTarget(float range) {
+static bool HasKindredECharge(const AIBaseClient& target) {
+    return target.IsValid() && target.HasBuff("kindredecharge");
+}
+
+static bool HasKindredETracker(const AIBaseClient& target) {
+    return target.IsValid() &&
+        (target.HasBuff("KindredHitTracker") ||
+         target.HasBuff("kindredhittracker"));
+}
+
+static bool InKindredRZone(const AIBaseClient& target) {
+    return target.IsValid() && target.HasBuff("kindredrnodeathbuff");
+}
+
+static TargetPolicy::MechanicFacts KindredMechanicFacts(
+    const AIBaseClient& target) {
+    TargetPolicy::MechanicFacts facts{};
+    facts.EMarked = HasKindredECharge(target);
+    facts.ETracker = HasKindredETracker(target);
+    facts.EStacks = facts.EMarked
+        ? std::max(1, target.GetBuffCount("kindredecharge")) : 0;
+    facts.RZone = InKindredRZone(target);
+    facts.RAtDeathFloor = facts.RZone && target.HealthPercent() <= 11.0f;
+    return facts;
+}
+
+static bool BuildKindredTargetFacts(
+    const SDK::KuroTargetSelector::TargetRequest& request,
+    const AIHeroClient& target,
+    SDK::KuroTargetSelector::TargetFacts& facts) {
+    (void)request;
+    const auto mechanic = KindredMechanicFacts(target);
+    facts.AddProviderFact("kindred.e_stacks",
+                          static_cast<float>(mechanic.EStacks));
+    facts.AddProviderFact("kindred.e_marked", mechanic.EMarked ? 1.0f : 0.0f);
+    facts.AddProviderFact("kindred.e_tracker", mechanic.ETracker ? 1.0f : 0.0f);
+    facts.AddProviderFact("kindred.r_zone", mechanic.RZone ? 1.0f : 0.0f);
+    facts.AddProviderFact(
+        "kindred.r_floor", mechanic.RAtDeathFloor ? 1.0f : 0.0f);
+    return true;
+}
+
+static TargetPolicy::MechanicFacts KindredMechanicFactsFromProvider(
+    const SDK::KuroTargetSelector::TargetFacts& facts) {
+    TargetPolicy::MechanicFacts result{};
+    result.EStacks = static_cast<int>(facts.ProviderFactValue(
+        "kindred.e_stacks"));
+    result.EMarked = facts.ProviderFactValue("kindred.e_marked") > 0.0f;
+    result.ETracker = facts.ProviderFactValue("kindred.e_tracker") > 0.0f;
+    result.RZone = facts.ProviderFactValue("kindred.r_zone") > 0.0f;
+    result.RAtDeathFloor = facts.ProviderFactValue("kindred.r_floor") > 0.0f;
+    return result;
+}
+
+static SDK::KuroTargetSelector::RejectReason ValidateKindredTarget(
+    const SDK::KuroTargetSelector::TargetProviderContext& context) {
+    if (!context.Request || !context.Facts) {
+        return SDK::KuroTargetSelector::RejectReason::None;
+    }
+    const bool manualAssist = context.Request->Purpose ==
+        SDK::KuroTargetSelector::TargetPurpose::ManualAssist;
+    return TargetPolicy::RZoneBlocksAction(
+            KindredMechanicFactsFromProvider(*context.Facts), manualAssist)
+        ? SDK::KuroTargetSelector::RejectReason::Immunity
+        : SDK::KuroTargetSelector::RejectReason::None;
+}
+
+static SDK::KuroTargetSelector::ScoreContribution ScoreKindredTarget(
+    const SDK::KuroTargetSelector::TargetProviderContext& context) {
+    if (!context.Facts) return {};
+    return {
+        "kindred-mechanic",
+        "E mark / R-zone state",
+        TargetPolicy::Score(KindredMechanicFactsFromProvider(*context.Facts)),
+        -1000.0f,
+        1000.0f,
+    };
+}
+
+static void UnregisterKindredTargetProvider() {
+    if (KindredProviderService && KindredProviderToken &&
+        SDK::KuroTargetSelector::LiveService() == KindredProviderService) {
+        (void)KindredProviderService->UnregisterProvider(
+            KindredProviderToken);
+    }
+    KindredProviderToken = 0;
+    KindredProviderService = nullptr;
+}
+
+static void EnsureKindredTargetProvider() {
+    auto* service = SDK::KuroTargetSelector::ActiveService();
+    if (!service) {
+        if (KindredProviderService && KindredProviderToken &&
+            SDK::KuroTargetSelector::LiveService() == KindredProviderService) {
+            (void)KindredProviderService->UnregisterProvider(
+                KindredProviderToken);
+        }
+        KindredProviderToken = 0;
+        KindredProviderService = nullptr;
+        return;
+    }
+    if (KindredProviderService != service) {
+        UnregisterKindredTargetProvider();
+        KindredProviderService = service;
+    }
+    if (KindredProviderToken) return;
+
+    const SDK::KuroTargetSelector::TargetRuleProvider provider{
+        kFocusLeaseOwnerId,
+        "kindred.mark_and_r_zone",
+        SDK::KuroTargetSelector::ProviderPriorityBand::ChampionMechanic,
+        &BuildKindredTargetFacts,
+        &ValidateKindredTarget,
+        &ScoreKindredTarget,
+    };
+    KindredProviderToken = service->RegisterProvider(provider);
+}
+
+static void SyncKindredManualOverride() {
+    auto* service = SDK::KuroTargetSelector::ActiveService();
+    if (!service) return;
+    const auto state = service->GetSelectionState();
+    const bool manual = state.ManualOverrideActive ||
+        (state.PreferSelectedTarget && state.SelectedNetworkId > 0);
+    const int manualTarget = manual ? state.SelectedNetworkId : 0;
+    if (AICombatTargetCoordinator::FocusLease::ManualOverrideActive() != manual ||
+        AICombatTargetCoordinator::FocusLease::ManualTargetNetworkId() !=
+            manualTarget) {
+        AICombatTargetCoordinator::FocusLease::SetManualOverride(
+            manual, manualTarget);
+    }
+}
+
+static SDK::KuroTargetSelector::TargetRequest KindredTargetRequest(
+    float range,
+    SDK::KuroTargetSelector::TargetPurpose purpose,
+    SDK::KuroTargetSelector::DecisionPhase phase,
+    const AIHeroClient& target = AIHeroClient()) {
+    auto request = MakeKuroTargetRequest(
+        range,
+        DamageType::Physical,
+        purpose,
+        phase);
+    request.RequesterId = kFocusLeaseOwnerId;
+    request.Route.Start = request.Source;
+    request.Route.Kind = purpose == SDK::KuroTargetSelector::TargetPurpose::AutoAttack
+        ? SDK::KuroTargetSelector::RouteKind::AutoAttack
+        : SDK::KuroTargetSelector::RouteKind::UnitProjectile;
+    request.Route.TargetableAtExecution = !target.IsValid() ||
+        target.IsTargetable();
+    if (target.IsValid()) {
+        request.Route.CastSubjectId = target.NetworkId();
+        request.Route.IntendedTargetId = target.NetworkId();
+        request.Damage.RawDamage = std::max(0.0f, E.GetDamage(target));
+    }
+    return request;
+}
+
+static bool KindredActionAllowed(
+    const AIHeroClient& target,
+    SDK::KuroTargetSelector::TargetPurpose purpose,
+    SDK::KuroTargetSelector::DecisionPhase phase =
+        SDK::KuroTargetSelector::DecisionPhase::Execution) {
+    if (!ValidHeroTarget(target) || InKindredRZone(target)) {
+        return false;
+    }
+    auto* service = SDK::KuroTargetSelector::ActiveService();
+    if (!service) return true;
+    const auto request = KindredTargetRequest(E.Range, purpose, phase, target);
+    return service->ValidateExecution(request, target);
+}
+
+static void ReleaseKindredFocus() {
+    (void)AICombatTargetCoordinator::FocusLease::Release(
+        kFocusLeaseOwnerId);
+    KindredFocusUntil = 0;
+    ForcedETarget = false;
+}
+
+static bool AcquireKindredFocus(const AIHeroClient& target,
+                                int lifetimeMs) {
+    if (!ValidHeroTarget(target) || !HasKindredECharge(target) ||
+        InKindredRZone(target) ||
+        !AutoAttack::InAutoAttackRange(target)) {
+        return false;
+    }
+    const int now = SDK::Variables::TickCount();
+    const int lifetime = std::max(1, lifetimeMs);
+    if (!AICombatTargetCoordinator::FocusLease::Acquire(
+            kFocusLeaseOwnerId,
+            target.NetworkId(),
+            AICombatTargetCoordinator::LeaseStrength::Hard,
+            now,
+            lifetime,
+            100)) {
+        return false;
+    }
+    KindredFocusUntil = now + lifetime;
+    ForcedETarget = true;
+    return true;
+}
+
+static AIHeroClient CurrentKindredFocus(float range) {
+    const int now = SDK::Variables::TickCount();
+    const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(now);
+    if (lease.OwnerId != kFocusLeaseOwnerId || lease.TargetNetworkId <= 0 ||
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Inactive ||
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal ||
+        lease.ManualOverride) {
+        return {};
+    }
+
+    const auto target = GameObjects::GetUnitByNetworkId<AIHeroClient>(
+        lease.TargetNetworkId);
+    if (InKindredRZone(target)) {
+        if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Active) {
+            (void)AICombatTargetCoordinator::FocusLease::Suspend(
+                kFocusLeaseOwnerId, now);
+        }
+        ForcedETarget = false;
+        return {};
+    }
+
+    const bool legal = ValidHeroTarget(target, range) &&
+        HasKindredECharge(target) && AutoAttack::InAutoAttackRange(target);
+    if (!legal) {
+        if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Active) {
+            (void)AICombatTargetCoordinator::FocusLease::BlockedTarget(
+                lease.TargetNetworkId, now);
+        }
+        return {};
+    }
+
+    const int lifetime = std::max(
+        1,
+        KindredFocusUntil > now ? KindredFocusUntil - now : 900);
+    if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Suspended) {
+        if (!AICombatTargetCoordinator::FocusLease::Restore(
+                kFocusLeaseOwnerId,
+                lease.TargetNetworkId,
+                now,
+                lifetime)) {
+            return {};
+        }
+    } else {
+        (void)AICombatTargetCoordinator::FocusLease::Refresh(
+            kFocusLeaseOwnerId, now, lifetime);
+    }
+    KindredFocusUntil = now + lifetime;
+    ForcedETarget = true;
+    return target;
+}
+
+static AIHeroClient KindredFallbackTarget(float range) {
     const auto player = Player();
+    AIHeroClient marked{};
+    AIHeroClient fallback{};
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy)) {
+        if (!ValidHeroTarget(enemy, range) || InKindredRZone(enemy)) {
             continue;
         }
-        const float expandedRange = range + player.BoundingRadius() + enemy.BoundingRadius();
-        if (player.Position().DistanceSqr2D(enemy.Position()) <=
-                expandedRange * expandedRange &&
-            (enemy.HasBuff("KindredHitTracker") ||
-             enemy.HasBuff("kindredhittracker") ||
-             enemy.HasBuff("kindredecharge"))) {
+        const float expandedRange = range + player.BoundingRadius() +
+            enemy.BoundingRadius();
+        if (player.IsValid() && player.Position().DistanceSqr2D(
+                enemy.Position()) > expandedRange * expandedRange) {
+            continue;
+        }
+        if (!marked.IsValid() &&
+            (HasKindredETracker(enemy) || HasKindredECharge(enemy))) {
+            marked = enemy;
+        }
+        if (!fallback.IsValid()) fallback = enemy;
+    }
+    return marked.IsValid() ? marked : fallback;
+}
+
+static AIHeroClient KindredTarget(float range) {
+    const auto focused = CurrentKindredFocus(range);
+    if (focused.IsValid()) return focused;
+
+    EnsureKindredTargetProvider();
+    if (auto* service = SDK::KuroTargetSelector::ActiveService()) {
+        auto request = KindredTargetRequest(
+            range,
+            SDK::KuroTargetSelector::TargetPurpose::AutoAttack,
+            SDK::KuroTargetSelector::DecisionPhase::Planning);
+        request.Route.Kind = SDK::KuroTargetSelector::RouteKind::Mobility;
+        const auto decision = service->Select(request);
+        return decision.Legal && ValidHeroTarget(decision.Target, range)
+            ? decision.Target : AIHeroClient();
+    }
+    return KindredFallbackTarget(range);
+}
+
+static AIHeroClient SelectKindredETarget(float range) {
+    EnsureKindredTargetProvider();
+    if (auto* service = SDK::KuroTargetSelector::ActiveService()) {
+        auto request = KindredTargetRequest(
+            range,
+            SDK::KuroTargetSelector::TargetPurpose::Execute,
+            SDK::KuroTargetSelector::DecisionPhase::Planning);
+        request.Damage.IsLethalAttempt = true;
+        for (const auto& decision : service->Rank(request)) {
+            const auto& enemy = decision.Target;
+            if (!decision.Legal || !ValidHeroTarget(enemy, range) ||
+                EBlacklisted(enemy)) {
+                continue;
+            }
+            const auto player = Player();
+            const float attackDamage =
+                Damage::GetAutoAttackDamage(player, enemy, true);
+            if (Bool(ComboMenu, "comboAdvancedE", true) &&
+                EffectivePhysicalHealth(enemy) <= attackDamage * 2.0f) {
+                continue;
+            }
             return enemy;
         }
+        return {};
     }
-    return GetPhysicalTarget(range);
+
+    const auto player = Player();
+    AIHeroClient best{};
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!ValidHeroTarget(enemy, range) || EBlacklisted(enemy) ||
+            InKindredRZone(enemy)) {
+            continue;
+        }
+        const float attackDamage =
+            Damage::GetAutoAttackDamage(player, enemy, true);
+        if (Bool(ComboMenu, "comboAdvancedE", true) &&
+            EffectivePhysicalHealth(enemy) <= attackDamage * 2.0f) {
+            continue;
+        }
+        if (!best.IsValid() ||
+            (HasKindredECharge(enemy) && !HasKindredECharge(best)) ||
+            enemy.Health() < best.Health()) {
+            best = enemy;
+        }
+    }
+    return best;
 }
 
 static bool FastBlackE() {
@@ -447,7 +778,8 @@ static bool FastBlackE() {
     AIHeroClient best = {};
     float bestScore = FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, E.Range) || !EBlacklisted(enemy)) {
+        if (!ValidHeroTarget(enemy, E.Range) || !EBlacklisted(enemy) ||
+            InKindredRZone(enemy)) {
             continue;
         }
         const float score = EffectivePhysicalHealth(enemy) -
@@ -457,36 +789,56 @@ static bool FastBlackE() {
             best = enemy;
         }
     }
-    return best.IsValid() && E.CastOnUnit(best);
+    return best.IsValid() &&
+        KindredActionAllowed(
+            best, SDK::KuroTargetSelector::TargetPurpose::Execute) &&
+        E.CastOnUnit(best);
 }
 
 static void ClearForcedETarget() {
-    if (ForcedETarget) {
-        Orbwalker::ForceTarget(AttackableUnit());
-        ForcedETarget = false;
-    }
+    ReleaseKindredFocus();
 }
 
 static void UpdateForcedETarget() {
+    EnsureKindredTargetProvider();
+    SyncKindredManualOverride();
     if (!Bool(MenuRoot, "AttackE", true)) {
         ClearForcedETarget();
         return;
     }
 
     const auto player = Player();
+    const int now = SDK::Variables::TickCount();
+    const float attackRange = AutoAttack::GetRealAutoAttackRange(player);
+    const auto focused = CurrentKindredFocus(attackRange + 5.0f);
+    if (focused.IsValid()) return;
+
+    const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(now);
+    const auto leasedTarget = lease.OwnerId == kFocusLeaseOwnerId
+        ? GameObjects::GetUnitByNetworkId<AIHeroClient>(
+            lease.TargetNetworkId)
+        : AIHeroClient();
+    const bool suspendedByR = lease.OwnerId == kFocusLeaseOwnerId &&
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Suspended &&
+        HasKindredECharge(leasedTarget) && InKindredRZone(leasedTarget);
+
     AIHeroClient marked = {};
     std::vector<AIHeroClient> attackable;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy) || !AutoAttack::InAutoAttackRange(enemy)) {
+        if (!ValidHeroTarget(enemy) || InKindredRZone(enemy) ||
+            !AutoAttack::InAutoAttackRange(enemy)) {
             continue;
         }
         attackable.push_back(enemy);
-        if (!marked.IsValid() && enemy.HasBuff("kindredecharge")) {
+        if (!marked.IsValid() && HasKindredECharge(enemy)) {
             marked = enemy;
         }
     }
     if (!marked.IsValid()) {
-        ClearForcedETarget();
+        // Keep the E identity semantic while Kindred R temporarily owns the
+        // area.  Orbwalker sees the suspended lease and can choose another
+        // legal hero; CurrentKindredFocus restores this target after R ends.
+        if (!suspendedByR) ClearForcedETarget();
         return;
     }
 
@@ -498,15 +850,20 @@ static void UpdateForcedETarget() {
                 continue;
             }
             const float damage = Damage::GetAutoAttackDamage(player, enemy, true);
-            if (EffectivePhysicalHealth(enemy) <= damage * 2.0f) {
+            if (TargetPolicy::PreferTwoAttackAlternate(
+                    EffectivePhysicalHealth(marked),
+                    markedDamage,
+                    EffectivePhysicalHealth(enemy),
+                    damage)) {
                 forced = enemy;
                 break;
             }
         }
     }
 
-    Orbwalker::ForceTarget(AttackableUnit(forced.Handle()));
-    ForcedETarget = true;
+    if (!AcquireKindredFocus(forced, 900)) {
+        ForcedETarget = false;
+    }
 }
 
 static bool TryClassicUltimateOn(const AIHeroClient& ally) {
@@ -546,7 +903,7 @@ static bool Combo() {
 
     if (Bool(ComboMenu, "CQ", true) && Q.IsReady()) {
         const float aaRange = AutoAttack::GetRealAutoAttackRange(player);
-        const auto target = GetPhysicalTarget(aaRange + Q.Range);
+        const auto target = KindredTarget(aaRange + Q.Range);
         if (ValidHeroTarget(target) && !AutoAttack::InAutoAttackRange(target)) {
             const Vector3 dashPos = player.Position().Extend(target.Position(), Q.Range);
             if (IsGoodDashPosition(dashPos) && Q.Cast(dashPos)) {
@@ -556,18 +913,12 @@ static bool Combo() {
     }
 
     if (Bool(ComboMenu, "CE", true) && E.IsReady()) {
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (!ValidHeroTarget(enemy, E.Range) || EBlacklisted(enemy)) {
-                continue;
-            }
-            if (Bool(ComboMenu, "comboAdvancedE", true) &&
-                EffectivePhysicalHealth(enemy) <=
-                    Damage::GetAutoAttackDamage(player, enemy, true) * 2.0f) {
-                continue;
-            }
-            if (E.CastOnUnit(enemy)) {
-                return true;
-            }
+        const auto target = SelectKindredETarget(E.Range);
+        if (target.IsValid() &&
+            KindredActionAllowed(
+                target, SDK::KuroTargetSelector::TargetPurpose::Execute) &&
+            E.CastOnUnit(target)) {
+            return true;
         }
     }
 
@@ -575,7 +926,7 @@ static bool Combo() {
         const float minimumDistance = static_cast<float>(
             Slider(ComboMenu, "comboDistanceW", 450));
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (ValidHeroTarget(enemy, W.Range) &&
+            if (ValidHeroTarget(enemy, W.Range) && !InKindredRZone(enemy) &&
                 enemy.Distance(player) <= minimumDistance &&
                 W.Cast(enemy.Position())) {
                 return true;
@@ -706,7 +1057,10 @@ static void OnGapcloser(const GapCloserEventArgs& args) {
         return;
     }
     if (Bool(AntiGapMenu, "AntiGapE", true) && E.IsReady() &&
-        ValidHeroTarget(sender, E.Range) && E.CastOnUnit(sender)) {
+        ValidHeroTarget(sender, E.Range) &&
+        KindredActionAllowed(
+            sender, SDK::KuroTargetSelector::TargetPurpose::Execute) &&
+        E.CastOnUnit(sender)) {
         return;
     }
     if (Bool(AntiGapMenu, "AntiGapQ", true) && Q.IsReady() &&
@@ -743,8 +1097,12 @@ static void OnDraw() {
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
+    if (!Loaded) {
+        return;
+    }
+    EnsureKindredTargetProvider();
     const auto player = Player();
-    if (!Loaded || !player.IsValid() || player.IsDead() || player.IsRecalling() ||
+    if (!player.IsValid() || player.IsDead() || player.IsRecalling() ||
         Game::IsChatOpen()) {
         ClearForcedETarget();
         return;
@@ -884,6 +1242,7 @@ static void OnGameLoad() {
     E.DamageType = DamageType::Physical;
 
     ForcedETarget = false;
+    KindredFocusUntil = 0;
     BuildMenu();
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnProcessSpell += &OnProcessSpell;
@@ -892,6 +1251,7 @@ static void OnGameLoad() {
     Drawing::OnDraw += &OnDraw;
 
     Loaded = true;
+    EnsureKindredTargetProvider();
     Game::Print("<font color='#D7A9FF' size='20'>Kuro - Kindred loaded</font>");
 }
 
@@ -905,6 +1265,7 @@ static void OnUnload() {
     Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
     ClearForcedETarget();
+    UnregisterKindredTargetProvider();
     RemoveMenu();
     Loaded = false;
 }

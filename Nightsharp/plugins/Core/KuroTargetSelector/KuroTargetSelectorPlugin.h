@@ -409,13 +409,94 @@ public:
 
     bool ValidateExecution(
         const ::SDK::KuroTargetSelector::TargetRequest& request,
-        const ::SDK::AIHeroClient& target) const override {
+        const ::SDK::AIHeroClient& target) override {
         auto execution = request;
         execution.Phase = ::SDK::KuroTargetSelector::DecisionPhase::Execution;
         const auto gate = ::SDK::KuroTargetSelector::KuroTargetActionGate::Evaluate(
             execution, target);
-        return gate.Legal && !target.IsClone() &&
-            (!menu_ || !menu_->IsBlacklisted(target.NetworkId()));
+        if (!gate.Legal || target.IsClone() ||
+            (menu_ && menu_->IsBlacklisted(target.NetworkId()))) {
+            return false;
+        }
+
+        // Execution is the second half of the selector/provider contract.
+        // A champion provider may observe a buff changing after planning
+        // (Kindred R is the important example) and must be able to reject the
+        // live action without making callers re-rank the whole target list.
+        using namespace ::SDK::KuroTargetSelector;
+        TargetFacts facts{};
+        const auto player = ::SDK::GameObjects::Player();
+        facts.Target = target;
+        facts.SnapshotId = static_cast<std::uint32_t>(snapshot_.Id);
+        facts.NetworkId = target.NetworkId();
+        facts.Level = target.Level();
+        facts.Position = target.Position();
+        facts.ServerPosition = target.ServerPosition();
+        facts.Direction = target.Direction();
+        facts.Health = target.Health();
+        facts.MaxHealth = target.MaxHealth();
+        facts.AllShield = target.AllShield();
+        facts.EffectiveHealth = facts.Health + facts.AllShield;
+        facts.HealthRegen = target.HealthRegenRate();
+        facts.DistanceToSource = player.IsValid()
+            ? player.Position().Distance(target.Position()) : 0.0f;
+        facts.Distance = facts.DistanceToSource;
+        facts.MoveSpeed = target.MoveSpeed();
+        facts.AttackDamage = target.AD();
+        facts.AbilityPower = target.AP();
+        facts.BoundingRadius = target.BoundingRadius();
+        facts.AutoAttackDamage = target.AD();
+        facts.Valid = target.IsValid();
+        facts.Dead = target.IsDead();
+        facts.Visible = target.IsVisible();
+        facts.Targetable = target.IsTargetable();
+        facts.Invulnerable = target.IsInvulnerable();
+        facts.IsZombie = target.IsZombie();
+        facts.IsClone = target.IsClone();
+        facts.IsDashing = target.IsDashing();
+        facts.IsMoving = target.IsMoving();
+        facts.IsChanneling = target.Spellbook().IsChanneling();
+        facts.IsCrowdControlled = target.HasBuff("stun") ||
+            target.HasBuff("root") || target.HasBuff("snare") ||
+            target.HasBuff("charm") || target.HasBuff("fear") ||
+            target.HasBuff("taunt") || target.HasBuff("silence");
+        facts.IsFacingSource = player.IsValid() &&
+            ::SDK::Extensions::IsFacing(target, player);
+        facts.IsStasis = target.HasBuff("bardrstasis") ||
+            target.HasBuff("zhonyasringshield") ||
+            target.HasBuff("lissandrarself") ||
+            target.HasBuff("vladimirsanguinepool") ||
+            target.HasBuff("fizztrickslippery");
+
+        std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>
+            providerOrder;
+        for (auto& entry : providersRegistry_.MutableEntries()) {
+            if (entry.Provider.Band != ProviderPriorityBand::BaseSafety) {
+                providerOrder.push_back(&entry);
+            }
+        }
+        std::stable_sort(providerOrder.begin(), providerOrder.end(),
+            [](const auto* lhs, const auto* rhs) {
+                return static_cast<int>(lhs->Provider.Band) <
+                    static_cast<int>(rhs->Provider.Band);
+            });
+
+        TargetProviderContext context{};
+        context.Request = &execution;
+        context.Target = &facts.Target;
+        context.Facts = &facts;
+        context.Snapshot = &snapshot_;
+        for (auto* provider : providerOrder) {
+            if (!providersRegistry_.BuildFacts(
+                    *provider, execution, target, facts)) {
+                return false;
+            }
+            if (providersRegistry_.Validate(*provider, context) !=
+                    RejectReason::None) {
+                return false;
+            }
+        }
+        return true;
     }
 
     std::vector<::SDK::KuroTargetSelector::ProviderDiagnostic>

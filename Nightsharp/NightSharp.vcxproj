@@ -699,6 +699,7 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Jinx.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Katarina.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Kindred.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\Champion\KindredTargetPolicy.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Lucian.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Rengar.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\Champion\Samira.h" />

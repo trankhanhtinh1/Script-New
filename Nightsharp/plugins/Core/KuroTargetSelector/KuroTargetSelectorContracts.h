@@ -404,7 +404,7 @@ public:
     virtual bool UnregisterProvider(ProviderToken token) = 0;
     virtual SelectionState GetSelectionState() const = 0;
     virtual bool ValidateExecution(const TargetRequest& request,
-                                   const AIHeroClient& target) const = 0;
+                                   const AIHeroClient& target) = 0;
     virtual std::vector<ProviderDiagnostic> GetProviderDiagnostics() const = 0;
 };
 
