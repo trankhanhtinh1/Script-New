@@ -5,6 +5,7 @@
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
 #include "../../../Core/KuroCombatCoordinator.h"
+#include "../KuroTargetSelector/KuroTargetActionGate.h"
 
 #include "../../../sdk/Core/Game.h"
 #include "../../../sdk/Core/Hud.h"

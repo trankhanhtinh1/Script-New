@@ -828,6 +828,14 @@
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTargeting.inl" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTypes.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerVisuals.inl" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorContracts.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPolicy.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorProviders.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorMenu.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorDrawing.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPlugin.h" />
     <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h" />
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h" />
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h" />

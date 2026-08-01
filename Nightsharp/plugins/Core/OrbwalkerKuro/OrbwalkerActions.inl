@@ -312,6 +312,31 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
 
+    if (auto* advanced = SDK::KuroTargetSelector::ActiveService()) {
+        using namespace SDK::KuroTargetSelector;
+        TargetRequest request = KuroTargetActionGate::MakeAutoAttackRequest(
+            player.Position(),
+            GetRealAutoAttackRange(player, attackTarget),
+            DecisionPhase::Execution,
+            0);
+        // An Azir soldier attack is a direct stab and intentionally bypasses
+        // projectile-wall collision; all other AA routes remain projectile
+        // gated at the execution boundary.
+        request.Route.Kind = OrbwalkingDetail::WillUseAzirSoldierAttack(
+                player, attackTarget)
+            ? RouteKind::NonProjectile
+            : RouteKind::AutoAttack;
+        request.Route.Start = player.ServerPosition();
+        request.Route.ProjectileWallCheck =
+            request.Route.Kind != RouteKind::NonProjectile;
+        if (attackTarget.IsHero()) {
+            const AIHeroClient heroTarget(attackTarget.Handle());
+            if (!advanced->ValidateExecution(request, heroTarget)) {
+                return false;
+            }
+        }
+    }
+
     const int targetNetworkId = attackTarget.NetworkId();
     if (context_.lastAttackOrderTick > 0 &&
         context_.lastAttackOrderNetworkId == targetNetworkId &&

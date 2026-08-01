@@ -85,6 +85,9 @@
     <Filter Include="Plugins\Core\OrbwalkerKuro">
       <UniqueIdentifier>{5806612D-F755-EF07-9329-C1DC3708712F}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\Core\KuroTargetSelector">
+      <UniqueIdentifier>{9C4D9B71-4D67-4D50-9E61-8A9D2B2B7C4E}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Core\TargetSelectorImpulse">
       <UniqueIdentifier>{25D38118-D72E-E612-764C-52187EF8D430}</UniqueIdentifier>
     </Filter>
@@ -2433,6 +2436,30 @@
     </ClInclude>
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\ImpulsePriorityData.h">
       <Filter>Plugins\Core\TargetSelectorImpulse</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorContracts.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPolicy.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorProviders.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorMenu.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorDrawing.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPlugin.h">
+      <Filter>Plugins\Core\KuroTargetSelector</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulse.h">
       <Filter>Plugins\Core\TargetSelectorImpulse</Filter>

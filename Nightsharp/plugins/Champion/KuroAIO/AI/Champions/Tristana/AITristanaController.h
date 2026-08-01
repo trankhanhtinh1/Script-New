@@ -38,6 +38,9 @@ inline int GapcloserExpireTick = 0;
 inline Vector3 GapcloserEndpoint = {};
 inline int OwnedFocusTargetId = 0;
 inline int OwnedFocusUntil = 0;
+inline constexpr std::uint32_t kFocusLeaseOwnerId = 0x54524953u; // "TRIS"
+inline SDK::KuroTargetSelector::ProviderToken TristanaProviderToken = 0;
+inline SDK::KuroTargetSelector::IKuroTargetSelector* TristanaProviderService = nullptr;
 inline Mode LastMode = Mode::None;
 inline AIHeroClient LastSmartTarget = {};
 
@@ -73,6 +76,77 @@ inline float ExplosiveChargeDamage(const AIBaseClient& target,
     return player.CalculatePhysicalDamage(target, raw);
 }
 
+inline bool BuildTristanaTargetFacts(
+    const SDK::KuroTargetSelector::TargetRequest& request,
+    const AIHeroClient& target,
+    SDK::KuroTargetSelector::TargetFacts& facts) {
+    (void)request;
+    const int stacks = ExplosiveChargeStacks(target);
+    facts.AddProviderFact("tristana.e_stacks", static_cast<float>(stacks));
+    facts.AddProviderFact(
+        "tristana.e_remaining_ms", ExplosiveChargeRemainingMs(target));
+    return true;
+}
+
+inline SDK::KuroTargetSelector::RejectReason ValidateTristanaTarget(
+    const SDK::KuroTargetSelector::TargetProviderContext& context) {
+    (void)context;
+    return SDK::KuroTargetSelector::RejectReason::None;
+}
+
+inline SDK::KuroTargetSelector::ScoreContribution ScoreTristanaTarget(
+    const SDK::KuroTargetSelector::TargetProviderContext& context) {
+    if (!context.Facts) return {};
+    const float stacks = context.Facts->ProviderFactValue(
+        "tristana.e_stacks");
+    const float remaining = context.Facts->ProviderFactValue(
+        "tristana.e_remaining_ms");
+    const float urgency = remaining > 0.0f && remaining <= 900.0f
+        ? (900.0f - remaining) * 0.08f : 0.0f;
+    return {
+        "tristana-charge", "Explosive Charge stacks/urgency",
+        stacks * 18.0f + urgency, 0.0f, 120.0f
+    };
+}
+
+inline void EnsureTristanaTargetProvider() {
+    auto* service = SDK::KuroTargetSelector::ActiveService();
+    if (!service) {
+        // Kuro may be inactive while the object is still alive.  Unregister in
+        // that case, but never dereference a service after its plugin unload.
+        if (TristanaProviderService && TristanaProviderToken &&
+            SDK::KuroTargetSelector::LiveService() ==
+                TristanaProviderService) {
+            (void)TristanaProviderService->UnregisterProvider(
+                TristanaProviderToken);
+        }
+        TristanaProviderToken = 0;
+        TristanaProviderService = nullptr;
+        return;
+    }
+    if (TristanaProviderService != service) {
+        if (TristanaProviderService && TristanaProviderToken &&
+            SDK::KuroTargetSelector::LiveService() ==
+                TristanaProviderService) {
+            (void)TristanaProviderService->UnregisterProvider(
+                TristanaProviderToken);
+        }
+        TristanaProviderToken = 0;
+        TristanaProviderService = service;
+    }
+    if (TristanaProviderToken) return;
+
+    const SDK::KuroTargetSelector::TargetRuleProvider provider{
+        kFocusLeaseOwnerId,
+        "tristana.explosive_charge",
+        SDK::KuroTargetSelector::ProviderPriorityBand::ChampionMechanic,
+        &BuildTristanaTargetFacts,
+        &ValidateTristanaTarget,
+        &ScoreTristanaTarget,
+    };
+    TristanaProviderToken = service->RegisterProvider(provider);
+}
+
 inline float TargetedRange() {
     const auto player = GameObjects::Player();
     return player.IsValid()
@@ -104,6 +178,85 @@ inline bool TargetedSpellReach(const AIBaseClient& target) {
             TargetedRange() + target.BoundingRadius();
 }
 
+inline void ReleaseTristanaFocus() {
+    (void)AICombatTargetCoordinator::FocusLease::Release(
+        kFocusLeaseOwnerId);
+    OwnedFocusTargetId = 0;
+    OwnedFocusUntil = 0;
+}
+
+inline bool AcquireTristanaFocus(const AIHeroClient& target,
+                                 int lifetimeMs) {
+    if (!Engine::ValidEnemy(target, 850.0f) ||
+        ControllerHelpers::IsCommonUntargetableOrImmune(target) ||
+        OrbwalkerAttackProjectileBlocked(target)) {
+        return false;
+    }
+    const int now = Now();
+    if (!AICombatTargetCoordinator::FocusLease::Acquire(
+            kFocusLeaseOwnerId,
+            static_cast<int>(target.NetworkId()),
+            AICombatTargetCoordinator::LeaseStrength::Hard,
+            now,
+            std::max(1, lifetimeMs),
+            100)) {
+        return false;
+    }
+    OwnedFocusTargetId = static_cast<int>(target.NetworkId());
+    OwnedFocusUntil = now + std::max(1, lifetimeMs);
+    return true;
+}
+
+inline AIHeroClient CurrentTristanaFocus(float range) {
+    const int now = Now();
+    const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(now);
+    if (lease.OwnerId != kFocusLeaseOwnerId ||
+        lease.TargetNetworkId <= 0 ||
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Inactive ||
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal ||
+        lease.ManualOverride) {
+        return {};
+    }
+
+    const auto target = ControllerHelpers::HeroByNetworkId(
+        lease.TargetNetworkId);
+    if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Suspended &&
+        target.IsValid() &&
+        (!HasExplosiveCharge(target) || ExplosiveChargeStacks(target) >= 4)) {
+        ReleaseTristanaFocus();
+        return {};
+    }
+    const bool legal = Engine::ValidEnemy(target, range) &&
+        HasExplosiveCharge(target) &&
+        ExplosiveChargeStacks(target) < 4 &&
+        InAutoAttackRange(target) &&
+        !ControllerHelpers::IsCommonUntargetableOrImmune(target) &&
+        !OrbwalkerAttackProjectileBlocked(target);
+    if (!legal) {
+        if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Active) {
+            (void)AICombatTargetCoordinator::FocusLease::BlockedTarget(
+                lease.TargetNetworkId, now);
+        }
+        return {};
+    }
+
+    if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Suspended) {
+        const int ttl = std::max(
+            1, OwnedFocusUntil > now ? OwnedFocusUntil - now : 850);
+        if (!AICombatTargetCoordinator::FocusLease::Restore(
+            kFocusLeaseOwnerId,
+            lease.TargetNetworkId,
+            now,
+            ttl)) {
+            return {};
+        }
+        OwnedFocusUntil = now + ttl;
+    }
+    OwnedFocusTargetId = lease.TargetNetworkId;
+    if (OwnedFocusUntil <= now) OwnedFocusUntil = now + 1;
+    return target;
+}
+
 inline bool CastQ(const AIHeroClient& target, Mode mode) {
     if (!CanUse(0, mode, true) || !Engine::ValidEnemy(target) ||
         !InAutoAttackRange(target) ||
@@ -131,9 +284,7 @@ inline bool CastE(const AIHeroClient& target,
     LastECastTick = Now();
     PendingRapidFireTargetId = static_cast<int>(target.NetworkId());
     PendingRapidFireUntil = Now() + 420;
-    (void)SetTemporaryOrbwalkerFocus(
-        target, ControllerHelpers::AutoAttackRange(target), 1000,
-        OwnedFocusTargetId, OwnedFocusUntil);
+    (void)AcquireTristanaFocus(target, 1000);
     return true;
 }
 
@@ -251,7 +402,7 @@ inline bool CastR(const AIHeroClient& target,
     PrepareTargetedCastRange(3, target);
     if (!Engine::ControllerCastUnit(3, target)) return false;
     LastRCastTick = Now();
-    ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
+    ReleaseTristanaFocus();
     return true;
 }
 
@@ -336,19 +487,32 @@ inline void RefreshChargeFocus(Mode mode,
     if (!protectedKill.IsValid() && ImmediateAttackKill(preferred)) {
         protectedKill = preferred;
     }
-    auto owned = OwnedOrbwalkerFocus(
-        OwnedFocusTargetId, OwnedFocusUntil, 850.0f);
+    auto owned = CurrentTristanaFocus(850.0f);
+    const auto leaseBeforeSelection =
+        AICombatTargetCoordinator::FocusLease::Snapshot(Now());
     if (!combat || !owned.IsValid() || !HasExplosiveCharge(owned) ||
         ExplosiveChargeStacks(owned) >= 4 || !InAutoAttackRange(owned) ||
         (protectedKill.IsValid() &&
          protectedKill.NetworkId() != owned.NetworkId())) {
-        ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
+        if (!combat || (owned.IsValid() &&
+            (ExplosiveChargeStacks(owned) >= 4 ||
+             !InAutoAttackRange(owned) ||
+             (protectedKill.IsValid() &&
+              protectedKill.NetworkId() != owned.NetworkId())))) {
+            ReleaseTristanaFocus();
+        }
         owned = {};
     }
-    if (owned.IsValid() || !combat) return;
+    if (owned.IsValid() || !combat ||
+        (leaseBeforeSelection.OwnerId == kFocusLeaseOwnerId &&
+         leaseBeforeSelection.Status ==
+             AICombatTargetCoordinator::LeaseStatus::Suspended)) {
+        return;
+    }
     if (protectedKill.IsValid()) {
-        (void)ForceImmediateAttackKill(
-            protectedKill, 450, OwnedFocusTargetId, OwnedFocusUntil);
+        if (ImmediateAttackKill(protectedKill)) {
+            (void)AcquireTristanaFocus(protectedKill, 450);
+        }
         return;
     }
 
@@ -380,9 +544,7 @@ inline void RefreshChargeFocus(Mode mode,
         }
     }
     if (best.IsValid()) {
-        (void)SetTemporaryOrbwalkerFocus(
-            best, ControllerHelpers::AutoAttackRange(best), 850,
-            OwnedFocusTargetId, OwnedFocusUntil);
+        (void)AcquireTristanaFocus(best, 850);
     }
 }
 
@@ -426,11 +588,12 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+    EnsureTristanaTargetProvider();
     LastMode = mode;
     RefreshDynamicRanges();
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     if (!combat) {
-        ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
+        ReleaseTristanaFocus();
         PendingRapidFireTargetId = PendingRapidFireUntil = 0;
     }
     if (ManualUltimatePressed()) {
@@ -482,14 +645,29 @@ inline void ObserveLocalSpell(
     }
 }
 
+inline bool RedirectTristanaFocus(
+    SDK::OrbwalkingActionArgs& args,
+    const AIHeroClient& target) {
+    if (!Engine::ValidEnemy(target) ||
+        ControllerHelpers::IsCommonUntargetableOrImmune(target) ||
+        OrbwalkerAttackProjectileBlocked(target) ||
+        !InAutoAttackRange(target)) {
+        return false;
+    }
+    if (!args.Target.IsValid() ||
+        args.Target.NetworkId() != target.NetworkId()) {
+        args.Target = AttackableUnit(target.Handle());
+        args.Position = target.Position();
+    }
+    return true;
+}
+
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    auto focus = OwnedOrbwalkerFocus(
-        OwnedFocusTargetId, OwnedFocusUntil, 850.0f);
+    auto focus = CurrentTristanaFocus(850.0f);
     if (focus.IsValid() &&
         (!HasExplosiveCharge(focus) ||
-         !RedirectBeforeAttackToFocus(args, focus))) {
-        ClearTemporaryOrbwalkerFocus(
-            OwnedFocusTargetId, OwnedFocusUntil);
+         !RedirectTristanaFocus(args, focus))) {
+        ReleaseTristanaFocus();
         focus = {};
     }
     if (!focus.IsValid() && args.Target.IsValid() && args.Target.IsHero()) {
@@ -501,6 +679,13 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     (void)CastQ(focus, LastMode);
 }
 
+inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
+    (void)ControllerHelpers::CaptureAfterAttack(
+        args, LastAfterAttackTargetId, LastAfterAttackTick);
+    if (LastAfterAttackTargetId == OwnedFocusTargetId) {
+        ReleaseTristanaFocus();
+    }
+}
 
 
 inline void BuildMenu(Menu* root) {
@@ -522,6 +707,10 @@ inline void BuildMenu(Menu* root) {
 }
 
 inline void OnLoad() {
+    TristanaProviderToken = 0;
+    TristanaProviderService = nullptr;
+    EnsureTristanaTargetProvider();
+    ReleaseTristanaFocus();
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     LastAfterAttackTick = LastAfterAttackTargetId = 0;
     PendingRapidFireTargetId = PendingRapidFireUntil = 0;
@@ -534,7 +723,14 @@ inline void OnLoad() {
 }
 
 inline void OnUnload() {
-    ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
+    if (TristanaProviderService && TristanaProviderToken &&
+        SDK::KuroTargetSelector::LiveService() == TristanaProviderService) {
+        (void)TristanaProviderService->UnregisterProvider(
+            TristanaProviderToken);
+    }
+    TristanaProviderToken = 0;
+    TristanaProviderService = nullptr;
+    ReleaseTristanaFocus();
     PendingRapidFireTargetId = PendingRapidFireUntil = 0;
     TacticsMenu = ChargeMenu = JumpMenu = BusterMenu = nullptr;
     LastMode = Mode::None;
@@ -575,10 +771,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnUpdate = &OnUpdate;
     controller.OnProcessSpell = &ObserveLocalSpell;
     controller.OnBeforeAttack = &OnBeforeAttack;
-    controller.OnAfterAttack =
-        &CaptureAfterAttackAndReleaseOwnedFocusEvent<
-            &LastAfterAttackTargetId, &LastAfterAttackTick,
-            &OwnedFocusTargetId, &OwnedFocusUntil>;
+    controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 700, 900>;
     return controller;
 }();

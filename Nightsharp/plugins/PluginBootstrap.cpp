@@ -12,6 +12,7 @@
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/Orbwalker7UP/Orbwalker7UP.h"
+#include "Core/KuroTargetSelector/KuroTargetSelectorPlugin.h"
 #include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
 //#include "Core/PlayerBuffDebugPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
@@ -148,6 +149,7 @@ void EnsureRegistered() {
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
     PluginManager::Get().Register<Orbwalker7UPPlugin>();
+    PluginManager::Get().Register<KuroTargetSelector::KuroTargetSelectorPlugin>();
     PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
     PluginManager::Get().Register<PlayerEventFilterPlugin>();
     //PluginManager::Get().Register<PlayerBuffDebugPlugin>();

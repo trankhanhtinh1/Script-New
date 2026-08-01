@@ -4,6 +4,7 @@
 #include "TargetSelectorRegistry.h"
 #include "TargetSelectorSdk.h"
 #include "../Spells/Spell.h"
+#include "../../../plugins/Core/KuroTargetSelector/KuroTargetSelectorContracts.h"
 
 #include <algorithm>
 #include <string>
@@ -18,7 +19,6 @@ public:
     {
         Instance_() = this;
         AddTargetSelector("SDK", &sdkImplementation_);
-        SetTargetSelector("SDK");
     }
 
     ~TargetSelector() {
@@ -28,6 +28,9 @@ public:
 
     static TargetSelector* Instance() { return Instance_(); }
     static ITargetSelector* Implementation() { return Registry_().Implementation(); }
+    static KuroTargetSelector::IKuroTargetSelector* AdvancedImplementation() {
+        return KuroTargetSelector::ActiveService();
+    }
 
     static bool AddTargetSelector(const std::string& name, ITargetSelector* implementation) {
         return Registry_().Add(name, implementation);

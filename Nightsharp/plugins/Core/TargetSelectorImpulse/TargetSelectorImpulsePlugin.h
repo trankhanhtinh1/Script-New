@@ -20,20 +20,20 @@ public:
         DestroyMenu();
         menu_ = new SDK::Menu(GetInternalId(), GetName(), true);
         implementation_ = new TargetSelectorImpulse::TargetSelectorImpulse(menu_);
+        // Registration is not activation.  Keep Impulse quiescent until the
+        // selector registry decides whether it is the restored/current
+        // implementation; this prevents duplicate WndProc/Drawing hooks.
+        implementation_->Suspend();
         menu_->Attach();
 
         const bool added = SDK::TargetSelector::AddTargetSelector(kImplementationName, implementation_);
-        const bool selected = added && SDK::TargetSelector::SetTargetSelector(kImplementationName);
-        if (!selected) {
-            if (added) SDK::TargetSelector::RemoveTargetSelector(kImplementationName);
+        if (!added) {
             implementation_->Dispose();
             delete implementation_;
             implementation_ = nullptr;
             DestroyMenu();
             return;
         }
-
-        SetSdkTargetSelectorLoaded(false);
     }
 
     void OnUnload() override {
@@ -44,26 +44,10 @@ public:
         delete implementation_;
         implementation_ = nullptr;
         DestroyMenu();
-        SetSdkTargetSelectorLoaded(true);
     }
 
 private:
     static constexpr const char* kImplementationName = "Impulse";
-
-    static void SetSdkTargetSelectorLoaded(bool loaded) {
-        const int index = PluginRegistry::FindByInternalId("targetselector");
-        if (index >= 0 && PluginRegistry::HasRuntime(index)) {
-            if (loaded) PluginRegistry::LoadPlugin(index);
-            else PluginRegistry::UnloadPlugin(index);
-            return;
-        }
-
-        if (auto* sdk = SDK::TargetSelector::GetTargetSelector("SDK")) {
-            if (loaded) sdk->Resume();
-            else sdk->Suspend();
-        }
-        if (index >= 0) PluginRegistry::Plugins[index].Loaded = loaded;
-    }
 
     void DestroyMenu() {
         if (!menu_) return;

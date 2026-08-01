@@ -593,6 +593,61 @@ inline LastHitEvaluation GetKillableMinion(
 }
 
 inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
+    // A hard FocusLease is an owned champion hint, not a replacement for
+    // legality.  If the leased target is outside live AA range or behind a
+    // wall, suspend the lease semantically and let selector ranking choose a
+    // fallback; the coordinator can restore it later without losing identity.
+    const auto lease = Plugins::AICombatTargetCoordinator::FocusLease::Snapshot(
+        Variables::TickCount());
+    int softLeaseTargetId = 0;
+    if (lease.Status == Plugins::AICombatTargetCoordinator::LeaseStatus::Active &&
+        !lease.ManualOverride && lease.TargetNetworkId > 0) {
+        const auto focus = GameObjects::GetUnitByNetworkId<AIHeroClient>(
+            lease.TargetNetworkId);
+        const AttackableUnit focusUnit(focus.Handle());
+        if (focus.IsValid() && IsValidCurrentAttackTarget(player, focusUnit)) {
+            if (lease.Strength ==
+                    Plugins::AICombatTargetCoordinator::LeaseStrength::Hard) {
+                return focusUnit;
+            }
+            softLeaseTargetId = lease.TargetNetworkId;
+        } else {
+            (void)Plugins::AICombatTargetCoordinator::FocusLease::BlockedTarget(
+                lease.TargetNetworkId, Variables::TickCount());
+        }
+    }
+
+    // KuroTargetSelector owns enemy-hero planning only.  The orbwalker still
+    // performs the final AA-range, wall, and unit legality checks below; farm
+    // targets never pass through this service.
+    if (auto* advanced = SDK::KuroTargetSelector::ActiveService()) {
+        using namespace SDK::KuroTargetSelector;
+        TargetRequest request = KuroTargetActionGate::MakeAutoAttackRequest(
+            player.Position(), FLT_MAX, DecisionPhase::Planning, 0);
+        // The orbwalker has a champion-specific final wall gate (including
+        // Azir soldier exceptions), so planning asks only for enemy-hero
+        // ranking and lets that final gate own the exact attack route.
+        request.Route.Kind = RouteKind::NonProjectile;
+        request.Route.ProjectileWallCheck = false;
+        request.Route.RequireLineOfSight = false;
+        request.RespectManualSelection = true;
+        const auto selection = advanced->GetSelectionState();
+        const bool explicitManual = selection.ManualOverrideActive ||
+            (selection.PreferSelectedTarget &&
+             selection.SelectedNetworkId > 0);
+        if (softLeaseTargetId > 0 && !explicitManual) {
+            request.PreferredTargetId = softLeaseTargetId;
+        }
+
+        for (const auto& decision : advanced->Rank(request)) {
+            if (!decision.Legal || !decision.Target.IsValid()) continue;
+            const AttackableUnit target(decision.Target.Handle());
+            if (IsValidCurrentAttackTarget(player, target)) {
+                return target;
+            }
+        }
+    }
+
     if (auto* selector = TargetSelector::Instance()) {
         const auto targets = selector->GetTargets(FLT_MAX, DamageType::True);
         for (const auto& hero : targets) {
