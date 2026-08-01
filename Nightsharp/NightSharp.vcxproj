@@ -532,9 +532,9 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vex\AIVexController.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vex\AIVexGeometry.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vi\AIViController.h" />
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vi\AIViGeometry.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Viego\AIViegoController.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Viego\AIViegoGeometry.h" />
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vi\AIViGeometry.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vladimir\AIVladimirController.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vladimir\AIVladimirGeometry.h" />
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Volibear\AIVolibearController.h" />
@@ -846,6 +846,14 @@
     <ClInclude Include="Plugins\Champion\ziblldev9898\Locke.h" />
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h" />
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorContracts.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorDrawing.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorMenu.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPlugin.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPolicy.h" />
+    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorProviders.h" />
     <ClInclude Include="Plugins\Core\ObjectLifecycleTestPlugins.h" />
     <ClInclude Include="Plugins\Core\Orbwalker7UP\Common\Base.h" />
     <ClInclude Include="Plugins\Core\Orbwalker7UP\Orbwalker7UP.h" />
@@ -866,14 +874,6 @@
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTargeting.inl" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTypes.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerVisuals.inl" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorContracts.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPolicy.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorProviders.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorMenu.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorDrawing.h" />
-    <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorPlugin.h" />
     <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h" />
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h" />
     <ClInclude Include="Plugins\Core\SpellTrackingDebugPlugin.h" />
@@ -1052,7 +1052,6 @@
     <ClInclude Include="SDK\Enumerations\CastTypes.h" />
     <ClInclude Include="SDK\Enumerations\CenteredFlags.h" />
     <ClInclude Include="SDK\Enumerations\ChampionId.h" />
-    <ClInclude Include="SDK\Enumerations\ItemId.h" />
     <ClInclude Include="SDK\Enumerations\CollisionableObjects.h" />
     <ClInclude Include="SDK\Enumerations\CollisionFlags.h" />
     <ClInclude Include="SDK\Enumerations\DamageType.h" />
@@ -1061,6 +1060,7 @@
     <ClInclude Include="SDK\Enumerations\GapcloserType.h" />
     <ClInclude Include="SDK\Enumerations\HealthPredictionType.h" />
     <ClInclude Include="SDK\Enumerations\HitChance.h" />
+    <ClInclude Include="SDK\Enumerations\ItemId.h" />
     <ClInclude Include="SDK\Enumerations\JungleType.h" />
     <ClInclude Include="SDK\Enumerations\KeyBindType.h" />
     <ClInclude Include="SDK\Enumerations\LogLevel.h" />
