@@ -31,7 +31,6 @@ x86/
 *.txt
 *.aps
 ipch/Nightsharp/version.h
-Nightsharp/mybuild.bat
 
 bin/
 obj/
