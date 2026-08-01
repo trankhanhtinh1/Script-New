@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // AIKayleController owns stack reconciliation, execute timing and ally-save policy.
 inline constexpr ChampionProfile Kayle = [] {
     ChampionProfile p{};
-    p.ChampionName = "Kayle";
+    p.ChampionId = SDK::ChampionId::Kayle;
     p.DisplayName = "Kayle";
     p.InternalId = "champion.kuroaio.ai.kayle";
     p.PrimaryArchetype = Archetype::Specialist;

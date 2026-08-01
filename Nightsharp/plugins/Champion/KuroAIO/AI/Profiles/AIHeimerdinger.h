@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Heimerdinger = [] {
     ChampionProfile p{};
-    p.ChampionName = "Heimerdinger";
+    p.ChampionId = SDK::ChampionId::Heimerdinger;
     p.DisplayName = "Heimerdinger";
     p.InternalId = "champion.kuroaio.ai.heimerdinger";
     p.PrimaryArchetype = Archetype::Specialist;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // an unconditional E-Q-W-R sequence.
 inline constexpr ChampionProfile XinZhao = [] {
     ChampionProfile p{};
-    p.ChampionName = "XinZhao";
+    p.ChampionId = SDK::ChampionId::XinZhao;
     p.DisplayName = "Xin Zhao";
     p.InternalId = "champion.kuroaio.ai.xinzhao";
     p.PrimaryArchetype = Archetype::Diver;

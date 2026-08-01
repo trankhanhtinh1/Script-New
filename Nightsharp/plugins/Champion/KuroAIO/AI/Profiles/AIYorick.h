@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Yorick = [] {
     ChampionProfile p{};
-    p.ChampionName = "Yorick";
+    p.ChampionId = SDK::ChampionId::Yorick;
     p.DisplayName = "Yorick";
     p.InternalId = "champion.kuroaio.ai.yorick";
     p.PrimaryArchetype = Archetype::Juggernaut;

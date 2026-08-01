@@ -130,8 +130,13 @@ public:
         result.EvadeSpellDatabaseEntries =
             static_cast<int>(evadeEntries.size());
         for (const Database::SpellData& spell : spellEntries) {
-            if (spell.CharacterName.empty() || spell.SpellName.empty() ||
-                spell.Runtime.ChampionName != spell.CharacterName ||
+            const bool hasChampionIdentity = spell.IsGlobal ||
+                spell.ChampionId != SDK::ChampionId::Unknown;
+            const char* runtimeChampion = spell.IsGlobal
+                ? "AllChampions"
+                : SDK::ChampionName(spell.ChampionId);
+            if (!hasChampionIdentity || spell.SpellName.empty() ||
+                spell.Runtime.ChampionName != runtimeChampion ||
                 spell.Runtime.SpellName != spell.SpellName ||
                 spell.Runtime.Range < 0 || spell.Runtime.Radius < 0 ||
                 (!spell.MissileSpellName.empty() &&
@@ -233,7 +238,9 @@ public:
             }
         }
         for (const Database::EvadeSpellData& spell : evadeEntries) {
-            if (spell.ChampionName.empty() || spell.Name.empty()) {
+            const bool hasChampionIdentity = spell.IsGlobal ||
+                spell.ChampionId != SDK::ChampionId::Unknown;
+            if (!hasChampionIdentity || spell.Name.empty()) {
                 ++result.InvalidDatabaseEntries;
             }
         }
@@ -291,21 +298,21 @@ public:
                 SourceCollisionKind::ProjectileWall) &&
             !SourceCollision::IsTerminalBeforeContinuation(
                 SourceCollisionKind::Unit));
+        const Database::SpellData* stolenUltimate =
+            SourceSkillshotDetector::LookupBySpellName(
+                "EnchantedCrystalArrow");
 
         // These lookups deliberately do not receive a caster champion. Sylas,
         // possessed Viego and Mel-reflected missiles must resolve the original
         // spell profile by runtime name alone.
-        const Database::SpellData* stolenUltimate =
-            SourceSkillshotDetector::LookupBySpellName(
-                "EnchantedCrystalArrow");
         dynamicCasterCheck(stolenUltimate &&
             stolenUltimate->Runtime.Slot == SDK::SpellSlot::R &&
-            _stricmp(stolenUltimate->CharacterName.c_str(), "Ashe") == 0);
+            stolenUltimate->ChampionId == SDK::ChampionId::Ashe);
         const Database::SpellData* possessedBasic =
             SourceSkillshotDetector::LookupBySpellName("LuxLightBinding");
         dynamicCasterCheck(possessedBasic &&
             possessedBasic->Runtime.Slot == SDK::SpellSlot::Q &&
-            _stricmp(possessedBasic->CharacterName.c_str(), "Lux") == 0);
+            possessedBasic->ChampionId == SDK::ChampionId::Lux);
         const Database::SpellData* reflectedProjectile =
             SourceSkillshotDetector::LookupByMissileName(
                 "LuxLightBindingMis");
@@ -332,8 +339,13 @@ public:
 
         const auto findSpell = [&](const char* champion, const char* spellName)
                 -> const Database::SpellData* {
+            const SDK::ChampionId championId =
+                SDK::ChampionIdFromName(champion);
+            if (championId == SDK::ChampionId::Unknown) {
+                return nullptr;
+            }
             for (const Database::SpellData& spell : spellEntries) {
-                if (_stricmp(spell.CharacterName.c_str(), champion) == 0 &&
+                if (!spell.IsGlobal && spell.ChampionId == championId &&
                     _stricmp(spell.SpellName.c_str(), spellName) == 0) {
                     return &spell;
                 }
@@ -780,9 +792,9 @@ private:
         if (start.DistanceSqr(end) < 100.0f * 100.0f) {
             start = end + Vec2(800.0f, 0.0f);
         }
-
         Database::SpellData data;
-        data.CharacterName = "Benchmark";
+
+        data.IsGlobal = true;
         data.DisplayName = circle ? "Test Circle Skillshot" : "Test Line Skillshot";
         data.SpellName = circle ? "TestCircleSkillShot" : "TestLineSkillShot";
         data.DangerValue = 3;

@@ -11,7 +11,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // owns that state; this profile only publishes the spell contract and intent.
 inline constexpr ChampionProfile Taliyah = [] {
     ChampionProfile p{};
-    p.ChampionName = "Taliyah";
+    p.ChampionId = SDK::ChampionId::Taliyah;
     p.DisplayName = "Taliyah";
     p.InternalId = "champion.kuroaio.ai.taliyah";
     p.PrimaryArchetype = Archetype::Battlemage;

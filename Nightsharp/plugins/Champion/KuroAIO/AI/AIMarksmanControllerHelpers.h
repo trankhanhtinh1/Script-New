@@ -104,10 +104,11 @@ inline float SpellProjectileWallRadius(int index, float fallbackRadius) {
         return fallbackRadius;
     }
     const auto& spec = Engine::ResolvedSpecs[index];
-    // Circle/cone width describes the landing area, not the travelling
-    // missile. Only line width is safe to reuse as projectile thickness.
+    if (!spec.ProjectileWall) return fallbackRadius;
+    // SpellSpec::Width is the prediction diameter; collision consumes the
+    // missile radius. Ground/area widths never enter this path.
     return spec.Kind == CastKind::Line
-        ? std::max(fallbackRadius, spec.Width)
+        ? std::max(fallbackRadius, spec.Width * 0.5f)
         : fallbackRadius;
 }
 
@@ -115,6 +116,8 @@ inline bool PositionProjectileWall(int index,
                                    const Vector3& destination,
                                    float fallbackRadius) {
     return destination.IsValid() && !destination.IsZero() &&
+           Engine::ActiveProfile && index >= 0 && index < 4 &&
+           Engine::ResolvedSpecs[index].ProjectileWall &&
            ControllerHelpers::ProjectileWallBlocksFromPlayer(
                destination,
                SpellProjectileWallRadius(index, fallbackRadius));
@@ -166,22 +169,29 @@ inline bool ManualUltimatePressed() {
 inline bool OrbwalkerAttackProjectileBlocked(const AIBaseClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return false;
-    static constexpr std::array<const char*, 8> projectileMarksmen = {
-        "Caitlyn", "Ezreal", "Jhin", "KogMaw",
-        "MissFortune", "Tristana", "Twitch", "Varus",
+    static constexpr std::array<SDK::ChampionId, 24> projectileMarksmen = {
+        SDK::ChampionId::Aphelios, SDK::ChampionId::Ashe,
+        SDK::ChampionId::Caitlyn, SDK::ChampionId::Corki,
+        SDK::ChampionId::Draven, SDK::ChampionId::Ezreal,
+        SDK::ChampionId::Jhin, SDK::ChampionId::Jinx,
+        SDK::ChampionId::Kaisa, SDK::ChampionId::Kalista,
+        SDK::ChampionId::KogMaw, SDK::ChampionId::Lucian,
+        SDK::ChampionId::MissFortune, SDK::ChampionId::Senna,
+        SDK::ChampionId::Sivir, SDK::ChampionId::Smolder,
+        SDK::ChampionId::Tristana, SDK::ChampionId::Twitch,
+        SDK::ChampionId::Varus, SDK::ChampionId::Vayne,
+        SDK::ChampionId::Xayah, SDK::ChampionId::Yunara,
+        SDK::ChampionId::Graves, SDK::ChampionId::Quinn,
     };
-    const std::string championName = player.CharacterName();
-    bool wallBlocksAttack = false;
-    for (const char* champion : projectileMarksmen) {
-        if (ControllerHelpers::NameEquals(
-                championName.c_str(), champion)) {
-            wallBlocksAttack = true;
-            break;
+    const SDK::ChampionId playerChampionId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    for (const SDK::ChampionId champion : projectileMarksmen) {
+        if (playerChampionId == champion) {
+            return ControllerHelpers::ProjectileWallBlocksFromPlayer(
+                target.Position(), 0.0f);
         }
     }
-    return wallBlocksAttack &&
-           ControllerHelpers::ProjectileWallBlocksFromPlayer(
-               target.Position(), 0.0f);
+    return false;
 }
 
 inline bool LocalAttackAvailable(const AIBaseClient& target,

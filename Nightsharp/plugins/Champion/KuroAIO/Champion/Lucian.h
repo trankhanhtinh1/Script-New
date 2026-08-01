@@ -263,6 +263,25 @@ static std::vector<AIBaseClient> QBridgeUnits() {
     return result;
 }
 
+static bool CastDirectQ(const AIBaseClient& target) {
+    if (!Q.IsReady() || !ValidTarget(target, Q.Range)) {
+        return false;
+    }
+    if (target.IsHero()) {
+        const auto player = Player();
+        const auto prediction = Q.GetPrediction(target);
+        Vector3 castPosition = prediction.GetCastPosition();
+        if (castPosition.IsZero()) {
+            castPosition = target.Position();
+        }
+        if (!player.IsValid() || SDK::Collision::HasProjectileWallCollision(
+                player.Position(), castPosition, 30.0f)) {
+            return false;
+        }
+    }
+    return Q.Cast(target) == CastStates::SuccessfullyCasted;
+}
+
 static bool CastExtendedQThroughUnit(const AIHeroClient& target) {
     const auto player = Player();
     if (!Q.IsReady() || !player.IsValid() ||
@@ -277,6 +296,11 @@ static bool CastExtendedQThroughUnit(const AIHeroClient& target) {
 
     const Vector3 start = player.Position();
     const Vector3 targetPosition = prediction.GetUnitPosition();
+    if (targetPosition.IsZero() ||
+        SDK::Collision::HasProjectileWallCollision(
+            start, targetPosition, ExtendedQ.Width * 0.5f)) {
+        return false;
+    }
     for (const auto& unit : QBridgeUnits()) {
         const Vector3 end = start.Extend(unit.Position(), ExtendedQ.Range);
         SDK::RectanglePoly rectangle(start, end, ExtendedQ.Width);
@@ -305,11 +329,17 @@ static bool CastW(const AIHeroClient& target,
         return false;
     }
     const auto prediction = spell.GetPrediction(target, true);
-    if (!HitchanceAtLeast(prediction.Hitchance, required)) {
+    const auto player = Player();
+    const Vector3 castPosition = prediction.GetCastPosition();
+    if (!player.IsValid() || castPosition.IsZero() ||
+        SDK::Collision::HasProjectileWallCollision(
+            player.Position(), castPosition, spell.Width * 0.5f) ||
+        !HitchanceAtLeast(prediction.Hitchance, required)) {
         return false;
     }
-    return spell.Cast(prediction.GetCastPosition());
+    return spell.Cast(castPosition);
 }
+
 
 static float PassiveShotDamage(const AIBaseClient& target) {
     const auto player = Player();
@@ -376,8 +406,7 @@ static bool ComboAfterAttack(const AIHeroClient& target) {
     }
 
     if (Bool(ComboMenu, "UseQ", true) && Q.IsReady()) {
-        if (ValidHeroTarget(target, Q.Range) &&
-            Q.Cast(target) == CastStates::SuccessfullyCasted) {
+        if (CastDirectQ(target)) {
             MarkPassiveSpellCast();
             return true;
         }
@@ -420,8 +449,7 @@ static bool Harass() {
 
     if (Bool(HarassMenu, "UseQ", true) && Q.IsReady()) {
         target = GetPhysicalTarget(Q.Range);
-        if (ValidHeroTarget(target, Q.Range) &&
-            Q.Cast(target) == CastStates::SuccessfullyCasted) {
+        if (CastDirectQ(target)) {
             return true;
         }
         if (Bool(HarassMenu, "UseExtendedQ", true) &&
@@ -528,8 +556,7 @@ static bool JungleClear() {
             return EffectivePhysicalHealth(left) < EffectivePhysicalHealth(right);
         });
         for (const auto& mob : monsters) {
-            if (ValidTarget(mob, Q.Range) &&
-                Q.Cast(AIBaseClient(mob.Handle())) == CastStates::SuccessfullyCasted) {
+            if (CastDirectQ(AIBaseClient(mob.Handle()))) {
                 return true;
             }
         }
@@ -542,7 +569,15 @@ static bool SmartR() {
         return false;
     }
     const auto target = GetPhysicalTarget(R.Range);
-    return ValidHeroTarget(target, R.Range) && R.Cast(target.Position());
+    const auto prediction = R.GetPrediction(target, true);
+    Vector3 castPosition = prediction.GetCastPosition();
+    if (castPosition.IsZero()) {
+        castPosition = target.Position();
+    }
+    return ValidHeroTarget(target, R.Range) &&
+           !SDK::Collision::HasProjectileWallCollision(
+               Player().Position(), castPosition, R.Width * 0.5f) &&
+           R.Cast(castPosition);
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {

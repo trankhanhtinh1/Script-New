@@ -11,7 +11,8 @@ struct AzirSoldierFrameCache {
 
 inline bool IsAzirPlayer(const AIHeroClient& player) {
     return player.IsValid() &&
-           AzirSoldierRules::IsAzirChampionName(player.CharacterName());
+           ::SDK::ChampionIdFromName(player.CharacterName().c_str()) ==
+               ::SDK::ChampionId::Azir;
 }
 
 inline bool IsAzirSandSoldier(const GameObject& obj) {
@@ -203,10 +204,11 @@ inline bool SupportsPredictedCriticalDamage(const AIHeroClient& player,
 
     // These attacks do not use the ordinary one-projectile AD crit formula.
     // Their existing champion-specific damage remains authoritative.
-    const std::string name = player.CharacterName();
-    return _stricmp(name.c_str(), "Ashe") != 0 &&
-           _stricmp(name.c_str(), "Corki") != 0 &&
-           _stricmp(name.c_str(), "Graves") != 0;
+    const ::SDK::ChampionId playerChampionId =
+        ::SDK::ChampionIdFromName(player.CharacterName().c_str());
+    return playerChampionId != ::SDK::ChampionId::Ashe &&
+           playerChampionId != ::SDK::ChampionId::Corki &&
+           playerChampionId != ::SDK::ChampionId::Graves;
 }
 
 inline float GetPredictedAutoAttackDamage(const AIHeroClient& player,

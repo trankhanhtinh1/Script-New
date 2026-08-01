@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Smolder = [] {
     ChampionProfile p{};
-    p.ChampionName = "Smolder";
+    p.ChampionId = SDK::ChampionId::Smolder;
     p.DisplayName = "Smolder";
     p.InternalId = "champion.kuroaio.ai.smolder";
     p.PrimaryArchetype = Archetype::Marksman;

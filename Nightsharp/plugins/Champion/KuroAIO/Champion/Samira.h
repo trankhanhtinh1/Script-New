@@ -150,7 +150,9 @@ static bool CastQOnTarget(const AIHeroClient& target,
 
     if (!close && allowGun &&
         static_cast<int>(pred.Hitchance) >= static_cast<int>(hitChance) &&
-        pred.CollisionObjects.empty()) {
+        pred.CollisionObjects.empty() &&
+        !SDK::Collision::HasProjectileWallCollision(
+            player.Position(), castPosition, Q.Width * 0.5f)) {
         bool res = Q.Cast(target) == CastStates::SuccessfullyCasted;
         if (!res) {
             res = CastPosition(Q, castPosition);
@@ -442,10 +444,10 @@ static bool TryTurboCombo() {
     if (LastCastSpell == 0 || enemyInW || Orbwalker::AttackCooldownRemaining() > 500) {
         if (AllowDashTo(target)) {
 
-            if (R.IsReady() && Bool(RMenu, "RCombo")){
+            if (R.IsReady() && Bool(RMenu, "RCombo")) {
                 R.Cast();
-
-                return CastE(target) && Q.Cast(target.Position());
+                return CastE(target) &&
+                       CastQOnTarget(target, true, true, HitChance::Low);
             }
 
             if (W.IsReady()) {
@@ -453,7 +455,7 @@ static bool TryTurboCombo() {
             }
 
             if (CastE(target)) {
-                return Q.Cast(target.Position());;
+                return CastQOnTarget(target, true, true, HitChance::Low);
             }
         }
     }
@@ -587,10 +589,10 @@ static bool TryECombo() {
             CastE(target)) {
             return true;
         }
-
         if (Q.IsReady() && Bool(EMenu, "EQ") && CastE(target)) {
-            Q.Cast(target.Position());
-            return true;
+            if (CastQOnTarget(target, true, true, HitChance::Low)) {
+                return true;
+            }
         }
     }
     return false;
@@ -627,9 +629,9 @@ static bool TryQCombo() {
     if (!ValidHeroTarget(target, Q.Range)) {
         return false;
     }
-
     if (Player().IsDashing() || LastE + 700 > SDK::Variables::TickCount()) {
-        return Bool(EMenu, "EQ") && Q.Cast(target.Position());
+        return Bool(EMenu, "EQ") &&
+               CastQOnTarget(target, true, true, HitChance::Low);
     }
 
     return CastQOnTarget(

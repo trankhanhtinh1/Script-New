@@ -253,7 +253,11 @@ static bool CastQE(const AIHeroClient& target) {
     const float qDistance = distance <= E.Range
         ? std::min(distance, Q.Range)
         : Q.Range - 100.0f;
-    return CastQEAt(player.Position().Extend(prediction.GetCastPosition(), qDistance));
+    const Vector3 qPosition =
+        player.Position().Extend(prediction.GetCastPosition(), qDistance);
+    return !SDK::Collision::HasProjectileWallCollision(
+               qPosition, prediction.GetCastPosition(), QE.Width * 0.5f) &&
+           CastQEAt(qPosition);
 }
 
 static AIBaseClient BestWPickupObject() {
@@ -304,7 +308,8 @@ static bool ThrowW(const AIHeroClient& target) {
     }
     const auto prediction = W.GetPrediction(target, true);
     if (prediction.Hitchance < HitChance::High ||
-        Collisions::HasYasuoWindWallCollision(Player().Position(), prediction.GetCastPosition())) {
+        SDK::Collision::HasProjectileWallCollision(
+            Player().Position(), prediction.GetCastPosition(), W.Width * 0.5f)) {
         return false;
     }
     return W.Cast(prediction.GetCastPosition());
@@ -339,9 +344,12 @@ static bool PushSphereAt(const AIHeroClient& target) {
             targetDistance + target.BoundingRadius() < sphereDistance) {
             continue;
         }
-        const Vector3 rayEnd = player.Position().Extend(sphere.Unit.Position(), kSpherePushRange);
+        const Vector3 rayEnd = player.Position().Extend(
+            sphere.Unit.Position(), kSpherePushRange);
         const float hitWidth = QE.Width + target.BoundingRadius();
-        if (PointSegmentDistance2D(targetPosition, sphere.Unit.Position(), rayEnd) <= hitWidth) {
+        if (PointSegmentDistance2D(targetPosition, sphere.Unit.Position(), rayEnd) <= hitWidth &&
+            !SDK::Collision::HasProjectileWallCollision(
+                sphere.Unit.Position(), rayEnd, QE.Width * 0.5f)) {
             LastSphereETick = SDK::Variables::TickCount() + SDK::Game::Ping() + 100;
             return E.Cast(sphere.Unit.Position());
         }

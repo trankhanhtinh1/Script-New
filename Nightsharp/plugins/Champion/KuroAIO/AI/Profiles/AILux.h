@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Lux = [] {
     ChampionProfile p{};
-    p.ChampionName = "Lux";
+    p.ChampionId = SDK::ChampionId::Lux;
     p.DisplayName = "Lux";
     p.InternalId = "champion.kuroaio.ai.lux";
     p.PrimaryArchetype = Archetype::BurstMage;

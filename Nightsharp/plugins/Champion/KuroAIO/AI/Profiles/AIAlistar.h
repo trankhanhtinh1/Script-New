@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // owns E's four-stack AA timing and R's cleanse-versus-tank economy.
 inline constexpr ChampionProfile Alistar = [] {
     ChampionProfile p{};
-    p.ChampionName = "Alistar";
+    p.ChampionId = SDK::ChampionId::Alistar;
     p.DisplayName = "Alistar";
     p.InternalId = "champion.kuroaio.ai.alistar";
     p.PrimaryArchetype = Archetype::Vanguard;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // Q/W/R consumes it, and avoid a flying Q stealing an intended AoE stun.
 inline constexpr ChampionProfile Annie = [] {
     ChampionProfile p{};
-    p.ChampionName = "Annie";
+    p.ChampionId = SDK::ChampionId::Annie;
     p.DisplayName = "Annie";
     p.InternalId = "champion.kuroaio.ai.annie";
     p.PrimaryArchetype = Archetype::BurstMage;

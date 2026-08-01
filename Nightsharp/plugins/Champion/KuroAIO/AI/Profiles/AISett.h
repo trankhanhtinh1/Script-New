@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Sett = [] {
     ChampionProfile p{};
-    p.ChampionName = "Sett";
+    p.ChampionId = SDK::ChampionId::Sett;
     p.DisplayName = "The Boss";
     p.InternalId = "champion.kuroaio.ai.sett";
     p.PrimaryArchetype = Archetype::Juggernaut;

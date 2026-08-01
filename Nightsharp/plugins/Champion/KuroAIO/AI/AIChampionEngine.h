@@ -834,6 +834,25 @@ inline Vector3 AimPosition(const SpellSpec& spec, const AIHeroClient& target) {
     }
     return {};
 }
+inline float ProjectileWallRadius(const SpellSpec& spec) {
+    return spec.ProjectileWall
+        ? std::max(0.0f, spec.Width * 0.5f)
+        : 0.0f;
+}
+
+inline bool ProjectileWallBlocksCast(int index,
+                                     const Vector3& destination) {
+    if (index < 0 || index >= 4 || !ActiveProfile ||
+        !ResolvedSpecs[index].ProjectileWall ||
+        !destination.IsValid() || destination.IsZero()) {
+        return false;
+    }
+    const auto player = GameObjects::Player();
+    return player.IsValid() &&
+           SDK::Collision::HasProjectileWallCollision(
+               player.Position(), destination,
+               ProjectileWallRadius(ResolvedSpecs[index]));
+}
 
 inline bool MarkSuccessfulCast(int index) {
     const int now = SDK::Variables::TickCount();
@@ -843,14 +862,12 @@ inline bool MarkSuccessfulCast(int index) {
     LastSlotCastTick[index] = now;
     return true;
 }
-
-// Champion controllers use these narrowly-scoped cast primitives after their
-// own mechanics/state checks.  The request is armed before calling Spell so a
-// synchronous ProcessSpell event is still recognized as controller input.
 inline void ArmControllerCast(int index) {
     LastEngineRequestTick = SDK::Variables::TickCount();
     LastEngineRequestSlot = index;
 }
+
+
 
 inline bool WasControllerCast(int index, int ownershipWindowMs = 650) {
     return LastEngineRequestSlot == index && LastEngineRequestTick > 0 &&
@@ -867,7 +884,8 @@ inline void CancelControllerCast(int index) {
 
 inline bool ControllerCastPosition(int index, const Vector3& position) {
     if (index < 0 || index >= 4 || !RuntimeSpells[index] ||
-        !position.IsValid() || position.IsZero()) {
+        !position.IsValid() || position.IsZero() ||
+        ProjectileWallBlocksCast(index, position)) {
         return false;
     }
     ArmControllerCast(index);
@@ -884,7 +902,8 @@ inline bool ControllerCastVector(int index,
     if (index < 0 || index >= 4 || !RuntimeSpells[index] ||
         !start.IsValid() || start.IsZero() ||
         !end.IsValid() || end.IsZero() ||
-        start.DistanceSqr2D(end) <= 0.001f) {
+        start.DistanceSqr2D(end) <= 0.001f ||
+        ProjectileWallBlocksCast(index, end)) {
         return false;
     }
     ArmControllerCast(index);
@@ -908,7 +927,10 @@ inline bool ControllerCastSelf(int index) {
 }
 
 inline bool ControllerCastUnit(int index, const AIBaseClient& target) {
-    if (index < 0 || index >= 4 || !RuntimeSpells[index] || !target.IsValid()) {
+    if (index < 0 || index >= 4 || !RuntimeSpells[index] ||
+        !target.IsValid() ||
+        (target.IsEnemy() &&
+         ProjectileWallBlocksCast(index, target.Position()))) {
         return false;
     }
     ArmControllerCast(index);
@@ -923,6 +945,10 @@ inline bool ControllerCastPredicted(int index,
                                     const AIBaseClient& target,
                                     SDK::HitChance chance) {
     if (index < 0 || index >= 4 || !RuntimeSpells[index] || !target.IsValid()) {
+        return false;
+    }
+    const auto prediction = RuntimeSpells[index]->GetPrediction(target);
+    if (ProjectileWallBlocksCast(index, prediction.GetCastPosition())) {
         return false;
     }
     ArmControllerCast(index);
@@ -993,13 +1019,16 @@ inline bool TryCast(const SpellSpec& spec,
         }
         break;
     case CastKind::EnemyTarget:
-        if (ValidEnemy(target, RuntimeSpells[index]->CurrentRange())) {
+        if (ValidEnemy(target, RuntimeSpells[index]->CurrentRange()) &&
+            !ProjectileWallBlocksCast(index, target.Position())) {
             casted = RuntimeSpells[index]->CastOnUnit(target);
         }
         break;
     case CastKind::AllyTarget:
     case CastKind::AnyTarget:
-        if (target.IsValid()) {
+        if (target.IsValid() &&
+            (!target.IsEnemy() ||
+             !ProjectileWallBlocksCast(index, target.Position()))) {
             casted = RuntimeSpells[index]->CastOnUnit(target);
         }
         break;
@@ -1018,8 +1047,14 @@ inline bool TryCast(const SpellSpec& spec,
                     chance = SDK::HitChance::Medium;
                 }
             }
-            const auto state = RuntimeSpells[index]->CastIfHitchanceMinimum(target, chance);
-            casted = state == SDK::CastStates::SuccessfullyCasted;
+            const auto prediction = RuntimeSpells[index]->GetPrediction(target);
+            if (!ProjectileWallBlocksCast(
+                    index, prediction.GetCastPosition())) {
+                const auto state =
+                    RuntimeSpells[index]->CastIfHitchanceMinimum(
+                        target, chance);
+                casted = state == SDK::CastStates::SuccessfullyCasted;
+            }
         }
         break;
     case CastKind::Position: {
@@ -1027,6 +1062,7 @@ inline bool TryCast(const SpellSpec& spec,
             ? BestSafePosition(spec, target, spec.Aim)
             : AimPosition(spec, target);
         if (position.IsValid() && !position.IsZero() &&
+            !ProjectileWallBlocksCast(index, position) &&
             (!Has(rules, StepRule::RequireSafePosition) ||
              PositionDangerScore(position, target, spec) > -10000.0f)) {
             casted = RuntimeSpells[index]->Cast(position);
@@ -1040,7 +1076,8 @@ inline bool TryCast(const SpellSpec& spec,
             start = Extend(player.Position(), target.Position(),
                            std::min(spec.Range, spec.DesiredDistance));
         }
-        if (start.IsValid() && end.IsValid()) {
+        if (start.IsValid() && end.IsValid() &&
+            !ProjectileWallBlocksCast(index, end)) {
             casted = RuntimeSpells[index]->Cast(start, end);
         }
         break;
@@ -1058,8 +1095,11 @@ inline bool TryCast(const SpellSpec& spec,
                         requiredChance = SDK::HitChance::Medium;
                     }
                 }
-                if (IsHardCrowdControlled(target) ||
-                    static_cast<int>(prediction.Hitchance) >= static_cast<int>(requiredChance)) {
+                if (!ProjectileWallBlocksCast(
+                        index, prediction.GetCastPosition()) &&
+                    (IsHardCrowdControlled(target) ||
+                     static_cast<int>(prediction.Hitchance) >=
+                         static_cast<int>(requiredChance))) {
                     casted = RuntimeSpells[index]->ShootChargedSpell(
                         prediction.GetCastPosition());
                 }
@@ -1381,7 +1421,8 @@ inline bool TryFarmSpell(int index, bool jungle, bool lastHitOnly) {
             const float damage = RuntimeSpells[index]->GetDamage(unit);
             const float health = RuntimeSpells[index]->GetHealthPrediction(unit);
             if (jungle || !lastHitOnly || damage >= health) {
-                if (RuntimeSpells[index]->CastOnUnit(unit)) {
+                if (!ProjectileWallBlocksCast(index, unit.Position()) &&
+                    RuntimeSpells[index]->CastOnUnit(unit)) {
                     return MarkSuccessfulCast(index);
                 }
             }
@@ -1397,6 +1438,11 @@ inline bool TryFarmSpell(int index, bool jungle, bool lastHitOnly) {
             const float damage = RuntimeSpells[index]->GetDamage(unit);
             const float health = RuntimeSpells[index]->GetHealthPrediction(unit);
             if (damage > 0.0f && damage >= health) {
+                const auto prediction = RuntimeSpells[index]->GetPrediction(unit);
+                if (ProjectileWallBlocksCast(
+                        index, prediction.GetCastPosition())) {
+                    continue;
+                }
                 const auto state = RuntimeSpells[index]->CastIfHitchanceMinimum(
                     unit, SDK::HitChance::High);
                 if (state == SDK::CastStates::SuccessfullyCasted) {
@@ -1414,6 +1460,7 @@ inline bool TryFarmSpell(int index, bool jungle, bool lastHitOnly) {
         farm = RuntimeSpells[index]->GetLineFarmLocation(units);
     }
     if (farm.MinionsHit >= minimumHits && farm.Position.IsValid() &&
+        !ProjectileWallBlocksCast(index, Vector3::From2D(farm.Position)) &&
         RuntimeSpells[index]->Cast(Vector3::From2D(farm.Position))) {
         return MarkSuccessfulCast(index);
     }
@@ -1843,7 +1890,14 @@ inline void OnGameLoad(const ChampionProfile& profile,
         return;
     }
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || _stricmp(player.CharacterName().c_str(), profile.ChampionName) != 0) {
+    if (!player.IsValid()) {
+        return;
+    }
+    const SDK::ChampionId playerChampionId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (playerChampionId == SDK::ChampionId::Unknown ||
+        profile.ChampionId == SDK::ChampionId::Unknown ||
+        playerChampionId != profile.ChampionId) {
         return;
     }
 
@@ -1890,7 +1944,8 @@ inline void OnGameLoad(const ChampionProfile& profile,
 
     NightSharpDebug::Logf(
         "[KuroAIO/AI] loaded champion=%s id=%s tactics=%s",
-        profile.ChampionName, profile.InternalId, profile.TacticalSummary);
+        SDK::ChampionName(profile.ChampionId), profile.InternalId,
+        profile.TacticalSummary);
 }
 
 inline void OnUnload() {

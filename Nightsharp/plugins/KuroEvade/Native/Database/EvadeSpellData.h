@@ -3,9 +3,8 @@
 #include "../CastType.h"
 #include "../EvadeType.h"
 #include "../SpellTargets.h"
+#include "../../../../SDK/Enumerations/ChampionId.h"
 #include "../../../../SDK/Enumerations/SpellSlot.h"
-
-#include <string>
 #include <vector>
 
 namespace Plugins::KuroEvade::Database {
@@ -14,8 +13,8 @@ namespace Plugins::KuroEvade::Database {
 // supplied EvadeSpellData class; no imported/compatibility copy is retained.
 struct EvadeSpellData {
     CastType CastTypeValue = CastType::Position;
-    std::string ChampionName;
-    std::string CheckSpellName;
+    SDK::ChampionId ChampionId = SDK::ChampionId::Unknown;
+    bool IsGlobal = false;
     int DangerLevel = 1;
     float Delay = 250.0f;
     EvadeType EvadeTypeValue = EvadeType::Blink;
@@ -32,6 +31,7 @@ struct EvadeSpellData {
     float MaxRange = 0.0f;
     float MinRange = 0.0f;
     std::string Name;
+    std::string CheckSpellName;
     SDK::SpellSlot Slot = SDK::SpellSlot::Unknown;
     float Speed = 0.0f;
     std::vector<float> SpeedArray;

@@ -18,12 +18,6 @@ inline Menu* ItemsMenu = nullptr;
 inline Menu* ClearMenu = nullptr;
 inline Menu* DrawMenu = nullptr;
 
-// Id đối chiếu với CommunityDragon `latest`
-// (rcp-be-lol-game-data/global/default/v1/items.json).
-inline constexpr int kRavenousHydra = 3074;
-inline constexpr int kTitanicHydra  = 3748;
-inline constexpr int kStridebreaker = 6631;
-inline constexpr int kProfaneHydra  = 6698;
 
 inline Spell Q{ SpellSlot::Q, 150.0f };
 inline Spell W{ SpellSlot::W, 450.0f };
@@ -108,6 +102,20 @@ static void CastComboW(const AIHeroClient& target) {
     }
 }
 
+static bool CastEAt(const AIHeroClient& target, HitChance required = HitChance::High) {
+    if (!E.IsReady() || !ValidHeroTarget(target, E.Range)) {
+        return false;
+    }
+    const auto prediction = E.GetPrediction(target);
+    const auto player = Player();
+    const Vector3 castPosition = prediction.GetCastPosition();
+    return player.IsValid() && !castPosition.IsZero() &&
+           static_cast<int>(prediction.Hitchance) >= static_cast<int>(required) &&
+           !SDK::Collision::HasProjectileWallCollision(
+               player.Position(), castPosition, E.Width * 0.5f) &&
+           E.Cast(castPosition);
+}
+
 static void CastComboE(const AIHeroClient& target) {
     if (!E.IsReady() || !ValidHeroTarget(target)) return;
 
@@ -122,10 +130,7 @@ static void CastComboE(const AIHeroClient& target) {
 
     if (!player.HasBuff("RengarR") || dashing || use3Q) {
         if (Bool(ESettingsMenu, "UseE", true)) {
-            auto pred = E.GetPrediction(target);
-            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-                E.Cast(pred.GetCastPosition());
-            }
+            (void)CastEAt(target);
         }
     }
 }
@@ -144,18 +149,18 @@ static void TryUseHydraItems(const AIHeroClient& player, const AIHeroClient& tar
     // ôm nhiều món Hydra; món còn lại để dành cho nhịp kế tiếp.
     if (distance <= radius) {
         if (Bool(ItemsMenu, "UseProfane", true) &&
-            SDK::Items::CanUseItem(player, kProfaneHydra)) {
-            SDK::Items::UseItem(player, kProfaneHydra);
+            SDK::Items::CanUseItem(player, SDK::ItemId::Profane_Hydra)) {
+            SDK::Items::UseItem(player, SDK::ItemId::Profane_Hydra);
             return;
         }
         if (Bool(ItemsMenu, "UseRavenous", true) &&
-            SDK::Items::CanUseItem(player, kRavenousHydra)) {
-            SDK::Items::UseItem(player, kRavenousHydra);
+            SDK::Items::CanUseItem(player, SDK::ItemId::Ravenous_Hydra)) {
+            SDK::Items::UseItem(player, SDK::ItemId::Ravenous_Hydra);
             return;
         }
         if (Bool(ItemsMenu, "UseStridebreaker", true) &&
-            SDK::Items::CanUseItem(player, kStridebreaker)) {
-            SDK::Items::UseItem(player, kStridebreaker);
+            SDK::Items::CanUseItem(player, SDK::ItemId::Stridebreaker)) {
+            SDK::Items::UseItem(player, SDK::ItemId::Stridebreaker);
             return;
         }
     }
@@ -166,8 +171,8 @@ static void TryUseHydraItems(const AIHeroClient& player, const AIHeroClient& tar
     if (Bool(ItemsMenu, "UseTitanic", true) &&
         !Q.IsReady() &&
         QCanAttack(target, 0.0f) &&
-        SDK::Items::CanUseItem(player, kTitanicHydra)) {
-        SDK::Items::UseItem(player, kTitanicHydra);
+        SDK::Items::CanUseItem(player, SDK::ItemId::Titanic_Hydra)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Titanic_Hydra);
     }
 }
 
@@ -218,10 +223,7 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
     // 3) E — skillshot, chỉ tung khi prediction đủ tin cậy.
     if (Bool(ComboMenu, "UseE", true) && Bool(ESettingsMenu, "UseE", true) &&
         E.IsReady()) {
-        const auto pred = E.GetPrediction(target);
-        if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-            E.Cast(pred.GetCastPosition());
-        }
+        (void)CastEAt(target);
     }
 }
 
@@ -299,7 +301,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
                     W.Cast(player.Position());
                     return;
                 }
-                if (E.IsReady() && Bool(ClearMenu, "JungleE", true) && !IsEmp()) {
+                if (E.IsReady() && Bool(ClearMenu, "JungleE", true) && !IsEmp() &&
+                    !SDK::Collision::HasProjectileWallCollision(
+                        player.Position(), minion.Position(), E.Width * 0.5f)) {
                     E.Cast(minion.Position());
                     return;
                 }

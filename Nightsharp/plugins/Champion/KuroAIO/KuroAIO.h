@@ -35,100 +35,64 @@ struct Palette {
     float Speed;
 };
 
-inline Palette GetPalette(const char* championName) {
-    if (_stricmp(championName, "Aphelios") == 0) {
+inline Palette GetPalette(SDK::ChampionId championId) {
+    switch (championId) {
+    case SDK::ChampionId::Aphelios:
         return { IM_COL32(0, 229, 255, 255), IM_COL32(157, 78, 221, 255), 1.0f };
-    }
-    if (_stricmp(championName, "Sylas") == 0) {
+    case SDK::ChampionId::Sylas:
         return { IM_COL32(0, 240, 255, 255), IM_COL32(230, 230, 250, 255), 1.0f };
-    }
-    if (_stricmp(championName, "Rengar") == 0) {
+    case SDK::ChampionId::Rengar:
         return { IM_COL32(217, 4, 41, 255), IM_COL32(255, 107, 0, 255), 1.10f };
-    }
-    if (_stricmp(championName, "Jinx") == 0) {
+    case SDK::ChampionId::Jinx:
         return { IM_COL32(255, 42, 112, 255), IM_COL32(0, 229, 255, 255), 1.10f };
-    }
-    if (_stricmp(championName, "Katarina") == 0) {
+    case SDK::ChampionId::Katarina:
         return { IM_COL32(255, 59, 92, 255), IM_COL32(157, 78, 221, 255), 1.05f };
-    }
-    if (_stricmp(championName, "Kindred") == 0) {
+    case SDK::ChampionId::Kindred:
         return { IM_COL32(245, 241, 232, 255), IM_COL32(103, 199, 235, 255), 0.82f };
-    }
-    if (_stricmp(championName, "Lucian") == 0) {
+    case SDK::ChampionId::Lucian:
         return { IM_COL32(116, 232, 255, 255), IM_COL32(244, 208, 111, 255), 0.95f };
-    }
-    if (_stricmp(championName, "Samira") == 0) {
+    case SDK::ChampionId::Samira:
         return { IM_COL32(255, 180, 94, 255), IM_COL32(214, 40, 57, 255), 1.12f };
-    }
-    if (_stricmp(championName, "Senna") == 0) {
+    case SDK::ChampionId::Senna:
         return { IM_COL32(87, 242, 192, 255), IM_COL32(138, 92, 255, 255), 0.90f };
-    }
-    if (_stricmp(championName, "Syndra") == 0) {
+    case SDK::ChampionId::Syndra:
         return { IM_COL32(212, 124, 255, 255), IM_COL32(108, 77, 255, 255), 1.00f };
-    }
-    if (_stricmp(championName, "TwistedFate") == 0) {
+    case SDK::ChampionId::TwistedFate:
         return { IM_COL32(255, 209, 102, 255), IM_COL32(239, 71, 111, 255), 0.88f };
-    }
-    if (_stricmp(championName, "Viktor") == 0) {
+    case SDK::ChampionId::Viktor:
         return { IM_COL32(82, 217, 255, 255), IM_COL32(255, 138, 61, 255), 1.04f };
-    }
-    if (_stricmp(championName, "Yasuo") == 0) {
+    case SDK::ChampionId::Yasuo:
         return { IM_COL32(142, 235, 255, 255), IM_COL32(82, 113, 255, 255), 0.92f };
-    }
-    if (_stricmp(championName, "Fiora") == 0) {
+    case SDK::ChampionId::Fiora:
         return { IM_COL32(113, 196, 255, 255), IM_COL32(229, 107, 178, 255), 0.98f };
+    default:
+        return { IM_COL32(255, 170, 64, 255), IM_COL32(156, 64, 255, 255), 1.0f };
     }
-    return { IM_COL32(255, 170, 64, 255), IM_COL32(156, 64, 255, 255), 1.0f };
 }
 
-inline SDK::UI::Menu* GetRoot(const char* championName) {
-    if (!championName || !championName[0]) {
+inline SDK::UI::Menu* GetRoot(SDK::ChampionId championId) {
+    if (championId == SDK::ChampionId::Unknown) {
         return nullptr;
     }
-    if (::Plugins::KuroAIO::AI::Catalog::Supports(championName)) {
+    if (::Plugins::KuroAIO::AI::Catalog::Supports(championId)) {
         return ::Plugins::KuroAIO::AI::Engine::MenuRoot;
     }
-    if (_stricmp(championName, "Sylas") == 0) {
-        return ::Plugins::KuroAIO::Sylas::MenuRoot;
+    switch (championId) {
+    case SDK::ChampionId::Sylas: return ::Plugins::KuroAIO::Sylas::MenuRoot;
+    case SDK::ChampionId::Rengar: return ::Plugins::KuroAIO::Rengar::MenuRoot;
+    case SDK::ChampionId::Jinx: return ::Plugins::KuroAIO::Jinx::MenuRoot;
+    case SDK::ChampionId::Katarina: return ::Plugins::KuroAIO::Katarina::MenuRoot;
+    case SDK::ChampionId::Kindred: return ::Plugins::KuroAIO::Kindred::MenuRoot;
+    case SDK::ChampionId::Lucian: return ::Plugins::KuroAIO::Lucian::MenuRoot;
+    case SDK::ChampionId::Samira: return ::Plugins::KuroAIO::Samira::MenuRoot;
+    case SDK::ChampionId::Senna: return ::Plugins::KuroAIO::Senna::MenuRoot;
+    case SDK::ChampionId::Syndra: return ::Plugins::KuroAIO::Syndra::MenuRoot;
+    case SDK::ChampionId::TwistedFate: return ::Plugins::KuroAIO::TwistedFate::MenuRoot;
+    case SDK::ChampionId::Viktor: return ::Plugins::KuroAIO::Viktor::MenuRoot;
+    case SDK::ChampionId::Yasuo: return ::Plugins::KuroAIO::Yasuo::MenuRoot;
+    case SDK::ChampionId::Fiora: return ::Plugins::KuroAIO::Fiora::MenuRoot;
+    default: return nullptr;
     }
-    if (_stricmp(championName, "Rengar") == 0) {
-        return ::Plugins::KuroAIO::Rengar::MenuRoot;
-    }
-    if (_stricmp(championName, "Jinx") == 0) {
-        return ::Plugins::KuroAIO::Jinx::MenuRoot;
-    }
-    if (_stricmp(championName, "Katarina") == 0) {
-        return ::Plugins::KuroAIO::Katarina::MenuRoot;
-    }
-    if (_stricmp(championName, "Kindred") == 0) {
-        return ::Plugins::KuroAIO::Kindred::MenuRoot;
-    }
-    if (_stricmp(championName, "Lucian") == 0) {
-        return ::Plugins::KuroAIO::Lucian::MenuRoot;
-    }
-    if (_stricmp(championName, "Samira") == 0) {
-        return ::Plugins::KuroAIO::Samira::MenuRoot;
-    }
-    if (_stricmp(championName, "Senna") == 0) {
-        return ::Plugins::KuroAIO::Senna::MenuRoot;
-    }
-    if (_stricmp(championName, "Syndra") == 0) {
-        return ::Plugins::KuroAIO::Syndra::MenuRoot;
-    }
-    if (_stricmp(championName, "TwistedFate") == 0) {
-        return ::Plugins::KuroAIO::TwistedFate::MenuRoot;
-    }
-    if (_stricmp(championName, "Viktor") == 0) {
-        return ::Plugins::KuroAIO::Viktor::MenuRoot;
-    }
-    if (_stricmp(championName, "Yasuo") == 0) {
-        return ::Plugins::KuroAIO::Yasuo::MenuRoot;
-    }
-    if (_stricmp(championName, "Fiora") == 0) {
-        return ::Plugins::KuroAIO::Fiora::MenuRoot;
-    }
-
-    return nullptr;
 }
 
 inline void ApplyGradient(SDK::UI::Menu* menu, const Palette& palette) {
@@ -145,8 +109,12 @@ inline void ApplyGradient(SDK::UI::Menu* menu, const Palette& palette) {
     }
 }
 
-inline ImTextureID LoadChampionIcon(const char* championName) {
+inline ImTextureID LoadChampionIcon(SDK::ChampionId championId) {
     ImTextureID placeholder = SDK::UI::Icons::GetPlaceholder();
+    const char* championName = SDK::ChampionName(championId);
+    if (!championName || !championName[0]) {
+        return nullptr;
+    }
     ImTextureID icon = SDK::UI::Icons::GetChampionSquare(championName);
     if (icon && icon != placeholder) {
         return icon;
@@ -179,15 +147,15 @@ inline ImTextureID LoadChampionIcon(const char* championName) {
     return nullptr;
 }
 
-inline bool Apply(const char* championName) {
-    SDK::UI::Menu* root = GetRoot(championName);
+inline bool Apply(SDK::ChampionId championId) {
+    SDK::UI::Menu* root = GetRoot(championId);
     if (!root) {
         return false;
     }
 
-    ApplyGradient(root, GetPalette(championName));
+    ApplyGradient(root, GetPalette(championId));
 
-    ImTextureID icon = LoadChampionIcon(championName);
+    ImTextureID icon = LoadChampionIcon(championId);
     if (!icon) {
         root->ClearLogo();
         return false;
@@ -205,44 +173,23 @@ class KuroAIOPlugin final : public IPlugin {
 public:
     const char* GetName() const override { return "KuroAIO"; }
     const char* GetInternalId() const override {
-        const std::string champ = CurrentChampionName();
-        if (_stricmp(champ.c_str(), "Rengar") == 0) return "champion.kuroaio.rengar";
-        if (_stricmp(champ.c_str(), "Jinx") == 0) return "champion.kuroaio.jinx";
-        if (_stricmp(champ.c_str(), "Katarina") == 0) {
-            return "champion.kuroaio.katarina";
+        const SDK::ChampionId championId = CurrentChampionId();
+        switch (championId) {
+        case SDK::ChampionId::Rengar: return "champion.kuroaio.rengar";
+        case SDK::ChampionId::Jinx: return "champion.kuroaio.jinx";
+        case SDK::ChampionId::Katarina: return "champion.kuroaio.katarina";
+        case SDK::ChampionId::Kindred: return "champion.kuroaio.kindred";
+        case SDK::ChampionId::Lucian: return "champion.kuroaio.lucian";
+        case SDK::ChampionId::Samira: return "champion.kuroaio.samira";
+        case SDK::ChampionId::Senna: return "champion.kuroaio.senna";
+        case SDK::ChampionId::Syndra: return "champion.kuroaio.syndra";
+        case SDK::ChampionId::Sylas: return "champion.kuroaio.sylas";
+        case SDK::ChampionId::Yasuo: return "champion.kuroaio.yasuo";
+        case SDK::ChampionId::Fiora: return "champion.kuroaio.fiora";
+        case SDK::ChampionId::TwistedFate: return "champion.kuroaio.twistedfate";
+        case SDK::ChampionId::Viktor: return "champion.kuroaio.viktor";
+        default: return "champion.kuroaio";
         }
-        if (_stricmp(champ.c_str(), "Kindred") == 0) {
-            return "champion.kuroaio.kindred";
-        }
-        if (_stricmp(champ.c_str(), "Lucian") == 0) {
-            return "champion.kuroaio.lucian";
-        }
-        if (_stricmp(champ.c_str(), "Samira") == 0) {
-            return "champion.kuroaio.samira";
-        }
-        if (_stricmp(champ.c_str(), "Senna") == 0) {
-            return "champion.kuroaio.senna";
-        }
-        if (_stricmp(champ.c_str(), "Syndra") == 0) {
-            return "champion.kuroaio.syndra";
-        }
-        if (_stricmp(champ.c_str(), "Sylas") == 0) {
-            return "champion.kuroaio.sylas";
-        }
-        if (_stricmp(champ.c_str(), "Yasuo") == 0) {
-            return "champion.kuroaio.yasuo";
-        }
-        if (_stricmp(champ.c_str(), "Fiora") == 0) {
-            return "champion.kuroaio.fiora";
-        }
-        if (_stricmp(champ.c_str(), "TwistedFate") == 0) {
-            return "champion.kuroaio.twistedfate";
-        }
-        if (_stricmp(champ.c_str(), "Viktor") == 0) {
-            return "champion.kuroaio.viktor";
-        }
-
-        return "champion.kuroaio";
     }
     const char* GetAuthor() const override { return "Kuro"; }
     PluginCategory GetCategory() const override { return PluginCategory::Champion; }
@@ -251,45 +198,31 @@ public:
     bool CanLoad() const override { return IsCurrentChampionSupported(); }
 
     void OnLoad() override {
-        const std::string champ = CurrentChampionName();
-        if (!IsSupportedChampionName(champ.c_str())) {
+        const SDK::ChampionId championId = CurrentChampionId();
+        if (!IsSupportedChampion(championId)) {
             return;
         }
 
-        if (_stricmp(champ.c_str(), "Rengar") == 0) {
-            KuroAIO::Rengar::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Jinx") == 0) {
-            KuroAIO::Jinx::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Katarina") == 0) {
-            KuroAIO::Katarina::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Kindred") == 0) {
-            KuroAIO::Kindred::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Lucian") == 0) {
-            KuroAIO::Lucian::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Samira") == 0) {
-            KuroAIO::Samira::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Senna") == 0) {
-            KuroAIO::Senna::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Syndra") == 0) {
-            KuroAIO::Syndra::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Sylas") == 0) {
-            KuroAIO::Sylas::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Yasuo") == 0) {
-            KuroAIO::Yasuo::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Fiora") == 0) {
-            KuroAIO::Fiora::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "TwistedFate") == 0) {
-            KuroAIO::TwistedFate::OnGameLoad();
-        } else if (_stricmp(champ.c_str(), "Viktor") == 0) {
-            KuroAIO::Viktor::OnGameLoad();
-        } else {
-            KuroAIO::AI::Catalog::Load(champ.c_str());
+        switch (championId) {
+        case SDK::ChampionId::Rengar: KuroAIO::Rengar::OnGameLoad(); break;
+        case SDK::ChampionId::Jinx: KuroAIO::Jinx::OnGameLoad(); break;
+        case SDK::ChampionId::Katarina: KuroAIO::Katarina::OnGameLoad(); break;
+        case SDK::ChampionId::Kindred: KuroAIO::Kindred::OnGameLoad(); break;
+        case SDK::ChampionId::Lucian: KuroAIO::Lucian::OnGameLoad(); break;
+        case SDK::ChampionId::Samira: KuroAIO::Samira::OnGameLoad(); break;
+        case SDK::ChampionId::Senna: KuroAIO::Senna::OnGameLoad(); break;
+        case SDK::ChampionId::Syndra: KuroAIO::Syndra::OnGameLoad(); break;
+        case SDK::ChampionId::Sylas: KuroAIO::Sylas::OnGameLoad(); break;
+        case SDK::ChampionId::Yasuo: KuroAIO::Yasuo::OnGameLoad(); break;
+        case SDK::ChampionId::Fiora: KuroAIO::Fiora::OnGameLoad(); break;
+        case SDK::ChampionId::TwistedFate: KuroAIO::TwistedFate::OnGameLoad(); break;
+        case SDK::ChampionId::Viktor: KuroAIO::Viktor::OnGameLoad(); break;
+        default: KuroAIO::AI::Catalog::Load(championId); break;
         }
 
-        m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
+        m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(championId);
         m_nextMenuThemeRetry = ::GetTickCount() + 1000;
     }
-
     void OnUpdate() override {
         if (m_menuThemeApplied) {
             return;
@@ -301,12 +234,13 @@ public:
             return;
         }
 
-        const std::string champ = CurrentChampionName();
-        if (IsSupportedChampionName(champ.c_str())) {
-            m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(champ.c_str());
+        const SDK::ChampionId championId = CurrentChampionId();
+        if (IsSupportedChampion(championId)) {
+            m_menuThemeApplied = KuroAIO::ChampionMenuTheme::Apply(championId);
         }
         m_nextMenuThemeRetry = now + 1000;
     }
+
 
     void OnUnload() override {
         KuroAIO::Rengar::OnUnload();
@@ -332,86 +266,50 @@ private:
     bool m_menuThemeApplied = false;
     DWORD m_nextMenuThemeRetry = 0;
 
-    static bool IsSupportedChampionName(const char* championName) {
-        if (!championName || !championName[0]) {
+    static bool IsSupportedChampion(SDK::ChampionId championId) {
+        if (championId == SDK::ChampionId::Unknown) {
             return false;
         }
-        if (_stricmp(championName, "Rengar") == 0 ||
-            _stricmp(championName, "Jinx") == 0 ||
-            _stricmp(championName, "Katarina") == 0 ||
-            _stricmp(championName, "Kindred") == 0 ||
-            _stricmp(championName, "Lucian") == 0 ||
-            _stricmp(championName, "Samira") == 0 ||
-            _stricmp(championName, "Senna") == 0 ||
-            _stricmp(championName, "Syndra") == 0 ||
-            _stricmp(championName, "Sylas") == 0 ||
-            _stricmp(championName, "Yasuo") == 0 ||
-            _stricmp(championName, "Fiora") == 0 ||
-            _stricmp(championName, "TwistedFate") == 0 ||
-            _stricmp(championName, "Viktor") == 0) {
+        switch (championId) {
+        case SDK::ChampionId::Rengar:
+        case SDK::ChampionId::Jinx:
+        case SDK::ChampionId::Katarina:
+        case SDK::ChampionId::Kindred:
+        case SDK::ChampionId::Lucian:
+        case SDK::ChampionId::Samira:
+        case SDK::ChampionId::Senna:
+        case SDK::ChampionId::Syndra:
+        case SDK::ChampionId::Sylas:
+        case SDK::ChampionId::Yasuo:
+        case SDK::ChampionId::Fiora:
+        case SDK::ChampionId::TwistedFate:
+        case SDK::ChampionId::Viktor:
             return true;
+        default:
+            return KuroAIO::AI::Catalog::Supports(championId);
         }
-        return KuroAIO::AI::Catalog::Supports(championName);
     }
 
-    static std::string CurrentChampionName() {
+    static SDK::ChampionId CurrentChampionId() {
         const std::string& cached = SDK::GameObject::GetCachedChampionName();
         if (!cached.empty()) {
-            return cached;
+            return SDK::ChampionIdFromName(cached.c_str());
         }
 
         const auto player = GameObjects::Player();
-        return player.IsValid() ? player.CharacterName() : std::string();
+        if (!player.IsValid()) {
+            return SDK::ChampionId::Unknown;
+        }
+        return SDK::ChampionIdFromName(player.CharacterName().c_str());
     }
 
     static bool IsCurrentChampionSupported() {
-        const std::string championName = CurrentChampionName();
-        return IsSupportedChampionName(championName.c_str());
+        return IsSupportedChampion(CurrentChampionId());
     }
 
     static const char* CurrentSupportedChampionName() {
-        const std::string championName = CurrentChampionName();
-        if (_stricmp(championName.c_str(), "Rengar") == 0) return "Rengar";
-        if (_stricmp(championName.c_str(), "Jinx") == 0) return "Jinx";
-        if (_stricmp(championName.c_str(), "Katarina") == 0) {
-            return "Katarina";
-        }
-        if (_stricmp(championName.c_str(), "Kindred") == 0) {
-            return "Kindred";
-        }
-        if (_stricmp(championName.c_str(), "Lucian") == 0) {
-            return "Lucian";
-        }
-        if (_stricmp(championName.c_str(), "Samira") == 0) {
-            return "Samira";
-        }
-        if (_stricmp(championName.c_str(), "Senna") == 0) {
-            return "Senna";
-        }
-        if (_stricmp(championName.c_str(), "Syndra") == 0) {
-            return "Syndra";
-        }
-        if (_stricmp(championName.c_str(), "Sylas") == 0) {
-            return "Sylas";
-        }
-        if (_stricmp(championName.c_str(), "Yasuo") == 0) {
-            return "Yasuo";
-        }
-        if (_stricmp(championName.c_str(), "Fiora") == 0) {
-            return "Fiora";
-        }
-        if (_stricmp(championName.c_str(), "TwistedFate") == 0) {
-            return "TwistedFate";
-        }
-        if (_stricmp(championName.c_str(), "Viktor") == 0) {
-            return "Viktor";
-        }
-
-        if (const auto* profile = KuroAIO::AI::Catalog::Find(championName.c_str())) {
-            return profile->ChampionName;
-        }
-
-        return nullptr;
+        const SDK::ChampionId championId = CurrentChampionId();
+        return IsSupportedChampion(championId) ? SDK::ChampionName(championId) : nullptr;
     }
 };
 

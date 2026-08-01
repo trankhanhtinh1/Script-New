@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Veigar = [] {
     ChampionProfile p{};
-    p.ChampionName = "Veigar";
+    p.ChampionId = SDK::ChampionId::Veigar;
     p.DisplayName = "Veigar";
     p.InternalId = "champion.kuroaio.ai.veigar";
     p.PrimaryArchetype = Archetype::BurstMage;

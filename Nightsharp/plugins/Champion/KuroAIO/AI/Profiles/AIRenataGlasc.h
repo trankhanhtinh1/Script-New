@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile RenataGlasc = [] {
     ChampionProfile p{};
-    p.ChampionName = "RenataGlasc";
+    p.ChampionId = SDK::ChampionId::RenataGlasc;
     p.DisplayName = "Renata Glasc";
     p.InternalId = "champion.kuroaio.ai.renataglasc";
     p.PrimaryArchetype = Archetype::Enchanter;

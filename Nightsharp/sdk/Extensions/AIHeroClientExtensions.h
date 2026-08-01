@@ -4,6 +4,7 @@
 #include "../GameObjects/InventorySlot.h"
 #include "AIBaseClientExtensions.h"
 #include "../../Core/CoreItem.h"
+#include "../Enumerations/ItemId.h"
 #include "../../Core/CoreSpellBook.h"
 #include "../../Core/CoreSpellDataInst.h"
 
@@ -60,6 +61,23 @@ inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
     if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
     return source.Spellbook().CastSpell(spellSlot, position);
+}
+inline bool CanUseItem(const AIHeroClient& source, ::SDK::ItemId itemId) {
+    return CanUseItem(source, ::SDK::ItemIdValue(itemId));
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId) {
+    return UseItem(source, ::SDK::ItemIdValue(itemId));
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId,
+                    const AIBaseClient& target) {
+    return UseItem(source, ::SDK::ItemIdValue(itemId), target);
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId,
+                    Vector3 position) {
+    return UseItem(source, ::SDK::ItemIdValue(itemId), position);
 }
 
 } // namespace SDK

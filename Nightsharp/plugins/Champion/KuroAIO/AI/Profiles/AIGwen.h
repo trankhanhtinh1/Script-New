@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // Hallowed Mist placement, Skip 'n Slash endpoints and Needlework recasts.
 inline constexpr ChampionProfile Gwen = [] {
     ChampionProfile p{};
-    p.ChampionName = "Gwen";
+    p.ChampionId = SDK::ChampionId::Gwen;
     p.DisplayName = "Gwen";
     p.InternalId = "champion.kuroaio.ai.gwen";
     p.PrimaryArchetype = Archetype::Skirmisher;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // E's conditional second strike and R's farthest-champion selection.
 inline constexpr ChampionProfile Ambessa = [] {
     ChampionProfile p{};
-    p.ChampionName = "Ambessa";
+    p.ChampionId = SDK::ChampionId::Ambessa;
     p.DisplayName = "Ambessa";
     p.InternalId = "champion.kuroaio.ai.ambessa";
     p.PrimaryArchetype = Archetype::Diver;

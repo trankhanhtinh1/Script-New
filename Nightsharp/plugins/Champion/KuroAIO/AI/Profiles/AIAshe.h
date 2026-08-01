@@ -11,7 +11,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // champion while its travel distance changes both speed and stun duration.
 inline constexpr ChampionProfile Ashe = [] {
     ChampionProfile p{};
-    p.ChampionName = "Ashe";
+    p.ChampionId = SDK::ChampionId::Ashe;
     p.DisplayName = "Ashe";
     p.InternalId = "champion.kuroaio.ai.ashe";
     p.PrimaryArchetype = Archetype::Marksman;

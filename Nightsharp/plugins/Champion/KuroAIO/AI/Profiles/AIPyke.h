@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Pyke = [] {
     ChampionProfile p{};
-    p.ChampionName = "Pyke";
+    p.ChampionId = SDK::ChampionId::Pyke;
     p.DisplayName = "Pyke";
     p.InternalId = "champion.kuroaio.ai.pyke";
     p.PrimaryArchetype = Archetype::Assassin;

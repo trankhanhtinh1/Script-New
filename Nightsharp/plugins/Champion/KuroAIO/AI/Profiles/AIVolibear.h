@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Volibear = [] {
     ChampionProfile p{};
-    p.ChampionName = "Volibear";
+    p.ChampionId = SDK::ChampionId::Volibear;
     p.DisplayName = "Volibear";
     p.InternalId = "champion.kuroaio.ai.volibear";
     p.PrimaryArchetype = Archetype::Diver;

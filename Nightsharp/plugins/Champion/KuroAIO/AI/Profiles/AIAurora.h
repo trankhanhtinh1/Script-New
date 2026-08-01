@@ -11,7 +11,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // endpoint, and R's leap/arena/portal are three distinct geometries.
 inline constexpr ChampionProfile Aurora = [] {
     ChampionProfile p{};
-    p.ChampionName = "Aurora";
+    p.ChampionId = SDK::ChampionId::Aurora;
     p.DisplayName = "Aurora";
     p.InternalId = "champion.kuroaio.ai.aurora";
     p.PrimaryArchetype = Archetype::BurstMage;

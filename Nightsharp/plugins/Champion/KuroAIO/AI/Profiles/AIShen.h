@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Shen = [] {
     ChampionProfile p{};
-    p.ChampionName = "Shen";
+    p.ChampionId = SDK::ChampionId::Shen;
     p.DisplayName = "Shen";
     p.InternalId = "champion.kuroaio.ai.shen";
     p.PrimaryArchetype = Archetype::Tank;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // sentries and every weapon-dependent decision.
 inline constexpr ChampionProfile Aphelios = [] {
     ChampionProfile p{};
-    p.ChampionName = "Aphelios";
+    p.ChampionId = SDK::ChampionId::Aphelios;
     p.DisplayName = "Aphelios";
     p.InternalId = "champion.kuroaio.ai.aphelios";
     p.PrimaryArchetype = Archetype::Marksman;

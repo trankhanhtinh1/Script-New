@@ -1,4 +1,6 @@
 #pragma once
+#include "Enumerations/ChampionId.h"
+#include "Enumerations/ItemId.h"
 
 #include "Enumerations/CastStates.h"
 #include "Enumerations/CastTypes.h"

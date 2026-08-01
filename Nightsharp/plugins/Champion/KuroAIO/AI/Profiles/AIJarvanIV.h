@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile JarvanIV = [] {
     ChampionProfile p{};
-    p.ChampionName = "JarvanIV";
+    p.ChampionId = SDK::ChampionId::JarvanIV;
     p.DisplayName = "Jarvan IV";
     p.InternalId = "champion.kuroaio.ai.jarvaniv";
     p.PrimaryArchetype = Archetype::Diver;

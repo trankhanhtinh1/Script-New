@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Renekton = [] {
     ChampionProfile p{};
-    p.ChampionName = "Renekton";
+    p.ChampionId = SDK::ChampionId::Renekton;
     p.DisplayName = "Renekton";
     p.InternalId = "champion.kuroaio.ai.renekton";
     p.PrimaryArchetype = Archetype::Diver;

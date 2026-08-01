@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Poppy = [] {
     ChampionProfile p{};
-    p.ChampionName = "Poppy";
+    p.ChampionId = SDK::ChampionId::Poppy;
     p.DisplayName = "Poppy";
     p.InternalId = "champion.kuroaio.ai.poppy";
     p.PrimaryArchetype = Archetype::Vanguard;

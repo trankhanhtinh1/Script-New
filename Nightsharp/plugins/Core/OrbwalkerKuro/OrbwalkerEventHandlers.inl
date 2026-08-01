@@ -201,7 +201,9 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
 
     const int now = Tick();
     const auto player = GameObjects::Player();
-
+    const SDK::ChampionId playerChampionId = player.IsValid()
+        ? SDK::ChampionIdFromName(player.CharacterName().c_str())
+        : SDK::ChampionId::Unknown;
     std::string spellNameStr = args.SpellName ? args.SpellName : "";
     for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
 
@@ -221,7 +223,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.lastCritProcessSpellTargetNetworkId == critTargetNetworkId;
     const bool forcedFioraCrit =
         player.IsValid() &&
-        _stricmp(player.CharacterName().c_str(), "Fiora") == 0 &&
+        playerChampionId == SDK::ChampionId::Fiora &&
         (player.HasBuff("fiorae2") ||
          spellNameStr.find("fiorae2") != std::string::npos);
     if (player.IsValid() &&
@@ -265,7 +267,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
     ReadAttackTimingsFromMemory(player);
 
-    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+    if (player.IsValid() && playerChampionId == SDK::ChampionId::Akshan) {
         const bool isAkshanSecondAttack =
             spellNameStr.find("akshanpassive") != std::string::npos ||
             spellNameStr.find("akshanpattack") != std::string::npos;
@@ -394,7 +396,10 @@ inline void OrbwalkerBase::OnDeleteObject(const Events::ObjectEventArgs& args) {
     OrbwalkingDetail::OnObjectDelete(args);
 
     const auto player = GameObjects::Player();
-    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Aphelios") == 0) {
+    const SDK::ChampionId playerChampionId = player.IsValid()
+        ? SDK::ChampionIdFromName(player.CharacterName().c_str())
+        : SDK::ChampionId::Unknown;
+    if (player.IsValid() && playerChampionId == SDK::ChampionId::Aphelios) {
         if (args.Sender.IsValid() && args.Sender.Type == ::Core::Objects::ObjectType::MissileClient) {
             if (args.SourceNetworkId == player.NetworkId() &&
                 (_stricmp(args.Sender.Name, "ApheliosCrescendumAttackMisIn") == 0 ||
@@ -418,101 +423,101 @@ inline void OrbwalkerBase::OnDeleteObject(const Events::ObjectEventArgs& args) {
 namespace OrbwalkingDetail {
 
 struct AutoAttackResetSlotEntry {
-    const char* ChampionName;
+    SDK::ChampionId Champion = SDK::ChampionId::Unknown;
     SpellSlot Slot;
 };
 
 inline bool IsKnownAutoAttackResetSlot(
-    const std::string& championName,
+    SDK::ChampionId championId,
     int slot
 ) {
-    if (championName.empty()) {
+    if (championId == SDK::ChampionId::Unknown) {
         return false;
     }
 
     static constexpr AutoAttackResetSlotEntry entries[] = {
-        { "Aatrox",     SpellSlot::E },
-        { "Ashe",       SpellSlot::Q },
-        { "Belveth",    SpellSlot::Q },
-        { "Blitzcrank", SpellSlot::E },
-        { "Briar",      SpellSlot::Q },
-        { "Briar",      SpellSlot::W },
-        { "Camille",    SpellSlot::Q },
-        { "Chogath",    SpellSlot::E },
-        { "Darius",     SpellSlot::W },
-        { "DrMundo",    SpellSlot::E },
-        { "Ekko",       SpellSlot::E },
-        { "Fiora",      SpellSlot::E },
-        { "Fizz",       SpellSlot::W },
-        { "Garen",      SpellSlot::Q },
-        { "Graves",     SpellSlot::E },
-        { "Gwen",       SpellSlot::E },
-        { "Hecarim",    SpellSlot::E },
-        { "Illaoi",     SpellSlot::W },
-        { "Jax",        SpellSlot::W },
-        { "Kaisa",      SpellSlot::R },
-        { "Kassadin",   SpellSlot::W },
-        { "Katarina",   SpellSlot::E },
-        { "Kayle",      SpellSlot::E },
-        { "Kindred",    SpellSlot::Q },
-        { "KSante",     SpellSlot::Q },
-        { "Leona",      SpellSlot::Q },
+        { SDK::ChampionId::Aatrox,     SpellSlot::E },
+        { SDK::ChampionId::Ashe,       SpellSlot::Q },
+        { SDK::ChampionId::Belveth,    SpellSlot::Q },
+        { SDK::ChampionId::Blitzcrank, SpellSlot::E },
+        { SDK::ChampionId::Briar,      SpellSlot::Q },
+        { SDK::ChampionId::Briar,      SpellSlot::W },
+        { SDK::ChampionId::Camille,    SpellSlot::Q },
+        { SDK::ChampionId::Chogath,    SpellSlot::E },
+        { SDK::ChampionId::Darius,     SpellSlot::W },
+        { SDK::ChampionId::DrMundo,    SpellSlot::E },
+        { SDK::ChampionId::Ekko,       SpellSlot::E },
+        { SDK::ChampionId::Fiora,      SpellSlot::E },
+        { SDK::ChampionId::Fizz,       SpellSlot::W },
+        { SDK::ChampionId::Garen,      SpellSlot::Q },
+        { SDK::ChampionId::Graves,     SpellSlot::E },
+        { SDK::ChampionId::Gwen,       SpellSlot::E },
+        { SDK::ChampionId::Hecarim,    SpellSlot::E },
+        { SDK::ChampionId::Illaoi,     SpellSlot::W },
+        { SDK::ChampionId::Jax,        SpellSlot::W },
+        { SDK::ChampionId::Kaisa,      SpellSlot::R },
+        { SDK::ChampionId::Kassadin,   SpellSlot::W },
+        { SDK::ChampionId::Katarina,   SpellSlot::E },
+        { SDK::ChampionId::Kayle,      SpellSlot::E },
+        { SDK::ChampionId::Kindred,    SpellSlot::Q },
+        { SDK::ChampionId::KSante,     SpellSlot::Q },
+        { SDK::ChampionId::Leona,      SpellSlot::Q },
 
         // Lucian E resets/accelerates his attack sequence directly.
-        { "Lucian", SpellSlot::Q },
-        { "Lucian", SpellSlot::W },
-        { "Lucian", SpellSlot::E },
-        { "Lucian", SpellSlot::R },
+        { SDK::ChampionId::Lucian, SpellSlot::Q },
+        { SDK::ChampionId::Lucian, SpellSlot::W },
+        { SDK::ChampionId::Lucian, SpellSlot::E },
+        { SDK::ChampionId::Lucian, SpellSlot::R },
 
-        { "Malphite",   SpellSlot::W },
-        { "MasterYi",   SpellSlot::W },
-        { "MonkeyKing", SpellSlot::Q },
-        { "Nasus",      SpellSlot::Q },
-        { "Nautilus",   SpellSlot::W },
-        { "Nilah",      SpellSlot::E },
-        { "Olaf",       SpellSlot::W },
-        { "Pantheon",   SpellSlot::W },
-        { "Quinn",      SpellSlot::E },
-        { "RekSai",     SpellSlot::Q },
-        { "Rell",       SpellSlot::W },
-        { "Renekton",   SpellSlot::W },
-        { "Rengar",     SpellSlot::Q },
-        { "Riven",      SpellSlot::Q },
-        { "Sejuani",    SpellSlot::E },
-        { "Sett",       SpellSlot::Q },
-        { "Shyvana",    SpellSlot::Q },
-        { "Sivir",      SpellSlot::W },
+        { SDK::ChampionId::Malphite,   SpellSlot::W },
+        { SDK::ChampionId::MasterYi,   SpellSlot::W },
+        { SDK::ChampionId::MonkeyKing, SpellSlot::Q },
+        { SDK::ChampionId::Nasus,      SpellSlot::Q },
+        { SDK::ChampionId::Nautilus,   SpellSlot::W },
+        { SDK::ChampionId::Nilah,      SpellSlot::E },
+        { SDK::ChampionId::Olaf,       SpellSlot::W },
+        { SDK::ChampionId::Pantheon,   SpellSlot::W },
+        { SDK::ChampionId::Quinn,      SpellSlot::E },
+        { SDK::ChampionId::RekSai,     SpellSlot::Q },
+        { SDK::ChampionId::Rell,       SpellSlot::W },
+        { SDK::ChampionId::Renekton,   SpellSlot::W },
+        { SDK::ChampionId::Rengar,     SpellSlot::Q },
+        { SDK::ChampionId::Riven,      SpellSlot::Q },
+        { SDK::ChampionId::Sejuani,    SpellSlot::E },
+        { SDK::ChampionId::Sett,       SpellSlot::Q },
+        { SDK::ChampionId::Shyvana,    SpellSlot::Q },
+        { SDK::ChampionId::Sivir,      SpellSlot::W },
 
         // Every normal Sylas spell grants a Petricite Burst charge.
-        { "Sylas",      SpellSlot::Q },
-        { "Sylas",      SpellSlot::W },
-        { "Sylas",      SpellSlot::E },
-        { "Sylas",      SpellSlot::R },
+        { SDK::ChampionId::Sylas,      SpellSlot::Q },
+        { SDK::ChampionId::Sylas,      SpellSlot::W },
+        { SDK::ChampionId::Sylas,      SpellSlot::E },
+        { SDK::ChampionId::Sylas,      SpellSlot::R },
 
-        { "Talon",      SpellSlot::Q },
-        { "Trundle",    SpellSlot::Q },
+        { SDK::ChampionId::Talon,      SpellSlot::Q },
+        { SDK::ChampionId::Trundle,    SpellSlot::Q },
 
         // Entering or awakening any stance accelerates Udyr's next attacks.
-        { "Udyr",       SpellSlot::Q },
-        { "Udyr",       SpellSlot::W },
-        { "Udyr",       SpellSlot::E },
-        { "Udyr",       SpellSlot::R },
+        { SDK::ChampionId::Udyr,       SpellSlot::Q },
+        { SDK::ChampionId::Udyr,       SpellSlot::W },
+        { SDK::ChampionId::Udyr,       SpellSlot::E },
+        { SDK::ChampionId::Udyr,       SpellSlot::R },
 
-        { "Vayne",      SpellSlot::Q },
-        { "Vi",         SpellSlot::E },
-        { "Viego",      SpellSlot::W },
-        { "Volibear",   SpellSlot::Q },
-        { "XinZhao",    SpellSlot::Q },
-        { "Yorick",     SpellSlot::Q },
-        { "Zaahen",     SpellSlot::Q },
-        { "Zac",        SpellSlot::Q },
-        { "Zeri",       SpellSlot::E },
-        { "Zoe",        SpellSlot::R },
+        { SDK::ChampionId::Vayne,      SpellSlot::Q },
+        { SDK::ChampionId::Vi,         SpellSlot::E },
+        { SDK::ChampionId::Viego,      SpellSlot::W },
+        { SDK::ChampionId::Volibear,   SpellSlot::Q },
+        { SDK::ChampionId::XinZhao,    SpellSlot::Q },
+        { SDK::ChampionId::Yorick,     SpellSlot::Q },
+        { SDK::ChampionId::Zaahen,     SpellSlot::Q },
+        { SDK::ChampionId::Zac,        SpellSlot::Q },
+        { SDK::ChampionId::Zeri,       SpellSlot::E },
+        { SDK::ChampionId::Zoe,        SpellSlot::R },
     };
 
     for (const auto& entry : entries) {
         if (slot == static_cast<int>(entry.Slot) &&
-            _stricmp(championName.c_str(), entry.ChampionName) == 0) {
+            championId == entry.Champion) {
             return true;
         }
     }
@@ -527,7 +532,8 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
     if (Events::IsLocalPlayer(args.Sender)) {
         if (args.IsAutoAttack) return true;
         if (args.SpellName && IsAutoAttack(args.SpellName)) return true;
-        if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        if (player.IsValid() &&
+            SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Akshan) {
             if (args.SpellName) {
                 std::string sName = args.SpellName;
                 for (auto& c : sName) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
@@ -582,16 +588,15 @@ inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::Obje
         return false;
     }
 
-    std::string championName;
+    SDK::ChampionId championId = SDK::ChampionId::Unknown;
     const auto player = GameObjects::Player();
     if (player.IsValid()) {
-        championName = player.CharacterName();
-    }
-    if (championName.empty()) {
-        championName = sender.CharacterName;
+        championId = SDK::ChampionIdFromName(player.CharacterName().c_str());
+    } else if (sender.CharacterName) {
+        championId = SDK::ChampionIdFromName(sender.CharacterName);
     }
 
-    return OrbwalkingDetail::IsKnownAutoAttackResetSlot(championName, slot);
+    return OrbwalkingDetail::IsKnownAutoAttackResetSlot(championId, slot);
 }
 
 inline bool OrbwalkerBase::IsLocalAutoAttackMissile(const Events::ObjectEventArgs& args) const {
@@ -599,7 +604,8 @@ inline bool OrbwalkerBase::IsLocalAutoAttackMissile(const Events::ObjectEventArg
     if (Events::IsLocalPlayer(args.Source)) {
         if (args.SpellName[0] && IsAutoAttack(args.SpellName)) return true;
         if (args.MissileName[0] && IsAutoAttack(args.MissileName)) return true;
-        if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+        if (player.IsValid() &&
+            SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Akshan) {
             std::string mName = args.MissileName[0] ? args.MissileName : (args.SpellName[0] ? args.SpellName : "");
             for (auto& c : mName) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
             if (mName.find("akshanpassive") != std::string::npos ||
@@ -729,7 +735,7 @@ inline void OrbwalkerBase::OnPlayAnimation(const Events::PlayAnimationEventArgs&
         return;
     }
 
-    if (_stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+    if (SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Rengar) {
         if (_stricmp(args.Animation, "Spell5") == 0) {
             const int now = Tick();
             const float dist = context_.lastTarget.IsValid() ? player.Distance(context_.lastTarget) : 0.0f;
@@ -751,7 +757,7 @@ inline void OrbwalkerBase::OnDash(const Events::Dash::DashArgs& args) {
         return;
     }
 
-    if (_stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+    if (SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Rengar) {
         const int now = Tick();
         if (now - context_.lastRengarLeapTick < 100) {
             return;

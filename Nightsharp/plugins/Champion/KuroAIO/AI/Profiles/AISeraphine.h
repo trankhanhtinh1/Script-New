@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Seraphine = [] {
     ChampionProfile p{};
-    p.ChampionName = "Seraphine";
+    p.ChampionId = SDK::ChampionId::Seraphine;
     p.DisplayName = "Seraphine";
     p.InternalId = "champion.kuroaio.ai.seraphine";
     p.PrimaryArchetype = Archetype::Catcher;

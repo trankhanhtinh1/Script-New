@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // execution or a planned exit instead of being fired as soon as it unlocks.
 inline constexpr ChampionProfile Akali = [] {
     ChampionProfile p{};
-    p.ChampionName = "Akali";
+    p.ChampionId = SDK::ChampionId::Akali;
     p.DisplayName = "Akali";
     p.InternalId = "champion.kuroaio.ai.akali";
     p.PrimaryArchetype = Archetype::Assassin;

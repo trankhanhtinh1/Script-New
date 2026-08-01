@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Nautilus = [] {
     ChampionProfile p{};
-    p.ChampionName = "Nautilus";
+    p.ChampionId = SDK::ChampionId::Nautilus;
     p.DisplayName = "Nautilus";
     p.InternalId = "champion.kuroaio.ai.nautilus";
     p.PrimaryArchetype = Archetype::Vanguard;

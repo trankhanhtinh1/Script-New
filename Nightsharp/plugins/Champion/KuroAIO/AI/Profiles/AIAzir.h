@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // late-Q timing, E collision/drift and every R displacement decision.
 inline constexpr ChampionProfile Azir = [] {
     ChampionProfile p{};
-    p.ChampionName = "Azir";
+    p.ChampionId = SDK::ChampionId::Azir;
     p.DisplayName = "Azir";
     p.InternalId = "champion.kuroaio.ai.azir";
     p.PrimaryArchetype = Archetype::Specialist;

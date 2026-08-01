@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile FiddleSticks = [] {
     ChampionProfile p{};
-    p.ChampionName = "Fiddlesticks";
+    p.ChampionId = SDK::ChampionId::Fiddlesticks;
     p.DisplayName = "Fiddlesticks";
     p.InternalId = "champion.kuroaio.ai.fiddlesticks";
     p.PrimaryArchetype = Archetype::Battlemage;

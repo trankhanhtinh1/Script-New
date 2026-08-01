@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Orianna = [] {
     ChampionProfile p{};
-    p.ChampionName = "Orianna";
+    p.ChampionId = SDK::ChampionId::Orianna;
     p.DisplayName = "Orianna";
     p.InternalId = "champion.kuroaio.ai.orianna";
     p.PrimaryArchetype = Archetype::BurstMage;

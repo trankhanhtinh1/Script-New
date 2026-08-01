@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Trundle = [] {
     ChampionProfile p{};
-    p.ChampionName = "Trundle";
+    p.ChampionId = SDK::ChampionId::Trundle;
     p.DisplayName = "Trundle";
     p.InternalId = "champion.kuroaio.ai.trundle";
     p.PrimaryArchetype = Archetype::Juggernaut;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // the final charge is normally an exit, not a fourth damage button.
 inline constexpr ChampionProfile Ahri = [] {
     ChampionProfile p{};
-    p.ChampionName = "Ahri";
+    p.ChampionId = SDK::ChampionId::Ahri;
     p.DisplayName = "Ahri";
     p.InternalId = "champion.kuroaio.ai.ahri";
     p.PrimaryArchetype = Archetype::BurstMage;

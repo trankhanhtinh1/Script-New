@@ -15,7 +15,7 @@
 namespace Plugins::KuroAIO::AI {
 
 struct ChampionController {
-    const char* ChampionName = "";
+    SDK::ChampionId ChampionId = SDK::ChampionId::Unknown;
     const char* ControllerId = "";
     const char* KitRevision = "";
     const char* ResearchArtifact = "";

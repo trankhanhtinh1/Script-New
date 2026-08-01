@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // rather than a combat steroid, and R must solve blockers while it channels.
 inline constexpr ChampionProfile Akshan = [] {
     ChampionProfile p{};
-    p.ChampionName = "Akshan";
+    p.ChampionId = SDK::ChampionId::Akshan;
     p.DisplayName = "Akshan";
     p.InternalId = "champion.kuroaio.ai.akshan";
     p.PrimaryArchetype = Archetype::Marksman;

@@ -48,7 +48,10 @@ public:
         std::function<bool(const SDK::AIBaseClient&)>;
 
     static std::string MenuKey(const Database::EvadeSpellData& data) {
-        std::string result = data.ChampionName + "|" + data.Name + "|" +
+        const char* championName = data.IsGlobal
+            ? "AllChampions"
+            : SDK::ChampionName(data.ChampionId);
+        std::string result = std::string(championName) + "|" + data.Name + "|" +
             std::to_string(data.ItemId);
         std::transform(result.begin(), result.end(), result.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -78,8 +81,12 @@ public:
             return result;
         }
 
+        const std::string playerName =
+            EvadeUtils::GetObjectCharacterName(player);
+        const SDK::ChampionId playerChampionId =
+            SDK::ChampionIdFromName(playerName.c_str());
         auto spells = Database::EvadeSpellDatabase::ForChampion(
-            EvadeUtils::GetObjectCharacterName(player).c_str(), true);
+            playerChampionId, true);
 
         struct RankedCandidate {
             const Database::EvadeSpellData* Data = nullptr;
@@ -173,8 +180,12 @@ public:
             return false;
         }
 
+        const std::string playerName =
+            EvadeUtils::GetObjectCharacterName(player);
+        const SDK::ChampionId playerChampionId =
+            SDK::ChampionIdFromName(playerName.c_str());
         const auto spells = Database::EvadeSpellDatabase::ForChampion(
-            EvadeUtils::GetObjectCharacterName(player).c_str(), false);
+            playerChampionId, false);
         for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
             if (!ally.IsValid() || ally.IsDead() || ally.IsMe()) {
                 continue;

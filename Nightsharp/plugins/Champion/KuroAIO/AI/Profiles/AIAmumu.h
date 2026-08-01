@@ -11,7 +11,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // separate mana, timing and team-follow-up policies in AIAmumuController.
 inline constexpr ChampionProfile Amumu = [] {
     ChampionProfile p{};
-    p.ChampionName = "Amumu";
+    p.ChampionId = SDK::ChampionId::Amumu;
     p.DisplayName = "Amumu";
     p.InternalId = "champion.kuroaio.ai.amumu";
     p.PrimaryArchetype = Archetype::Vanguard;

@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // 1.5-second Glacial Storm growth clock, mana drain and Rebirth state.
 inline constexpr ChampionProfile Anivia = [] {
     ChampionProfile p{};
-    p.ChampionName = "Anivia";
+    p.ChampionId = SDK::ChampionId::Anivia;
     p.DisplayName = "Anivia";
     p.InternalId = "champion.kuroaio.ai.anivia";
     p.PrimaryArchetype = Archetype::Battlemage;

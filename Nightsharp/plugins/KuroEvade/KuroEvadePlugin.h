@@ -13,7 +13,7 @@
 
 #include "Native/KuroEvadeNative.h"
 
-#include <Windows.h>
+#include <vector>
 #include <algorithm>
 #include <cfloat>
 #include <cstdio>
@@ -637,9 +637,13 @@ private:
         const auto player = GameObjects::Player();
         if (player.IsValid()) {
             const std::string selfName = GetHeroCharacterName(player);
-            if (!selfName.empty()) {
-                const std::string selfKey = KuroEvade::SpellMenuKey::Lower(selfName);
-                if (m_loadedChampions.find("self_" + selfKey) == m_loadedChampions.end()) {
+            const SDK::ChampionId selfId =
+                SDK::ChampionIdFromName(selfName.c_str());
+            if (selfId != SDK::ChampionId::Unknown) {
+                const std::string selfKey =
+                    KuroEvade::SpellMenuKey::Lower(SDK::ChampionName(selfId));
+                if (m_loadedChampions.find("self_" + selfKey) ==
+                    m_loadedChampions.end()) {
                     m_loadedChampions.insert("self_" + selfKey);
                     needRebuild = true;
                 }
@@ -651,9 +655,13 @@ private:
                 continue;
             }
             const std::string enemyName = GetHeroCharacterName(enemy);
-            if (!enemyName.empty()) {
-                const std::string enemyKey = KuroEvade::SpellMenuKey::Lower(enemyName);
-                if (m_loadedChampions.find("enemy_" + enemyKey) == m_loadedChampions.end()) {
+            const SDK::ChampionId enemyId =
+                SDK::ChampionIdFromName(enemyName.c_str());
+            if (enemyId != SDK::ChampionId::Unknown) {
+                const std::string enemyKey =
+                    KuroEvade::SpellMenuKey::Lower(SDK::ChampionName(enemyId));
+                if (m_loadedChampions.find("enemy_" + enemyKey) ==
+                    m_loadedChampions.end()) {
                     m_loadedChampions.insert("enemy_" + enemyKey);
                     needRebuild = true;
                 }
@@ -665,9 +673,11 @@ private:
                 continue;
             }
             const std::string allyName = GetHeroCharacterName(ally);
-            if (!allyName.empty()) {
+            const SDK::ChampionId allyId =
+                SDK::ChampionIdFromName(allyName.c_str());
+            if (allyId != SDK::ChampionId::Unknown) {
                 const std::string allyKey =
-                    KuroEvade::SpellMenuKey::Lower(allyName);
+                    KuroEvade::SpellMenuKey::Lower(SDK::ChampionName(allyId));
                 if (m_loadedChampions.find("ally_" + allyKey) ==
                     m_loadedChampions.end()) {
                     m_loadedChampions.insert("ally_" + allyKey);
@@ -675,6 +685,7 @@ private:
                 }
             }
         }
+
 
         if (needRebuild) {
             RebuildSpellsMenu();
@@ -965,7 +976,10 @@ private:
         m_showEvadeStatusMenu = misc->Add(new MenuBool(
             "ShowEvadeStatus", "Show Evade Status", false));
         const auto player = GameObjects::Player();
-        if (player.IsValid() && _stricmp(GetHeroCharacterName(player).c_str(), "Olaf") == 0) {
+        const std::string playerName = GetHeroCharacterName(player);
+        const SDK::ChampionId playerId =
+            SDK::ChampionIdFromName(playerName.c_str());
+        if (player.IsValid() && playerId == SDK::ChampionId::Olaf) {
             m_disableOlafRMenu = misc->Add(new MenuBool(
                 "DisableEvadeForOlafR", "Automatic disable Evade when Olaf's ulti is active!", true));
         }
@@ -1006,33 +1020,44 @@ private:
         }
 
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-            if (_stricmp(data.Runtime.ChampionName.c_str(), "AllChampions") == 0) {
+            if (data.IsGlobal) {
                 AddSpellMenuEntry(parent, data);
             }
         }
 
-        std::unordered_set<std::string> enemyChampions;
+        std::vector<SDK::ChampionId> enemyChampions;
         for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
             if (!enemy.IsValid()) {
                 continue;
             }
             const std::string championName = GetHeroCharacterName(enemy);
-            if (!championName.empty()) {
-                enemyChampions.insert(
-                    KuroEvade::SpellMenuKey::Lower(championName));
+            const SDK::ChampionId championId =
+                SDK::ChampionIdFromName(championName.c_str());
+            if (championId != SDK::ChampionId::Unknown &&
+                std::find(enemyChampions.begin(), enemyChampions.end(), championId) ==
+                    enemyChampions.end()) {
+                enemyChampions.push_back(championId);
             }
         }
         for (const std::string& loaded : m_loadedChampions) {
             if (loaded.rfind("enemy_", 0) == 0) {
-                enemyChampions.insert(loaded.substr(6));
+                const std::string championName = loaded.substr(6);
+                const SDK::ChampionId championId =
+                    SDK::ChampionIdFromName(championName.c_str());
+                if (championId != SDK::ChampionId::Unknown &&
+                    std::find(enemyChampions.begin(), enemyChampions.end(), championId) ==
+                        enemyChampions.end()) {
+                    enemyChampions.push_back(championId);
+                }
             }
         }
 
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-            const std::string champion = KuroEvade::SpellMenuKey::Lower(
-                data.Runtime.ChampionName);
-            if (enemyChampions.find(champion) != enemyChampions.end()) {
-                AddSpellMenuEntry(parent, data);
+            for (const SDK::ChampionId championId : enemyChampions) {
+                if (data.MatchesChampion(championId)) {
+                    AddSpellMenuEntry(parent, data);
+                    break;
+                }
             }
         }
 
@@ -1041,19 +1066,27 @@ private:
         // and Mel recreates reflected projectiles as missiles owned by herself.
         // Add those source entries to the existing per-spell menu instead of
         // silently falling back to unconfigurable defaults.
-        const bool enemySylas = enemyChampions.contains("sylas");
-        const bool enemyViego = enemyChampions.contains("viego");
-        const bool enemyMel = enemyChampions.contains("mel");
+        const bool enemySylas =
+            std::find(enemyChampions.begin(), enemyChampions.end(),
+                      SDK::ChampionId::Sylas) != enemyChampions.end();
+        const bool enemyViego =
+            std::find(enemyChampions.begin(), enemyChampions.end(),
+                      SDK::ChampionId::Viego) != enemyChampions.end();
+        const bool enemyMel =
+            std::find(enemyChampions.begin(), enemyChampions.end(),
+                      SDK::ChampionId::Mel) != enemyChampions.end();
         if (!enemySylas && !enemyViego && !enemyMel) {
             return;
         }
 
-        std::unordered_set<std::string> allyChampions;
+        std::vector<SDK::ChampionId> allyChampions;
         const auto player = GameObjects::Player();
         if (player.IsValid()) {
             const std::string name = GetHeroCharacterName(player);
-            if (!name.empty()) {
-                allyChampions.insert(KuroEvade::SpellMenuKey::Lower(name));
+            const SDK::ChampionId championId =
+                SDK::ChampionIdFromName(name.c_str());
+            if (championId != SDK::ChampionId::Unknown) {
+                allyChampions.push_back(championId);
             }
         }
         for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
@@ -1061,34 +1094,45 @@ private:
                 continue;
             }
             const std::string name = GetHeroCharacterName(ally);
-            if (!name.empty()) {
-                allyChampions.insert(KuroEvade::SpellMenuKey::Lower(name));
+            const SDK::ChampionId championId =
+                SDK::ChampionIdFromName(name.c_str());
+            if (championId != SDK::ChampionId::Unknown &&
+                std::find(allyChampions.begin(), allyChampions.end(), championId) ==
+                    allyChampions.end()) {
+                allyChampions.push_back(championId);
             }
         }
         for (const std::string& loaded : m_loadedChampions) {
-            if (loaded.rfind("ally_", 0) == 0) {
-                allyChampions.insert(loaded.substr(5));
-            } else if (loaded.rfind("self_", 0) == 0) {
-                allyChampions.insert(loaded.substr(5));
+            if (loaded.rfind("ally_", 0) == 0 ||
+                loaded.rfind("self_", 0) == 0) {
+                const std::string name = loaded.substr(5);
+                const SDK::ChampionId championId =
+                    SDK::ChampionIdFromName(name.c_str());
+                if (championId != SDK::ChampionId::Unknown &&
+                    std::find(allyChampions.begin(), allyChampions.end(), championId) ==
+                        allyChampions.end()) {
+                    allyChampions.push_back(championId);
+                }
             }
         }
 
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
-            const std::string champion = KuroEvade::SpellMenuKey::Lower(
-                data.Runtime.ChampionName);
-            if (allyChampions.find(champion) == allyChampions.end()) {
-                continue;
-            }
-            const bool stolenUltimate = enemySylas &&
-                data.Runtime.Slot == SDK::SpellSlot::R;
-            const bool possessedBasic = enemyViego &&
-                data.Runtime.Slot >= SDK::SpellSlot::Q &&
-                data.Runtime.Slot <= SDK::SpellSlot::E;
-            const bool reflectedProjectile = enemyMel &&
-                (!data.MissileSpellName.empty() ||
-                 !data.ExtraMissileNames.empty());
-            if (stolenUltimate || possessedBasic || reflectedProjectile) {
-                AddSpellMenuEntry(parent, data);
+            for (const SDK::ChampionId championId : allyChampions) {
+                if (!data.MatchesChampion(championId)) {
+                    continue;
+                }
+                const bool stolenUltimate = enemySylas &&
+                    data.Runtime.Slot == SDK::SpellSlot::R;
+                const bool possessedBasic = enemyViego &&
+                    data.Runtime.Slot >= SDK::SpellSlot::Q &&
+                    data.Runtime.Slot <= SDK::SpellSlot::E;
+                const bool reflectedProjectile = enemyMel &&
+                    (!data.MissileSpellName.empty() ||
+                     !data.ExtraMissileNames.empty());
+                if (stolenUltimate || possessedBasic || reflectedProjectile) {
+                    AddSpellMenuEntry(parent, data);
+                }
+                break;
             }
         }
     }
@@ -1150,10 +1194,15 @@ private:
         }
 
         const std::string championName = GetHeroCharacterName(player);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(championName.c_str());
+        if (championId == SDK::ChampionId::Unknown) {
+            return;
+        }
         bool first = true;
         for (const auto* data :
              KuroEvade::Database::EvadeSpellDatabase::ForChampion(
-                 championName.c_str(), true)) {
+                 championId, true)) {
             AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
             first = false;
         }
@@ -1248,10 +1297,15 @@ private:
         }
 
         const std::string championName = GetHeroCharacterName(player);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(championName.c_str());
+        if (championId == SDK::ChampionId::Unknown) {
+            return;
+        }
         bool first = true;
         for (const auto* data :
              KuroEvade::Database::EvadeSpellDatabase::ForChampion(
-                 championName.c_str(), true)) {
+                 championId, true)) {
             AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
             first = false;
         }

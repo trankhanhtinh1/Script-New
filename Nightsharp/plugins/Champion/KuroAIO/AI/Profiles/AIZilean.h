@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Zilean = [] {
     ChampionProfile p{};
-    p.ChampionName = "Zilean";
+    p.ChampionId = SDK::ChampionId::Zilean;
     p.DisplayName = "Zilean";
     p.InternalId = "champion.kuroaio.ai.zilean";
     p.PrimaryArchetype = Archetype::Enchanter;

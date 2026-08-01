@@ -15,7 +15,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerValue = 1;
             spell.MissileSpellName = "summonersnowball";
             spell.DisplayName = "Mark";
@@ -40,7 +40,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Aatrox";
+            spell.ChampionId = SDK::ChampionId::Aatrox;
             spell.DangerValue = 2;
             spell.DisplayName = "The Darkin Blade (Q1)";
             spell.Range = 650.0f;
@@ -54,7 +54,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Aatrox";
+            spell.ChampionId = SDK::ChampionId::Aatrox;
             spell.DangerValue = 2;
             spell.DisplayName = "The Darkin Blade (Q2)";
             spell.Range = 525.0f;
@@ -68,7 +68,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Aatrox";
+            spell.ChampionId = SDK::ChampionId::Aatrox;
             spell.DangerValue = 3;
             spell.DisplayName = "The Darkin Blade (Q3)";
             spell.Range = 450.0f;
@@ -82,7 +82,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Aatrox";
+            spell.ChampionId = SDK::ChampionId::Aatrox;
             spell.DangerValue = 2;
             spell.MissileSpellName = "AatroxW";
             spell.DisplayName = "Infernal Chains";
@@ -102,7 +102,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ahri";
+            spell.ChampionId = SDK::ChampionId::Ahri;
             spell.DangerValue = 2;
             spell.MissileSpellName = "AhriOrbMissile";
             spell.DisplayName = "Orb of Deception";
@@ -118,7 +118,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ahri";
+            spell.ChampionId = SDK::ChampionId::Ahri;
             spell.DangerValue = 2;
             spell.MissileSpellName = "AhriOrbReturn";
             spell.DisplayName = "Orb of Deception (Return)";
@@ -135,7 +135,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ahri";
+            spell.ChampionId = SDK::ChampionId::Ahri;
             spell.DangerValue = 3;
             spell.MissileSpellName = "AhriSeduceMissile";
             spell.DisplayName = "Charm";
@@ -155,7 +155,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Akali";
+            spell.ChampionId = SDK::ChampionId::Akali;
             spell.DangerValue = 1;
             spell.DisplayName = "Five Point Strike";
             spell.Range = 550.0f;
@@ -169,7 +169,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Akali";
+            spell.ChampionId = SDK::ChampionId::Akali;
             spell.DangerValue = 2;
             spell.MissileSpellName = "AkaliEMis";
             spell.DisplayName = "Shuriken Flip";
@@ -189,7 +189,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Akshan";
+            spell.ChampionId = SDK::ChampionId::Akshan;
             spell.DangerValue = 2;
             spell.MissileSpellName = "AkshanQMissile";
             spell.DisplayName = "Avengerang";
@@ -208,7 +208,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Alistar";
+            spell.ChampionId = SDK::ChampionId::Alistar;
             spell.DangerValue = 3;
             spell.DisplayName = "Pulverize";
             spell.Radius = 375.0f;
@@ -230,7 +230,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Amumu";
+            spell.ChampionId = SDK::ChampionId::Amumu;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SadMummyBandageToss";
             spell.DisplayName = "Bandage Toss";
@@ -247,7 +247,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Amumu";
+            spell.ChampionId = SDK::ChampionId::Amumu;
             spell.DangerValue = 4;
             spell.DisplayName = "Curse of the Sad Mummy";
             spell.Radius = 560.0f;
@@ -264,7 +264,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Anivia";
+            spell.ChampionId = SDK::ChampionId::Anivia;
             spell.DangerValue = 3;
             spell.MissileSpellName = "FlashFrostSpell";
             spell.DisplayName = "Flash Frost";
@@ -283,7 +283,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Annie";
+            spell.ChampionId = SDK::ChampionId::Annie;
             spell.DangerValue = 2;
             spell.MultipleAngle = 25.0f;
             spell.DisplayName = "Incinerate";
@@ -297,7 +297,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Annie";
+            spell.ChampionId = SDK::ChampionId::Annie;
             spell.DangerValue = 4;
             spell.DisplayName = "Summon: Tibbers";
             spell.Radius = 290.0f;
@@ -314,7 +314,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Aphelios";
+            spell.ChampionId = SDK::ChampionId::Aphelios;
             spell.DangerValue = 2;
             spell.MissileSpellName = "ApheliosCalibrumQMis";
             spell.DisplayName = "Moonshot";
@@ -331,7 +331,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Aphelios";
+            spell.ChampionId = SDK::ChampionId::Aphelios;
             spell.DangerValue = 4;
             spell.MissileSpellName = "ApheliosRMis";
             spell.DisplayName = "Moonlight Vigil";
@@ -357,7 +357,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ashe";
+            spell.ChampionId = SDK::ChampionId::Ashe;
             spell.DangerValue = 4;
             spell.MissileSpellName = "EnchantedCrystalArrow";
             spell.DisplayName = "Enchanted Crystal Arrow";
@@ -384,7 +384,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "AurelionSol";
+            spell.ChampionId = SDK::ChampionId::AurelionSol;
             spell.DangerValue = 4;
             spell.DisplayName = "Falling Star / The Skies Descend";
             spell.Radius = 350.0f;
@@ -401,7 +401,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Azir";
+            spell.ChampionId = SDK::ChampionId::Azir;
             spell.DangerValue = 4;
             spell.MissileSpellName = "AzirSoldierRMissile";
             spell.DisplayName = "Emperor's Divide";
@@ -423,7 +423,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Bard";
+            spell.ChampionId = SDK::ChampionId::Bard;
             spell.DangerValue = 2;
             spell.MissileSpellName = "BardQMissile";
             spell.DisplayName = "Cosmic Binding";
@@ -450,7 +450,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Bard";
+            spell.ChampionId = SDK::ChampionId::Bard;
             spell.DangerValue = 4;
             spell.MissileSpellName = "BardRMissile";
             spell.DisplayName = "Tempered Fate";
@@ -469,7 +469,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "BelVeth";
+            spell.ChampionId = SDK::ChampionId::Belveth;
             spell.DangerValue = 3;
             spell.DisplayName = "Above and Below (W)";
             spell.Radius = 100.0f;
@@ -486,7 +486,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Blitzcrank";
+            spell.ChampionId = SDK::ChampionId::Blitzcrank;
             spell.DangerValue = 4;
             spell.MissileSpellName = "RocketGrabMissile";
             spell.DisplayName = "Rocket Grab";
@@ -506,7 +506,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Brand";
+            spell.ChampionId = SDK::ChampionId::Brand;
             spell.DangerValue = 2;
             spell.MissileSpellName = "BrandQMissile";
             spell.DisplayName = "Sear";
@@ -523,7 +523,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Brand";
+            spell.ChampionId = SDK::ChampionId::Brand;
             spell.DangerValue = 2;
             spell.DisplayName = "Pillar of Flame";
             spell.Radius = 250.0f;
@@ -540,7 +540,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Braum";
+            spell.ChampionId = SDK::ChampionId::Braum;
             spell.DangerValue = 2;
             spell.MissileSpellName = "BraumQMissile";
             spell.DisplayName = "Winter's Bite";
@@ -558,7 +558,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Braum";
+            spell.ChampionId = SDK::ChampionId::Braum;
             spell.DangerValue = 4;
             spell.MissileSpellName = "BraumRMissile";
             spell.DisplayName = "Glacial Fissure";
@@ -577,7 +577,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Briar";
+            spell.ChampionId = SDK::ChampionId::Briar;
             spell.DangerValue = 3;
             spell.DisplayName = "Chilling Scream (E)";
             spell.Range = 600.0f;
@@ -591,7 +591,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Briar";
+            spell.ChampionId = SDK::ChampionId::Briar;
             spell.DangerValue = 4;
             spell.MissileSpellName = "BriarRMissile";
             spell.DisplayName = "Certain Death";
@@ -615,7 +615,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Caitlyn";
+            spell.ChampionId = SDK::ChampionId::Caitlyn;
             spell.DangerValue = 2;
             spell.MissileSpellName = "CaitlynPiltoverPeacemakerMissile";
             spell.DisplayName = "Piltover Peacemaker";
@@ -631,7 +631,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Caitlyn";
+            spell.ChampionId = SDK::ChampionId::Caitlyn;
             spell.DangerValue = 2;
             spell.DisplayName = "Yordle Snap Trap";
             spell.Radius = 75.0f;
@@ -647,7 +647,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Caitlyn";
+            spell.ChampionId = SDK::ChampionId::Caitlyn;
             spell.DangerValue = 2;
             spell.MissileSpellName = "CaitlynEntrapmentMissile";
             spell.DisplayName = "90 Caliber Net";
@@ -667,7 +667,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Camille";
+            spell.ChampionId = SDK::ChampionId::Camille;
             spell.DangerValue = 2;
             spell.DisplayName = "Tactical Sweep (W)";
             spell.Range = 650.0f;
@@ -681,7 +681,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Camille";
+            spell.ChampionId = SDK::ChampionId::Camille;
             spell.DangerValue = 3;
             spell.DisplayName = "Wall Dive (E2)";
             spell.MissileSpeed = 1050.0f;
@@ -699,7 +699,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Cassiopeia";
+            spell.ChampionId = SDK::ChampionId::Cassiopeia;
             spell.DangerValue = 1;
             spell.DisplayName = "Noxious Blast";
             spell.Radius = 160.0f;
@@ -713,7 +713,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Cassiopeia";
+            spell.ChampionId = SDK::ChampionId::Cassiopeia;
             spell.DangerValue = 4;
             spell.DisplayName = "Petrifying Gaze";
             spell.Range = 825.0f;
@@ -730,7 +730,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Chogath";
+            spell.ChampionId = SDK::ChampionId::Chogath;
             spell.DangerValue = 3;
             spell.DisplayName = "Rupture";
             spell.Radius = 250.0f;
@@ -744,7 +744,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Chogath";
+            spell.ChampionId = SDK::ChampionId::Chogath;
             spell.DangerValue = 2;
             spell.DisplayName = "Feral Scream";
             spell.Range = 650.0f;
@@ -761,7 +761,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Corki";
+            spell.ChampionId = SDK::ChampionId::Corki;
             spell.DangerValue = 1;
             spell.MissileSpellName = "PhosphorusBombMissile";
             spell.DisplayName = "Phosphorus Bomb";
@@ -777,7 +777,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Corki";
+            spell.ChampionId = SDK::ChampionId::Corki;
             spell.DangerValue = 2;
             spell.MissileSpellName = "MissileBarrageMissile";
             spell.DisplayName = "Missile Barrage (R)";
@@ -797,7 +797,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Corki";
+            spell.ChampionId = SDK::ChampionId::Corki;
             spell.DangerValue = 3;
             spell.MissileSpellName = "MissileBarrageMissile2";
             spell.DisplayName = "Missile Barrage - The Big One (R)";
@@ -824,7 +824,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Darius";
+            spell.ChampionId = SDK::ChampionId::Darius;
             spell.DangerValue = 3;
             spell.DisplayName = "Apprehend";
             spell.Range = 535.0f;
@@ -841,7 +841,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Diana";
+            spell.ChampionId = SDK::ChampionId::Diana;
             spell.DangerValue = 2;
             spell.MissileSpellName = "DianaQMissile";
             spell.DisplayName = "Crescent Strike";
@@ -860,7 +860,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "DrMundo";
+            spell.ChampionId = SDK::ChampionId::DrMundo;
             spell.DangerValue = 1;
             spell.MissileSpellName = "DrMundoQMissile";
             spell.DisplayName = "Infected Bonesaw";
@@ -880,7 +880,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Draven";
+            spell.ChampionId = SDK::ChampionId::Draven;
             spell.DangerValue = 2;
             spell.MissileSpellName = "DravenDoubleShotMissile";
             spell.DisplayName = "Stand Aside";
@@ -896,7 +896,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Draven";
+            spell.ChampionId = SDK::ChampionId::Draven;
             spell.DangerValue = 3;
             spell.MissileSpellName = "DravenRCast";
             spell.DisplayName = "Whirling Death";
@@ -918,7 +918,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ekko";
+            spell.ChampionId = SDK::ChampionId::Ekko;
             spell.DangerValue = 2;
             spell.MissileSpellName = "EkkoQMis";
             spell.DisplayName = "Timewinder (Q1)";
@@ -934,7 +934,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ekko";
+            spell.ChampionId = SDK::ChampionId::Ekko;
             spell.DangerValue = 3;
             spell.DisplayName = "Parallel Convergence (W)";
             spell.Radius = 375.0f;
@@ -951,7 +951,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Elise";
+            spell.ChampionId = SDK::ChampionId::Elise;
             spell.DangerValue = 3;
             spell.MissileSpellName = "EliseHumanE";
             spell.DisplayName = "Cocoon";
@@ -975,7 +975,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Evelynn";
+            spell.ChampionId = SDK::ChampionId::Evelynn;
             spell.DangerValue = 1;
             spell.MissileSpellName = "EvelynnQLineMis";
             spell.DisplayName = "Hate Spike (Q)";
@@ -992,7 +992,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Evelynn";
+            spell.ChampionId = SDK::ChampionId::Evelynn;
             spell.DangerValue = 4;
             spell.DisplayName = "Last Caress (R)";
             spell.Range = 450.0f;
@@ -1009,7 +1009,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ezreal";
+            spell.ChampionId = SDK::ChampionId::Ezreal;
             spell.DangerValue = 1;
             spell.MissileSpellName = "EzrealQ";
             spell.DisplayName = "Mystic Shot";
@@ -1026,7 +1026,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ezreal";
+            spell.ChampionId = SDK::ChampionId::Ezreal;
             spell.DangerValue = 2;
             spell.MissileSpellName = "EzrealW";
             spell.DisplayName = "Essence Flux";
@@ -1043,7 +1043,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ezreal";
+            spell.ChampionId = SDK::ChampionId::Ezreal;
             spell.DangerValue = 3;
             spell.MissileSpellName = "EzrealR";
             spell.DisplayName = "Trueshot Barrage";
@@ -1066,7 +1066,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Fiddlesticks";
+            spell.ChampionId = SDK::ChampionId::Fiddlesticks;
             spell.DangerValue = 2;
             spell.DisplayName = "Bountiful Harvest (E)";
             spell.Radius = 80.0f; // Bán kính vạch cắt của lưỡi liềm
@@ -1083,7 +1083,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Fiora";
+            spell.ChampionId = SDK::ChampionId::Fiora;
             spell.DangerValue = 2;
             spell.MissileSpellName = "FioraWMissile";
             spell.DisplayName = "Riposte (W)";
@@ -1102,7 +1102,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Fizz";
+            spell.ChampionId = SDK::ChampionId::Fizz;
             spell.DangerValue = 4;
             spell.MissileSpellName = "FizzRMissile";
             spell.DisplayName = "Chum the Waters (R)";
@@ -1139,7 +1139,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Galio";
+            spell.ChampionId = SDK::ChampionId::Galio;
             spell.DangerValue = 2;
             spell.MissileSpellName = "GalioQMissileIn";
             spell.DisplayName = "Winds of War (Q)";
@@ -1155,7 +1155,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Galio";
+            spell.ChampionId = SDK::ChampionId::Galio;
             spell.DangerValue = 3;
             spell.DisplayName = "Justice Punch (E)";
             spell.MissileSpeed = 2300.0f;
@@ -1174,7 +1174,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Gnar";
+            spell.ChampionId = SDK::ChampionId::Gnar;
             spell.DangerValue = 1;
             spell.MissileSpellName = "GnarQMissile";
             spell.DisplayName = "Boomerang Throw (Mini Q)";
@@ -1190,7 +1190,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Gnar";
+            spell.ChampionId = SDK::ChampionId::Gnar;
             spell.DangerValue = 2;
             spell.MissileSpellName = "GnarBigQMissile";
             spell.DisplayName = "Boulder Toss (Mega Q)";
@@ -1207,7 +1207,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Gnar";
+            spell.ChampionId = SDK::ChampionId::Gnar;
             spell.DangerValue = 3;
             spell.DisplayName = "Wallop (Mega W)";
             spell.Radius = 100.0f;
@@ -1224,7 +1224,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Gragas";
+            spell.ChampionId = SDK::ChampionId::Gragas;
             spell.DangerValue = 2;
             spell.MissileSpellName = "GragasQMissile";
             spell.DisplayName = "Barrel Roll";
@@ -1240,7 +1240,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Gragas";
+            spell.ChampionId = SDK::ChampionId::Gragas;
             spell.DangerValue = 3;
             spell.DisplayName = "Body Slam";
             spell.MissileSpeed = 900.0f;
@@ -1256,7 +1256,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Gragas";
+            spell.ChampionId = SDK::ChampionId::Gragas;
             spell.DangerValue = 4;
             spell.MissileSpellName = "GragasRMissile";
             spell.DisplayName = "Explosive Cask";
@@ -1275,7 +1275,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Graves";
+            spell.ChampionId = SDK::ChampionId::Graves;
             spell.DangerValue = 2;
             spell.MissileSpellName = "GravesQLineMissile";
             spell.DisplayName = "End of the Line (Q)";
@@ -1291,7 +1291,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Graves";
+            spell.ChampionId = SDK::ChampionId::Graves;
             spell.DangerValue = 2;
             spell.MissileSpellName = "GravesClusterShotAttack";
             spell.DisplayName = "Smoke Screen (W)";
@@ -1307,7 +1307,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Graves";
+            spell.ChampionId = SDK::ChampionId::Graves;
             spell.DangerValue = 3;
             spell.MissileSpellName = "GravesUltimateMissile";
             spell.DisplayName = "Collateral Damage (R)";
@@ -1326,7 +1326,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Gwen";
+            spell.ChampionId = SDK::ChampionId::Gwen;
             spell.DangerValue = 3;
             spell.MissileSpellName = "GwenRMissile";
             spell.DisplayName = "Needlework (R)";
@@ -1349,7 +1349,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Hecarim";
+            spell.ChampionId = SDK::ChampionId::Hecarim;
             spell.DangerValue = 4;
             spell.MissileSpellName = "HecarimUltMissile";
             spell.DisplayName = "Onslaught of Shadows (R)";
@@ -1368,7 +1368,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Heimerdinger";
+            spell.ChampionId = SDK::ChampionId::Heimerdinger;
             spell.DangerValue = 2;
             spell.MissileSpellName = "HeimerdingerWMaxAttack";
             spell.DisplayName = "Hextech Micro-Rockets (W)";
@@ -1385,7 +1385,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Heimerdinger";
+            spell.ChampionId = SDK::ChampionId::Heimerdinger;
             spell.DangerValue = 3;
             spell.MissileSpellName = "HeimerdingerEExplosion";
             spell.DisplayName = "CH-2 Electron Storm Grenade (E)";
@@ -1404,7 +1404,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Hwei";
+            spell.ChampionId = SDK::ChampionId::Hwei;
             spell.DangerValue = 2;
             spell.MissileSpellName = "HweiQQMissile";
             spell.DisplayName = "Subject: Disaster - Devastating Fire (QQ)";
@@ -1423,7 +1423,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Hwei";
+            spell.ChampionId = SDK::ChampionId::Hwei;
             spell.DangerValue = 2;
             spell.DisplayName = "Subject: Disaster - Molten Fissure (QW)";
             spell.Radius = 100.0f; // Bán kính đường vệt lửa dội xuống tầm xa
@@ -1437,7 +1437,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Hwei";
+            spell.ChampionId = SDK::ChampionId::Hwei;
             spell.DangerValue = 3;
             spell.MissileSpellName = "HweiEQMissile";
             spell.DisplayName = "Subject: Torment - Grim Visage (EQ)";
@@ -1454,7 +1454,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Hwei";
+            spell.ChampionId = SDK::ChampionId::Hwei;
             spell.DangerValue = 3;
             spell.MissileSpellName = "HweiEWMissile";
             spell.DisplayName = "Subject: Torment - Gaze of the Abyss (EW)";
@@ -1470,7 +1470,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Hwei";
+            spell.ChampionId = SDK::ChampionId::Hwei;
             spell.DangerValue = 4;
             spell.MissileSpellName = "HweiRMissile";
             spell.ExtraMissileNames = { "HweiR", "Hwei_R_Mis" };
@@ -1504,7 +1504,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Illaoi";
+            spell.ChampionId = SDK::ChampionId::Illaoi;
             spell.DangerValue = 2;
             spell.DisplayName = "Tentacle Smash (Q)";
             spell.Radius = 100.0f;
@@ -1518,7 +1518,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Illaoi";
+            spell.ChampionId = SDK::ChampionId::Illaoi;
             spell.DangerValue = 3;
             spell.MissileSpellName = "IllaoiEMis";
             spell.DisplayName = "Test of Spirit (E)";
@@ -1538,7 +1538,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Irelia";
+            spell.ChampionId = SDK::ChampionId::Irelia;
             spell.DangerValue = 2;
             spell.MissileSpellName = "IreliaEMissile";
             spell.DisplayName = "Flawless Duet (E)";
@@ -1555,7 +1555,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Irelia";
+            spell.ChampionId = SDK::ChampionId::Irelia;
             spell.DangerValue = 3;
             spell.MissileSpellName = "IreliaR";
             spell.DisplayName = "Vanguard's Edge (R)";
@@ -1574,7 +1574,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ivern";
+            spell.ChampionId = SDK::ChampionId::Ivern;
             spell.DangerValue = 3;
             spell.MissileSpellName = "IvernQ";
             spell.DisplayName = "Rootcaller (Q)";
@@ -1598,7 +1598,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Janna";
+            spell.ChampionId = SDK::ChampionId::Janna;
             spell.DangerValue = 2;
             spell.MissileSpellName = "HowlingGaleSpell";
             spell.DisplayName = "Howling Gale (Q)";
@@ -1617,7 +1617,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "JarvanIV";
+            spell.ChampionId = SDK::ChampionId::JarvanIV;
             spell.DangerValue = 2;
             spell.DisplayName = "Dragon Strike (Q)";
             spell.Radius = 70.0f;
@@ -1634,7 +1634,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Jayce";
+            spell.ChampionId = SDK::ChampionId::Jayce;
             spell.DangerValue = 2;
             spell.MissileSpellName = "JayceShockBlastMis";
             spell.DisplayName = "Shock Blast (Q Thường)";
@@ -1656,7 +1656,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Jayce";
+            spell.ChampionId = SDK::ChampionId::Jayce;
             spell.DangerValue = 3;
             spell.MissileSpellName = "JayceShockBlastWallMis";
             spell.DisplayName = "Shock Blast (Q Gia Tốc Cổng E)";
@@ -1681,7 +1681,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Jhin";
+            spell.ChampionId = SDK::ChampionId::Jhin;
             spell.DangerValue = 2;
             spell.MissileSpellName = "JhinWMissile";
             spell.DisplayName = "Deadly Flourish (W)";
@@ -1701,7 +1701,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Jhin";
+            spell.ChampionId = SDK::ChampionId::Jhin;
             spell.DangerValue = 3;
             spell.MissileSpellName = "JhinRShotMis";
             spell.DisplayName = "Curtain Call (R)";
@@ -1721,7 +1721,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Jinx";
+            spell.ChampionId = SDK::ChampionId::Jinx;
             spell.DangerValue = 2;
             spell.MissileSpellName = "JinxWMissile";
             spell.DisplayName = "Zap! (W)";
@@ -1738,7 +1738,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Jinx";
+            spell.ChampionId = SDK::ChampionId::Jinx;
             spell.DangerValue = 3;
             spell.MissileSpellName = "JinxR";
             spell.DisplayName = "Super Mega Death Rocket! (R)";
@@ -1766,7 +1766,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kaisa";
+            spell.ChampionId = SDK::ChampionId::Kaisa;
             spell.DangerValue = 2;
             spell.MissileSpellName = "KaisaWMissile";
             spell.DisplayName = "Void Seeker (W)";
@@ -1786,7 +1786,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Karma";
+            spell.ChampionId = SDK::ChampionId::Karma;
             spell.DangerValue = 2;
             spell.MissileSpellName = "KarmaQMissile";
             spell.DisplayName = "Inner Flame (Q)";
@@ -1806,7 +1806,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Karma";
+            spell.ChampionId = SDK::ChampionId::Karma;
             spell.DangerValue = 3;
             spell.MissileSpellName = "KarmaQMissileMantra";
             spell.DisplayName = "Inner Flame (Mantra Q)";
@@ -1828,7 +1828,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Karthus";
+            spell.ChampionId = SDK::ChampionId::Karthus;
             spell.DangerValue = 1;
             spell.DisplayName = "Lay Waste (Q)";
             spell.Radius = 160.0f;
@@ -1845,7 +1845,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kassadin";
+            spell.ChampionId = SDK::ChampionId::Kassadin;
             spell.DangerValue = 2;
             spell.DisplayName = "Force Pulse (E)";
             spell.Range = 600.0f;
@@ -1862,7 +1862,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kayle";
+            spell.ChampionId = SDK::ChampionId::Kayle;
             spell.DangerValue = 1;
             spell.MissileSpellName = "KayleQMis";
             spell.DisplayName = "Radiant Blast (Q)";
@@ -1896,7 +1896,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kayn";
+            spell.ChampionId = SDK::ChampionId::Kayn;
             spell.DangerValue = 2;
             spell.DisplayName = "Blade's Reach (W - Thường)";
             spell.Radius = 90.0f;
@@ -1910,7 +1910,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Kayn";
+            spell.ChampionId = SDK::ChampionId::Kayn;
             spell.DangerValue = 3;
             spell.DisplayName = "Blade's Reach (W - Darkin)";
             spell.Radius = 90.0f;
@@ -1927,7 +1927,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kennen";
+            spell.ChampionId = SDK::ChampionId::Kennen;
             spell.DangerValue = 1;
             spell.MissileSpellName = "KennenShurikenHurlMissile";
             spell.DisplayName = "Thundering Shuriken (Q)";
@@ -1947,7 +1947,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Khazix";
+            spell.ChampionId = SDK::ChampionId::KhaZix;
             spell.DangerValue = 1;
             spell.MissileSpellName = "KhazixWMissile";
             spell.DisplayName = "Void Spike (W)";
@@ -1970,7 +1970,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Kled";
+            spell.ChampionId = SDK::ChampionId::Kled;
             spell.DangerValue = 2;
             spell.MissileSpellName = "KledQMissile";
             spell.DisplayName = "Beartrap on a Rope (Q)";
@@ -1992,7 +1992,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "KogMaw";
+            spell.ChampionId = SDK::ChampionId::KogMaw;
             spell.DangerValue = 1;
             spell.MissileSpellName = "KogMawQVMissile";
             spell.DisplayName = "Caustic Spittle (Q)";
@@ -2009,7 +2009,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "KogMaw";
+            spell.ChampionId = SDK::ChampionId::KogMaw;
             spell.DangerValue = 2;
             spell.MissileSpellName = "KogMawVoidOozeMissile";
             spell.DisplayName = "Void Ooze (E)";
@@ -2025,7 +2025,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "KogMaw";
+            spell.ChampionId = SDK::ChampionId::KogMaw;
             spell.DangerValue = 2;
             spell.DisplayName = "Living Artillery (R)";
             spell.Radius = 240.0f;
@@ -2042,7 +2042,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "KSante";
+            spell.ChampionId = SDK::ChampionId::KSante;
             spell.DangerValue = 2;
             spell.DisplayName = "Ntofo Strikes (Q3)";
             spell.MissileSpeed = 1400.0f;
@@ -2064,7 +2064,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Leblanc";
+            spell.ChampionId = SDK::ChampionId::Leblanc;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LeblancEMissile";
             spell.DisplayName = "Ethereal Chains (E)";
@@ -2081,7 +2081,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Leblanc";
+            spell.ChampionId = SDK::ChampionId::Leblanc;
             spell.DangerValue = 3;
             spell.MissileSpellName = "LeblancREMissile";
             spell.DisplayName = "Ethereal Chains (Mô Phỏng RE)";
@@ -2101,7 +2101,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "LeeSin";
+            spell.ChampionId = SDK::ChampionId::LeeSin;
             spell.DangerValue = 2;
             spell.MissileSpellName = "BlindMonkQOne";
             spell.DisplayName = "Sonic Wave (Q1)";
@@ -2121,7 +2121,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Leona";
+            spell.ChampionId = SDK::ChampionId::Leona;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LeonaZenithBladeMissile";
             spell.DisplayName = "Zenith Blade (E)";
@@ -2137,7 +2137,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Leona";
+            spell.ChampionId = SDK::ChampionId::Leona;
             spell.DangerValue = 4;
             spell.DisplayName = "Solar Flare (R)";
             spell.Radius = 320.0f; // Toàn vùng ảnh hưởng, trung tâm choáng rìa làm chậm
@@ -2154,7 +2154,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Lillia";
+            spell.ChampionId = SDK::ChampionId::Lillia;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LilliaE";
             spell.DisplayName = "Swirlseed (E Initial Lob)";
@@ -2172,7 +2172,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Lillia";
+            spell.ChampionId = SDK::ChampionId::Lillia;
             spell.DangerValue = 3;
             spell.MissileSpellName = "LilliaERollingMissile";
             spell.DisplayName = "Swirlseed (E Rolling)";
@@ -2202,7 +2202,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Lissandra";
+            spell.ChampionId = SDK::ChampionId::Lissandra;
             spell.DangerValue = 1;
             spell.MissileSpellName = "LissandraQMissile";
             spell.DisplayName = "Ice Shard (Q)";
@@ -2225,7 +2225,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Lissandra";
+            spell.ChampionId = SDK::ChampionId::Lissandra;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LissandraEMissile";
             spell.DisplayName = "Glacial Path (E)";
@@ -2243,7 +2243,7 @@ public:
 	// ===
         {
             SpellData spell;
-            spell.CharacterName = "Locke";
+            spell.ChampionId = SDK::ChampionId::Locke;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LockeQNailMissile"; // Tên missile đinh hồn bay ra
             spell.DisplayName = "Ritual Nails (Q)";
@@ -2260,7 +2260,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Locke";
+            spell.ChampionId = SDK::ChampionId::Locke;
             spell.DangerValue = 5; // Độ nguy hiểm tối đa do cơ chế Execute (kết liễu) lập tức dưới ngưỡng máu
             spell.MissileSpellName = "LockeRArtifact";
             spell.DisplayName = "Purgatory (R)";
@@ -2279,7 +2279,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Lucian";
+            spell.ChampionId = SDK::ChampionId::Lucian;
             spell.DangerValue = 2;
             spell.DisplayName = "Piercing Light (Q)";
             spell.Radius = 65.0f;
@@ -2294,7 +2294,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Lucian";
+            spell.ChampionId = SDK::ChampionId::Lucian;
             spell.DangerValue = 1;
             spell.MissileSpellName = "LucianWMissile";
             spell.DisplayName = "Ardent Blaze (W)";
@@ -2313,7 +2313,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Lulu";
+            spell.ChampionId = SDK::ChampionId::Lulu;
             spell.DangerValue = 1;
             spell.MissileSpellName = "LuluQMissile";
             spell.DisplayName = "Glitterlance (Q)";
@@ -2332,7 +2332,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Lux";
+            spell.ChampionId = SDK::ChampionId::Lux;
             spell.DangerValue = 3;
             // Track the functional missile. The dummy VFX missile is destroyed
             // on the first target and must never truncate the real two-hit Q.
@@ -2354,7 +2354,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Lux";
+            spell.ChampionId = SDK::ChampionId::Lux;
             spell.DangerValue = 2;
             spell.MissileSpellName = "LuxLightStrikeKugel";
             spell.DisplayName = "Lucent Singularity (E)";
@@ -2370,7 +2370,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Lux";
+            spell.ChampionId = SDK::ChampionId::Lux;
             spell.DangerValue = 4;
             spell.DisplayName = "Final Spark (R)";
             spell.Radius = 100.0f;
@@ -2390,7 +2390,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Malphite";
+            spell.ChampionId = SDK::ChampionId::Malphite;
             spell.DangerValue = 5; // Độ nguy hiểm tối đa vì đây là chiêu mở giao tranh cực mạnh
             spell.MissileSpellName = "MalphiteR";
             spell.DisplayName = "Unstoppable Force (R)";
@@ -2409,7 +2409,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Malzahar";
+            spell.ChampionId = SDK::ChampionId::Malzahar;
             spell.DangerValue = 2;
             spell.DisplayName = "Call of the Void (Q)";
             spell.Radius = 85.0f; // Độ rộng của hai cổng không gian nổ song song
@@ -2426,7 +2426,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Maokai";
+            spell.ChampionId = SDK::ChampionId::Maokai;
             spell.DangerValue = 2;
             spell.MissileSpellName = "MaokaiQMissile";
             spell.DisplayName = "Bramble Smash (Q)";
@@ -2442,7 +2442,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Maokai";
+            spell.ChampionId = SDK::ChampionId::Maokai;
             spell.DangerValue = 4;
             spell.DisplayName = "Nature's Grasp (R)";
             spell.MissileSpeed = 500.0f; // Bắt đầu chậm (50f) tăng tiến dần lên 850f theo khoảng cách bay
@@ -2460,7 +2460,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Milio";
+            spell.ChampionId = SDK::ChampionId::Milio;
             spell.DangerValue = 2;
             spell.MissileSpellName = "MilioQMissile";
             spell.DisplayName = "Ultra Mega Firekick (Q)";
@@ -2492,7 +2492,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Morgana";
+            spell.ChampionId = SDK::ChampionId::Morgana;
             spell.DangerValue = 4; // Nguy hiểm cao do thời gian trói chân kỷ lục (tối đa 3 giây)
             spell.MissileSpellName = "DarkBindingMissile";
             spell.DisplayName = "Dark Binding (Q)";
@@ -2518,7 +2518,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Nami";
+            spell.ChampionId = SDK::ChampionId::Nami;
             spell.DangerValue = 3;
             spell.DisplayName = "Aqua Prison (Q)";
             spell.Radius = 162.5f;
@@ -2532,7 +2532,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Nami";
+            spell.ChampionId = SDK::ChampionId::Nami;
             spell.DangerValue = 4;
             spell.MissileSpellName = "NamiRMissile";
             spell.DisplayName = "Tidal Wave (R)";
@@ -2551,7 +2551,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Nautilus";
+            spell.ChampionId = SDK::ChampionId::Nautilus;
             spell.DangerValue = 4;
             spell.MissileSpellName = "NautilusAnchorDragMissile";
             spell.DisplayName = "Dredge Line (Q)";
@@ -2574,7 +2574,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Neeko";
+            spell.ChampionId = SDK::ChampionId::Neeko;
             spell.DangerValue = 2;
             spell.MissileSpellName = "NeekoQMissile";
             spell.DisplayName = "Blooming Burst (Q)";
@@ -2590,7 +2590,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Neeko";
+            spell.ChampionId = SDK::ChampionId::Neeko;
             spell.DangerValue = 3;
             spell.MissileSpellName = "NeekoEMissile";
             spell.DisplayName = "Tangle-Barbs (E)";
@@ -2609,7 +2609,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Nidalee";
+            spell.ChampionId = SDK::ChampionId::Nidalee;
             spell.DangerValue = 3; // Sát thương cực cao nếu trúng từ xa
             spell.MissileSpellName = "JavelinToss";
             spell.DisplayName = "Javelin Toss (Q Người)";
@@ -2629,7 +2629,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Nilah";
+            spell.ChampionId = SDK::ChampionId::Nilah;
             spell.DangerValue = 1;
             spell.DisplayName = "Formless Blade (Q)";
             spell.Radius = 75.0f;
@@ -2646,7 +2646,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Nocturne";
+            spell.ChampionId = SDK::ChampionId::Nocturne;
             spell.DangerValue = 2;
             spell.MissileSpellName = "NocturneDuskbringerAura";
             spell.DisplayName = "Duskbringer (Q)";
@@ -2669,7 +2669,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Olaf";
+            spell.ChampionId = SDK::ChampionId::Olaf;
             spell.DangerValue = 2;
             spell.MissileSpellName = "OlafAxeThrowCast";
             spell.DisplayName = "Undertow (Q)";
@@ -2688,7 +2688,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Ornn";
+            spell.ChampionId = SDK::ChampionId::Ornn;
             spell.DangerValue = 4;
             spell.DisplayName = "Searing Charge (E)";
             spell.MissileSpeed = 1600.0f;
@@ -2708,7 +2708,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Orianna";
+            spell.ChampionId = SDK::ChampionId::Orianna;
             spell.DangerValue = 2;
             spell.MissileSpellName = "TheBall"; // Quả cầu nội tại di chuyển
             spell.DisplayName = "Command: Attack (Q)";
@@ -2732,7 +2732,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Pantheon";
+            spell.ChampionId = SDK::ChampionId::Pantheon;
             spell.DangerValue = 2;
             spell.MissileSpellName = "PantheonQMissile";
             spell.DisplayName = "Comet Spear (Q Phóng)";
@@ -2751,7 +2751,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Poppy";
+            spell.ChampionId = SDK::ChampionId::Poppy;
             spell.DangerValue = 2;
             spell.DisplayName = "Hammer Shock (Q)";
             spell.Radius = 100.0f;
@@ -2765,7 +2765,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Poppy";
+            spell.ChampionId = SDK::ChampionId::Poppy;
             spell.DangerValue = 4;
             spell.MissileSpellName = "PoppyRMissile";
             spell.DisplayName = "Keeper's Verdict (R Vận Sức)";
@@ -2792,7 +2792,7 @@ public:
         // ===
         {
             SpellData spell;
-            spell.CharacterName = "Pyke";
+            spell.ChampionId = SDK::ChampionId::Pyke;
             spell.DangerValue = 3;
             spell.MissileSpellName = "PykeQMissile";
             spell.DisplayName = "Bone Skewer (Q Kéo)";
@@ -2809,7 +2809,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Pyke";
+            spell.ChampionId = SDK::ChampionId::Pyke;
             spell.DangerValue = 3;
             spell.DisplayName = "Phantom Undertow (E)";
             spell.Radius = 110.0f;
@@ -2824,7 +2824,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Pyke";
+            spell.ChampionId = SDK::ChampionId::Pyke;
             spell.DangerValue = 5; // Chiêu cuối hồi lại ngay lập tức và chia tiền, mức cảnh báo cao nhất
             spell.DisplayName = "Death From Below (R)";
             spell.Radius = 160.0f; // Bán kính vùng tâm chữ X kết liễu
@@ -2843,7 +2843,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "Quinn";
+            spell.ChampionId = SDK::ChampionId::Quinn;
             spell.DangerValue = 2;
             spell.MissileSpellName = "QuinnQMissile";
             spell.DisplayName = "Blinding Assault (Q)";
@@ -2864,7 +2864,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "Rakan";
+            spell.ChampionId = SDK::ChampionId::Rakan;
             spell.DangerValue = 3;
             spell.DisplayName = "Grand Entrance (W)";
             spell.Radius = 250.0f;
@@ -2878,7 +2878,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Rell";
+            spell.ChampionId = SDK::ChampionId::Rell;
             spell.DangerValue = 3;
             spell.DisplayName = "Shatterstrike (Q)";
             spell.Radius = 90.0f;
@@ -2892,7 +2892,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Rengar";
+            spell.ChampionId = SDK::ChampionId::Rengar;
             spell.DangerValue = 3;
             spell.MissileSpellName = "RengarEFinal";
             spell.DisplayName = "Bola Strike (E)";
@@ -2909,7 +2909,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Riven";
+            spell.ChampionId = SDK::ChampionId::Riven;
             spell.DangerValue = 4;
             spell.MissileSpellName = "RivenWindSlashMissile";
             spell.DisplayName = "Wind Slash (R2)";
@@ -2924,7 +2924,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Rumble";
+            spell.ChampionId = SDK::ChampionId::Rumble;
             spell.DangerValue = 3;
             spell.MissileSpellName = "RumbleGrenadeMissile";
             spell.DisplayName = "Electro Harpoon (E)";
@@ -2941,7 +2941,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ryze";
+            spell.ChampionId = SDK::ChampionId::Ryze;
             spell.DangerValue = 2;
             spell.MissileSpellName = "RyzeQW";
             spell.DisplayName = "Overload (Q)";
@@ -2961,7 +2961,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "Samira";
+            spell.ChampionId = SDK::ChampionId::Samira;
             spell.DangerValue = 2;
             spell.MissileSpellName = "SamiraQGun";
             spell.DisplayName = "Flair (Q Shot / E-Q Explosives)";
@@ -2982,7 +2982,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Samira";
+            spell.ChampionId = SDK::ChampionId::Samira;
             spell.DangerValue = 2;
             spell.DisplayName = "Flair (Q Sword Cone)";
             spell.Radius = 65.0f;
@@ -2998,7 +2998,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Samira";
+            spell.ChampionId = SDK::ChampionId::Samira;
             spell.DangerValue = 2;
             spell.DisplayName = "Wild Rush (E Path)";
             spell.MissileSpeed = 1600.0f;
@@ -3013,7 +3013,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Sejuani";
+            spell.ChampionId = SDK::ChampionId::Sejuani;
             spell.DangerValue = 4;
             spell.MissileSpellName = "SejuaniRMissile";
             spell.DisplayName = "Glacial Prison (R)";
@@ -3036,7 +3036,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Senna";
+            spell.ChampionId = SDK::ChampionId::Senna;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SennaWMissile";
             spell.DisplayName = "Last Embrace (W)";
@@ -3060,7 +3060,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Seraphine";
+            spell.ChampionId = SDK::ChampionId::Seraphine;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SeraphineEIsotopeMissile";
             spell.DisplayName = "Beat Drop (E)";
@@ -3076,7 +3076,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Seraphine";
+            spell.ChampionId = SDK::ChampionId::Seraphine;
             spell.DangerValue = 5;
             spell.MissileSpellName = "SeraphineRMissile";
             spell.DisplayName = "Encore (R)";
@@ -3092,7 +3092,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Shaco";
+            spell.ChampionId = SDK::ChampionId::Shaco;
             spell.DangerValue = 2;
             spell.DisplayName = "Jack In The Box (W)";
             spell.Radius = 175.0f;
@@ -3106,7 +3106,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Shen";
+            spell.ChampionId = SDK::ChampionId::Shen;
             spell.DangerValue = 3;
             spell.DisplayName = "Shadow Dash (E)";
             spell.MissileSpeed = 1200.0f; // Tốc độ lướt của Shen
@@ -3121,7 +3121,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Shyvana";
+            spell.ChampionId = SDK::ChampionId::Shyvana;
             spell.DangerValue = 3;
             spell.MissileSpellName = "ShyvanaTransformLeapNoData"; // Dạng rồng quăng E lửa lớn
             spell.DisplayName = "Flame Breath (E - Dragon Form)";
@@ -3136,7 +3136,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Sion";
+            spell.ChampionId = SDK::ChampionId::Sion;
             spell.DangerValue = 2;
             spell.MissileSpellName = "SionEMissile";
             spell.DisplayName = "Roar of the Slayer (E)";
@@ -3152,7 +3152,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Sivir";
+            spell.ChampionId = SDK::ChampionId::Sivir;
             spell.DangerValue = 2;
             spell.MissileSpellName = "SivirQMissile";
             spell.DisplayName = "Boomerang Blade (Q)";
@@ -3167,7 +3167,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Skarner";
+            spell.ChampionId = SDK::ChampionId::Skarner;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SkarnerEIsotopeMissile";
             spell.DisplayName = "Ixtal's Impact (E)";
@@ -3183,7 +3183,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Sona";
+            spell.ChampionId = SDK::ChampionId::Sona;
             spell.DangerValue = 5;
             spell.MissileSpellName = "SonaRMissile";
             spell.DisplayName = "Crescendo (R)";
@@ -3199,7 +3199,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Soraka";
+            spell.ChampionId = SDK::ChampionId::Soraka;
             spell.DangerValue = 2;
             spell.MissileSpellName = "SorakaQMissile";
             spell.DisplayName = "Starcall (Q)";
@@ -3214,7 +3214,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Soraka";
+            spell.ChampionId = SDK::ChampionId::Soraka;
             spell.DangerValue = 3;
             spell.DisplayName = "Equinox (E)";
             spell.Radius = 250.0f;
@@ -3228,7 +3228,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Swain";
+            spell.ChampionId = SDK::ChampionId::Swain;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SwainEMissile";
             spell.DisplayName = "Nevermove (E)";
@@ -3244,7 +3244,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Sylas";
+            spell.ChampionId = SDK::ChampionId::Sylas;
             spell.DangerValue = 3;
             spell.MissileSpellName = "SylasEMissile";
             spell.DisplayName = "Abduct (E2)";
@@ -3263,7 +3263,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Syndra";
+            spell.ChampionId = SDK::ChampionId::Syndra;
             spell.DangerValue = 2;
             spell.DisplayName = "Dark Sphere (Q)";
             spell.Radius = 180.0f;
@@ -3280,7 +3280,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "TahmKench";
+            spell.ChampionId = SDK::ChampionId::TahmKench;
             spell.DangerValue = 2;
             spell.MissileSpellName = "TahmKenchQMissile";
             spell.DisplayName = "Tongue Lash (Q)";
@@ -3297,7 +3297,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Taliyah";
+            spell.ChampionId = SDK::ChampionId::Taliyah;
             spell.DangerValue = 3;
             spell.DisplayName = "Seismic Shove (W)";
             spell.Radius = 150.0f;
@@ -3311,7 +3311,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Talon";
+            spell.ChampionId = SDK::ChampionId::Talon;
             spell.DangerValue = 2;
             spell.MissileSpellName = "TalonWBlades";
             spell.DisplayName = "Rake (W)";
@@ -3327,7 +3327,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Teemo";
+            spell.ChampionId = SDK::ChampionId::Teemo;
             spell.DangerValue = 3;
             spell.MissileSpellName = "TeemoRShroom"; // Trường hợp Teemo quăng nấm bay xa nâng cấp cấp R
             spell.DisplayName = "Noxious Trap (R)";
@@ -3343,7 +3343,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Thresh";
+            spell.ChampionId = SDK::ChampionId::Thresh;
             spell.DangerValue = 4;
             spell.MissileSpellName = "ThreshQMissile";
             spell.DisplayName = "Death Sentence (Q)";
@@ -3360,7 +3360,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Tristana";
+            spell.ChampionId = SDK::ChampionId::Tristana;
             spell.DangerValue = 2;
             spell.DisplayName = "Rocket Jump (W)";
             spell.MissileSpeed = 1100.0f;
@@ -3375,7 +3375,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Trundle";
+            spell.ChampionId = SDK::ChampionId::Trundle;
             spell.DangerValue = 3;
             spell.DisplayName = "Pillar of Ice (E)";
             spell.Radius = 130.0f; // Kích thước vật thể cột băng cản địa hình
@@ -3394,7 +3394,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "Urgot";
+            spell.ChampionId = SDK::ChampionId::Urgot;
             spell.DangerValue = 3;
             spell.MissileSpellName = "UrgotQMissile";
             spell.DisplayName = "Corrosive Charge (Q)";
@@ -3409,7 +3409,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Urgot";
+            spell.ChampionId = SDK::ChampionId::Urgot;
             spell.DangerValue = 5; // Độ nguy hiểm tối đa (Kết liễu mục tiêu thấp máu)
             spell.MissileSpellName = "UrgotRMissile";
             spell.DisplayName = "Fear Beyond Death (R)";
@@ -3425,7 +3425,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Varus";
+            spell.ChampionId = SDK::ChampionId::Varus;
             spell.DangerValue = 2;
             spell.MissileSpellName = "VarusQMissile";
             spell.DisplayName = "Piercing Arrow (Q)";
@@ -3440,7 +3440,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Varus";
+            spell.ChampionId = SDK::ChampionId::Varus;
             spell.DangerValue = 4;
             spell.MissileSpellName = "VarusRMissile";
             spell.DisplayName = "Chain of Corruption (R)";
@@ -3458,7 +3458,7 @@ public:
         // Vayne E (Condemn) — REMOVED: Targeted/point-and-click spell, cannot be dodged
         {
             SpellData spell;
-            spell.CharacterName = "Veigar";
+            spell.ChampionId = SDK::ChampionId::Veigar;
             spell.DangerValue = 2;
             spell.DisplayName = "Baleful Strike (Q)";
             spell.MissileSpeed = 2200.0f;
@@ -3477,7 +3477,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Veigar";
+            spell.ChampionId = SDK::ChampionId::Veigar;
             spell.DangerValue = 3;
             spell.DisplayName = "Dark Matter (W)";
             spell.Radius = 240.0f;
@@ -3490,7 +3490,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "VelKoz";
+            spell.ChampionId = SDK::ChampionId::Velkoz;
             spell.DangerValue = 3;
             spell.MissileSpellName = "VelkozQMissile";
             spell.DisplayName = "Plasma Fission (Q)";
@@ -3507,7 +3507,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "VelKoz";
+            spell.ChampionId = SDK::ChampionId::Velkoz;
             spell.DangerValue = 3;
             spell.MissileSpellName = "VelkozQMissileSplit";
             spell.DisplayName = "Plasma Fission (Q Split)";
@@ -3529,7 +3529,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Vex";
+            spell.ChampionId = SDK::ChampionId::Vex;
             spell.DangerValue = 2;
             spell.DisplayName = "Mistral Pace (Q)";
             spell.MissileSpeed = 1200.0f;
@@ -3543,7 +3543,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Vex";
+            spell.ChampionId = SDK::ChampionId::Vex;
             spell.DangerValue = 3;
             spell.MissileSpellName = "VexE";
             spell.DisplayName = "Mistral Bolt (E)";
@@ -3559,7 +3559,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Viktor";
+            spell.ChampionId = SDK::ChampionId::Viktor;
             spell.DangerValue = 2;
             spell.DisplayName = "Death Ray (E)";
             spell.MissileSpeed = 1050.0f;
@@ -3573,7 +3573,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Vladimir";
+            spell.ChampionId = SDK::ChampionId::Vladimir;
             spell.DangerValue = 2;
             spell.DisplayName = "Tides of Blood (E)";
             spell.MissileSpeed = 4000.0f; // Máu bắn ra xung quanh siêu tốc
@@ -3592,7 +3592,7 @@ public:
         // ==========================================
         {
             SpellData spell;
-            spell.CharacterName = "Xayah";
+            spell.ChampionId = SDK::ChampionId::Xayah;
             spell.DangerValue = 2;
             spell.MissileSpellName = "XayahQMissile1";
             spell.DisplayName = "Double Daggers (Q)";
@@ -3607,7 +3607,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Xerath";
+            spell.ChampionId = SDK::ChampionId::Xerath;
             spell.DangerValue = 3;
             spell.DisplayName = "Arcanopulse (Q)";
             spell.Radius = 70.0f;
@@ -3620,7 +3620,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Xerath";
+            spell.ChampionId = SDK::ChampionId::Xerath;
             spell.DangerValue = 3;
             spell.MissileSpellName = "XerathArcaneBarrageFive"; // Phát bắn chiêu cuối
             spell.DisplayName = "Rite of the Arcane (R)";
@@ -3634,7 +3634,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Yasuo";
+            spell.ChampionId = SDK::ChampionId::Yasuo;
             spell.DangerValue = 3;
             spell.MissileSpellName = "YasuoQ3Mis"; // Lốc xoáy
             spell.DisplayName = "Steel Tempest (Q3)";
@@ -3650,7 +3650,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Yone";
+            spell.ChampionId = SDK::ChampionId::Yone;
             spell.DangerValue = 3;
             spell.MissileSpellName = "YoneQ3Mis"; // Lốc xoáy kèm lướt của Yone
             spell.DisplayName = "Mortal Steel (Q3)";
@@ -3666,7 +3666,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Yone";
+            spell.ChampionId = SDK::ChampionId::Yone;
             spell.DangerValue = 5;
             spell.DisplayName = "Fate Sealed (R)";
             spell.Radius = 112.5f; // Bề rộng của dải đường quét chiêu cuối
@@ -3680,7 +3680,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Zeri";
+            spell.ChampionId = SDK::ChampionId::Zeri;
             spell.DangerValue = 1;
             spell.MissileSpellName = "ZeriQMis";
             spell.DisplayName = "Burst Fire (Q)";
@@ -3696,7 +3696,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ziggs";
+            spell.ChampionId = SDK::ChampionId::Ziggs;
             spell.DangerValue = 2;
             spell.MissileSpellName = "ZiggsQSpell";
             spell.DisplayName = "Bouncing Bomb (Q - First Landing)";
@@ -3712,7 +3712,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ziggs";
+            spell.ChampionId = SDK::ChampionId::Ziggs;
             spell.DangerValue = 2;
             spell.MissileSpellName = "ZiggsQSpell2";
             spell.DisplayName = "Bouncing Bomb (Q - Bounce 1)";
@@ -3729,7 +3729,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Ziggs";
+            spell.ChampionId = SDK::ChampionId::Ziggs;
             spell.DangerValue = 2;
             spell.MissileSpellName = "ZiggsQSpell3";
             spell.DisplayName = "Bouncing Bomb (Q - Bounce 2)";
@@ -3746,7 +3746,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Zoe";
+            spell.ChampionId = SDK::ChampionId::Zoe;
             spell.DangerValue = 3;
             spell.MissileSpellName = "ZoeEMis";
             spell.DisplayName = "Sleepy Trouble Bubble (E)";
@@ -3763,7 +3763,7 @@ public:
         }
         {
             SpellData spell;
-            spell.CharacterName = "Zyra";
+            spell.ChampionId = SDK::ChampionId::Zyra;
             spell.DangerValue = 3;
             spell.MissileSpellName = "ZyraEIsotope";
             spell.DisplayName = "Grasping Roots (E)";

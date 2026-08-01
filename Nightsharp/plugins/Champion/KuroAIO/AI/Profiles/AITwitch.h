@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Twitch = [] {
     ChampionProfile p{};
-    p.ChampionName = "Twitch";
+    p.ChampionId = SDK::ChampionId::Twitch;
     p.DisplayName = "Twitch";
     p.InternalId = "champion.kuroaio.ai.twitch";
     p.PrimaryArchetype = Archetype::Marksman;

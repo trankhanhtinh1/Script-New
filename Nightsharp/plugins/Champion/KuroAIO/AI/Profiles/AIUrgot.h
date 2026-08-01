@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Urgot = [] {
     ChampionProfile p{};
-    p.ChampionName = "Urgot";
+    p.ChampionId = SDK::ChampionId::Urgot;
     p.DisplayName = "Urgot";
     p.InternalId = "champion.kuroaio.ai.urgot";
     p.PrimaryArchetype = Archetype::Juggernaut;

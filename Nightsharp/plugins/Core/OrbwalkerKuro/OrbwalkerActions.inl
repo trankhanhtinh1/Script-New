@@ -220,7 +220,8 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
         ClearDoCastMoveGate();
     }
     // Akshan Passive 2-Hit Double Shot movement gate
-    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Akshan") == 0) {
+    if (player.IsValid() &&
+        SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Akshan) {
         const int passiveMode = menu_.AkshanPassiveMode(); // 0 = Always 2-Hit, 1 = Always 1-Hit, 2 = Smart
         if (context_.isAkshanSecondShotPending) {
             const int elapsed = now - context_.pendingAkshanSecondShotTick;
@@ -462,7 +463,7 @@ inline float OrbwalkerBase::AttackPingLeadMs() const {
 }
 
 inline float OrbwalkerBase::ChampionExtraAttackDelayMs(const AIHeroClient& player) const {
-    if (_stricmp(player.CharacterName().c_str(), "Graves") == 0) {
+    if (SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Graves) {
         return (context_.attackDelayMs * 1.0740296828f) - 716.2381256175f - context_.attackDelayMs;
     }
     return 0.0f;
@@ -490,15 +491,17 @@ inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& 
 }
 
 inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
-    if (_stricmp(player.CharacterName().c_str(), "Graves") == 0 &&
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (championId == SDK::ChampionId::Graves &&
         !player.HasBuff("gravesbasicattackammo1")) {
         return false;
     }
-    if (_stricmp(player.CharacterName().c_str(), "Jhin") == 0 &&
+    if (championId == SDK::ChampionId::Jhin &&
         player.HasBuff("JhinPassiveReload")) {
         return false;
     }
-    if (_stricmp(player.CharacterName().c_str(), "Aphelios") == 0 &&
+    if (championId == SDK::ChampionId::Aphelios &&
         (player.HasBuff("ApheliosSeverumQ") || player.HasBuff("apheliospreload"))) {
         return false;
     }
@@ -517,7 +520,9 @@ inline float OrbwalkerBase::AttackSafetyMs() const {
 
 inline float OrbwalkerBase::MoveSafetyMs() const {
     const auto player = GameObjects::Player();
-    if (player.IsValid() && _stricmp(player.CharacterName().c_str(), "Rengar") == 0) {
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (player.IsValid() && championId == SDK::ChampionId::Rengar) {
         if (player.HasBuff("RengarQ") ||
             player.HasBuff("RengarQEmp") ||
             player.HasBuff("rengarqbase") ||

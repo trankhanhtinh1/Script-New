@@ -43,7 +43,7 @@
     <Filter Include="Plugins\Champion\KuroAIO\AI">
       <UniqueIdentifier>{A9C3967C-7F07-0AA1-DA11-DC66C2FB95F6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Plugins\Champion\KuroAIO\AI\Controllers">
+    <Filter Include="Plugins\Champion\KuroAIO\AI\Champions">
       <UniqueIdentifier>{191FB8A9-A5B7-1158-92D8-77F08F81C0A6}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\Champion\KuroAIO\AI\Profiles">
@@ -580,965 +580,965 @@
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\AIMarksmanTargeting.h">
       <Filter>Plugins\Champion\KuroAIO\AI</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAatroxController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aatrox\AIAatroxController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAatroxGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aatrox\AIAatroxGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAhriController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ahri\AIAhriController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAhriGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ahri\AIAhriGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAkaliController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Akali\AIAkaliController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAkaliGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Akali\AIAkaliGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAkshanController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Akshan\AIAkshanController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAkshanGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Akshan\AIAkshanGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAlistarController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Alistar\AIAlistarController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAlistarGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Alistar\AIAlistarGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAmbessaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ambessa\AIAmbessaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAmbessaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ambessa\AIAmbessaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAmumuController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Amumu\AIAmumuController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAmumuGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Amumu\AIAmumuGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAniviaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Anivia\AIAniviaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAniviaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Anivia\AIAniviaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAnnieController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Annie\AIAnnieController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAnnieGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Annie\AIAnnieGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIApheliosController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aphelios\AIApheliosController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIApheliosGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aphelios\AIApheliosGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAsheController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ashe\AIAsheController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAsheGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ashe\AIAsheGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAurelionSolController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\AurelionSol\AIAurelionSolController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAurelionSolGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\AurelionSol\AIAurelionSolGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAuroraController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aurora\AIAuroraController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAuroraGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Aurora\AIAuroraGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAzirController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Azir\AIAzirController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIAzirGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Azir\AIAzirGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBardController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Bard\AIBardController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBardGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Bard\AIBardGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBelvethController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Belveth\AIBelvethController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBelvethGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Belveth\AIBelvethGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBlitzcrankController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Blitzcrank\AIBlitzcrankController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBlitzcrankGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Blitzcrank\AIBlitzcrankGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBrandController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Brand\AIBrandController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBrandGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Brand\AIBrandGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBraumController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Braum\AIBraumController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBraumGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Braum\AIBraumGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBriarController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Briar\AIBriarController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIBriarGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Briar\AIBriarGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICaitlynController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Caitlyn\AICaitlynController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICaitlynGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Caitlyn\AICaitlynGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICamilleController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Camille\AICamilleController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICamilleGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Camille\AICamilleGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICassiopeiaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Cassiopeia\AICassiopeiaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICassiopeiaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Cassiopeia\AICassiopeiaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIChogathController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Chogath\AIChogathController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIChogathGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Chogath\AIChogathGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICorkiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Corki\AICorkiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AICorkiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Corki\AICorkiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDariusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Darius\AIDariusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDariusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Darius\AIDariusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDianaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Diana\AIDianaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDianaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Diana\AIDianaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDravenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Draven\AIDravenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDravenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Draven\AIDravenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDrMundoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\DrMundo\AIDrMundoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIDrMundoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\DrMundo\AIDrMundoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEkkoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ekko\AIEkkoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEkkoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ekko\AIEkkoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEliseController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Elise\AIEliseController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEliseGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Elise\AIEliseGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEvelynnController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Evelynn\AIEvelynnController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEvelynnGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Evelynn\AIEvelynnGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEzrealController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ezreal\AIEzrealController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIEzrealGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ezreal\AIEzrealGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIFiddleSticksController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\FiddleSticks\AIFiddleSticksController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIFiddleSticksGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\FiddleSticks\AIFiddleSticksGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIFizzController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Fizz\AIFizzController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIFizzGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Fizz\AIFizzGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGalioController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Galio\AIGalioController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGalioGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Galio\AIGalioGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGangplankController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gangplank\AIGangplankController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGangplankGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gangplank\AIGangplankGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGarenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Garen\AIGarenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGarenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Garen\AIGarenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGnarController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gnar\AIGnarController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGnarGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gnar\AIGnarGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGragasController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gragas\AIGragasController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGragasGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gragas\AIGragasGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGravesController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Graves\AIGravesController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGravesGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Graves\AIGravesGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGwenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gwen\AIGwenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIGwenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Gwen\AIGwenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHecarimController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Hecarim\AIHecarimController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHecarimGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Hecarim\AIHecarimGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHeimerdingerController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Heimerdinger\AIHeimerdingerController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHeimerdingerGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Heimerdinger\AIHeimerdingerGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHweiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Hwei\AIHweiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIHweiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Hwei\AIHweiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIllaoiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Illaoi\AIIllaoiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIllaoiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Illaoi\AIIllaoiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIreliaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Irelia\AIIreliaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIreliaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Irelia\AIIreliaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIvernController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ivern\AIIvernController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIIvernGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ivern\AIIvernGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJannaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Janna\AIJannaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJannaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Janna\AIJannaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJarvanIVController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\JarvanIV\AIJarvanIVController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJarvanIVGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\JarvanIV\AIJarvanIVGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJaxController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jax\AIJaxController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJaxGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jax\AIJaxGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJayceController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jayce\AIJayceController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJayceGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jayce\AIJayceGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJhinController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jhin\AIJhinController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIJhinGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Jhin\AIJhinGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKaisaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kaisa\AIKaisaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKaisaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kaisa\AIKaisaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKalistaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kalista\AIKalistaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKalistaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kalista\AIKalistaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKarmaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Karma\AIKarmaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKarmaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Karma\AIKarmaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKarthusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Karthus\AIKarthusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKarthusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Karthus\AIKarthusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKassadinController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kassadin\AIKassadinController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKassadinGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kassadin\AIKassadinGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKayleController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kayle\AIKayleController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKayleGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kayle\AIKayleGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKaynController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kayn\AIKaynController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKaynGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kayn\AIKaynGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKennenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kennen\AIKennenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKennenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kennen\AIKennenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKhaZixController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KhaZix\AIKhaZixController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKhaZixGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KhaZix\AIKhaZixGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKledController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kled\AIKledController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKledGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Kled\AIKledGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKogMawController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KogMaw\AIKogMawController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKogMawGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KogMaw\AIKogMawGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKSanteController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KSante\AIKSanteController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIKSanteGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\KSante\AIKSanteGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeblancController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Leblanc\AILeblancController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeblancGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Leblanc\AILeblancGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeeSinController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\LeeSin\AILeeSinController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeeSinGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\LeeSin\AILeeSinGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeonaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Leona\AILeonaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILeonaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Leona\AILeonaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILilliaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lillia\AILilliaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILilliaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lillia\AILilliaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILissandraController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lissandra\AILissandraController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILissandraGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lissandra\AILissandraGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILockeController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Locke\AILockeController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILockeGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Locke\AILockeGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILuluController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lulu\AILuluController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILuluGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lulu\AILuluGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILuxController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lux\AILuxController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AILuxGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Lux\AILuxGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMalphiteController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Malphite\AIMalphiteController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMalphiteGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Malphite\AIMalphiteGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMalzaharController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Malzahar\AIMalzaharController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMalzaharGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Malzahar\AIMalzaharGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMaokaiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Maokai\AIMaokaiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMaokaiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Maokai\AIMaokaiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMasterYiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MasterYi\AIMasterYiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMasterYiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MasterYi\AIMasterYiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMelController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Mel\AIMelController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMelGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Mel\AIMelGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMilioController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Milio\AIMilioController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMilioGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Milio\AIMilioGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMissFortuneController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MissFortune\AIMissFortuneController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMissFortuneGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MissFortune\AIMissFortuneGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMonkeyKingController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MonkeyKing\AIMonkeyKingController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMonkeyKingGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\MonkeyKing\AIMonkeyKingGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMordekaiserController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Mordekaiser\AIMordekaiserController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMordekaiserGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Mordekaiser\AIMordekaiserGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMorganaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Morgana\AIMorganaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIMorganaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Morgana\AIMorganaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINaafiriController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Naafiri\AINaafiriController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINaafiriGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Naafiri\AINaafiriGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINamiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nami\AINamiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINamiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nami\AINamiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINasusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nasus\AINasusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINasusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nasus\AINasusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINautilusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nautilus\AINautilusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINautilusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nautilus\AINautilusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINeekoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Neeko\AINeekoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINeekoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Neeko\AINeekoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINidaleeController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nidalee\AINidaleeController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINidaleeGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nidalee\AINidaleeGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINilahController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nilah\AINilahController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINilahGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nilah\AINilahGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINocturneController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nocturne\AINocturneController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINocturneGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nocturne\AINocturneGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINunuController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nunu\AINunuController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AINunuGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Nunu\AINunuGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOlafController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Olaf\AIOlafController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOlafGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Olaf\AIOlafGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOriannaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Orianna\AIOriannaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOriannaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Orianna\AIOriannaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOrnnController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ornn\AIOrnnController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIOrnnGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ornn\AIOrnnGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPantheonController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Pantheon\AIPantheonController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPantheonGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Pantheon\AIPantheonGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPoppyController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Poppy\AIPoppyController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPoppyGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Poppy\AIPoppyGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPykeController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Pyke\AIPykeController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIPykeGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Pyke\AIPykeGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIQiyanaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Qiyana\AIQiyanaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIQiyanaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Qiyana\AIQiyanaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIQuinnController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Quinn\AIQuinnController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIQuinnGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Quinn\AIQuinnGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRakanController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rakan\AIRakanController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRakanGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rakan\AIRakanGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRammusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rammus\AIRammusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRammusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rammus\AIRammusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRekSaiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\RekSai\AIRekSaiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRekSaiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\RekSai\AIRekSaiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRellController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rell\AIRellController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRellGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rell\AIRellGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRenataGlascController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\RenataGlasc\AIRenataGlascController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRenataGlascGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\RenataGlasc\AIRenataGlascGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRenektonController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Renekton\AIRenektonController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRenektonGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Renekton\AIRenektonGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRivenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Riven\AIRivenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRivenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Riven\AIRivenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRumbleController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rumble\AIRumbleController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRumbleGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Rumble\AIRumbleGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRyzeController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ryze\AIRyzeController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIRyzeGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ryze\AIRyzeGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISejuaniController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sejuani\AISejuaniController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISejuaniGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sejuani\AISejuaniGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISeraphineController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Seraphine\AISeraphineController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISeraphineGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Seraphine\AISeraphineGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISettController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sett\AISettController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISettGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sett\AISettGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShacoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shaco\AIShacoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShacoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shaco\AIShacoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shen\AIShenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shen\AIShenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShyvanaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shyvana\AIShyvanaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIShyvanaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Shyvana\AIShyvanaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISingedController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Singed\AISingedController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISingedGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Singed\AISingedGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISionController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sion\AISionController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISionGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sion\AISionGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISivirController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sivir\AISivirController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISivirGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sivir\AISivirGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISkarnerController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Skarner\AISkarnerController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISkarnerGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Skarner\AISkarnerGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISmolderController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Smolder\AISmolderController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISmolderGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Smolder\AISmolderGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISonaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sona\AISonaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISonaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Sona\AISonaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISorakaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Soraka\AISorakaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISorakaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Soraka\AISorakaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISwainController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Swain\AISwainController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AISwainGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Swain\AISwainGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITahmKenchController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\TahmKench\AITahmKenchController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITahmKenchGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\TahmKench\AITahmKenchGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaliyahController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Taliyah\AITaliyahController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaliyahGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Taliyah\AITaliyahGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITalonController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Talon\AITalonController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITalonGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Talon\AITalonGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaricController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Taric\AITaricController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITaricGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Taric\AITaricGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITeemoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Teemo\AITeemoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITeemoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Teemo\AITeemoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIThreshController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Thresh\AIThreshController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIThreshGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Thresh\AIThreshGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITristanaController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Tristana\AITristanaController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITristanaGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Tristana\AITristanaGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITrundleController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Trundle\AITrundleController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITrundleGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Trundle\AITrundleGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITryndamereController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Tryndamere\AITryndamereController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITryndamereGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Tryndamere\AITryndamereGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITwitchController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Twitch\AITwitchController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AITwitchGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Twitch\AITwitchGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIUdyrController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Udyr\AIUdyrController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIUdyrGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Udyr\AIUdyrGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIUrgotController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Urgot\AIUrgotController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIUrgotGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Urgot\AIUrgotGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVarusController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Varus\AIVarusController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVarusGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Varus\AIVarusGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVayneController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vayne\AIVayneController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVayneGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vayne\AIVayneGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVeigarController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Veigar\AIVeigarController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVeigarGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Veigar\AIVeigarGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVelkozController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Velkoz\AIVelkozController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVelkozGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Velkoz\AIVelkozGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVexController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vex\AIVexController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVexGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vex\AIVexGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIViController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vi\AIViController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIViegoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Viego\AIViegoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIViegoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Viego\AIViegoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIViGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vi\AIViGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVladimirController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vladimir\AIVladimirController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVladimirGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Vladimir\AIVladimirGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVolibearController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Volibear\AIVolibearController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIVolibearGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Volibear\AIVolibearGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIWarwickController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Warwick\AIWarwickController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIWarwickGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Warwick\AIWarwickGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXayahController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Xayah\AIXayahController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXayahGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Xayah\AIXayahGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXerathController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Xerath\AIXerathController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXerathGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Xerath\AIXerathGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXinZhaoController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\XinZhao\AIXinZhaoController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIXinZhaoGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\XinZhao\AIXinZhaoGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYoneController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yone\AIYoneController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYoneGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yone\AIYoneGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYorickController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yorick\AIYorickController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYorickGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yorick\AIYorickGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYunaraController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yunara\AIYunaraController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYunaraGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yunara\AIYunaraGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYuumiController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yuumi\AIYuumiController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIYuumiGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Yuumi\AIYuumiGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZaahenController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zaahen\AIZaahenController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZaahenGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zaahen\AIZaahenGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZacController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zac\AIZacController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZacGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zac\AIZacGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZedController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zed\AIZedController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZedGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zed\AIZedGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZeriController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zeri\AIZeriController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZeriGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zeri\AIZeriGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZiggsController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ziggs\AIZiggsController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZiggsGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Ziggs\AIZiggsGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZileanController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zilean\AIZileanController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZileanGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zilean\AIZileanGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZoeController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zoe\AIZoeController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZoeGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zoe\AIZoeGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZyraController.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zyra\AIZyraController.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Controllers\AIZyraGeometry.h">
-      <Filter>Plugins\Champion\KuroAIO\AI\Controllers</Filter>
+    <ClInclude Include="Plugins\Champion\KuroAIO\AI\Champions\Zyra\AIZyraGeometry.h">
+      <Filter>Plugins\Champion\KuroAIO\AI\Champions</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\KuroAIO\AI\Profiles\AIAatrox.h">
       <Filter>Plugins\Champion\KuroAIO\AI\Profiles</Filter>
@@ -2951,6 +2951,12 @@
       <Filter>SDK\Enumerations</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Enumerations\CenteredFlags.h">
+      <Filter>SDK\Enumerations</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Enumerations\ChampionId.h">
+      <Filter>SDK\Enumerations</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Enumerations\ItemId.h">
       <Filter>SDK\Enumerations</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Enumerations\CollisionableObjects.h">

@@ -9,6 +9,7 @@
 #include "../../../sdk/Core/Game.h"
 #include "../../../sdk/Core/Hud.h"
 #include "../../../sdk/Enumerations/SpellSlot.h"
+#include "../../../sdk/Enumerations/ChampionId.h"
 #include "../../../sdk/Events/Events.h"
 #include "../../../sdk/Events/Dash.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
@@ -198,10 +199,12 @@ inline float GetRealAutoAttackRange(const AIBaseClient& sender, const Attackable
     float result = sender.AttackRange() + sender.BoundingRadius();
     if (target.IsValid() && !target.IsDead()) {
         const AIBaseClient targetBase(target.Handle());
-        if (sender.CharacterName() == "Caitlyn" &&
+        const SDK::ChampionId senderChampionId =
+            SDK::ChampionIdFromName(sender.CharacterName().c_str());
+        if (senderChampionId == SDK::ChampionId::Caitlyn &&
             (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile"))) {
             result = 1300.0f;
-        } else if (sender.CharacterName() == "Aphelios" &&
+        } else if (senderChampionId == SDK::ChampionId::Aphelios &&
                    targetBase.HasBuff("aphelioscalibrumbonusrangedebuff") &&
                    sender.HasBuff("aphelioscalibrumbonusrangebuff")) {
             result = 1800.0f;

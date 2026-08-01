@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Hecarim = [] {
     ChampionProfile p{};
-    p.ChampionName = "Hecarim";
+    p.ChampionId = SDK::ChampionId::Hecarim;
     p.DisplayName = "Hecarim";
     p.InternalId = "champion.kuroaio.ai.hecarim";
     p.PrimaryArchetype = Archetype::Diver;

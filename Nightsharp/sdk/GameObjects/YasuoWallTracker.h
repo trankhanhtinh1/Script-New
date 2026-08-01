@@ -82,10 +82,18 @@ inline std::string ResolveName(
     }
 
     char buffer[128] = {};
+    if (::Core::Objects::ReadCharacterName(
+            address,
+            buffer,
+            static_cast<int>(sizeof(buffer))) &&
+        buffer[0]) {
+        return std::string(buffer);
+    }
     return ::Core::Objects::ReadName(
                address,
                buffer,
-               static_cast<int>(sizeof(buffer)))
+               static_cast<int>(sizeof(buffer))) &&
+           buffer[0]
         ? std::string(buffer)
         : std::string();
 }
@@ -98,6 +106,9 @@ inline void ObserveLocked(
     }
 
     const std::string name = ResolveName(info.Ptr, info.Name);
+    if (name.empty()) {
+        return;
+    }
     const Vec3 position = info.Position.IsValid()
         ? info.Position
         : ::Core::Objects::ReadPosition(info.Ptr);
@@ -109,29 +120,13 @@ inline void ObserveLocked(
         ::Core::Objects::ReadTeam(info.Ptr));
 }
 
-inline bool HasYasuoInGame() {
-    static bool checked = false;
-    static bool hasYasuo = false;
-    if (!checked) {
-        for (const auto& hero : GameObjects::Heroes()) {
-            if (hero.IsValid() && _stricmp(hero.CharacterName().c_str(), "Yasuo") == 0) {
-                hasYasuo = true;
-                break;
-            }
-        }
-        if (!GameObjects::Heroes().empty()) checked = true;
-    }
-    return hasYasuo;
-}
 
 inline void OnCreate(const Events::ObjectEventArgs& args) {
-    if (!HasYasuoInGame()) return;
     std::lock_guard<std::mutex> lock(g_mutex);
     ObserveLocked(args.Sender, Variables::TickCount());
 }
 
 inline void OnDelete(const Events::ObjectEventArgs& args) {
-    if (!HasYasuoInGame()) return;
     std::lock_guard<std::mutex> lock(g_mutex);
     g_registry.OnDelete(ToIdentity(args.Sender));
     g_active.clear();

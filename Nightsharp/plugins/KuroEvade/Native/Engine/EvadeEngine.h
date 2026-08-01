@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstring>
 #include <utility>
+#include <string>
 #include <vector>
 
 namespace Plugins::KuroEvade {
@@ -450,10 +451,14 @@ private:
             player.IsDashing()) {
             return false;
         }
-        if (settings.DisableEvadeForOlafR &&
-            _stricmp(player.CharacterName().c_str(), "Olaf") == 0 &&
-            player.HasBuff("OlafRagnarok")) {
-            return false;
+        if (settings.DisableEvadeForOlafR) {
+            const std::string playerName = player.CharacterName();
+            const SDK::ChampionId playerChampionId =
+                SDK::ChampionIdFromName(playerName.c_str());
+            if (playerChampionId == SDK::ChampionId::Olaf &&
+                player.HasBuff("OlafRagnarok")) {
+                return false;
+            }
         }
         return true;
     }

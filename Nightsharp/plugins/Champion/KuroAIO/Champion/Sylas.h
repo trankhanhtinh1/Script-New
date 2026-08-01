@@ -74,7 +74,10 @@ static void Combo() {
                         if (LastCasted + 1000 >= now && KuroAIO::CanAttack(250) && LastE + 2750 >= now) {
                             return;
                         }
-                        if (E.Cast(prediction.GetCastPosition())) {
+                        if (!SDK::Collision::HasProjectileWallCollision(
+                                player.Position(), prediction.GetCastPosition(),
+                                E.Width * 0.5f) &&
+                            E.Cast(prediction.GetCastPosition())) {
                             return;
                         }
                     }
@@ -155,7 +158,10 @@ static void Harass() {
                         if (LastCasted + 1000 >= now && KuroAIO::CanAttack(250) && LastE + 2750 >= now) {
                             return;
                         }
-                        if (E.Cast(prediction.GetCastPosition())) {
+                        if (!SDK::Collision::HasProjectileWallCollision(
+                                player.Position(), prediction.GetCastPosition(),
+                                E.Width * 0.5f) &&
+                            E.Cast(prediction.GetCastPosition())) {
                             return;
                         }
                     }
@@ -290,7 +296,10 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
                 for (const auto& enemy : EnemyHeroesByHealth(E.Range)) {
                     const auto prediction = E.GetPrediction(enemy);
                     if (prediction.Hitchance >= HitChance::High) {
-                        if (E.Cast(prediction.GetCastPosition())) {
+                        if (!SDK::Collision::HasProjectileWallCollision(
+                                player.Position(), prediction.GetCastPosition(),
+                                E.Width * 0.5f) &&
+                            E.Cast(prediction.GetCastPosition())) {
                             return;
                         }
                     }

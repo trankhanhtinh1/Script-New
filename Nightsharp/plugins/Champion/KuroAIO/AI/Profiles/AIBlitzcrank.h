@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // W-E walk-up pressure, exact E attack timing and R passive/active economy.
 inline constexpr ChampionProfile Blitzcrank = [] {
     ChampionProfile p{};
-    p.ChampionName = "Blitzcrank";
+    p.ChampionId = SDK::ChampionId::Blitzcrank;
     p.DisplayName = "Blitzcrank";
     p.InternalId = "champion.kuroaio.ai.blitzcrank";
     p.PrimaryArchetype = Archetype::Catcher;

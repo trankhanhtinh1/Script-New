@@ -61,7 +61,15 @@ static bool AllowTurret() {
 }
 
 static bool CastPosition(Spell& spell, const Vector3& position) {
-    return spell.IsReady() && !position.IsZero() && spell.Cast(position);
+    if (!spell.IsReady() || position.IsZero()) {
+        return false;
+    }
+    if ((&spell == &Q || &spell == &Q3) &&
+        SDK::Collision::HasProjectileWallCollision(
+            Player().Position(), position, spell.Width * 0.5f)) {
+        return false;
+    }
+    return spell.Cast(position);
 }
 
 static bool CastE(const AIBaseClient& target) {
@@ -312,7 +320,11 @@ static bool CastQDuringDash() {
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(enemy) &&
             enemy.Position().Distance2D(player.Position()) <= radius + enemy.BoundingRadius() + 30.0f) {
-            if (Q.Cast(player.Position())) {
+            if ((!HaveQ3() || !SDK::Collision::HasProjectileWallCollision(
+                    player.Position(),
+                    player.Position().Extend(Game::CursorPos(), Q3.Range),
+                    Q3.Width * 0.5f)) &&
+                Q.Cast(player.Position())) {
                 LastQ = now;
                 return true;
             }

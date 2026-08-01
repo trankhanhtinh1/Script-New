@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // endpoint she accepts. W is intentionally descriptive: it has no cast route.
 inline constexpr ChampionProfile Vi = [] {
     ChampionProfile p{};
-    p.ChampionName = "Vi";
+    p.ChampionId = SDK::ChampionId::Vi;
     p.DisplayName = "Vi";
     p.InternalId = "champion.kuroaio.ai.vi";
     p.PrimaryArchetype = Archetype::Diver;

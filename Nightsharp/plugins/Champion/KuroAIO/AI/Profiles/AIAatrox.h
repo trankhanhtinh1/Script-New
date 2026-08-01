@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // endpoint.  R is a commit/reset tool, not an opener for every short trade.
 inline constexpr ChampionProfile Aatrox = [] {
     ChampionProfile p{};
-    p.ChampionName = "Aatrox";
+    p.ChampionId = SDK::ChampionId::Aatrox;
     p.DisplayName = "Aatrox";
     p.InternalId = "champion.kuroaio.ai.aatrox";
     p.PrimaryArchetype = Archetype::Juggernaut;

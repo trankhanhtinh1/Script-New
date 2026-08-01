@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Zyra = [] {
     ChampionProfile p{};
-    p.ChampionName = "Zyra";
+    p.ChampionId = SDK::ChampionId::Zyra;
     p.DisplayName = "Zyra";
     p.InternalId = "champion.kuroaio.ai.zyra";
     p.PrimaryArchetype = Archetype::Catcher;

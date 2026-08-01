@@ -229,6 +229,7 @@ struct SpellSpec {
     float DesiredDistance = 0.0f;
     float DashDistance = 0.0f;
     bool Collision = false;
+    bool ProjectileWall = false;
     bool WeaveAfterAttack = false;
     bool PreserveAutoAttack = true;
     bool AllowOnMinions = false;
@@ -279,7 +280,7 @@ struct SpellVariant {
 };
 
 struct ChampionProfile {
-    const char* ChampionName = "";
+    SDK::ChampionId ChampionId = SDK::ChampionId::Unknown;
     const char* DisplayName = "";
     const char* InternalId = "";
     Archetype PrimaryArchetype = Archetype::Specialist;
@@ -320,6 +321,30 @@ struct ChampionProfile {
     const char* ResearchSummary = "";
 };
 
+constexpr bool IsProjectileWallShape(SDK::SpellType shape) {
+    return shape == SDK::SpellType::SkillshotMissileLine ||
+           shape == SDK::SpellType::SkillshotMissileCircle ||
+           shape == SDK::SpellType::SkillshotMissileCone ||
+           shape == SDK::SpellType::SkillshotMissileArc;
+}
+
+// Collision is the profile's missile/unit-collision bit. Finite-speed
+// colliding entries and explicit missile shapes are projectile-wall aware.
+// Finite-speed line and circle entries without that bit are retained for
+// legacy profiles whose shape metadata predates the explicit missile enum;
+// instant ground/laser spells (FLT_MAX or very slow ground travel) remain
+// non-projectile.
+constexpr bool DefaultProjectileWall(CastKind kind,
+                                      bool collision,
+                                      float speed,
+                                      SDK::SpellType shape) {
+    if (IsProjectileWallShape(shape)) return true;
+    if (collision && speed < FLT_MAX) return true;
+    const bool lineOrCircle =
+        kind == CastKind::Line || kind == CastKind::Circle;
+    return lineOrCircle && speed > 250.0f && speed < FLT_MAX;
+}
+
 constexpr SpellSpec Spell(
     SDK::SpellSlot slot,
     const char* name,
@@ -342,11 +367,12 @@ constexpr SpellSpec Spell(
     value.Range = range;
     value.TriggerRange = range;
     value.Delay = delay;
-    value.Width = width;
-    value.Speed = speed;
     value.Collision = collision;
+    value.ProjectileWall = DefaultProjectileWall(
+        kind, collision, speed, shape);
     value.Damage = damage;
     value.Shape = shape;
+    value.Speed = speed;
     return value;
 }
 

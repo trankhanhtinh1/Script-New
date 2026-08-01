@@ -199,32 +199,53 @@ static void UpdateTarget() {
     }
 }
 
+static bool CastWAt(const AIHeroClient& target, HitChance required) {
+    if (!W.IsReady() || !ValidHeroTarget(target, W.Range)) {
+        return false;
+    }
+    const auto prediction = W.GetPrediction(target);
+    const auto player = Player();
+    const Vector3 castPosition = prediction.GetCastPosition();
+    if (!player.IsValid() || castPosition.IsZero() ||
+        static_cast<int>(prediction.Hitchance) < static_cast<int>(required) ||
+        SDK::Collision::HasProjectileWallCollision(
+            player.Position(), castPosition, W.Width * 0.5f)) {
+        return false;
+    }
+    return W.Cast(castPosition);
+}
+
+static bool CastRAt(const AIHeroClient& target, HitChance required) {
+    if (!R.IsReady() || !ValidHeroTarget(target, R.Range)) {
+        return false;
+    }
+    const auto prediction = R.GetPrediction(target);
+    const auto player = Player();
+    const Vector3 castPosition = prediction.GetCastPosition();
+    if (!player.IsValid() || castPosition.IsZero() ||
+        static_cast<int>(prediction.Hitchance) < static_cast<int>(required) ||
+        SDK::Collision::HasProjectileWallCollision(
+            player.Position(), castPosition, R.Width * 0.5f)) {
+        return false;
+    }
+    return R.Cast(castPosition);
+}
+
 static void CastLogicW(const AIHeroClient& target) {
     if (!W.IsReady() || !ValidHeroTarget(target)) return;
     const int wMode = List(WSettingsMenu, "WComboType", 0);
 
     if (wMode == 0) { // Logic
-        if (!CanAttack(500)) {
-            auto pred = W.GetPrediction(target);
-            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-                W.Cast(pred.GetCastPosition());
-                return;
-            }
-        }
-    } else if (wMode == 1) { // Out AA Range
-        if (!InCurrentAutoAttackRange(target)) {
-            auto pred = W.GetPrediction(target);
-            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-                W.Cast(pred.GetCastPosition());
-                return;
-            }
-        }
-    } else if (wMode == 2) { // Always
-        auto pred = W.GetPrediction(target);
-        if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-            W.Cast(pred.GetCastPosition());
+        if (!CanAttack(500) && CastWAt(target, HitChance::High)) {
             return;
         }
+    } else if (wMode == 1) { // Out AA Range
+        if (!InCurrentAutoAttackRange(target) &&
+            CastWAt(target, HitChance::High)) {
+            return;
+        }
+    } else if (wMode == 2) { // Always
+        (void)CastWAt(target, HitChance::High);
     }
 }
 
@@ -272,9 +293,7 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     if (Key(RSettingsMenu, "SemiR", false) && R.IsReady()) {
         auto rTarget = GetPhysicalTarget(R.Range);
         if (ValidHeroTarget(rTarget)) {
-            auto pred = R.GetPrediction(rTarget);
-            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::High)) {
-                R.Cast(pred.GetCastPosition());
+            if (CastRAt(rTarget, HitChance::High)) {
                 return;
             }
         }
@@ -323,14 +342,10 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
             CastLogicW(CurrentTarget);
         }
 
-        if (Bool(RSettingsMenu, "UseR", true) && R.IsReady()) {
-            auto pred = R.GetPrediction(CurrentTarget);
-            if (static_cast<int>(pred.Hitchance) >= static_cast<int>(HitChance::VeryHigh)) {
-                if (CurrentTarget.Health() <= RDmgget(CurrentTarget)) {
-                    R.Cast(pred.GetCastPosition());
-                    return;
-                }
-            }
+        if (Bool(RSettingsMenu, "UseR", true) && R.IsReady() &&
+            CurrentTarget.Health() <= RDmgget(CurrentTarget) &&
+            CastRAt(CurrentTarget, HitChance::VeryHigh)) {
+            return;
         }
     }
 

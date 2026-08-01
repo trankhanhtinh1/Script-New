@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // branches, mana reserves, auto weaving and player-authorized Realm Warp.
 inline constexpr ChampionProfile Ryze = [] {
     ChampionProfile p{};
-    p.ChampionName = "Ryze";
+    p.ChampionId = SDK::ChampionId::Ryze;
     p.DisplayName = "Ryze";
     p.InternalId = "champion.kuroaio.ai.ryze";
     p.PrimaryArchetype = Archetype::Battlemage;

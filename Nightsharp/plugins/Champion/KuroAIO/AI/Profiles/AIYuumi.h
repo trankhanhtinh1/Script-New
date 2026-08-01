@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Yuumi = [] {
     ChampionProfile p{};
-    p.ChampionName = "Yuumi";
+    p.ChampionId = SDK::ChampionId::Yuumi;
     p.DisplayName = "Yuumi";
     p.InternalId = "champion.kuroaio.ai.yuumi";
     p.PrimaryArchetype = Archetype::Enchanter;

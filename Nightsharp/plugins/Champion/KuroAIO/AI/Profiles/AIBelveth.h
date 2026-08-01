@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // coral/form economy.
 inline constexpr ChampionProfile Belveth = [] {
     ChampionProfile p{};
-    p.ChampionName = "Belveth";
+    p.ChampionId = SDK::ChampionId::Belveth;
     p.DisplayName = "Bel'Veth";
     p.InternalId = "champion.kuroaio.ai.belveth";
     p.PrimaryArchetype = Archetype::Skirmisher;

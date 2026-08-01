@@ -8,7 +8,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Nasus = [] {
     ChampionProfile p{};
-    p.ChampionName = "Nasus";
+    p.ChampionId = SDK::ChampionId::Nasus;
     p.DisplayName = "Nasus";
     p.InternalId = "champion.kuroaio.ai.nasus";
     p.PrimaryArchetype = Archetype::Juggernaut;

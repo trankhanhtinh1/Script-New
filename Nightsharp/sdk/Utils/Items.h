@@ -2,6 +2,7 @@
 
 #include "../Extensions/AIHeroClientExtensions.h"
 #include "../GameObjects/GameObjects.h"
+#include "../Enumerations/ItemId.h"
 
 #include <string_view>
 
@@ -19,6 +20,9 @@ inline bool ItemNameEquals(const InventorySlot& slot, const char* name) {
 inline bool HasItem(const AIHeroClient& source, int itemId) {
     return source.IsValid() && source.HasItem(itemId);
 }
+inline bool HasItem(const AIHeroClient& source, ::SDK::ItemId itemId) {
+    return ::SDK::Items::HasItem(source, ::SDK::ItemIdValue(itemId));
+}
 
 inline bool HasItem(const AIHeroClient& source, const char* name) {
     if (!source.IsValid() || !name) {
@@ -35,7 +39,10 @@ inline bool HasItem(const AIHeroClient& source, const char* name) {
 }
 
 inline bool CanUseItem(const AIHeroClient& source, int itemId) {
-    return SDK::CanUseItem(source, itemId);
+    return ::SDK::CanUseItem(source, itemId);
+}
+inline bool CanUseItem(const AIHeroClient& source, ::SDK::ItemId itemId) {
+    return ::SDK::Items::CanUseItem(source, ::SDK::ItemIdValue(itemId));
 }
 
 inline bool CanUseItem(const AIHeroClient& source, const char* name) {
@@ -90,7 +97,7 @@ inline bool UseItem(const AIHeroClient& source, int itemId) {
         return false;
     }
 
-    return SDK::UseItem(player, itemId);
+    return ::SDK::UseItem(player, itemId);
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId,
@@ -101,9 +108,9 @@ inline bool UseItem(const AIHeroClient& source, int itemId,
     }
 
     if (!target.IsValid()) {
-        return SDK::UseItem(player, itemId);
+        return ::SDK::UseItem(player, itemId);
     }
-    return SDK::UseItem(player, itemId, target);
+    return ::SDK::UseItem(player, itemId, target);
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
@@ -112,11 +119,29 @@ inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
         return false;
     }
 
-    return SDK::UseItem(player, itemId, position);
+    return ::SDK::UseItem(player, itemId, position);
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, Vector2 position) {
-    return SDK::Items::UseItem(source, itemId, Vector3::From2D(position));
+    return ::SDK::Items::UseItem(source, itemId, Vector3::From2D(position));
+}
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId) {
+    return ::SDK::Items::UseItem(source, ::SDK::ItemIdValue(itemId));
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId,
+                    const AIBaseClient& target) {
+    return ::SDK::Items::UseItem(source, ::SDK::ItemIdValue(itemId), target);
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId,
+                    Vector3 position) {
+    return ::SDK::Items::UseItem(source, ::SDK::ItemIdValue(itemId), position);
+}
+
+inline bool UseItem(const AIHeroClient& source, ::SDK::ItemId itemId,
+                    Vector2 position) {
+    return ::SDK::Items::UseItem(source, ::SDK::ItemIdValue(itemId), position);
 }
 
 inline bool UseItem(const AIHeroClient& source, const char* name,

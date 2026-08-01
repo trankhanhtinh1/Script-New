@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Xerath = [] {
     ChampionProfile p{};
-    p.ChampionName = "Xerath";
+    p.ChampionId = SDK::ChampionId::Xerath;
     p.DisplayName = "Xerath";
     p.InternalId = "champion.kuroaio.ai.xerath";
     p.PrimaryArchetype = Archetype::BurstMage;

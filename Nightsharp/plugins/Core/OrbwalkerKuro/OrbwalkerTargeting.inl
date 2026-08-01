@@ -1,6 +1,8 @@
 #pragma once
+#include <array>
 
 #include "../../../sdk/GameObjects/GameObjects.h"
+#include "../../../sdk/Enumerations/ChampionId.h"
 
 using namespace ::SDK;
 
@@ -44,35 +46,60 @@ inline bool IsValidAttackTarget(const AttackableUnit& target, float range = FLT_
 // namespace-level helpers below have no access to the menu instance.
 inline bool WallCheckEnabled = true;
 
-inline const char* const* WindWallBrokenChampions() {
-    static const char* values[] = {
-        "annie","twistedfate","leblanc","urgot","vladimir","fiddlesticks","ryze",
-        "sivir","soraka","teemo","tristana","missfortune","ashe","morgana",
-        "zilean","twitch","karthus","anivia","sona","janna","corki","karma",
-        "veigar","swain","caitlyn","orianna","brand","vayne","cassiopeia",
-        "heimerdinger","ezreal","kennen","kogmaw","lux","xerath","ahri","graves",
-        "varus","viktor","lulu","ziggs","draven","quinn","syndra","aurelionsol",
-        "zoe","zyra","kaisa","taliyah","jhin","kindred","jinx","lucian","yuumi",
-        "thresh","kalista","xayah","aphelios","bard","ivern","nami","velkoz",
-        "lissandra","malzahar", nullptr
-    };
-    return values;
+inline constexpr std::array<SDK::ChampionId, 64> kWindWallBrokenChampions = {{
+    SDK::ChampionId::Annie, SDK::ChampionId::TwistedFate,
+    SDK::ChampionId::Leblanc, SDK::ChampionId::Urgot,
+    SDK::ChampionId::Vladimir, SDK::ChampionId::Fiddlesticks,
+    SDK::ChampionId::Ryze, SDK::ChampionId::Sivir,
+    SDK::ChampionId::Soraka, SDK::ChampionId::Teemo,
+    SDK::ChampionId::Tristana, SDK::ChampionId::MissFortune,
+    SDK::ChampionId::Ashe, SDK::ChampionId::Morgana,
+    SDK::ChampionId::Zilean, SDK::ChampionId::Twitch,
+    SDK::ChampionId::Karthus, SDK::ChampionId::Anivia,
+    SDK::ChampionId::Sona, SDK::ChampionId::Janna,
+    SDK::ChampionId::Corki, SDK::ChampionId::Karma,
+    SDK::ChampionId::Veigar, SDK::ChampionId::Swain,
+    SDK::ChampionId::Caitlyn, SDK::ChampionId::Orianna,
+    SDK::ChampionId::Brand, SDK::ChampionId::Vayne,
+    SDK::ChampionId::Cassiopeia, SDK::ChampionId::Heimerdinger,
+    SDK::ChampionId::Ezreal, SDK::ChampionId::Kennen,
+    SDK::ChampionId::KogMaw, SDK::ChampionId::Lux,
+    SDK::ChampionId::Xerath, SDK::ChampionId::Ahri,
+    SDK::ChampionId::Graves, SDK::ChampionId::Varus,
+    SDK::ChampionId::Viktor, SDK::ChampionId::Lulu,
+    SDK::ChampionId::Ziggs, SDK::ChampionId::Draven,
+    SDK::ChampionId::Quinn, SDK::ChampionId::Syndra,
+    SDK::ChampionId::AurelionSol, SDK::ChampionId::Zoe,
+    SDK::ChampionId::Zyra, SDK::ChampionId::Kaisa,
+    SDK::ChampionId::Taliyah, SDK::ChampionId::Jhin,
+    SDK::ChampionId::Kindred, SDK::ChampionId::Jinx,
+    SDK::ChampionId::Lucian, SDK::ChampionId::Yuumi,
+    SDK::ChampionId::Thresh, SDK::ChampionId::Kalista,
+    SDK::ChampionId::Xayah, SDK::ChampionId::Aphelios,
+    SDK::ChampionId::Bard, SDK::ChampionId::Ivern,
+    SDK::ChampionId::Nami, SDK::ChampionId::Velkoz,
+    SDK::ChampionId::Lissandra, SDK::ChampionId::Malzahar,
+}};
+
+inline bool IsWindWallBrokenChampion(SDK::ChampionId championId) {
+    for (const SDK::ChampionId candidate : kWindWallBrokenChampions) {
+        if (candidate == championId) return true;
+    }
+    return false;
 }
 
 // Champions whose attack only becomes a wall-stoppable projectile in one of
 // their forms/stances.
-inline const char* const* SpecialWindWallChampions() {
-    static const char* values[] = {
-        "kayle","elise","nidalee","jayce","gnar","azir","neeko", nullptr
-    };
-    return values;
-}
+inline constexpr std::array<SDK::ChampionId, 7> kSpecialWindWallChampions = {{
+    SDK::ChampionId::Kayle, SDK::ChampionId::Elise,
+    SDK::ChampionId::Nidalee, SDK::ChampionId::Jayce,
+    SDK::ChampionId::Gnar, SDK::ChampionId::Azir,
+    SDK::ChampionId::Neeko,
+}};
 
-inline bool ContainsChampionName(const char* const* values, const std::string& name) {
-    for (int i = 0; values[i]; ++i) {
-        if (_stricmp(name.c_str(), values[i]) == 0) {
-            return true;
-        }
+inline bool IsSpecialWindWallChampion(SDK::ChampionId championId) {
+    for (const SDK::ChampionId candidate : kSpecialWindWallChampions) {
+        if (candidate == championId) return true;
     }
     return false;
 }
@@ -93,17 +120,18 @@ inline bool PlayerAttackHitsWall(const AIHeroClient& player) {
         return false;
     }
 
-    const std::string name = player.CharacterName();
-    if (ContainsChampionName(WindWallBrokenChampions(), name)) {
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (IsWindWallBrokenChampion(championId)) {
         cached = true;
-    } else if (ContainsChampionName(SpecialWindWallChampions(), name)) {
+    } else if (IsSpecialWindWallChampion(championId)) {
         cached =
-            (_stricmp(name.c_str(), "kayle") == 0 && player.AttackRange() >= 530.0f) ||
-            (_stricmp(name.c_str(), "elise") == 0 && !player.IsMelee()) ||
-            (_stricmp(name.c_str(), "nidalee") == 0 && !player.IsMelee()) ||
-            (_stricmp(name.c_str(), "jayce") == 0 && !player.IsMelee()) ||
-            (_stricmp(name.c_str(), "gnar") == 0 && !player.IsMelee()) ||
-            (_stricmp(name.c_str(), "neeko") == 0 && !player.HasBuff("neekowpassiveready"));
+            (championId == SDK::ChampionId::Kayle && player.AttackRange() >= 530.0f) ||
+            (championId == SDK::ChampionId::Elise && !player.IsMelee()) ||
+            (championId == SDK::ChampionId::Nidalee && !player.IsMelee()) ||
+            (championId == SDK::ChampionId::Jayce && !player.IsMelee()) ||
+            (championId == SDK::ChampionId::Gnar && !player.IsMelee()) ||
+            (championId == SDK::ChampionId::Neeko && !player.HasBuff("neekowpassiveready"));
     }
     return cached;
 }
@@ -119,9 +147,10 @@ inline bool HasShieldWallChampionInGame() {
             if (!hero.IsValid()) {
                 continue;
             }
-            const std::string name = hero.CharacterName();
-            if (_stricmp(name.c_str(), "Samira") == 0 ||
-                _stricmp(name.c_str(), "Mel") == 0) {
+            const SDK::ChampionId championId =
+                SDK::ChampionIdFromName(hero.CharacterName().c_str());
+            if (championId == SDK::ChampionId::Samira ||
+                championId == SDK::ChampionId::Mel) {
                 present = true;
                 break;
             }
@@ -213,7 +242,9 @@ inline bool HasGangplankInGame() {
     static bool hasGp = false;
     if (!checked) {
         for (const auto& hero : GameObjects::Heroes()) {
-            if (hero.IsValid() && _stricmp(hero.CharacterName().c_str(), "Gangplank") == 0) {
+            if (hero.IsValid() &&
+                SDK::ChampionIdFromName(hero.CharacterName().c_str()) ==
+                    SDK::ChampionId::Gangplank) {
                 hasGp = true;
                 break;
             }

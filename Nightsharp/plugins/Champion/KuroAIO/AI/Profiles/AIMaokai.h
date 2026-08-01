@@ -10,7 +10,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // sapling/brush state and R is an advancing wave planned for peel or engage.
 inline constexpr ChampionProfile Maokai = [] {
     ChampionProfile p{};
-    p.ChampionName = "Maokai";
+    p.ChampionId = SDK::ChampionId::Maokai;
     p.DisplayName = "Maokai";
     p.InternalId = "champion.kuroaio.ai.maokai";
     p.PrimaryArchetype = Archetype::Vanguard;

@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Gangplank = [] {
     ChampionProfile p{};
-    p.ChampionName = "Gangplank";
+    p.ChampionId = SDK::ChampionId::Gangplank;
     p.DisplayName = "Gangplank";
     p.InternalId = "champion.kuroaio.ai.gangplank";
     p.PrimaryArchetype = Archetype::Specialist;

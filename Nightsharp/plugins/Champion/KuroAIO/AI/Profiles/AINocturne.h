@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Nocturne = [] {
     ChampionProfile p{};
-    p.ChampionName = "Nocturne";
+    p.ChampionId = SDK::ChampionId::Nocturne;
     p.DisplayName = "Nocturne";
     p.InternalId = "champion.kuroaio.ai.nocturne";
     p.PrimaryArchetype = Archetype::Diver;

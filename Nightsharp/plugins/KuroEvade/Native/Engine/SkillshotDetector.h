@@ -496,8 +496,16 @@ public:
 
         SDK::AIBaseClient caster;
         for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
-            if (hero.IsValid() && SameText(
-                    EvadeUtils::GetObjectCharacterName(hero), data->Runtime.ChampionName)) {
+            if (!hero.IsValid()) {
+                continue;
+            }
+            const std::string heroName =
+                EvadeUtils::GetObjectCharacterName(hero);
+            const SDK::ChampionId heroChampionId =
+                SDK::ChampionIdFromName(heroName.c_str());
+            if (data->IsGlobal ||
+                (data->ChampionId != SDK::ChampionId::Unknown &&
+                 heroChampionId == data->ChampionId)) {
                 caster = SDK::AIBaseClient(hero.Handle());
                 break;
             }
@@ -894,15 +902,16 @@ private:
     }
 
     static const Database::SpellData* FindUniqueByChampionAndSlot(
-        const char* champion, int slot) {
-        if (!champion || !champion[0] || slot < 0 || slot > 3) {
+        SDK::ChampionId championId, int slot) {
+        if (championId == SDK::ChampionId::Unknown ||
+            slot < 0 || slot > 3) {
             return nullptr;
         }
-        SDK::SpellSlot target = static_cast<SDK::SpellSlot>(slot);
+        const SDK::SpellSlot target = static_cast<SDK::SpellSlot>(slot);
         const Database::SpellData* result = nullptr;
         for (const auto& entry : Database::SpellDatabase::Spells()) {
-            if (entry.DontProcess ||
-                !SameText(entry.Runtime.ChampionName, champion) ||
+            if (entry.DontProcess || entry.IsGlobal ||
+                entry.ChampionId != championId ||
                 entry.Runtime.Slot != target) {
                 continue;
             }

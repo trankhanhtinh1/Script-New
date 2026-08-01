@@ -222,13 +222,13 @@ static float MagicDamageAmp(const AIBaseClient& target) {
 
     // Shadowflame (4645) — Cinderbloom: sát thương phép và chuẩn "chí mạng" lên
     // mục tiêu dưới 40% máu, +20% sát thương.
-    if (player.HasItem(4645) && target.HealthPercent() < 40.0f) {
+    if (SDK::Items::HasItem(player, SDK::ItemId::Shadowflame) && target.HealthPercent() < 40.0f) {
         amp *= 1.20f;
     }
 
     // Perplexity (4015) — Giant Slayer: tối đa +15% lên tướng có max HP cao hơn
     // mình, đạt trần khi chênh lệch >= 3000.
-    if (target.IsHero() && player.HasItem(4015)) {
+    if (target.IsHero() && SDK::Items::HasItem(player, SDK::ItemId::Perplexity)) {
         const float diff = target.MaxHealth() - player.MaxHealth();
         if (diff > 0.0f) {
             amp *= 1.0f + 0.15f * std::min(diff / 3000.0f, 1.0f);
@@ -236,7 +236,7 @@ static float MagicDamageAmp(const AIBaseClient& target) {
     }
 
     // Lightning Braid (4013) — Chain Lightning: -20% sát thương kỹ năng.
-    if (player.HasItem(4013)) {
+    if (SDK::Items::HasItem(player, SDK::ItemId::Lightning_Braid)) {
         amp *= 0.80f;
     }
 
@@ -349,9 +349,22 @@ static bool CastE(const Vector3& position) {
 }
 
 static bool CastQ(const AIBaseClient& target) {
-    return Q.IsReady() &&
-           ValidTarget(target, Q.Range) &&
-           Q.Cast(target) == CastStates::SuccessfullyCasted;
+    if (!Q.IsReady() || !ValidTarget(target, Q.Range)) {
+        return false;
+    }
+    if (target.IsHero()) {
+        const auto player = Player();
+        const auto prediction = Q.GetPrediction(target);
+        Vector3 castPosition = prediction.GetCastPosition();
+        if (castPosition.IsZero()) {
+            castPosition = target.Position();
+        }
+        if (!player.IsValid() || SDK::Collision::HasProjectileWallCollision(
+                player.Position(), castPosition, 30.0f)) {
+            return false;
+        }
+    }
+    return Q.Cast(target) == CastStates::SuccessfullyCasted;
 }
 
 static const Dagger* BestDaggerNearTarget(const AIBaseClient& target, float range) {

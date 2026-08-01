@@ -1096,54 +1096,6 @@ inline std::vector<AIBaseClient> CollectLineCollisions(
         }
     }
 
-    // ── Samira Blade Whirl (W) ───────────────────────────────────────
-    // Samira's W blocks projectiles in a radius around her for ~1s
-    // Detect via buff "SamiraW" or "SamiraWBuff"
-    if (SDK::HasFlag(flags, CollisionableObjects::SamiraWall)) {
-        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
-            if (!hero.IsValid() || hero.IsDead()) continue;
-            if (!isEnemy(hero)) continue;
-            if (hero.CharacterName() != "Samira") continue;
-            if (!hero.HasBuff("SamiraW") && !hero.HasBuff("SamiraWBuff"))
-                continue;
-
-            // Check if skillshot path passes through Samira's W radius
-            Vec2 samiraPos = hero.Position().To2D();
-            auto proj = Vec2Ext::ProjectOn(samiraPos, from2D, to2D);
-            float distToLine = proj.IsOnSegment
-                ? samiraPos.Distance(proj.SegmentPoint)
-                : std::min(samiraPos.Distance(from2D), samiraPos.Distance(to2D));
-            // Samira W radius ~ 260 (her W AoE)
-            if (distToLine <= 260.0f + radius) {
-                result.push_back(hero);
-            }
-        }
-    }
-
-    // ── Mel Rebuttal (W) ─────────────────────────────────────────────
-    // Mel's W creates a 175-radius barrier that destroys/reflects projectiles
-    // Duration ~0.75s. Detect via buff "MelW" or "MelWBuff" or "MelRebuttal"
-    if (SDK::HasFlag(flags, CollisionableObjects::MelWall)) {
-        for (const auto& hero : SDK::ObjectManager::Get<AIHeroClient>()) {
-            if (!hero.IsValid() || hero.IsDead()) continue;
-            if (!isEnemy(hero)) continue;
-            if (hero.CharacterName() != "Mel") continue;
-            if (!hero.HasBuff("MelW") && !hero.HasBuff("MelWBuff")
-                && !hero.HasBuff("MelRebuttal"))
-                continue;
-
-            // Check if skillshot path passes through Mel's W barrier radius
-            Vec2 melPos = hero.Position().To2D();
-            auto proj = Vec2Ext::ProjectOn(melPos, from2D, to2D);
-            float distToLine = proj.IsOnSegment
-                ? melPos.Distance(proj.SegmentPoint)
-                : std::min(melPos.Distance(from2D), melPos.Distance(to2D));
-            // Mel W effect radius = 175
-            if (distToLine <= 175.0f + radius) {
-                result.push_back(hero);
-            }
-        }
-    }
 
     return result;
 }

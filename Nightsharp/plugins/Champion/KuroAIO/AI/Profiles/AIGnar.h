@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Gnar = [] {
     ChampionProfile profile{};
-    profile.ChampionName = "Gnar";
+    profile.ChampionId = SDK::ChampionId::Gnar;
     profile.DisplayName = "Gnar";
     profile.InternalId = "champion.kuroaio.ai.gnar";
     profile.PrimaryArchetype = Archetype::Specialist;

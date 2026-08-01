@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // owns every Q continuation, shrine, portal and no-grief R decision.
 inline constexpr ChampionProfile Bard = [] {
     ChampionProfile p{};
-    p.ChampionName = "Bard";
+    p.ChampionId = SDK::ChampionId::Bard;
     p.DisplayName = "Bard";
     p.InternalId = "champion.kuroaio.ai.bard";
     p.PrimaryArchetype = Archetype::Catcher;

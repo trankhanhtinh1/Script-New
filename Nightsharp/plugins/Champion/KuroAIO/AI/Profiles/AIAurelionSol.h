@@ -11,7 +11,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // and Falling Star changes delay, radius, CC and shockwave after 75 new stacks.
 inline constexpr ChampionProfile AurelionSol = [] {
     ChampionProfile p{};
-    p.ChampionName = "AurelionSol";
+    p.ChampionId = SDK::ChampionId::AurelionSol;
     p.DisplayName = "Aurelion Sol";
     p.InternalId = "champion.kuroaio.ai.aurelionsol";
     p.PrimaryArchetype = Archetype::Battlemage;

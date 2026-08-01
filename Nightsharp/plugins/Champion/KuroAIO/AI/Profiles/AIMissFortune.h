@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile MissFortune = [] {
     ChampionProfile p{};
-    p.ChampionName = "MissFortune";
+    p.ChampionId = SDK::ChampionId::MissFortune;
     p.DisplayName = "Miss Fortune";
     p.InternalId = "champion.kuroaio.ai.missfortune";
     p.PrimaryArchetype = Archetype::Marksman;

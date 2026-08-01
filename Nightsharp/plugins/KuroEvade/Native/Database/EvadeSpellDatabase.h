@@ -31,7 +31,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ahri";
+            spell.ChampionId = SDK::ChampionId::Ahri;
             spell.DangerLevel = 4;
             spell.Name = "AhriTumble";
             spell.CheckSpellName = "AhriTumble";
@@ -49,7 +49,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Blitzcrank";
+            spell.ChampionId = SDK::ChampionId::Blitzcrank;
             spell.DangerLevel = 3;
             spell.Name = "Overdrive";
             spell.CheckSpellName = "Overdrive";
@@ -66,7 +66,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Caitlyn";
+            spell.ChampionId = SDK::ChampionId::Caitlyn;
             spell.DangerLevel = 3;
             spell.Name = "CaitlynEntrapment";
             spell.CheckSpellName = "CaitlynEntrapment";
@@ -86,7 +86,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Corki";
+            spell.ChampionId = SDK::ChampionId::Corki;
             spell.DangerLevel = 3;
             spell.Name = "CarpetBomb";
             spell.CheckSpellName = "CarpetBomb";
@@ -104,7 +104,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Draven";
+            spell.ChampionId = SDK::ChampionId::Draven;
             spell.DangerLevel = 3;
             spell.Name = "Blood Rush";
             spell.CheckSpellName = "DravenFury";
@@ -121,7 +121,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ekko";
+            spell.ChampionId = SDK::ChampionId::Ekko;
             spell.DangerLevel = 3;
             spell.Name = "PhaseDive";
             spell.CheckSpellName = "EkkoE";
@@ -136,7 +136,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ekko";
+            spell.ChampionId = SDK::ChampionId::Ekko;
             spell.DangerLevel = 3;
             spell.Name = "PhaseDive2";
             spell.CheckSpellName = "EkkoEAttack";
@@ -152,7 +152,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ekko";
+            spell.ChampionId = SDK::ChampionId::Ekko;
             spell.DangerLevel = 4;
             spell.Name = "Chronobreak";
             spell.CheckSpellName = "EkkoR";
@@ -170,7 +170,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Elise";
+            spell.ChampionId = SDK::ChampionId::Elise;
             spell.DangerLevel = 4;
             spell.Name = "Rappel";
             spell.CheckSpellName = "EliseSpiderEInitial";
@@ -188,7 +188,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Evelynn";
+            spell.ChampionId = SDK::ChampionId::Evelynn;
             spell.DangerLevel = 3;
             spell.Name = "Darl Frenzy";
             spell.CheckSpellName = "EvelynnW";
@@ -205,7 +205,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ezreal";
+            spell.ChampionId = SDK::ChampionId::Ezreal;
             spell.DangerLevel = 2;
             spell.Name = "ArcaneShift";
             spell.CheckSpellName = "EzrealArcaneShift";
@@ -222,7 +222,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Fiora";
+            spell.ChampionId = SDK::ChampionId::Fiora;
             spell.DangerLevel = 3;
             spell.Name = "FioraW";
             spell.CheckSpellName = "FioraW";
@@ -235,7 +235,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Fiora";
+            spell.ChampionId = SDK::ChampionId::Fiora;
             spell.DangerLevel = 3;
             spell.Name = "FioraQ";
             spell.CheckSpellName = "FioraQ";
@@ -254,7 +254,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Fizz";
+            spell.ChampionId = SDK::ChampionId::Fizz;
             spell.DangerLevel = 3;
             spell.Name = "FizzPiercingStrike";
             spell.CheckSpellName = "FizzPiercingStrike";
@@ -270,7 +270,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Fizz";
+            spell.ChampionId = SDK::ChampionId::Fizz;
             spell.DangerLevel = 3;
             spell.Name = "FizzJump";
             spell.CheckSpellName = "FizzJump";
@@ -290,7 +290,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Galio";
+            spell.ChampionId = SDK::ChampionId::Galio;
             spell.DangerLevel = 4;
             spell.Name = "Righteous Gust";
             spell.CheckSpellName = "GalioRighteousGust";
@@ -307,7 +307,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Garen";
+            spell.ChampionId = SDK::ChampionId::Garen;
             spell.DangerLevel = 3;
             spell.Name = "Decisive Strike";
             spell.CheckSpellName = "GarenQ";
@@ -324,7 +324,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Gragas";
+            spell.ChampionId = SDK::ChampionId::Gragas;
             spell.DangerLevel = 2;
             spell.Name = "BodySlam";
             spell.CheckSpellName = "GragasBodySlam";
@@ -342,7 +342,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Gnar";
+            spell.ChampionId = SDK::ChampionId::Gnar;
             spell.DangerLevel = 3;
             spell.Name = "GnarE";
             spell.CheckSpellName = "GnarE";
@@ -356,7 +356,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Gnar";
+            spell.ChampionId = SDK::ChampionId::Gnar;
             spell.DangerLevel = 4;
             spell.Name = "GnarBigE";
             spell.CheckSpellName = "gnarbige";
@@ -374,7 +374,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Graves";
+            spell.ChampionId = SDK::ChampionId::Graves;
             spell.DangerLevel = 2;
             spell.Name = "QuickDraw";
             spell.CheckSpellName = "GravesMove";
@@ -392,7 +392,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Janna";
+            spell.ChampionId = SDK::ChampionId::Janna;
             spell.DangerLevel = 1;
             spell.Name = "Janna E";
             spell.MaxRange = 800.0f;
@@ -410,7 +410,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Karma";
+            spell.ChampionId = SDK::ChampionId::Karma;
             spell.DangerLevel = 3;
             spell.Name = "Inspire";
             spell.CheckSpellName = "KarmaSolkimShield";
@@ -430,7 +430,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kassadin";
+            spell.ChampionId = SDK::ChampionId::Kassadin;
             spell.DangerLevel = 1;
             spell.Name = "RiftWalk";
             spell.MaxRange = 450.0f; // CDragon: KassadinR castRange = 450 (kept C# 450)
@@ -446,7 +446,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Katarina";
+            spell.ChampionId = SDK::ChampionId::Katarina;
             spell.DangerLevel = 3;
             spell.Name = "KatarinaE";
             spell.CheckSpellName = "KatarinaE";
@@ -465,7 +465,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kayle";
+            spell.ChampionId = SDK::ChampionId::Kayle;
             spell.DangerLevel = 3;
             spell.Name = "Divine Blessing";
             spell.CheckSpellName = "JudicatorDivineBlessing";
@@ -478,7 +478,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kayle";
+            spell.ChampionId = SDK::ChampionId::Kayle;
             spell.DangerLevel = 4;
             spell.Name = "Intervention";
             spell.CheckSpellName = "JudicatorIntervention";
@@ -495,7 +495,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kennen";
+            spell.ChampionId = SDK::ChampionId::Kennen;
             spell.DangerLevel = 4;
             spell.Name = "Lightning Rush";
             spell.CheckSpellName = "KennenLightningRush";
@@ -512,7 +512,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kindred";
+            spell.ChampionId = SDK::ChampionId::Kindred;
             spell.DangerLevel = 1;
             spell.Name = "KindredQ";
             spell.CheckSpellName = "KindredQ";
@@ -531,7 +531,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Leblanc";
+            spell.ChampionId = SDK::ChampionId::Leblanc;
             spell.DangerLevel = 2;
             spell.Name = "Distortion";
             spell.CheckSpellName = "LeblancSlide";
@@ -545,7 +545,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Leblanc";
+            spell.ChampionId = SDK::ChampionId::Leblanc;
             spell.DangerLevel = 2;
             spell.Name = "DistortionR";
             spell.CheckSpellName = "LeblancSlideM";
@@ -563,7 +563,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "LeeSin";
+            spell.ChampionId = SDK::ChampionId::LeeSin;
             spell.DangerLevel = 3;
             spell.Name = "LeeSinW";
             spell.CheckSpellName = "BlindMonkWOne";
@@ -582,7 +582,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Lucian";
+            spell.ChampionId = SDK::ChampionId::Lucian;
             spell.DangerLevel = 1;
             spell.Name = "RelentlessPursuit";
             spell.CheckSpellName = "LucianE";
@@ -600,7 +600,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Lulu";
+            spell.ChampionId = SDK::ChampionId::Lulu;
             spell.DangerLevel = 3;
             spell.Name = "Whimsy";
             spell.CheckSpellName = "LuluW";
@@ -617,7 +617,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "MasterYi";
+            spell.ChampionId = SDK::ChampionId::MasterYi;
             spell.DangerLevel = 3;
             spell.Name = "AlphaStrike";
             spell.CheckSpellName = "AlphaStrike";
@@ -637,7 +637,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Morgana";
+            spell.ChampionId = SDK::ChampionId::Morgana;
             spell.DangerLevel = 3;
             spell.Name = "BlackShield";
             spell.CheckSpellName = "BlackShield";
@@ -656,7 +656,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Nocturne";
+            spell.ChampionId = SDK::ChampionId::Nocturne;
             spell.DangerLevel = 3;
             spell.Name = "ShroudofDarkness";
             spell.CheckSpellName = "NocturneShroudofDarkness";
@@ -672,7 +672,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Nidalee";
+            spell.ChampionId = SDK::ChampionId::Nidalee;
             spell.DangerLevel = 4;
             spell.Name = "Pounce";
             spell.CheckSpellName = "Pounce";
@@ -691,7 +691,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Nunu";
+            spell.ChampionId = SDK::ChampionId::Nunu;
             spell.DangerLevel = 2;
             spell.Name = "BloodBoil";
             spell.CheckSpellName = "BloodBoil";
@@ -708,7 +708,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Poppy";
+            spell.ChampionId = SDK::ChampionId::Poppy;
             spell.DangerLevel = 3;
             spell.Name = "Steadfast Presence";
             spell.CheckSpellName = "PoppyW";
@@ -725,7 +725,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Riven";
+            spell.ChampionId = SDK::ChampionId::Riven;
             spell.DangerLevel = 1;
             spell.Name = "BrokenWings";
             spell.CheckSpellName = "RivenTriCleave";
@@ -741,7 +741,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Riven";
+            spell.ChampionId = SDK::ChampionId::Riven;
             spell.DangerLevel = 1;
             spell.Name = "Valor";
             spell.CheckSpellName = "RivenFeint";
@@ -760,7 +760,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rumble";
+            spell.ChampionId = SDK::ChampionId::Rumble;
             spell.DangerLevel = 3;
             spell.Name = "Scrap Shield";
             spell.CheckSpellName = "RumbleShield";
@@ -777,7 +777,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sivir";
+            spell.ChampionId = SDK::ChampionId::Sivir;
             spell.DangerLevel = 2;
             spell.Name = "SivirE";
             spell.CheckSpellName = "SivirE";
@@ -793,7 +793,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Shyvana";
+            spell.ChampionId = SDK::ChampionId::Shyvana;
             spell.DangerLevel = 3;
             spell.Name = "Burnout";
             spell.CheckSpellName = "ShyvanaImmolationAura";
@@ -810,7 +810,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Shaco";
+            spell.ChampionId = SDK::ChampionId::Shaco;
             spell.DangerLevel = 3;
             spell.Name = "Deceive";
             spell.CheckSpellName = "Deceive";
@@ -827,7 +827,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sona";
+            spell.ChampionId = SDK::ChampionId::Sona;
             spell.DangerLevel = 3;
             spell.Name = "Song of Celerity";
             spell.CheckSpellName = "SonaE";
@@ -844,7 +844,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Talon";
+            spell.ChampionId = SDK::ChampionId::Talon;
             spell.DangerLevel = 4;
             spell.Name = "Shadow Assualt";
             spell.CheckSpellName = "TalonShadowAssault";
@@ -861,7 +861,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Teemo";
+            spell.ChampionId = SDK::ChampionId::Teemo;
             spell.DangerLevel = 3;
             spell.Name = "Move Quick";
             spell.CheckSpellName = "MoveQuick";
@@ -878,7 +878,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Tristana";
+            spell.ChampionId = SDK::ChampionId::Tristana;
             spell.DangerLevel = 3;
             spell.Name = "RocketJump";
             spell.CheckSpellName = "RocketJump";
@@ -896,7 +896,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Tryndamere";
+            spell.ChampionId = SDK::ChampionId::Tryndamere;
             spell.DangerLevel = 3;
             spell.Name = "SpinningSlash";
             spell.CheckSpellName = "Slash";
@@ -914,7 +914,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Udyr";
+            spell.ChampionId = SDK::ChampionId::Udyr;
             spell.DangerLevel = 3;
             spell.Name = "Bear Stance";
             spell.CheckSpellName = "UdyrBearStance";
@@ -931,7 +931,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Vayne";
+            spell.ChampionId = SDK::ChampionId::Vayne;
             spell.DangerLevel = 1;
             spell.Name = "Tumble";
             spell.CheckSpellName = "VayneTumble";
@@ -950,7 +950,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Yasuo";
+            spell.ChampionId = SDK::ChampionId::Yasuo;
             spell.DangerLevel = 2;
             spell.Name = "SweepingBlade";
             spell.CheckSpellName = "YasuoDashWrapper";
@@ -966,7 +966,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Yasuo";
+            spell.ChampionId = SDK::ChampionId::Yasuo;
             spell.DangerLevel = 3;
             spell.Name = "WindWall";
             spell.CheckSpellName = "YasuoWMovingWall";
@@ -983,7 +983,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Zilean";
+            spell.ChampionId = SDK::ChampionId::Zilean;
             spell.DangerLevel = 3;
             spell.Name = "Timewarp";
             spell.CheckSpellName = "ZileanE";
@@ -1000,7 +1000,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Akali";
+            spell.ChampionId = SDK::ChampionId::Akali;
             spell.DangerLevel = 4;
             spell.Name = "Shadow Dance";
             spell.CheckSpellName = "AkaliShadowDance";
@@ -1018,7 +1018,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Alistar";
+            spell.ChampionId = SDK::ChampionId::Alistar;
             spell.DangerLevel = 3;
             spell.Name = "Headbutt";
             spell.CheckSpellName = "Pulverize"; // Headbutt is part of combo, uses Pulverize slot
@@ -1036,7 +1036,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ambessa";
+            spell.ChampionId = SDK::ChampionId::Ambessa;
             spell.DangerLevel = 4;
             spell.Name = "Sundering Strike";
             spell.CheckSpellName = "AmbessaE";
@@ -1050,7 +1050,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Ambessa";
+            spell.ChampionId = SDK::ChampionId::Ambessa;
             spell.DangerLevel = 5;
             spell.Name = "Public Execution";
             spell.CheckSpellName = "AmbessaR";
@@ -1068,7 +1068,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Belveth";
+            spell.ChampionId = SDK::ChampionId::Belveth;
             spell.DangerLevel = 3;
             spell.Name = "Abyssal Dive";
             spell.CheckSpellName = "BelvethE";
@@ -1086,7 +1086,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Briar";
+            spell.ChampionId = SDK::ChampionId::Briar;
             spell.DangerLevel = 5;
             spell.Name = "Certain Death";
             spell.CheckSpellName = "BriarR";
@@ -1105,7 +1105,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Camille";
+            spell.ChampionId = SDK::ChampionId::Camille;
             spell.DangerLevel = 4;
             spell.Name = "Hookshot";
             spell.CheckSpellName = "CamilleE";
@@ -1118,7 +1118,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Camille";
+            spell.ChampionId = SDK::ChampionId::Camille;
             spell.DangerLevel = 5;
             spell.Name = "The Hextech Ultimatum";
             spell.CheckSpellName = "CamilleR";
@@ -1136,7 +1136,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Fizz";
+            spell.ChampionId = SDK::ChampionId::Fizz;
             spell.DangerLevel = 4;
             spell.Name = "Playful / Trickster";
             spell.CheckSpellName = "FizzE";
@@ -1154,7 +1154,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Garen";
+            spell.ChampionId = SDK::ChampionId::Garen;
             spell.DangerLevel = 2;
             spell.Name = "Decisive Strike";
             spell.CheckSpellName = "GarenQ";
@@ -1171,7 +1171,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Gwen";
+            spell.ChampionId = SDK::ChampionId::Gwen;
             spell.DangerLevel = 3;
             spell.Name = "Hallowed Mist";
             spell.CheckSpellName = "GwenW";
@@ -1184,7 +1184,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Gwen";
+            spell.ChampionId = SDK::ChampionId::Gwen;
             spell.DangerLevel = 3;
             spell.Name = "Skip 'n Slash";
             spell.CheckSpellName = "GwenE";
@@ -1202,7 +1202,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Irelia";
+            spell.ChampionId = SDK::ChampionId::Irelia;
             spell.DangerLevel = 3;
             spell.Name = "Bladesurge";
             spell.CheckSpellName = "IreliaQ";
@@ -1220,7 +1220,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "JarvanIV";
+            spell.ChampionId = SDK::ChampionId::JarvanIV;
             spell.DangerLevel = 4;
             spell.Name = "Dragon Strike";
             spell.CheckSpellName = "JarvanIVQ";
@@ -1233,7 +1233,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "JarvanIV";
+            spell.ChampionId = SDK::ChampionId::JarvanIV;
             spell.DangerLevel = 5;
             spell.Name = "Cataclysm";
             spell.CheckSpellName = "JarvanIVR";
@@ -1252,7 +1252,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Jax";
+            spell.ChampionId = SDK::ChampionId::Jax;
             spell.DangerLevel = 3;
             spell.Name = "Leap Strike";
             spell.CheckSpellName = "JaxQ";
@@ -1270,7 +1270,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kaisa";
+            spell.ChampionId = SDK::ChampionId::Kaisa;
             spell.DangerLevel = 3;
             spell.Name = "Supercharge";
             spell.CheckSpellName = "KaisaE";
@@ -1283,7 +1283,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kaisa";
+            spell.ChampionId = SDK::ChampionId::Kaisa;
             spell.DangerLevel = 5;
             spell.Name = "Killer Instinct";
             spell.CheckSpellName = "KaisaR";
@@ -1301,7 +1301,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kayn";
+            spell.ChampionId = SDK::ChampionId::Kayn;
             spell.DangerLevel = 3;
             spell.Name = "Reaping Slash";
             spell.CheckSpellName = "KaynQ";
@@ -1319,7 +1319,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kindred";
+            spell.ChampionId = SDK::ChampionId::Kindred;
             spell.DangerLevel = 3;
             spell.Name = "Dance of Arrows";
             spell.CheckSpellName = "KindredQ";
@@ -1337,7 +1337,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kled";
+            spell.ChampionId = SDK::ChampionId::Kled;
             spell.DangerLevel = 4;
             spell.Name = "Jousting";
             spell.CheckSpellName = "KledE";
@@ -1351,7 +1351,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Kled";
+            spell.ChampionId = SDK::ChampionId::Kled;
             spell.DangerLevel = 5;
             spell.Name = "Chaaaaaaaarge!!!";
             spell.CheckSpellName = "KledR";
@@ -1369,7 +1369,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "KSante";
+            spell.ChampionId = SDK::ChampionId::KSante;
             spell.DangerLevel = 3;
             spell.Name = "Footwork";
             spell.CheckSpellName = "KSanteE";
@@ -1387,7 +1387,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Leona";
+            spell.ChampionId = SDK::ChampionId::Leona;
             spell.DangerLevel = 4;
             spell.Name = "Zenith Blade";
             spell.CheckSpellName = "LeonaE";
@@ -1405,7 +1405,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Lillia";
+            spell.ChampionId = SDK::ChampionId::Lillia;
             spell.DangerLevel = 3;
             spell.Name = "Watch Out! Eep!";
             spell.CheckSpellName = "LilliaW";
@@ -1423,7 +1423,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "MasterYi";
+            spell.ChampionId = SDK::ChampionId::MasterYi;
             spell.DangerLevel = 4;
             spell.Name = "Alpha Strike";
             spell.CheckSpellName = "AlphaStrike";
@@ -1438,7 +1438,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "MasterYi";
+            spell.ChampionId = SDK::ChampionId::MasterYi;
             spell.DangerLevel = 3;
             spell.Name = "Highlander";
             spell.CheckSpellName = "MasterYiR";
@@ -1455,7 +1455,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "MonkeyKing";
+            spell.ChampionId = SDK::ChampionId::MonkeyKing;
             spell.DangerLevel = 3;
             spell.Name = "Nimbus Strike";
             spell.CheckSpellName = "MonkeyKingNimbusKick";
@@ -1473,7 +1473,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Naafiri";
+            spell.ChampionId = SDK::ChampionId::Naafiri;
             spell.DangerLevel = 3;
             spell.Name = "Hounds' Quest";
             spell.CheckSpellName = "NaafiriW";
@@ -1487,7 +1487,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Naafiri";
+            spell.ChampionId = SDK::ChampionId::Naafiri;
             spell.DangerLevel = 5;
             spell.Name = "We Are More";
             spell.CheckSpellName = "NaafiriR";
@@ -1504,7 +1504,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Neeko";
+            spell.ChampionId = SDK::ChampionId::Neeko;
             spell.DangerLevel = 3;
             spell.Name = "Shapesplitter";
             spell.CheckSpellName = "NeekoW";
@@ -1521,7 +1521,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Nilah";
+            spell.ChampionId = SDK::ChampionId::Nilah;
             spell.DangerLevel = 4;
             spell.Name = "Apotheosis";
             spell.CheckSpellName = "NilahR";
@@ -1538,7 +1538,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Poppy";
+            spell.ChampionId = SDK::ChampionId::Poppy;
             spell.DangerLevel = 4;
             spell.Name = "Heroic Charge";
             spell.CheckSpellName = "PoppyE";
@@ -1556,7 +1556,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Pyke";
+            spell.ChampionId = SDK::ChampionId::Pyke;
             spell.DangerLevel = 4;
             spell.Name = "Phantom Undertow";
             spell.CheckSpellName = "PykeE";
@@ -1574,7 +1574,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Qiyana";
+            spell.ChampionId = SDK::ChampionId::Qiyana;
             spell.DangerLevel = 4;
             spell.Name = "Edge of Ixtal";
             spell.CheckSpellName = "QiyanaE";
@@ -1592,7 +1592,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rakan";
+            spell.ChampionId = SDK::ChampionId::Rakan;
             spell.DangerLevel = 4;
             spell.Name = "Grand Entrance";
             spell.CheckSpellName = "RakanW";
@@ -1605,7 +1605,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rakan";
+            spell.ChampionId = SDK::ChampionId::Rakan;
             spell.DangerLevel = 3;
             spell.Name = "Battle Dance";
             spell.CheckSpellName = "RakanE";
@@ -1619,7 +1619,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rakan";
+            spell.ChampionId = SDK::ChampionId::Rakan;
             spell.DangerLevel = 5;
             spell.Name = "The Quickness";
             spell.CheckSpellName = "RakanR";
@@ -1636,7 +1636,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rammus";
+            spell.ChampionId = SDK::ChampionId::Rammus;
             spell.DangerLevel = 3;
             spell.Name = "Powerball";
             spell.CheckSpellName = "RammusW"; // Powerball is actually Q slot but named RammusW in old data
@@ -1653,7 +1653,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "RekSai";
+            spell.ChampionId = SDK::ChampionId::RekSai;
             spell.DangerLevel = 4;
             spell.Name = "Burrowed Unburrow";
             spell.CheckSpellName = "RekSaiE";
@@ -1667,7 +1667,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "RekSai";
+            spell.ChampionId = SDK::ChampionId::RekSai;
             spell.DangerLevel = 5;
             spell.Name = "Void Rush";
             spell.CheckSpellName = "RekSaiR";
@@ -1686,7 +1686,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Rell";
+            spell.ChampionId = SDK::ChampionId::Rell;
             spell.DangerLevel = 4;
             spell.Name = "Ferromancy: Mount Up";
             spell.CheckSpellName = "RellW";
@@ -1704,7 +1704,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Renata";
+            spell.ChampionId = SDK::ChampionId::RenataGlasc;
             spell.DangerLevel = 3;
             spell.Name = "Loyalty Program";
             spell.CheckSpellName = "RenataE";
@@ -1722,7 +1722,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Samira";
+            spell.ChampionId = SDK::ChampionId::Samira;
             spell.DangerLevel = 3;
             spell.Name = "Wild Rush";
             spell.CheckSpellName = "SamiraE";
@@ -1740,7 +1740,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sejuani";
+            spell.ChampionId = SDK::ChampionId::Sejuani;
             spell.DangerLevel = 4;
             spell.Name = "Arctic Assault";
             spell.CheckSpellName = "SejuaniQ";
@@ -1758,7 +1758,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Seraphine";
+            spell.ChampionId = SDK::ChampionId::Seraphine;
             spell.DangerLevel = 3;
             spell.Name = "Surround Sound";
             spell.CheckSpellName = "SeraphineE";
@@ -1776,7 +1776,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sett";
+            spell.ChampionId = SDK::ChampionId::Sett;
             spell.DangerLevel = 5;
             spell.Name = "The Show Stopper";
             spell.CheckSpellName = "SettR";
@@ -1794,7 +1794,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Singed";
+            spell.ChampionId = SDK::ChampionId::Singed;
             spell.DangerLevel = 2;
             spell.Name = "Insanity Potion";
             spell.CheckSpellName = "SingedR";
@@ -1811,7 +1811,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Smolder";
+            spell.ChampionId = SDK::ChampionId::Smolder;
             spell.DangerLevel = 3;
             spell.Name = "Flap, Flap, Flap";
             spell.CheckSpellName = "SmolderE";
@@ -1829,7 +1829,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sona";
+            spell.ChampionId = SDK::ChampionId::Sona;
             spell.DangerLevel = 2;
             spell.Name = "Song of Celerity";
             spell.CheckSpellName = "SonaE";
@@ -1846,7 +1846,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Sylas";
+            spell.ChampionId = SDK::ChampionId::Sylas;
             spell.DangerLevel = 4;
             spell.Name = "Abduct";
             spell.CheckSpellName = "SylasE";
@@ -1863,7 +1863,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "TahmKench";
+            spell.ChampionId = SDK::ChampionId::TahmKench;
             spell.DangerLevel = 4;
             spell.Name = "Abyssal Dive";
             spell.CheckSpellName = "TahmKenchR";
@@ -1881,7 +1881,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Taliyah";
+            spell.ChampionId = SDK::ChampionId::Taliyah;
             spell.DangerLevel = 4;
             spell.Name = "Seismic Shove";
             spell.CheckSpellName = "TaliyahW";
@@ -1898,7 +1898,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Udyr";
+            spell.ChampionId = SDK::ChampionId::Udyr;
             spell.DangerLevel = 3;
             spell.Name = "Wingborne Storm";
             spell.CheckSpellName = "UdyrE";
@@ -1915,7 +1915,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Vi";
+            spell.ChampionId = SDK::ChampionId::Vi;
             spell.DangerLevel = 4;
             spell.Name = "Vault Breaker";
             spell.CheckSpellName = "ViQ";
@@ -1928,7 +1928,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Vi";
+            spell.ChampionId = SDK::ChampionId::Vi;
             spell.DangerLevel = 5;
             spell.Name = "Assault and Battery";
             spell.CheckSpellName = "ViR";
@@ -1946,7 +1946,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Viego";
+            spell.ChampionId = SDK::ChampionId::Viego;
             spell.DangerLevel = 4;
             spell.Name = "Spectral Maw";
             spell.CheckSpellName = "ViegoW";
@@ -1960,7 +1960,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Viego";
+            spell.ChampionId = SDK::ChampionId::Viego;
             spell.DangerLevel = 5;
             spell.Name = "Harrowed Path";
             spell.CheckSpellName = "ViegoR";
@@ -1978,7 +1978,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Volibear";
+            spell.ChampionId = SDK::ChampionId::Volibear;
             spell.DangerLevel = 3;
             spell.Name = "Thundering Smite";
             spell.CheckSpellName = "VolibearQ";
@@ -1991,7 +1991,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Volibear";
+            spell.ChampionId = SDK::ChampionId::Volibear;
             spell.DangerLevel = 5;
             spell.Name = "Stormbringer";
             spell.CheckSpellName = "VolibearR";
@@ -2009,7 +2009,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Xayah";
+            spell.ChampionId = SDK::ChampionId::Xayah;
             spell.DangerLevel = 5;
             spell.Name = "Featherstorm";
             spell.CheckSpellName = "XayahR";
@@ -2028,7 +2028,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "XinZhao";
+            spell.ChampionId = SDK::ChampionId::XinZhao;
             spell.DangerLevel = 3;
             spell.Name = "Audacious Charge";
             spell.CheckSpellName = "XinZhaoE";
@@ -2046,7 +2046,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Yone";
+            spell.ChampionId = SDK::ChampionId::Yone;
             spell.DangerLevel = 4;
             spell.Name = "Soul Unbound";
             spell.CheckSpellName = "YoneE";
@@ -2060,7 +2060,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Yone";
+            spell.ChampionId = SDK::ChampionId::Yone;
             spell.DangerLevel = 5;
             spell.Name = "Fate Sealed";
             spell.CheckSpellName = "YoneR";
@@ -2077,7 +2077,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Yuumi";
+            spell.ChampionId = SDK::ChampionId::Yuumi;
             spell.DangerLevel = 3;
             spell.Name = "You and Me!";
             spell.CheckSpellName = "YuumiW";
@@ -2095,7 +2095,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Zoe";
+            spell.ChampionId = SDK::ChampionId::Zoe;
             spell.DangerLevel = 4;
             spell.Name = "Portal Jump";
             spell.CheckSpellName = "ZoeR";
@@ -2113,7 +2113,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Aurora";
+            spell.ChampionId = SDK::ChampionId::Aurora;
             spell.DangerLevel = 3;
             spell.Name = "Across the Divide";
             spell.CheckSpellName = "AuroraE";
@@ -2131,7 +2131,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Milio";
+            spell.ChampionId = SDK::ChampionId::Milio;
             spell.DangerLevel = 3;
             spell.Name = "Warm Hugs";
             spell.CheckSpellName = "MilioE";
@@ -2150,7 +2150,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Locke";
+            spell.ChampionId = SDK::ChampionId::Locke;
             spell.DangerLevel = 4;
             spell.Name = "LockeE";
             spell.CheckSpellName = "LockeE";
@@ -2164,7 +2164,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "Locke";
+            spell.ChampionId = SDK::ChampionId::Locke;
             spell.DangerLevel = 5;
             spell.Name = "LockeR";
             spell.CheckSpellName = "LockeR";
@@ -2182,7 +2182,7 @@ public:
         // ==========================================
         {
             EvadeSpellData spell;
-            spell.ChampionName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerLevel = 3;
             spell.Name = "Talisman of Ascension";
             spell.CheckSpellName = "TalismanOfAscension";
@@ -2197,7 +2197,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerLevel = 3;
             spell.Name = "Youmuu's Ghostblade";
             spell.CheckSpellName = "YoumuusGhostblade";
@@ -2212,7 +2212,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerLevel = 4;
             spell.Name = "Flash";
             spell.CheckSpellName = "SummonerFlash";
@@ -2227,7 +2227,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerLevel = 4;
             spell.Name = "Hourglass";
             spell.CheckSpellName = "ZhonyasHourglass";
@@ -2241,7 +2241,7 @@ public:
         }
         {
             EvadeSpellData spell;
-            spell.ChampionName = "AllChampions";
+            spell.IsGlobal = true;
             spell.DangerLevel = 4;
             spell.Name = "Witchcap";
             spell.CheckSpellName = "Witchcap";
@@ -2265,15 +2265,13 @@ public:
     }
 
     static std::vector<const EvadeSpellData*> ForChampion(
-            const char* championName,
+            SDK::ChampionId championId,
             bool includeGlobal = true) {
         std::vector<const EvadeSpellData*> result;
         for (const EvadeSpellData& spell : Spells()) {
-            const bool isGlobal =
-                _stricmp(spell.ChampionName.c_str(), "AllChampions") == 0;
-            const bool isChampion = championName && championName[0] &&
-                _stricmp(spell.ChampionName.c_str(), championName) == 0;
-            if ((includeGlobal && isGlobal) || isChampion) {
+            if ((includeGlobal && spell.IsGlobal) ||
+                (!spell.IsGlobal && spell.ChampionId == championId &&
+                 championId != SDK::ChampionId::Unknown)) {
                 result.push_back(&spell);
             }
         }

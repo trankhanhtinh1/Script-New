@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Garen = [] {
     ChampionProfile p{};
-    p.ChampionName = "Garen";
+    p.ChampionId = SDK::ChampionId::Garen;
     p.DisplayName = "The Might of Demacia";
     p.InternalId = "champion.kuroaio.ai.garen";
     p.PrimaryArchetype = Archetype::Juggernaut;

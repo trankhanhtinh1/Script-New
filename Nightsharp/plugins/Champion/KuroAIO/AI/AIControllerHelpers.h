@@ -985,9 +985,16 @@ inline bool SpellSlotOrEventNameContainsAny(
            SpellEventNameContainsAny(args, tokens);
 }
 
-inline bool ChampionIs(const AIHeroClient& target, const char* name) {
-    return target.IsValid() && name && name[0] &&
-           _stricmp(target.CharacterName().c_str(), name) == 0;
+inline SDK::ChampionId ChampionIdOf(const AIHeroClient& target) {
+    if (!target.IsValid()) {
+        return SDK::ChampionId::Unknown;
+    }
+    return SDK::ChampionIdFromName(target.CharacterName().c_str());
+}
+
+inline bool ChampionIs(const AIHeroClient& target, SDK::ChampionId championId) {
+    return championId != SDK::ChampionId::Unknown &&
+           ChampionIdOf(target) == championId;
 }
 
 inline bool EnemySpellReady(const AIHeroClient& target, SDK::SpellSlot slot) {
@@ -1021,12 +1028,12 @@ inline bool HasReadyDashHazardAt(const Vector3& position,
             enemy.Position().Distance2D(position) > searchRange) {
             continue;
         }
-        if ((ChampionIs(enemy, "Poppy") &&
+        if ((ChampionIs(enemy, SDK::ChampionId::Poppy) &&
              (enemy.HasBuff("PoppyWZone") ||
               EnemySpellReady(enemy, SDK::SpellSlot::W))) ||
-            (ChampionIs(enemy, "Taliyah") &&
+            (ChampionIs(enemy, SDK::ChampionId::Taliyah) &&
              EnemySpellReady(enemy, SDK::SpellSlot::E)) ||
-            (ChampionIs(enemy, "Cassiopeia") &&
+            (ChampionIs(enemy, SDK::ChampionId::Cassiopeia) &&
              EnemySpellReady(enemy, SDK::SpellSlot::W))) {
             return true;
         }
@@ -1151,7 +1158,7 @@ enum class ThreatCondition : std::uint8_t {
 };
 
 struct PointClickThreatRule {
-    const char* Champion = "";
+    SDK::ChampionId Champion = SDK::ChampionId::Unknown;
     SDK::SpellSlot Slot = SDK::SpellSlot::Unknown;
     float Range = 0.0f;
     ThreatCondition Condition = ThreatCondition::None;
@@ -1175,26 +1182,26 @@ inline bool ThreatConditionMet(const AIHeroClient& enemy,
 // Warwick R and Skarner R deliberately do not belong here; their live paths
 // are handled by each controller's incoming-line logic.
 inline constexpr std::array<PointClickThreatRule, 18> PointClickThreats = {
-    PointClickThreatRule{ "Malzahar", SDK::SpellSlot::R, 700.0f },
-    PointClickThreatRule{ "Lissandra", SDK::SpellSlot::R, 550.0f },
-    PointClickThreatRule{ "Vi", SDK::SpellSlot::R, 800.0f },
-    PointClickThreatRule{ "Nautilus", SDK::SpellSlot::R, 825.0f },
-    PointClickThreatRule{ "Pantheon", SDK::SpellSlot::W, 600.0f },
-    PointClickThreatRule{ "Maokai", SDK::SpellSlot::W, 525.0f },
-    PointClickThreatRule{ "FiddleSticks", SDK::SpellSlot::Q, 575.0f },
-    PointClickThreatRule{ "Renekton", SDK::SpellSlot::W, 275.0f },
-    PointClickThreatRule{ "Lulu", SDK::SpellSlot::W, 650.0f },
-    PointClickThreatRule{ "Rammus", SDK::SpellSlot::E, 325.0f },
-    PointClickThreatRule{ "Alistar", SDK::SpellSlot::W, 650.0f },
-    PointClickThreatRule{ "Poppy", SDK::SpellSlot::E, 475.0f },
-    PointClickThreatRule{ "Sett", SDK::SpellSlot::R, 400.0f },
-    PointClickThreatRule{ "Camille", SDK::SpellSlot::R, 475.0f },
-    PointClickThreatRule{ "Mordekaiser", SDK::SpellSlot::R, 650.0f },
-    PointClickThreatRule{ "Annie", SDK::SpellSlot::Q, 625.0f,
+    PointClickThreatRule{ SDK::ChampionId::Malzahar, SDK::SpellSlot::R, 700.0f },
+    PointClickThreatRule{ SDK::ChampionId::Lissandra, SDK::SpellSlot::R, 550.0f },
+    PointClickThreatRule{ SDK::ChampionId::Vi, SDK::SpellSlot::R, 800.0f },
+    PointClickThreatRule{ SDK::ChampionId::Nautilus, SDK::SpellSlot::R, 825.0f },
+    PointClickThreatRule{ SDK::ChampionId::Pantheon, SDK::SpellSlot::W, 600.0f },
+    PointClickThreatRule{ SDK::ChampionId::Maokai, SDK::SpellSlot::W, 525.0f },
+    PointClickThreatRule{ SDK::ChampionId::Fiddlesticks, SDK::SpellSlot::Q, 575.0f },
+    PointClickThreatRule{ SDK::ChampionId::Renekton, SDK::SpellSlot::W, 275.0f },
+    PointClickThreatRule{ SDK::ChampionId::Lulu, SDK::SpellSlot::W, 650.0f },
+    PointClickThreatRule{ SDK::ChampionId::Rammus, SDK::SpellSlot::E, 325.0f },
+    PointClickThreatRule{ SDK::ChampionId::Alistar, SDK::SpellSlot::W, 650.0f },
+    PointClickThreatRule{ SDK::ChampionId::Poppy, SDK::SpellSlot::E, 475.0f },
+    PointClickThreatRule{ SDK::ChampionId::Sett, SDK::SpellSlot::R, 400.0f },
+    PointClickThreatRule{ SDK::ChampionId::Camille, SDK::SpellSlot::R, 475.0f },
+    PointClickThreatRule{ SDK::ChampionId::Mordekaiser, SDK::SpellSlot::R, 650.0f },
+    PointClickThreatRule{ SDK::ChampionId::Annie, SDK::SpellSlot::Q, 625.0f,
                           ThreatCondition::AnnieStunReady, true },
-    PointClickThreatRule{ "Annie", SDK::SpellSlot::R, 600.0f,
+    PointClickThreatRule{ SDK::ChampionId::Annie, SDK::SpellSlot::R, 600.0f,
                           ThreatCondition::AnnieStunReady, true },
-    PointClickThreatRule{ "TwistedFate", SDK::SpellSlot::W, 575.0f,
+    PointClickThreatRule{ SDK::ChampionId::TwistedFate, SDK::SpellSlot::W, 575.0f,
                           ThreatCondition::TwistedFateGoldCard, false },
 };
 

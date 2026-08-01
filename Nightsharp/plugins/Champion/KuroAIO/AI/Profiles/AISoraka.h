@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Soraka = [] {
     ChampionProfile p{};
-    p.ChampionName = "Soraka";
+    p.ChampionId = SDK::ChampionId::Soraka;
     p.DisplayName = "Soraka";
     p.InternalId = "champion.kuroaio.ai.soraka";
     p.PrimaryArchetype = Archetype::Enchanter;

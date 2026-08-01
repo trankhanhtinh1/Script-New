@@ -4,6 +4,7 @@
 
 #include "../../../sdk/Events/Events.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
+#include "../../../sdk/Enumerations/ChampionId.h"
 
 #include <vector>
 
@@ -14,7 +15,8 @@ inline std::vector<::SDK::AIMinionClient> GetAzirSandSoldiers(
 ) {
     std::vector<::SDK::AIMinionClient> result;
     if (!player.IsValid() || player.IsDead() ||
-        !AzirSoldierRules::IsAzirChampionName(player.CharacterName())) {
+        ::SDK::ChampionIdFromName(player.CharacterName().c_str()) !=
+            ::SDK::ChampionId::Azir) {
         return result;
     }
 

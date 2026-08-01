@@ -3,7 +3,7 @@
 namespace Plugins::KuroAIO::AI::Profiles {
 inline constexpr ChampionProfile Jayce = [] {
   ChampionProfile p{};
-  p.ChampionName = "Jayce";
+  p.ChampionId = SDK::ChampionId::Jayce;
   p.DisplayName = "Jayce";
   p.InternalId = "champion.kuroaio.ai.jayce";
   p.PrimaryArchetype = Archetype::Specialist;

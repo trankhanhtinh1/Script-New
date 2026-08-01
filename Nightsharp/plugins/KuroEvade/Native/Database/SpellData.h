@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ProjectileWallDatabase.h"
-
+#include "../../../../SDK/Enumerations/ChampionId.h"
 #include "../../../../SDK/Wrappers/Spells/Database/SpellDatabaseEntry.h"
 
 #include <algorithm>
@@ -56,14 +56,15 @@ enum class CrowdControlType {
 };
 
 struct SpellData {
-    std::string CharacterName;
-    int DangerValue = 1;
+    SDK::ChampionId ChampionId = SDK::ChampionId::Unknown;
+    bool IsGlobal = false;
     std::string DisplayName;
     std::string MissileSpellName;
     float MissileSpeed = 0.0f;
     float Radius = 0.0f;
     float Range = 0.0f;
     int Delay = 250;
+    int DangerValue = 1;
     SpellSlot Slot = SpellSlot::Unknown;
     std::string SpellName;
     SkillShotType Type = SkillShotType::SkillshotLine;
@@ -171,7 +172,7 @@ struct SpellData {
 
     void Finalize() {
         Runtime = {};
-        Runtime.ChampionName = CharacterName;
+        Runtime.ChampionName = IsGlobal ? "AllChampions" : SDK::ChampionName(ChampionId);
         Runtime.SpellName = SpellName;
         Runtime.MissileSpellName = MissileSpellName;
         Runtime.DangerValue = DangerValue;
@@ -267,8 +268,9 @@ struct SpellData {
         }
     }
 
-    bool MatchesChampion(const char* name) const {
-        return name && _stricmp(CharacterName.c_str(), name) == 0;
+    bool MatchesChampion(SDK::ChampionId championId) const {
+        return IsGlobal || (ChampionId != SDK::ChampionId::Unknown &&
+                            ChampionId == championId);
     }
 };
 

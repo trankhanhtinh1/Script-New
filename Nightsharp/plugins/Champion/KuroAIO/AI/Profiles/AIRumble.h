@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Rumble = [] {
     ChampionProfile profile{};
-    profile.ChampionName = "Rumble";
+    profile.ChampionId = SDK::ChampionId::Rumble;
     profile.DisplayName = "Rumble";
     profile.InternalId = "champion.kuroaio.ai.rumble";
     profile.PrimaryArchetype = Archetype::Battlemage;

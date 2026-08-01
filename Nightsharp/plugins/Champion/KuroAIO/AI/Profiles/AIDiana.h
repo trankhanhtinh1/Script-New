@@ -9,7 +9,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 // consumes a mark for its reset, and R is reserved for safe pull density.
 inline constexpr ChampionProfile Diana = [] {
     ChampionProfile p{};
-    p.ChampionName = "Diana";
+    p.ChampionId = SDK::ChampionId::Diana;
     p.DisplayName = "Diana";
     p.InternalId = "champion.kuroaio.ai.diana";
     p.PrimaryArchetype = Archetype::Diver;

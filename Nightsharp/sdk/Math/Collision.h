@@ -48,9 +48,6 @@ inline bool HasProjectileWallCollision(const Vector3& start,
 namespace detail {
 
 inline bool Initialized = false;
-inline bool YasuoInGame = false;
-inline bool SamiraInGame = false;
-inline bool MelInGame = false;
 
 inline std::string ToLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -59,27 +56,6 @@ inline std::string ToLower(std::string value) {
     return value;
 }
 
-inline bool IsChampionInGame(const char* championName) {
-    const auto player = ObjectManager::Player();
-    const GameObjectTeam playerTeam = player.IsValid()
-        ? player.Team()
-        : GameObjectTeam::Unknown;
-    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
-        if (hero.IsValid() &&
-            (playerTeam == GameObjectTeam::Unknown ||
-             hero.Team() != playerTeam) &&
-            hero.CharacterName() == championName) {
-            return true;
-        }
-    }
-    return false;
-}
-
-inline void RefreshChampionFlags() {
-    YasuoInGame = IsChampionInGame("Yasuo");
-    SamiraInGame = IsChampionInGame("Samira");
-    MelInGame = IsChampionInGame("Mel");
-}
 
 inline void Initialize() {
     if (Initialized) {
@@ -87,7 +63,6 @@ inline void Initialize() {
         return;
     }
     Initialized = true;
-    RefreshChampionFlags();
     YasuoWallTracker::EnsureInitialized();
 }
 
@@ -332,14 +307,16 @@ inline bool HasAnyBuff(const AIBaseClient& unit, std::initializer_list<const cha
 inline bool SegmentIntersectsYasuoWall(const Vector3& start,
                                        const Vector3& end,
                                        float projectileRadius) {
-    Initialize();
-    RefreshChampionFlags();
-    return YasuoInGame &&
-           YasuoWallTracker::Intersects(
-               start,
-               end,
-               std::max(projectileRadius, 0.0f),
-               YasuoWallTracker::WallOwner::Enemy);
+    if (!start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(projectileRadius) || projectileRadius < 0.0f) {
+        return false;
+    }
+    return YasuoWallTracker::Intersects(
+        start,
+        end,
+        projectileRadius,
+        YasuoWallTracker::WallOwner::Enemy);
 }
 
 inline bool HasCircularShieldCollision(const char* championName,
@@ -348,9 +325,20 @@ inline bool HasCircularShieldCollision(const char* championName,
                                        const Vector3& end,
                                        float baseRadius,
                                        float extraRadius) {
+    if (!championName || !start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(baseRadius) || baseRadius < 0.0f ||
+        !std::isfinite(extraRadius) || extraRadius < 0.0f) {
+        return false;
+    }
+
     const float radius = baseRadius + extraRadius;
+    if (!std::isfinite(radius)) {
+        return false;
+    }
     const Vec2 start2D = start.To2D();
     const Vec2 end2D = end.To2D();
+    const std::string targetName = ToLower(championName);
 
     const auto player = ObjectManager::Player();
     const GameObjectTeam playerTeam = player.IsValid()
@@ -361,7 +349,8 @@ inline bool HasCircularShieldCollision(const char* championName,
             hero.Team() == playerTeam) {
             continue;
         }
-        if (!Extensions::IsValidTarget(hero) || hero.CharacterName() != championName) {
+        if (!Extensions::IsValidTarget(hero) ||
+            ToLower(hero.CharacterName()) != targetName) {
             continue;
         }
 
@@ -371,13 +360,16 @@ inline bool HasCircularShieldCollision(const char* championName,
         }
 
         const Vector3 shieldPosition = ServerPositionOrPosition(unit);
-        if (shieldPosition.Distance(start) <= radius ||
-            end.Distance(shieldPosition) <= radius) {
+        if (!shieldPosition.IsValid()) {
+            continue;
+        }
+        const Vec2 shield2D = shieldPosition.To2D();
+        if (shield2D.Distance(start2D) <= radius ||
+            end2D.Distance(shield2D) <= radius) {
             return true;
         }
-
         if (DistanceSquaredToSegmentOnly(
-                shieldPosition.To2D(),
+                shield2D,
                 start2D,
                 end2D) <= radius * radius) {
             return true;
@@ -385,29 +377,24 @@ inline bool HasCircularShieldCollision(const char* championName,
     }
     return false;
 }
-
 inline bool HasSamiraCollision(const Vector3& start, const Vector3& end, float extraRadius) {
-    RefreshChampionFlags();
-    return SamiraInGame &&
-           HasCircularShieldCollision(
-               "Samira",
-               { "SamiraW", "SamiraWBuff" },
-               start,
-               end,
-               325.0f,
-               extraRadius);
+    return HasCircularShieldCollision(
+        "Samira",
+        { "SamiraW", "SamiraWBuff" },
+        start,
+        end,
+        325.0f,
+        extraRadius);
 }
 
 inline bool HasMelCollision(const Vector3& start, const Vector3& end, float extraRadius) {
-    RefreshChampionFlags();
-    return MelInGame &&
-           HasCircularShieldCollision(
-               "Mel",
-               { "MelW", "MelWBuff", "MelRebuttal" },
-               start,
-               end,
-               175.0f,
-               extraRadius);
+    return HasCircularShieldCollision(
+        "Mel",
+        { "MelW", "MelWBuff", "MelWReflect", "MelRebuttal" },
+        start,
+        end,
+        175.0f,
+        extraRadius);
 }
 
 inline void ProcessHeroes(std::vector<AIBaseClient>& result,
@@ -609,6 +596,9 @@ inline void ProcessWalls(std::vector<AIBaseClient>& result,
 inline void ProcessProjectileWalls(std::vector<AIBaseClient>& result,
                                    const Vector3& position,
                                    const PredictionInput& input) {
+    if (!input.Collision) {
+        return;
+    }
     const Vector3 from = input.ResolveFrom();
 
     if (ContainsCollisionObject(input, CollisionableObjects::YasuoWall) &&
@@ -714,6 +704,11 @@ inline bool HasCollision(const std::vector<Vector3>& positions, PredictionInput 
 inline bool HasSamiraWallCollision(const Vector3& start,
                                    const Vector3& end,
                                    float extraRadius = 0.0f) {
+    if (!start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(extraRadius) || extraRadius < 0.0f) {
+        return false;
+    }
     Initialize();
     return detail::HasSamiraCollision(start, end, extraRadius);
 }
@@ -721,6 +716,11 @@ inline bool HasSamiraWallCollision(const Vector3& start,
 inline bool HasMelWallCollision(const Vector3& start,
                                 const Vector3& end,
                                 float extraRadius = 0.0f) {
+    if (!start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(extraRadius) || extraRadius < 0.0f) {
+        return false;
+    }
     Initialize();
     return detail::HasMelCollision(start, end, extraRadius);
 }
@@ -733,6 +733,11 @@ inline bool HasYasuoWindWallCollision(const Vector3& start,
 inline bool HasYasuoWindWallCollision(const Vector3& start,
                                       const Vector3& end,
                                       float extraRadius) {
+    if (!start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(extraRadius) || extraRadius < 0.0f) {
+        return false;
+    }
     Initialize();
     return detail::SegmentIntersectsYasuoWall(start, end, extraRadius);
 }
@@ -740,9 +745,15 @@ inline bool HasYasuoWindWallCollision(const Vector3& start,
 inline bool HasProjectileWallCollision(const Vector3& start,
                                        const Vector3& end,
                                        float extraRadius = 0.0f) {
-    return HasYasuoWindWallCollision(start, end, extraRadius) ||
-           HasSamiraWallCollision(start, end, extraRadius) ||
-           HasMelWallCollision(start, end, extraRadius);
+    if (!start.IsValid() || !end.IsValid() ||
+        start.IsZero() || end.IsZero() ||
+        !std::isfinite(extraRadius) || extraRadius < 0.0f) {
+        return false;
+    }
+    Initialize();
+    return detail::SegmentIntersectsYasuoWall(start, end, extraRadius) ||
+           detail::HasSamiraCollision(start, end, extraRadius) ||
+           detail::HasMelCollision(start, end, extraRadius);
 }
 
 inline bool IsCollision(const Vector3& position, float radius = 50.0f) {

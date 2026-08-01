@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Warwick = [] {
     ChampionProfile p{};
-    p.ChampionName = "Warwick";
+    p.ChampionId = SDK::ChampionId::Warwick;
     p.DisplayName = "Warwick";
     p.InternalId = "champion.kuroaio.ai.warwick";
     p.PrimaryArchetype = Archetype::Diver;

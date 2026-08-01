@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Ziggs = [] {
     ChampionProfile p{};
-    p.ChampionName = "Ziggs";
+    p.ChampionId = SDK::ChampionId::Ziggs;
     p.DisplayName = "Ziggs";
     p.InternalId = "champion.kuroaio.ai.ziggs";
     p.PrimaryArchetype = Archetype::BurstMage;

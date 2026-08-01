@@ -56,18 +56,6 @@ struct DetectedTarget {
     Vector3 Start;
 };
 
-enum class ItemId : int {
-    Youmuus_Ghostblade = 3142,
-    Stridebreaker = 6631,
-    Titanic_Hydra = 3748,
-    Tiamat = 3077,
-    Ravenous_Hydra = 3074,
-    Profane_Hydra = 6698,
-    Randuins_Omen = 3143,
-    Locket_of_the_Iron_Solari = 3190,
-    Mercurial_Scimitar = 3139,
-    Quicksilver_Sash = 3140
-};
 
 // ============================================================================
 // Inline Variables
@@ -386,7 +374,11 @@ static AIHeroClient GetPriorityTarget() {
     float bestHealth = FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!ValidHeroTarget(enemy, pRange)) continue;
-        std::string key = "Priority" + GetObjectCharacterName(enemy);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(GetObjectCharacterName(enemy).c_str());
+        const char* championName = SDK::ChampionName(championId);
+        if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
+        std::string key = "Priority" + std::string(championName);
         int p = Slider(PriorityModeMenu, key.c_str(), 2);
         if (p > bestPriority) {
             best = enemy;
@@ -441,6 +433,16 @@ static AIHeroClient GetFioraTarget(float range = 500.0f) {
 // W Block (Parry) Solvers
 // ============================================================================
 
+static void CastWPosition(const Vector3& position) {
+    const auto player = Player();
+    if (!player.IsValid() || position.IsZero() ||
+        SDK::Collision::HasProjectileWallCollision(
+            player.Position(), position, W.Width * 0.5f)) {
+        return;
+    }
+    player.Spellbook().CastSpell(SpellSlot::W, position);
+}
+
 static void SolveInstantBlock() {
     const auto player = Player();
     if (!player.IsValid() || player.IsDead() ||
@@ -451,7 +453,9 @@ static void SolveInstantBlock() {
 
     auto target = GetFioraTarget(W.Range);
     if (ValidHeroTarget(target, W.Range)) {
-        player.Spellbook().CastSpell(SpellSlot::W, target.Position());
+        Vector3 castPosition = SDK::Prediction::GetPrediction(
+            target, W.Delay).GetUnitPosition();
+        CastWPosition(castPosition.IsZero() ? target.Position() : castPosition);
     } else {
         AIHeroClient fallbackHero;
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -461,10 +465,13 @@ static void SolveInstantBlock() {
             }
         }
         if (fallbackHero.IsValid()) {
-            player.Spellbook().CastSpell(SpellSlot::W, fallbackHero.Position());
+            Vector3 castPosition = SDK::Prediction::GetPrediction(
+                fallbackHero, W.Delay).GetUnitPosition();
+            CastWPosition(castPosition.IsZero()
+                ? fallbackHero.Position() : castPosition);
         } else {
             Vector3 castPos = player.Position().Extend(SDK::Game::CursorPosition(), 100.0f);
-            player.Spellbook().CastSpell(SpellSlot::W, castPos);
+            CastWPosition(castPos);
         }
     }
 }
@@ -708,41 +715,41 @@ static float GetFastDamage(const AIHeroClient& target) {
 static bool HasActiveItem() {
     const auto player = Player();
     if (!player.IsValid()) return false;
-    return SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Youmuus_Ghostblade)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Stridebreaker)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Titanic_Hydra)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Ravenous_Hydra)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Profane_Hydra)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Tiamat)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Randuins_Omen)) ||
-           SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Locket_of_the_Iron_Solari));
+    return SDK::Items::CanUseItem(player, SDK::ItemId::Youmuu_s_Ghostblade) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Stridebreaker) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Titanic_Hydra) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Ravenous_Hydra) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Profane_Hydra) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Tiamat) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Randuin_s_Omen) ||
+           SDK::Items::CanUseItem(player, SDK::ItemId::Locket_of_the_Iron_Solari);
 }
 
 static bool CastActiveItem() {
     const auto player = Player();
     if (!player.IsValid()) return false;
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Youmuus_Ghostblade))) {
-        SDK::Items::UseItem(player, static_cast<int>(ItemId::Youmuus_Ghostblade));
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Youmuu_s_Ghostblade)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Youmuu_s_Ghostblade);
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Titanic_Hydra))) {
-        if (SDK::Items::UseItem(player, static_cast<int>(ItemId::Titanic_Hydra))) {
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Titanic_Hydra)) {
+        if (SDK::Items::UseItem(player, SDK::ItemId::Titanic_Hydra)) {
             Orbwalker::ResetAutoAttackTimer();
             return true;
         }
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Ravenous_Hydra))) {
-        SDK::Items::UseItem(player, static_cast<int>(ItemId::Ravenous_Hydra));
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Ravenous_Hydra)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Ravenous_Hydra);
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Profane_Hydra))) {
-        SDK::Items::UseItem(player, static_cast<int>(ItemId::Profane_Hydra));
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Profane_Hydra)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Profane_Hydra);
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Stridebreaker))) {
-        SDK::Items::UseItem(player, static_cast<int>(ItemId::Stridebreaker), SDK::Game::CursorPosition());
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Stridebreaker)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Stridebreaker, SDK::Game::CursorPosition());
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Tiamat))) {
-        SDK::Items::UseItem(player, static_cast<int>(ItemId::Tiamat));
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Tiamat)) {
+        SDK::Items::UseItem(player, SDK::ItemId::Tiamat);
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Randuins_Omen))) {
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Randuin_s_Omen)) {
         bool enemyInRange = false;
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
             if (ValidHeroTarget(enemy, 500.0f)) {
@@ -751,10 +758,10 @@ static bool CastActiveItem() {
             }
         }
         if (enemyInRange) {
-            SDK::Items::UseItem(player, static_cast<int>(ItemId::Randuins_Omen));
+            SDK::Items::UseItem(player, SDK::ItemId::Randuin_s_Omen);
         }
     }
-    if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Locket_of_the_Iron_Solari))) {
+    if (SDK::Items::CanUseItem(player, SDK::ItemId::Locket_of_the_Iron_Solari)) {
         if (player.HealthPercent() <= 40.0f) {
             bool enemyInRange = false;
             for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -764,7 +771,7 @@ static bool CastActiveItem() {
                 }
             }
             if (enemyInRange) {
-                SDK::Items::UseItem(player, static_cast<int>(ItemId::Locket_of_the_Iron_Solari));
+                SDK::Items::UseItem(player, SDK::ItemId::Locket_of_the_Iron_Solari);
             }
         }
     }
@@ -1033,10 +1040,10 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         SDK::HasBuffOfType(player, SDK::BuffType::Taunt) ||
         SDK::HasBuffOfType(player, SDK::BuffType::Suppression) ||
         SDK::HasBuffOfType(player, SDK::BuffType::Asleep)) {
-        if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Quicksilver_Sash))) {
-            SDK::Items::UseItem(player, static_cast<int>(ItemId::Quicksilver_Sash));
-        } else if (SDK::Items::CanUseItem(player, static_cast<int>(ItemId::Mercurial_Scimitar))) {
-            SDK::Items::UseItem(player, static_cast<int>(ItemId::Mercurial_Scimitar));
+        if (SDK::Items::CanUseItem(player, SDK::ItemId::Quicksilver_Sash)) {
+            SDK::Items::UseItem(player, SDK::ItemId::Quicksilver_Sash);
+        } else if (SDK::Items::CanUseItem(player, SDK::ItemId::Mercurial_Scimitar)) {
+            SDK::Items::UseItem(player, SDK::ItemId::Mercurial_Scimitar);
         }
     }
 
@@ -1063,7 +1070,8 @@ static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
         return;
     }
 
-    if (_stricmp(args.Sender.CharacterName, "Jax") == 0 && args.Slot == static_cast<int>(SpellSlot::E)) {
+    if (SDK::ChampionIdFromName(args.Sender.CharacterName) == SDK::ChampionId::Jax &&
+        args.Slot == static_cast<int>(SpellSlot::E)) {
         Menu* charSub = EvadeOthersMenu->GetSubMenu("jax");
         bool enabled = charSub ? Bool(charSub, "JaxE", false) : false;
         if (enabled && player.Position().Distance(args.Sender.Position) <= player.BoundingRadius() + 875.0f) {
@@ -1084,14 +1092,17 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
         return;
     }
 
-    std::string charName = args.Sender.CharacterName;
-    std::string charLower = ToLower(charName);
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(args.Sender.CharacterName);
+    const char* championName = SDK::ChampionName(championId);
+    if (championId == SDK::ChampionId::Unknown || !championName[0]) return;
+    std::string charLower = ToLower(championName);
 
     Menu* targetNoneCharSub = EvadeTargetNoneMenu ? EvadeTargetNoneMenu->GetSubMenu(charLower.c_str()) : nullptr;
     if (targetNoneCharSub && Bool(EvadeTargetNoneMenu, "W", true)) {
         for (const auto& spell : TargetedNoneEvadeSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
-                std::string key = spell.CharacterName + SpellSlotToString(spell.Slot);
+            if (spell.Champion == championId) {
+                std::string key = std::string(SDK::ChampionName(spell.Champion)) + SpellSlotToString(spell.Slot);
                 bool enabled = Bool(targetNoneCharSub, key.c_str(), false);
                 if (enabled && args.Target.IsValid() && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
                     if (spell.IsDash) {
@@ -1108,82 +1119,82 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     Menu* othersCharSub = EvadeOthersMenu ? EvadeOthersMenu->GetSubMenu(charLower.c_str()) : nullptr;
     if (othersCharSub && Bool(EvadeOthersMenu, "W", true)) {
         for (const auto& spell : OtherEvadeSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
-                std::string key = spell.CharacterName + SpellSlotToString(spell.Slot);
+            if (spell.Champion == championId) {
+                std::string key = std::string(SDK::ChampionName(spell.Champion)) + SpellSlotToString(spell.Slot);
                 bool enabled = Bool(othersCharSub, key.c_str(), false);
                 if (enabled) {
                     if (args.IsAutoAttack && args.Target.IsValid() && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
-                        if (charName == "Jax" && spell.Slot == SpellSlot::W && args.Sender.IsVisible) {
+                        if (championId == SDK::ChampionId::Jax && spell.Slot == SpellSlot::W && args.Sender.IsVisible) {
                             SolveInstantBlock();
                             return;
                         }
-                        if (charName == "Yorick" && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
+                        if (championId == SDK::ChampionId::Yorick && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
                             SolveInstantBlock();
                             return;
                         }
-                        if (charName == "Poppy" && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
+                        if (championId == SDK::ChampionId::Poppy && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
                             SolveInstantBlock();
                             return;
                         }
-                        if (charName == "Rengar" && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
+                        if (championId == SDK::ChampionId::Rengar && spell.Slot == SpellSlot::Q && args.Sender.IsVisible) {
                             SolveInstantBlock();
                             return;
                         }
-                        if (charName == "Nautilus" && spell.Slot == SpellSlot::Unknown && !player.HasBuff("nautiluspassivecheck")) {
+                        if (championId == SDK::ChampionId::Nautilus && spell.Slot == SpellSlot::Unknown && !player.HasBuff("nautiluspassivecheck")) {
                             SolveInstantBlock();
                             return;
                         }
-                        if (charName == "Udyr" && spell.Slot == SpellSlot::E && !player.HasBuff("udyrbearstuncheck")) {
+                        if (championId == SDK::ChampionId::Udyr && spell.Slot == SpellSlot::E && !player.HasBuff("udyrbearstuncheck")) {
                             SolveInstantBlock();
                             return;
                         }
                     }
                     float dist = player.Position().Distance2D(args.Sender.Position);
-                    if (charName == "Riven" && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + args.Sender.Position.To2D().Distance(player.Position().To2D()) + 100.0f) {
+                    if (championId == SDK::ChampionId::Riven && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + args.Sender.Position.To2D().Distance(player.Position().To2D()) + 100.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Diana" && spell.Slot == SpellSlot::E && dist <= player.BoundingRadius() + 450.0f) {
+                    if (championId == SDK::ChampionId::Diana && spell.Slot == SpellSlot::E && dist <= player.BoundingRadius() + 450.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Maokai" && spell.Slot == SpellSlot::R && _stricmp(args.SpellName, "maokaidrain3toggle") == 0 && dist <= player.BoundingRadius() + 575.0f) {
+                    if (championId == SDK::ChampionId::Maokai && spell.Slot == SpellSlot::R && _stricmp(args.SpellName, "maokaidrain3toggle") == 0 && dist <= player.BoundingRadius() + 575.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Kalista" && spell.Slot == SpellSlot::E && dist <= 950.0f && player.HasBuff("kalistaexpungemarker")) {
+                    if (championId == SDK::ChampionId::Kalista && spell.Slot == SpellSlot::E && dist <= 950.0f && player.HasBuff("kalistaexpungemarker")) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Kennen" && spell.Slot == SpellSlot::W && dist <= 800.0f && player.HasBuff("kennenmarkofstorm") && player.GetBuffCount("kennenmarkofstorm") == 2) {
+                    if (championId == SDK::ChampionId::Kennen && spell.Slot == SpellSlot::W && dist <= 800.0f && player.HasBuff("kennenmarkofstorm") && player.GetBuffCount("kennenmarkofstorm") == 2) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Tryndamere" && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + 850.0f) {
+                    if (championId == SDK::ChampionId::Tryndamere && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + 850.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Sett" && spell.Slot == SpellSlot::E && dist <= player.BoundingRadius() + 490.0f) {
+                    if (championId == SDK::ChampionId::Sett && spell.Slot == SpellSlot::E && dist <= player.BoundingRadius() + 490.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Lissandra" && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + 490.0f) {
+                    if (championId == SDK::ChampionId::Lissandra && spell.Slot == SpellSlot::W && dist <= player.BoundingRadius() + 490.0f) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Sett" && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
+                    if (championId == SDK::ChampionId::Sett && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Camille" && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
+                    if (championId == SDK::ChampionId::Camille && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Tristana" && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
+                    if (championId == SDK::ChampionId::Tristana && spell.Slot == SpellSlot::R && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Lulu") {
+                    if (championId == SDK::ChampionId::Lulu) {
                         if (spell.Slot == SpellSlot::W && args.Target.NetworkId == static_cast<uint32_t>(player.NetworkId())) {
                             SolveInstantBlock();
                             return;
@@ -1193,7 +1204,7 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
                             return;
                         }
                     }
-                    if (charName == "Qiyana" && spell.Slot == SpellSlot::R && dist <= player.BoundingRadius() + 350.0f) {
+                    if (championId == SDK::ChampionId::Qiyana && spell.Slot == SpellSlot::R && dist <= player.BoundingRadius() + 350.0f) {
                         SDK::Polygon rect;
                         Vector2 start = args.Sender.Position.To2D();
                         Vector2 end = args.EndPosition.To2D();
@@ -1207,11 +1218,11 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
                             return;
                         }
                     }
-                    if (charName == "Jax" && spell.Slot == SpellSlot::E && player.Position().Distance(args.Sender.Position) <= player.BoundingRadius() + 875.0f && args.Sender.IsVisible) {
+                    if (championId == SDK::ChampionId::Jax && spell.Slot == SpellSlot::E && player.Position().Distance(args.Sender.Position) <= player.BoundingRadius() + 875.0f && args.Sender.IsVisible) {
                         SolveInstantBlock();
                         return;
                     }
-                    if (charName == "Yone") {
+                    if (championId == SDK::ChampionId::Yone) {
                         if (spell.Slot == SpellSlot::Q && _stricmp(args.SpellName, "YoneQ3") == 0 && dist <= player.BoundingRadius() + 500.0f) {
                             SolveInstantBlock();
                             return;
@@ -1221,7 +1232,7 @@ static void OnDoCast(const Events::ProcessSpellEventArgs& args) {
                             return;
                         }
                     }
-                    if (charName == "Sylas" && spell.Slot == SpellSlot::E && _stricmp(args.SpellName, "SylasE2") == 0 && dist <= player.BoundingRadius() + 800.0f) {
+                    if (championId == SDK::ChampionId::Sylas && spell.Slot == SpellSlot::E && _stricmp(args.SpellName, "SylasE2") == 0 && dist <= player.BoundingRadius() + 800.0f) {
                         SolveInstantBlock();
                         return;
                     }
@@ -1239,10 +1250,13 @@ static void OnPlayAnimation(const Events::PlayAnimationEventArgs& args) {
         return;
     }
 
-    std::string charName = args.Sender.CharacterName;
-    std::string charLower = ToLower(charName);
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(args.Sender.CharacterName);
+    const char* championName = SDK::ChampionName(championId);
+    if (championId == SDK::ChampionId::Unknown || !championName[0]) return;
+    std::string charLower = ToLower(championName);
 
-    if (charName == "Riven" && _stricmp(args.Animation, "spell1c") == 0) {
+    if (championId == SDK::ChampionId::Riven && _stricmp(args.Animation, "spell1c") == 0) {
         Menu* charSub = EvadeOthersMenu->GetSubMenu("riven");
         if (charSub && Bool(charSub, "RivenQ", false)) {
             RivenQ3Tick = SDK::Variables::TickCount();
@@ -1254,11 +1268,11 @@ static void OnPlayAnimation(const Events::PlayAnimationEventArgs& args) {
     Menu* othersCharSub = EvadeOthersMenu ? EvadeOthersMenu->GetSubMenu(charLower.c_str()) : nullptr;
     if (othersCharSub) {
         for (const auto& spell : OtherEvadeSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
-                std::string key = spell.CharacterName + SpellSlotToString(spell.Slot);
+            if (spell.Champion == championId) {
+                std::string key = std::string(SDK::ChampionName(spell.Champion)) + SpellSlotToString(spell.Slot);
                 bool enabled = Bool(othersCharSub, key.c_str(), false);
                 if (enabled) {
-                    if (charName == "Reksai" && spell.Slot == SpellSlot::W && _stricmp(args.Animation, "Spell2_knockup") == 0) {
+                    if (championId == SDK::ChampionId::RekSai && spell.Slot == SpellSlot::W && _stricmp(args.Animation, "Spell2_knockup") == 0) {
                         if (!player.HasBuff("reksaiknockupimmune") && player.Position().Distance2D(args.Sender.Position) <= player.BoundingRadius() + 100.0f) {
                             SolveInstantBlock();
                         }
@@ -1278,7 +1292,9 @@ static void Unit_OnDash(const SDK::Events::Dash::DashArgs& args) {
     AIHeroClient caster(args.Unit);
     if (!caster.IsValid() || caster.Team() == player.Team()) return;
 
-    if (GetObjectCharacterName(caster) == "Riven") {
+    const SDK::ChampionId casterChampionId =
+        SDK::ChampionIdFromName(caster.CharacterName().c_str());
+    if (casterChampionId == SDK::ChampionId::Riven) {
         Menu* charSub = EvadeOthersMenu->GetSubMenu("riven");
         if (charSub && Bool(charSub, "RivenQ", false)) {
             RivenDashTick = SDK::Variables::TickCount();
@@ -1529,8 +1545,13 @@ static void BuildMenu() {
     PriorityModeMenu->Add(new MenuBool("PriorityOrbwalktoPassive", "Orbwalk to Passive", true));
     PriorityModeMenu->Add(new MenuBool("PriorityUnderTower", "Under Tower", true));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        std::string key = "Priority" + GetObjectCharacterName(enemy);
-        std::string label = GetObjectCharacterName(enemy);
+        const std::string runtimeName = GetObjectCharacterName(enemy);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(runtimeName.c_str());
+        const char* championName = SDK::ChampionName(championId);
+        if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
+        std::string key = "Priority" + std::string(championName);
+        std::string label = championName;
         PriorityModeMenu->Add(new MenuSlider(key.c_str(), label.c_str(), 2, 1, 5));
     }
 
@@ -1572,20 +1593,24 @@ static void BuildMenu() {
     EvadeTargetMenu = MenuRoot->AddSubMenu(new Menu("EvadeTarget", "Evade Targeted Missile"));
     EvadeTargetMenu->Add(new MenuBool("W", "Use W", true));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        std::string charName = GetObjectCharacterName(enemy);
+        const std::string runtimeName = GetObjectCharacterName(enemy);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(runtimeName.c_str());
+        const char* championName = SDK::ChampionName(championId);
+        if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
         bool hasSpell = false;
         for (const auto& spell : EvadeTargetSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
+            if (spell.Champion == championId) {
                 hasSpell = true;
                 break;
             }
         }
         if (hasSpell) {
-            std::string subMenuId = ToLower(charName);
-            std::string subMenuLabel = "-> " + charName;
+            std::string subMenuId = ToLower(championName);
+            std::string subMenuLabel = "-> " + std::string(championName);
             Menu* charSub = EvadeTargetMenu->AddSubMenu(new Menu(subMenuId.c_str(), subMenuLabel.c_str()));
             for (const auto& spell : EvadeTargetSpells) {
-                if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
+                if (spell.Champion == championId) {
                     std::string key = spell.MissileName;
                     std::string label = spell.MissileName + " (" + SpellSlotToString(spell.Slot) + ")";
                     charSub->Add(new MenuBool(key.c_str(), label.c_str(), false));
@@ -1597,22 +1622,27 @@ static void BuildMenu() {
     EvadeOthersMenu = MenuRoot->AddSubMenu(new Menu("EvadeOthers", "Block Other Skills"));
     EvadeOthersMenu->Add(new MenuBool("W", "Use W", true));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        std::string charName = GetObjectCharacterName(enemy);
+        const std::string runtimeName = GetObjectCharacterName(enemy);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(runtimeName.c_str());
+        const char* championName = SDK::ChampionName(championId);
+        if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
         bool hasSpell = false;
         for (const auto& spell : OtherEvadeSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
+            if (spell.Champion == championId) {
                 hasSpell = true;
                 break;
             }
         }
         if (hasSpell) {
-            std::string subMenuId = ToLower(charName);
-            std::string subMenuLabel = "-> " + charName;
+            std::string subMenuId = ToLower(championName);
+            std::string subMenuLabel = "-> " + std::string(championName);
             Menu* charSub = EvadeOthersMenu->AddSubMenu(new Menu(subMenuId.c_str(), subMenuLabel.c_str()));
             for (const auto& spell : OtherEvadeSpells) {
-                if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
-                    std::string key = spell.CharacterName + SpellSlotToString(spell.Slot);
-                    std::string label = spell.CharacterName + " (" + SpellSlotToString(spell.Slot) + ")";
+                if (spell.Champion == championId) {
+                    const char* spellChampionName = SDK::ChampionName(spell.Champion);
+                    std::string key = std::string(spellChampionName) + SpellSlotToString(spell.Slot);
+                    std::string label = std::string(spellChampionName) + " (" + SpellSlotToString(spell.Slot) + ")";
                     charSub->Add(new MenuBool(key.c_str(), label.c_str(), false));
                 }
             }
@@ -1622,22 +1652,27 @@ static void BuildMenu() {
     EvadeTargetNoneMenu = MenuRoot->AddSubMenu(new Menu("EvadeTargetNone", "Evade Targeted None-Missile"));
     EvadeTargetNoneMenu->Add(new MenuBool("W", "Use W", true));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        std::string charName = GetObjectCharacterName(enemy);
+        const std::string runtimeName = GetObjectCharacterName(enemy);
+        const SDK::ChampionId championId =
+            SDK::ChampionIdFromName(runtimeName.c_str());
+        const char* championName = SDK::ChampionName(championId);
+        if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
         bool hasSpell = false;
         for (const auto& spell : TargetedNoneEvadeSpells) {
-            if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
+            if (spell.Champion == championId) {
                 hasSpell = true;
                 break;
             }
         }
         if (hasSpell) {
-            std::string subMenuId = ToLower(charName);
-            std::string subMenuLabel = "-> " + charName;
+            std::string subMenuId = ToLower(championName);
+            std::string subMenuLabel = "-> " + std::string(championName);
             Menu* charSub = EvadeTargetNoneMenu->AddSubMenu(new Menu(subMenuId.c_str(), subMenuLabel.c_str()));
             for (const auto& spell : TargetedNoneEvadeSpells) {
-                if (EqualsIgnoreCase(spell.CharacterName.c_str(), charName.c_str())) {
-                    std::string key = spell.CharacterName + SpellSlotToString(spell.Slot);
-                    std::string label = spell.CharacterName + " (" + SpellSlotToString(spell.Slot) + ")";
+                if (spell.Champion == championId) {
+                    const char* spellChampionName = SDK::ChampionName(spell.Champion);
+                    std::string key = std::string(spellChampionName) + SpellSlotToString(spell.Slot);
+                    std::string label = std::string(spellChampionName) + " (" + SpellSlotToString(spell.Slot) + ")";
                     charSub->Add(new MenuBool(key.c_str(), label.c_str(), false));
                 }
             }

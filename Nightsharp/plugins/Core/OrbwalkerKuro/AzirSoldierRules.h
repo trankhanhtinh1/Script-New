@@ -48,9 +48,6 @@ inline bool ContainsInsensitive(std::string_view value,
     return it != value.end();
 }
 
-inline bool IsAzirChampionName(std::string_view name) {
-    return EqualsInsensitive(name, "Azir");
-}
 
 inline bool IsSandSoldierName(std::string_view name) {
     return EqualsInsensitive(name, "AzirSoldier") ||

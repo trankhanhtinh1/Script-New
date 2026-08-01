@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile Mordekaiser = [] {
     ChampionProfile p{};
-    p.ChampionName = "Mordekaiser";
+    p.ChampionId = SDK::ChampionId::Mordekaiser;
     p.DisplayName = "Mordekaiser";
     p.InternalId = "champion.kuroaio.ai.mordekaiser";
     p.PrimaryArchetype = Archetype::Juggernaut;

@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 inline constexpr ChampionProfile MasterYi = [] {
     ChampionProfile p{};
-    p.ChampionName = "MasterYi";
+    p.ChampionId = SDK::ChampionId::MasterYi;
     p.DisplayName = "Master Yi";
     p.InternalId = "champion.kuroaio.ai.masteryi";
     p.PrimaryArchetype = Archetype::Skirmisher;

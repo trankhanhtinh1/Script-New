@@ -224,6 +224,13 @@ static std::vector<AIBaseClient> QCastTargets() {
     return result;
 }
 
+static bool QWallBlocks(const Vector3& destination, float radius) {
+    const auto player = Player();
+    return !player.IsValid() || destination.IsZero() ||
+           SDK::Collision::HasProjectileWallCollision(
+               player.Position(), destination, radius);
+}
+
 static bool CastExtendedQAt(const Vector3& desiredHitPosition, float lineWidth) {
     const auto player = Player();
     if (!player.IsValid() || !Q.IsReady() || desiredHitPosition.IsZero()) {
@@ -233,7 +240,9 @@ static bool CastExtendedQAt(const Vector3& desiredHitPosition, float lineWidth) 
     const Vector3 start = player.Position();
     AIBaseClient bestBridge;
     float bestDistance = FLT_MAX;
-
+    if (QWallBlocks(desiredHitPosition, lineWidth * 0.5f)) {
+        return false;
+    }
     for (const auto& bridge : QCastTargets()) {
         const Vector3 bridgePosition = bridge.Position();
         if (bridgePosition.IsZero() || start.DistanceSqr2D(bridgePosition) <= FLT_EPSILON) {
@@ -247,7 +256,6 @@ static bool CastExtendedQAt(const Vector3& desiredHitPosition, float lineWidth) 
             bestDistance = distance;
         }
     }
-
     return bestBridge.IsValid() && Q.CastOnUnit(bestBridge);
 }
 
@@ -255,7 +263,19 @@ static bool CastNormalQ(const AIBaseClient& preferredTarget = AIBaseClient()) {
     const AIBaseClient target = preferredTarget.IsValid()
         ? preferredTarget
         : AIBaseClient(GetPhysicalTarget(Q.Range).Handle());
-    return ValidTarget(target, Q.Range) && Q.CastOnUnit(target);
+    if (!ValidTarget(target, Q.Range)) {
+        return false;
+    }
+    const auto player = Player();
+    const auto prediction = Q.GetPrediction(target);
+    Vector3 castPosition = prediction.GetCastPosition();
+    if (castPosition.IsZero()) {
+        castPosition = target.Position();
+    }
+    return player.IsValid() &&
+           !SDK::Collision::HasProjectileWallCollision(
+               player.Position(), castPosition, 30.0f) &&
+           Q.CastOnUnit(target);
 }
 
 static bool CastExtendedDamageQ() {
@@ -278,7 +298,8 @@ static bool TryHealAlly(const AIHeroClient& ally) {
     }
 
     if (Player().Position().DistanceSqr2D(ally.Position()) <= Q.Range * Q.Range) {
-        return Q.CastOnUnit(ally);
+        return !QWallBlocks(ally.Position(), 30.0f) &&
+               Q.CastOnUnit(ally);
     }
     return CastExtendedQAt(ally.Position(), ExtraQHealWidth);
 }
@@ -312,7 +333,9 @@ static bool FastHeal() {
 
     for (const auto& ward : GameObjects::AllyWards()) {
         const AIBaseClient wardTarget(ward.Handle());
-        if (ValidQCastTarget(wardTarget) && Q.CastOnUnit(wardTarget)) {
+        if (ValidQCastTarget(wardTarget) &&
+            !QWallBlocks(wardTarget.Position(), 30.0f) &&
+            Q.CastOnUnit(wardTarget)) {
             return true;
         }
     }
@@ -402,8 +425,9 @@ static bool TryRHeal() {
                 continue;
             }
         }
-
-        if (R.Cast(ally.Position())) {
+        if (!SDK::Collision::HasProjectileWallCollision(
+                Player().Position(), ally.Position(), R.Width * 0.5f) &&
+            R.Cast(ally.Position())) {
             return true;
         }
     }
@@ -445,8 +469,8 @@ static bool TryRExecute() {
         }
 
         const Vector3 castPosition = prediction.GetCastPosition();
-        if (Collisions::HasYasuoWindWallCollision(
-                player.Position(), castPosition, R.Width)) {
+        if (SDK::Collision::HasProjectileWallCollision(
+                player.Position(), castPosition, R.Width * 0.5f)) {
             continue;
         }
 
@@ -472,9 +496,18 @@ static bool AutoRLogic() {
 
 static bool CastW() {
     const auto target = GetPhysicalTarget(W.Range);
-    return ValidHeroTarget(target, W.Range) &&
-           W.CastIfHitchanceMinimum(target, HitChance::VeryHigh) ==
-               CastStates::SuccessfullyCasted;
+    if (!ValidHeroTarget(target, W.Range)) {
+        return false;
+    }
+    const auto prediction = W.GetPrediction(target, true);
+    const auto player = Player();
+    const Vector3 castPosition = prediction.GetCastPosition();
+    return player.IsValid() && !castPosition.IsZero() &&
+           static_cast<int>(prediction.Hitchance) >=
+               static_cast<int>(HitChance::VeryHigh) &&
+           !SDK::Collision::HasProjectileWallCollision(
+               player.Position(), castPosition, W.Width * 0.5f) &&
+           W.Cast(castPosition);
 }
 
 static void UpdatePassiveTarget() {
