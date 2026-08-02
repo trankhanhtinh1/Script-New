@@ -105,10 +105,11 @@ private:
     ::CoreItem::ItemSlot slot_ = {};
 };
 
-inline std::vector<InventorySlot> AIBaseClient::InventoryItems() const {
-    std::vector<InventorySlot> result;
+inline void AIBaseClient::InventoryItems(
+    std::vector<InventorySlot>& result) const {
+    result.clear();
     if (!IsValid()) {
-        return result;
+        return;
     }
 
     ::CoreItem::ItemSlot slots[::CoreItem::kVisibleSlotCount] = {};
@@ -123,6 +124,11 @@ inline std::vector<InventorySlot> AIBaseClient::InventoryItems() const {
             result.emplace_back(slots[i]);
         }
     }
+}
+
+inline std::vector<InventorySlot> AIBaseClient::InventoryItems() const {
+    std::vector<InventorySlot> result;
+    InventoryItems(result);
     return result;
 }
 

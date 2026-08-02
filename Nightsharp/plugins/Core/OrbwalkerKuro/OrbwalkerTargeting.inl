@@ -232,6 +232,41 @@ inline bool IsValidCurrentAttackTarget(const AIHeroClient& player,
 inline bool IsValidCurrentAttackTarget(const AttackableUnit& target) {
     return IsValidCurrentAttackTarget(GameObjects::Player(), target);
 }
+inline SDK::KuroTargetSelector::TargetRequest
+MakeKuroAutoAttackExecutionRequest(const AIHeroClient& player,
+                                    const AttackableUnit& target) {
+    using namespace SDK::KuroTargetSelector;
+    TargetRequest request = KuroTargetActionGate::MakeAutoAttackRequest(
+        player.Position(),
+        GetRealAutoAttackRange(player, target),
+        DecisionPhase::Execution,
+        0);
+    request.Route.Kind = WillUseAzirSoldierAttack(player, target)
+        ? RouteKind::NonProjectile
+        : RouteKind::AutoAttack;
+    request.Route.Start = player.ServerPosition();
+    request.Route.ProjectileWallCheck =
+        request.Route.Kind != RouteKind::NonProjectile;
+    return request;
+}
+
+inline bool IsValidCurrentKuroAutoAttackTarget(
+    const AIHeroClient& player,
+    const AttackableUnit& target,
+    SDK::KuroTargetSelector::IKuroTargetSelector* advanced) {
+    if (!IsValidCurrentAttackTarget(player, target)) {
+        return false;
+    }
+    if (!advanced || !target.IsHero()) {
+        return true;
+    }
+    const AIHeroClient heroTarget(target.Handle());
+    return heroTarget.IsValid() &&
+        advanced->ValidateExecution(
+            MakeKuroAutoAttackExecutionRequest(player, target),
+            heroTarget);
+}
+
 
 inline bool IsGangplankBarrel(const AIMinionClient& minion) {
     return _stricmp(minion.CharacterName().c_str(), "gangplankbarrel") == 0;
@@ -593,10 +628,18 @@ inline LastHitEvaluation GetKillableMinion(
 }
 
 inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
+    auto* advanced = SDK::KuroTargetSelector::ActiveService();
+    const auto canUseForAttack =
+        [&](const AttackableUnit& target) {
+            return IsValidCurrentKuroAutoAttackTarget(
+                player, target, advanced);
+        };
+
     // A hard FocusLease is an owned champion hint, not a replacement for
-    // legality.  If the leased target is outside live AA range or behind a
-    // wall, suspend the lease semantically and let selector ranking choose a
-    // fallback; the coordinator can restore it later without losing identity.
+    // legality.  If the leased target is outside live AA range, behind a
+    // wall, or rejected at execution, suspend the lease semantically and let
+    // selector ranking choose a fallback; the coordinator can restore it
+    // later without losing identity.
     const auto lease = Plugins::AICombatTargetCoordinator::FocusLease::Snapshot(
         Variables::TickCount());
     int softLeaseTargetId = 0;
@@ -605,7 +648,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
         const auto focus = GameObjects::GetUnitByNetworkId<AIHeroClient>(
             lease.TargetNetworkId);
         const AttackableUnit focusUnit(focus.Handle());
-        if (focus.IsValid() && IsValidCurrentAttackTarget(player, focusUnit)) {
+        if (focus.IsValid() && canUseForAttack(focusUnit)) {
             if (lease.Strength ==
                     Plugins::AICombatTargetCoordinator::LeaseStrength::Hard) {
                 return focusUnit;
@@ -617,16 +660,16 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
         }
     }
 
-    // KuroTargetSelector owns enemy-hero planning only.  The orbwalker still
-    // performs the final AA-range, wall, and unit legality checks below; farm
-    // targets never pass through this service.
-    if (auto* advanced = SDK::KuroTargetSelector::ActiveService()) {
+    // KuroTargetSelector owns enemy-hero planning only.  Candidate selection
+    // still uses the exact execution validation used by Attack(), so a
+    // rejected first candidate cannot consume a full attack/move cycle.
+    if (advanced) {
         using namespace SDK::KuroTargetSelector;
         TargetRequest request = KuroTargetActionGate::MakeAutoAttackRequest(
             player.Position(), FLT_MAX, DecisionPhase::Planning, 0);
         // The orbwalker has a champion-specific final wall gate (including
         // Azir soldier exceptions), so planning asks only for enemy-hero
-        // ranking and lets that final gate own the exact attack route.
+        // ranking and lets the execution request own the exact attack route.
         request.Route.Kind = RouteKind::NonProjectile;
         request.Route.ProjectileWallCheck = false;
         request.Route.RequireLineOfSight = false;
@@ -642,25 +685,29 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
         for (const auto& decision : advanced->Rank(request)) {
             if (!decision.Legal || !decision.Target.IsValid()) continue;
             const AttackableUnit target(decision.Target.Handle());
-            if (IsValidCurrentAttackTarget(player, target)) {
+            if (canUseForAttack(target)) {
                 return target;
             }
         }
     }
 
-    if (auto* selector = TargetSelector::Instance()) {
-        const auto targets = selector->GetTargets(FLT_MAX, DamageType::True);
-        for (const auto& hero : targets) {
-            const AttackableUnit target(hero.Handle());
-            if (IsValidCurrentAttackTarget(player, target)) {
-                return target;
+    // TargetSelector::Instance() is the facade, so when Kuro is current its
+    // legacy GetTargets() call would rank the same snapshot a second time.
+    if (!advanced || TargetSelector::CurrentTargetSelectorName() != "Kuro") {
+        if (auto* selector = TargetSelector::Instance()) {
+            const auto targets = selector->GetTargets(FLT_MAX, DamageType::True);
+            for (const auto& hero : targets) {
+                const AttackableUnit target(hero.Handle());
+                if (canUseForAttack(target)) {
+                    return target;
+                }
             }
         }
     }
 
     for (const auto& hero : GameObjects::EnemyHeroes()) {
         const AttackableUnit target(hero.Handle());
-        if (IsValidCurrentAttackTarget(player, target)) {
+        if (canUseForAttack(target)) {
             return target;
         }
     }
@@ -810,6 +857,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int now = Tick();
     OrbwalkingDetail::WallCheckEnabled = menu_.WindWallCheck();
     const auto player = GameObjects::Player();
+    auto* advanced = SDK::KuroTargetSelector::ActiveService();
     if (!player.IsValid() || player.IsDead() || !menu_.Enabled()) {
         context_.cachedTargetTick = -1;
         context_.cachedShouldWaitTick = -1;
@@ -845,7 +893,8 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         context_.cachedTargetMode == mode &&
         context_.cachedTargetForceTargetNetworkId == forceTargetNetworkId) {
         if (!context_.cachedTarget.IsValid() ||
-            OrbwalkingDetail::IsValidCurrentAttackTarget(player, context_.cachedTarget)) {
+            OrbwalkingDetail::IsValidCurrentAttackTarget(
+                player, context_.cachedTarget)) {
             return context_.cachedTarget;
         }
     }
@@ -880,8 +929,8 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 
     if (mode == OrbwalkingMode::Combo) {
         if (context_.forceTarget.IsValid() &&
-            OrbwalkingDetail::IsValidCurrentAttackTarget(
-                player, context_.forceTarget)) {
+            OrbwalkingDetail::IsValidCurrentKuroAutoAttackTarget(
+                player, context_.forceTarget, advanced)) {
             return cacheTarget(context_.forceTarget);
         }
 
@@ -930,8 +979,8 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     if (context_.forceTarget.IsValid() &&
-        OrbwalkingDetail::IsValidCurrentAttackTarget(
-            player, context_.forceTarget)) {
+        OrbwalkingDetail::IsValidCurrentKuroAutoAttackTarget(
+            player, context_.forceTarget, advanced)) {
         return cacheTarget(context_.forceTarget);
     }
 

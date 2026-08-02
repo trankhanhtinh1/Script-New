@@ -80,6 +80,86 @@ public:
         m_lastCollisionTick = 0;
         SpecialSpells::ClearState();
     }
+    void ReconcileLifetimes(int now) {
+        std::vector<SDK::Events::ObjectEventArgs> terminations;
+        std::unordered_set<int> missingIds;
+        terminations.reserve(m_skillshots.size());
+
+        for (const SkillshotPtr& skillshot : m_skillshots) {
+            if (!skillshot || !skillshot->Native ||
+                skillshot->MissileNetworkId == 0) {
+                continue;
+            }
+            auto* missile = dynamic_cast<SDK::SkillshotMissile*>(
+                skillshot->Native.get());
+            if (!missile) {
+                continue;
+            }
+
+            const int missileId = skillshot->MissileNetworkId;
+            if (!SDK::GameObjects::IsNetworkIdAlive(
+                    static_cast<std::uint32_t>(missileId))) {
+                if (!missingIds.insert(missileId).second) {
+                    continue;
+                }
+                SDK::Events::ObjectEventArgs event{};
+                event.Sender.NetworkId = static_cast<std::uint32_t>(missileId);
+                event.Sender.Type =
+                    ::Core::Objects::ObjectType::MissileClient;
+                event.Sender.Position =
+                    Vec3::From2D(skillshot->LastMissilePosition);
+                event.Sender.IdentityOnly = true;
+                event.MissileNetworkId =
+                    static_cast<std::uint32_t>(missileId);
+                event.TargetNetworkId =
+                    static_cast<std::uint32_t>(
+                        std::max(0, skillshot->LastMissileTargetNetworkId));
+                event.Target.NetworkId = event.TargetNetworkId;
+                event.Target.IdentityOnly = event.TargetNetworkId != 0;
+                if (skillshot->Native->Caster.IsValid()) {
+                    const int casterId =
+                        skillshot->Native->Caster.NetworkId();
+                    event.SourceNetworkId =
+                        static_cast<std::uint32_t>(std::max(0, casterId));
+                    event.Source.NetworkId = event.SourceNetworkId;
+                    event.Source.IdentityOnly = event.SourceNetworkId != 0;
+                }
+                terminations.push_back(event);
+                continue;
+            }
+
+            const SDK::MissileClient liveMissile =
+                SDK::GameObjects::GetUnitByNetworkId<SDK::MissileClient>(
+                    missileId);
+            if (liveMissile.IsValid()) {
+                missile->Missile = liveMissile;
+                skillshot->LastMissilePosition =
+                    liveMissile.Position().To2D();
+                skillshot->LastMissileTargetNetworkId =
+                    liveMissile.TargetNetworkId();
+                skillshot->LastMissileSeenTick = now;
+            }
+        }
+
+        for (const auto& event : terminations) {
+            ProcessMissileTermination(event);
+        }
+
+        for (auto it = m_traps.begin(); it != m_traps.end();) {
+            if (it->first != 0 &&
+                !SDK::GameObjects::IsNetworkIdAlive(
+                    static_cast<std::uint32_t>(it->first))) {
+                const SkillshotPtr trap = it->second;
+                m_skillshots.erase(
+                    std::remove(m_skillshots.begin(), m_skillshots.end(), trap),
+                    m_skillshots.end());
+                it = m_traps.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
 
     void AddSimulatedSkillshot(const std::shared_ptr<SDK::Skillshot>& native,
                                const Database::SpellData& data) {
@@ -109,6 +189,8 @@ public:
     void Update() {
         SpecialSpells::BeginUpdate();
         const int now = SDK::Variables::TickCount();
+        ReconcileLifetimes(now);
+
         m_skillshots.erase(std::remove_if(
             m_skillshots.begin(), m_skillshots.end(),
             [&](const SkillshotPtr& skillshot) {
@@ -132,8 +214,8 @@ public:
                         skillshot->CollisionEnd = skillshot->Native->EndPosition;
                     }
                 }
-                // The SDK missile handle is no longer safe after the delete
-                // hook. Retained endpoint explosions use frozen geometry only.
+                // ReconcileLifetimes refreshes live handles before this pass.
+                // Terminated projectiles keep frozen geometry only.
                 if (!skillshot->ProjectileTerminated) {
                     skillshot->Native->Game_OnUpdate();
                 }
@@ -144,7 +226,10 @@ public:
                 // not expire a still-live authoritative missile from the
                 // shorter predicted collision time.
                 const bool hasLiveMissile = missile &&
-                    missile->Missile.IsValid() &&
+                    skillshot->MissileNetworkId != 0 &&
+                    SDK::GameObjects::IsNetworkIdAlive(
+                        static_cast<std::uint32_t>(
+                            skillshot->MissileNetworkId)) &&
                     !skillshot->ProjectileTerminated;
                 return !hasLiveMissile && !skillshot->IsActive(now);
             }), m_skillshots.end());
@@ -319,7 +404,7 @@ public:
                missile, startTick);
     }
 
-    void OnMissileDelete(const SDK::Events::ObjectEventArgs& args) {
+    void ProcessMissileTermination(const SDK::Events::ObjectEventArgs& args) {
         struct ProjectileTerminationCancellation {
             int CasterNetworkId = 0;
             int StartTick = 0;
@@ -359,9 +444,9 @@ public:
                     skillshot->Native->EndPosition = impact;
                 }
 
-                // A missile can be created and destroyed between two 50 ms
-                // prediction passes. Prefer the authoritative delete target
-                // so collision-triggered explosions are not silently lost.
+                // A missile can be created and destroyed between two frame
+                // reconciliations. Prefer the last observed position so
+                // collision-triggered explosions are not silently lost.
                 SDK::AIBaseClient collisionTarget = MakeCaster(args.Target);
                 if (!collisionTarget.IsValid()) {
                     collisionTarget = FindImpactUnit(*skillshot, impact);
@@ -520,20 +605,6 @@ public:
         }
     }
 
-    void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
-        int objectId = static_cast<int>(args.Sender.NetworkId);
-        if (objectId == 0 && args.Sender.Ptr) {
-            objectId = SDK::GameObject(args.Sender.Ptr, args.Sender.Type).NetworkId();
-        }
-        const auto found = m_traps.find(objectId);
-        if (found == m_traps.end()) {
-            return;
-        }
-        const SkillshotPtr trap = found->second;
-        m_traps.erase(found);
-        m_skillshots.erase(std::remove(m_skillshots.begin(), m_skillshots.end(), trap),
-                           m_skillshots.end());
-    }
 
 private:
     SkillshotList m_skillshots;
@@ -1077,6 +1148,11 @@ private:
         if (const auto* missile = dynamic_cast<const SDK::SkillshotMissile*>(
                 native.get()); missile && missile->Missile.IsValid()) {
             runtime->MissileNetworkId = missile->Missile.NetworkId();
+            runtime->LastMissilePosition =
+                missile->Missile.Position().To2D();
+            runtime->LastMissileTargetNetworkId =
+                missile->Missile.TargetNetworkId();
+            runtime->LastMissileSeenTick = SDK::Variables::TickCount();
         }
         return runtime;
     }

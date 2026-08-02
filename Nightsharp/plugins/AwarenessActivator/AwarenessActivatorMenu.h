@@ -55,6 +55,9 @@ public:
             settings.confirmationVirtualKey, SDK::KeyBindType::Press, false));
         BindBool(general, "DoNotInterruptRecall", "Do not interrupt recall",
                  settings.doNotInterruptRecall);
+        BindBool(general, "DoNotUseWhileTyping",
+                 "Do not activate while typing",
+                 settings.doNotUseWhileTyping);
         BindBool(general, "AllowPracticeAutomation", "Allow automation in Practice only",
                  settings.allowPracticeAutomation);
         general->Add(new SDK::MenuSeparator(
@@ -169,6 +172,9 @@ public:
                   settings.offensiveSafetyMargin, 0.0f, 100.0f);
         BindFloat(thresholds, "CleanseReactionDelay", "Cleanse reaction delay (seconds)",
                   settings.cleanseReactionDelay, 0.0f, 0.20f);
+        BindFloat(thresholds, "ReactionDebounceSeconds",
+                  "Duplicate reaction debounce (seconds)",
+                  settings.reactionDebounceSeconds, 0.0f, 1.0f);
         BindFloat(thresholds, "MinimumShieldEfficiency",
                   "Minimum Barrier shield efficiency",
                   settings.minimumShieldEfficiency, 0.10f, 1.0f);
@@ -408,6 +414,9 @@ private:
             SetLabel(general, "DoNotInterruptRecall",
                      vi ? "Không ngắt Biến Về"
                         : "Do not interrupt recall");
+            SetLabel(general, "DoNotUseWhileTyping",
+                     vi ? "Không kích hoạt khi đang gõ"
+                        : "Do not activate while typing");
             SetLabel(general, "AllowPracticeAutomation",
                      vi ? "Chỉ cho phép tự động trong Phòng Tập"
                         : "Allow automation in Practice only");
@@ -600,12 +609,11 @@ private:
             self->exportCallback_(self->exportContext_);
         }
     }
-
     SDK::Menu* root_ = nullptr;
     ActivatorSettings* settings_ = nullptr;
     SDK::MenuKeyBind* confirmationKey_ = nullptr;
     SDK::MenuList* rolePreset_ = nullptr;
-    std::array<BoolBinding, 32> boolBindings_{};
+    std::array<BoolBinding, 40> boolBindings_{};
     std::array<FloatBinding, 16> floatBindings_{};
     std::array<ModeBinding, 40> modeBindings_{};
     std::size_t boolBindingCount_ = 0;

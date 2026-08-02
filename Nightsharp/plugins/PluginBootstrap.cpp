@@ -8,37 +8,18 @@
 #include "PluginManager.h"
 #include "PluginRegistrars.h"
 #include "PluginRegistry.h"
-#include "AwarenessActivator/AwarenessActivatorPlugin.h"
 
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
-#include "Core/Orbwalker7UP/Orbwalker7UP.h"
-#include "Core/KuroTargetSelector/KuroTargetSelectorPlugin.h"
 #include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
 //#include "Core/PlayerBuffDebugPlugin.h"
-#include "Core/PlayerEventFilterPlugin.h"
-#include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
 #include "Utility/IsDeadDebugPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
 #include "Utility/NavGridDrawPlugin.h"
-#include "Utility/ObjectDefinitionDrawPlugin.h"
 #include "Utility/VisibilityInvulnerabilityOffsetPlugin.h"
 #include "Utility/YasuoWallDebugPlugin.h"
-#include "Utility/DeveloperToolsPluginOld.h"
-#include "Champion/EzrealSemiPlugin.h"
-#include "Champion/EzrealMissileLifecyclePlugin.h"
-#include "Champion/JaxSemiPlugin.h"
 // #include "Champion/XerathSemiCastNew.h"
-#include "Champion/XerathSemiNewCastSpell.h"
-#include "Champion/XerathSemiPlugin.h"
-#include "Champion/7UPAIO/7UPAIO.h"
-#include "Champion/SharpShooterAIO/SharpShooterAIO.h"
-#include "Champion/ziblldev9898/ziblldev9898.h"
-#include "EzEvade/EzEvadePlugin.h"
-#include "KuroEvade/KuroEvadePlugin.h"
-#include "ZDEvade/ZDEvade.h"
-#include "ZDPrediction/ZDPrediction.h"
 #include "../SDK/Core/Objects.h"
 #include "../SDK/Wrappers/SdkWrappersInit.h"
 #include "../menu/ConfigStore.h"
@@ -148,14 +129,14 @@ void EnsureRegistered() {
 
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
-    PluginManager::Get().Register<NightSharp::Companion::AwarenessActivatorPlugin>();
+    Registration::RegisterAwarenessActivator(PluginManager::Get());
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
-    PluginManager::Get().Register<Orbwalker7UPPlugin>();
-    PluginManager::Get().Register<KuroTargetSelector::KuroTargetSelectorPlugin>();
+    Registration::RegisterOrbwalker7UP(PluginManager::Get());
+    Registration::RegisterKuroTargetSelector(PluginManager::Get());
     PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
-    PluginManager::Get().Register<PlayerEventFilterPlugin>();
+    Registration::RegisterPlayerEventFilter(PluginManager::Get());
     //PluginManager::Get().Register<PlayerBuffDebugPlugin>();
-    PluginManager::Get().Register<SpellTrackingDebugPlugin>();
+    Registration::RegisterSpellTrackingDebug(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
 
     NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins begin");
@@ -163,26 +144,26 @@ void EnsureRegistered() {
     PluginManager::Get().Register<IsDeadDebugPlugin>();
     PluginManager::Get().Register<MovementStateDrawPlugin>();
     PluginManager::Get().Register<NavGridDrawPlugin>();
-    PluginManager::Get().Register<ObjectDefinitionDrawPlugin>();
+    Registration::RegisterObjectDefinitionDraw(PluginManager::Get());
     PluginManager::Get().Register<VisibilityInvulnerabilityOffsetPlugin>();
     PluginManager::Get().Register<YasuoWallDebugPlugin>();
-    PluginManager::Get().Register<DeveloperToolsPluginOld>();
+    Registration::RegisterDeveloperTools(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register utility plugins complete");
 
     NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins begin");
-    PluginManager::Get().Register<EzrealSemiPlugin>();
-    PluginManager::Get().Register<EzrealMissileLifecyclePlugin>();
-    PluginManager::Get().Register<JaxSemiPlugin>();
+    Registration::RegisterEzrealCastSpell(PluginManager::Get());
+    Registration::RegisterEzrealMissileLifecycle(PluginManager::Get());
+    Registration::RegisterJaxCastSpell(PluginManager::Get());
     // PluginManager::Get().Register<XerathSemiCastNew>();
-    PluginManager::Get().Register<XerathSemiNewCastSpell>();
-    PluginManager::Get().Register<XerathSemiPlugin>();
-    PluginManager::Get().Register<AIO7UPPlugin>();
+    Registration::RegisterXerathSemiNewCastSpell(PluginManager::Get());
+    Registration::RegisterXerathCastSpell(PluginManager::Get());
+    Registration::RegisterAIO7UP(PluginManager::Get());
     Registration::RegisterKuroAIO(PluginManager::Get());
-    PluginManager::Get().Register<SharpShooterAIOPlugin>();
-    PluginManager::Get().Register<Ziblldev9898Plugin>();
-    PluginManager::Get().Register<EzEvadePlugin>();
-    PluginManager::Get().Register<KuroEvadePlugin>();
-    PluginManager::Get().Register<ZDEvadePlugin>();
+    Registration::RegisterSharpShooterAIO(PluginManager::Get());
+    Registration::RegisterZiblldev9898(PluginManager::Get());
+    Registration::RegisterEzEvade(PluginManager::Get());
+    Registration::RegisterKuroEvade(PluginManager::Get());
+    Registration::RegisterZDEvade(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else

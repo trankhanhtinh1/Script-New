@@ -193,14 +193,21 @@ inline void ResetSections() {
 class SectionProbe {
 public:
     explicit SectionProbe(const char* name)
-        : name_(name), start_(SectionNow()) {}
+        : name_(name), active_(SectionsActive) {
+        if (active_) {
+            start_ = SectionNow();
+        }
+    }
 
     ~SectionProbe() {
-        RecordSection(name_, SectionMsSince(start_));
+        if (active_) {
+            RecordSection(name_, SectionMsSince(start_));
+        }
     }
 
 private:
     const char* name_ = "";
+    bool active_ = false;
     LARGE_INTEGER start_ = {};
 };
 

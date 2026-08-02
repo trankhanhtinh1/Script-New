@@ -313,25 +313,16 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     }
 
     if (auto* advanced = SDK::KuroTargetSelector::ActiveService()) {
-        using namespace SDK::KuroTargetSelector;
-        TargetRequest request = KuroTargetActionGate::MakeAutoAttackRequest(
-            player.Position(),
-            GetRealAutoAttackRange(player, attackTarget),
-            DecisionPhase::Execution,
-            0);
-        // An Azir soldier attack is a direct stab and intentionally bypasses
-        // projectile-wall collision; all other AA routes remain projectile
-        // gated at the execution boundary.
-        request.Route.Kind = OrbwalkingDetail::WillUseAzirSoldierAttack(
-                player, attackTarget)
-            ? RouteKind::NonProjectile
-            : RouteKind::AutoAttack;
-        request.Route.Start = player.ServerPosition();
-        request.Route.ProjectileWallCheck =
-            request.Route.Kind != RouteKind::NonProjectile;
         if (attackTarget.IsHero()) {
             const AIHeroClient heroTarget(attackTarget.Handle());
-            if (!advanced->ValidateExecution(request, heroTarget)) {
+            if (!advanced->ValidateExecution(
+                    OrbwalkingDetail::MakeKuroAutoAttackExecutionRequest(
+                        player, attackTarget),
+                    heroTarget)) {
+                // Do not let a rejected cached candidate suppress the next
+                // target scan for the normal 35 ms throttle window.
+                context_.cachedTarget = {};
+                context_.cachedTargetTick = -1;
                 return false;
             }
         }

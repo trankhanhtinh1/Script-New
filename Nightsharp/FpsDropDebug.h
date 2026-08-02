@@ -2,6 +2,7 @@
 
 #include "imgui/imgui.h"
 
+#include "SectionProfiler.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cstdio>
@@ -104,9 +105,12 @@ inline void ResetFrame() {
 }
 
 inline void BeginFrame() {
+    SectionsActive = Enabled;
+    SectionLogEnabled = LogEnabled;
     if (!Enabled) {
         return;
     }
+    DumpSections();
     EnsureFrequency();
     QueryPerformanceCounter(&FrameStart);
     FrameTick = GetTickCount();

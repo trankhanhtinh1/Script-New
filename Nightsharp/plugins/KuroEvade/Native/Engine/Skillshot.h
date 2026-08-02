@@ -97,11 +97,14 @@ public:
     int Id = 0;
     int TrapObjectId = 0;
     int MissileNetworkId = 0;
+    int LastMissileTargetNetworkId = 0;
+    int LastMissileSeenTick = 0;
+    Vec2 LastMissilePosition;
     bool ForceDisabled = false;
     bool Persistent = false;
     bool FromFog = false;
-    float EvadeTime = -FLT_MAX;
     float SpellHitTime = -FLT_MAX;
+    float EvadeTime = -FLT_MAX;
 
     bool IsValid() const {
         return Native != nullptr;
@@ -390,9 +393,9 @@ public:
         if (Persistent) {
             return INT_MAX;
         }
-        // Once the SDK reports missile deletion, ImpactTick uses that
-        // authoritative moment. This prevents delayed attached explosions
-        // from expiring according to an older predicted travel time.
+        // Frame reconciliation records the actual last-seen missile tick.
+        // This prevents delayed attached explosions from expiring according
+        // to a stale predicted travel time when delete delivery is missed.
         const int impactTick = ImpactTick();
         const int explosionTail = HasEndExplosionArea()
             ? EndExplosionDelayMs() + std::max(

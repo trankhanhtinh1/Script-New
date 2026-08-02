@@ -2,11 +2,13 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include "../../SectionProfiler.h"
 
 #include "AwarenessEngine.h"
 #include "../../SDK/Enums/BuffType.h"
 #include "../../sdk/Enumerations/SpellSlot.h"
 #include "../../core/CoreNavGrid.h"
+#include "../../SDK/UI/UI.h"
 
 #include <Windows.h>
 
@@ -17,6 +19,12 @@
 #include <string_view>
 
 namespace NightSharp::Companion {
+
+struct CapabilitySafety {
+    bool allowSuggest = true;
+    bool allowConfirm = true;
+    bool allowPracticeAutomation = true;
+};
 
 class ActivatorSettings final {
 public:
@@ -33,6 +41,23 @@ public:
         const std::size_t index = static_cast<std::size_t>(capability);
         if (index < modes_.size()) modes_[index] = mode;
     }
+    CapabilitySafety& SafetyFor(Capability capability) noexcept {
+        const std::size_t index =
+            static_cast<std::size_t>(capability);
+        return safety_[index < safety_.size() ? index : 0];
+    }
+    const CapabilitySafety& SafetyFor(
+        Capability capability) const noexcept {
+        const std::size_t index =
+            static_cast<std::size_t>(capability);
+        return safety_[index < safety_.size() ? index : 0];
+    }
+    void SetSafety(Capability capability,
+                   CapabilitySafety safety) noexcept {
+        const std::size_t index =
+            static_cast<std::size_t>(capability);
+        if (index < safety_.size()) safety_[index] = safety;
+    }
     bool enabled = true;
     bool summonersEnabled = true;
     bool defensiveItemsEnabled = true;
@@ -43,6 +68,7 @@ public:
     bool potionEnabled = true;
     bool allowPracticeAutomation = false;
     bool doNotInterruptRecall = true;
+    bool doNotUseWhileTyping = true;
     bool reserveSmiteCharge = true;
     bool includeDamageOverTime = true;
     bool barrierLethalOnly = false;
@@ -73,6 +99,7 @@ public:
     float allySaveThreshold = 0.38f;
     float offensiveSafetyMargin = 15.0f;
     float cleanseReactionDelay = 0.04f;
+    float reactionDebounceSeconds = 0.25f;
     float minimumShieldEfficiency = 0.35f;
     float healMissingHealthThreshold = 0.28f;
     float exhaustDamageThreshold = 0.20f;
@@ -83,32 +110,69 @@ public:
     float enemyHudY = 390.0f;
     int rolePresetIndex = 0;
     std::array<ActionMode, 64> modes_{};
+    std::array<CapabilitySafety, 64> safety_{};
 };
 
 
 class ActivatorEngine final {
 public:
-    const ActionRequest* Evaluate(AwarenessEngine& awareness,
-                                  const ActivatorSettings& settings) {
+    const ActionRequest* Evaluate(
+        AwarenessEngine& awareness,
+        const ActivatorSettings& settings) {
+        NS_PROFILE("Activator.Evaluate");
         ActionArbiter& arbiter = awareness.Arbiter();
+        arbiter.SetDebounceSeconds(
+            settings.reactionDebounceSeconds);
         arbiter.Clear();
+        hasSelfForecast_ = false;
+        selfForecast_ = {};
         if (!settings.enabled) return nullptr;
 
         const StateStore& store = awareness.Store();
         const PatchRegistry& registry = awareness.Registry();
         const ChampionState* player = FindLocalPlayer(store);
-        if (!player || player->dead || !player->visible || player->health.value <= 0.0f) return nullptr;
+        if (!player || player->dead || !player->visible ||
+            player->health.value <= 0.0f) {
+            return nullptr;
+        }
+        if ((settings.doNotInterruptRecall &&
+             player->recalling) ||
+            player->channeling ||
+            (settings.doNotUseWhileTyping &&
+             SDK::UI::g_KeybindInputBlocked)) {
+            return nullptr;
+        }
 
         const float now = awareness.Now();
-        const ThreatForecast selfForecast = CombatPredictionService::Forecast(
+        selfForecast_ = CombatPredictionService::Forecast(
             *player, store, now, settings.defensiveHorizon);
-        EvaluateCleanse(*player, store, registry, settings, awareness.Mode(), now, arbiter);
-        EvaluateProtection(*player, selfForecast, registry, settings, awareness.Mode(), now, arbiter);
-        EvaluateAllies(*player, store, registry, settings, awareness.Mode(), now, arbiter);
-        EvaluateEnemies(*player, store, selfForecast, registry, settings, awareness.Mode(), now, arbiter);
-        EvaluateObjectives(*player, store, registry, settings, awareness.Mode(), now, arbiter);
-        EvaluateUtility(*player, store, selfForecast, registry, settings, awareness.Mode(), now, arbiter);
+        hasSelfForecast_ = true;
+        EvaluateCleanse(
+            *player, store, registry, settings,
+            awareness.Mode(), now, arbiter);
+        EvaluateProtection(
+            *player, selfForecast_, registry, settings,
+            awareness.Mode(), now, arbiter);
+        EvaluateAllies(
+            *player, store, registry, settings,
+            awareness.Mode(), now, arbiter);
+        EvaluateEnemies(
+            *player, store, selfForecast_, registry, settings,
+            awareness.Mode(), now, arbiter);
+        EvaluateObjectives(
+            *player, store, registry, settings,
+            awareness.Mode(), now, arbiter);
+        EvaluateUtility(
+            *player, store, selfForecast_, registry, settings,
+            awareness.Mode(), now, arbiter);
         return arbiter.Resolve(now);
+    }
+
+    bool HasSelfForecast() const noexcept {
+        return hasSelfForecast_;
+    }
+    const ThreatForecast& SelfForecast() const noexcept {
+        return selfForecast_;
     }
 
     static bool IsSummonerSpellSlot(int slot) noexcept {
@@ -121,7 +185,8 @@ public:
     static Capability CapabilityFromSpell(
         const ObservedSpell& spell,
         const PatchRegistry& registry) noexcept {
-        if (!IsSummonerSpellSlot(spell.slot)) {
+        if (!IsSummonerSpellSlot(spell.slot) ||
+            spell.idHash == 0 || !spell.name[0]) {
             return Capability::None;
         }
         const SummonerDefinition* definition =
@@ -167,8 +232,7 @@ public:
             }
             const ItemDefinition* definition =
                 registry.FindAvailableItem(item.itemId);
-            if (!definition ||
-                definition->capability != capability) {
+            if (!definition || definition->capability != capability) {
                 continue;
             }
             if (requireUsable &&
@@ -262,6 +326,18 @@ private:
                HasActiveBuff(state, "shurelya", now) ||
                HasActiveBuff(state, "youmuu", now) ||
                HasActiveBuff(state, "movespeed", now);
+    }
+    static bool PathSupports(
+        const ChampionState& state,
+        const Point3& destination) noexcept {
+        const Point3 direction =
+            Normalize2D(state.lastDirection);
+        const Point3 route =
+            Normalize2D(destination - state.position);
+        if (direction.IsZero() || route.IsZero()) return true;
+        const float alignment =
+            direction.x * route.x + direction.z * route.z;
+        return alignment >= -0.25f;
     }
 
     static float EstimateBarrierShield(
@@ -464,14 +540,35 @@ private:
             request.mode = request.mode == ActionMode::Off
                 ? ActionMode::Off
                 : ActionMode::Suggest;
-        } else if ((capability == Capability::Flash ||
-                    capability == Capability::Teleport) &&
-                   request.mode == ActionMode::Auto) {
-            request.mode = ActionMode::Confirm;
+        } else if (capability == Capability::Flash ||
+                   capability == Capability::Teleport) {
+            if (request.mode != ActionMode::Off) {
+                request.mode = ActionMode::Confirm;
+            }
+        }
+        const CapabilitySafety& safety =
+            settings.SafetyFor(capability);
+        if (request.mode == ActionMode::Auto &&
+            !safety.allowPracticeAutomation) {
+            request.mode = safety.allowConfirm
+                ? ActionMode::Confirm
+                : (safety.allowSuggest
+                       ? ActionMode::Suggest
+                       : ActionMode::Off);
+        }
+        if (request.mode == ActionMode::Confirm &&
+            !safety.allowConfirm) {
+            request.mode = safety.allowSuggest
+                ? ActionMode::Suggest
+                : ActionMode::Off;
+        }
+        if (request.mode == ActionMode::Suggest &&
+            !safety.allowSuggest) {
+            request.mode = ActionMode::Off;
         }
         request.priority = priority;
         request.resourceMask = ResourceFor(capability);
-        request.conflictMask = request.resourceMask;
+        request.conflictMask = ConflictFor(capability);
         request.createdAt = now;
         request.expiresAt = now + 0.35f;
         request.confidence = confidence;
@@ -724,7 +821,7 @@ private:
         }
     }
 
-    static void EvaluateAllies(const ChampionState& player,
+    void EvaluateAllies(const ChampionState& player,
                                const StateStore& store,
                                const PatchRegistry& registry,
                                const ActivatorSettings& settings,
@@ -746,12 +843,26 @@ private:
         const float knightsVowRange =
             ItemRange(
                 registry, Capability::KnightsVow, 1000.0f);
+        const bool canKnightsVow =
+            settings.supportItemsEnabled &&
+            settings.ModeFor(Capability::KnightsVow) !=
+                ActionMode::Off &&
+            FindItem(
+                player, Capability::KnightsVow,
+                registry) != nullptr &&
+            !HasActiveBuff(player, "knightsvow", now) &&
+            !player.recalling &&
+            !player.channeling;
         int nearbyThreatenedAllies = 0;
         const ChampionState* lowest = nullptr;
         ThreatForecast lowestForecast{};
         float lowestRatio = 1.0f;
         const ChampionState* vowTarget = nullptr;
+        const ChampionState* bestVowTarget = nullptr;
+        const ChampionState* stickyVowTarget = nullptr;
         float vowScore = -1.0f;
+        float bestVowScore = -1.0f;
+        float stickyVowScore = -1.0f;
 
         store.ForEachChampion([&](const ChampionState& ally) {
             if (!ally.ally || ally.local || ally.dead ||
@@ -764,17 +875,22 @@ private:
                 ally.health.value / ally.maxHealth.value;
             const float distance =
                 ally.position.Distance(player.position);
-            if (settings.supportItemsEnabled &&
+            if (canKnightsVow &&
                 distance <= knightsVowRange &&
                 !HasActiveBuff(ally, "knightsvow", now)) {
                 const float candidateScore =
                     std::max(0.0f, ally.totalGold.value) +
                     static_cast<float>(
                         std::max(1, ally.level.value)) *
-                        500.0f;
-                if (candidateScore > vowScore) {
-                    vowScore = candidateScore;
-                    vowTarget = &ally;
+                        500.0f +
+                    std::max(0.0f, 1.0f - ratio) * 250.0f;
+                if (candidateScore > bestVowScore) {
+                    bestVowScore = candidateScore;
+                    bestVowTarget = &ally;
+                }
+                if (ally.networkId == knightsVowTargetId_) {
+                    stickyVowScore = candidateScore;
+                    stickyVowTarget = &ally;
                 }
             }
             const ThreatForecast forecast =
@@ -855,19 +971,34 @@ private:
                             ? "Heal prevents lethal observed ally damage"
                             : "nearby ally has low health and observed damage",
                         forecast.confidence);
+                    heal.targetId = ally.networkId;
                     heal.expectedValue = usableHeal;
                     arbiter.Submit(heal);
                 }
             }
         });
+        if (canKnightsVow) {
+            const bool keepSticky =
+                stickyVowTarget &&
+                (bestVowTarget == stickyVowTarget ||
+                 bestVowScore <=
+                     stickyVowScore * 1.20f + 250.0f);
+            vowTarget = keepSticky
+                ? stickyVowTarget
+                : bestVowTarget;
+            vowScore = keepSticky
+                ? stickyVowScore
+                : bestVowScore;
+            knightsVowTargetId_ =
+                vowTarget ? vowTarget->networkId : 0;
+        }
 
-        if (settings.supportItemsEnabled && vowTarget &&
-            !HasActiveBuff(player, "knightsvow", now)) {
+        if (canKnightsVow && vowTarget) {
             ActionRequest vow = MakeRequest(
                 player, registry, settings, runtimeMode,
                 Capability::KnightsVow,
                 ActionPriority::Utility, now,
-                "highest-value visible ally is available for Knight's Vow");
+                "stable highest-value visible ally is available for Knight's Vow");
             vow.targetId = vowTarget->networkId;
             vow.expectedValue = vowScore;
             arbiter.Submit(vow);
@@ -899,6 +1030,18 @@ private:
                 (1.0f - lowestRatio) *
                     lowest->maxHealth.value +
                 lowestForecast.incomingDamage;
+            const ItemDefinition* redemptionDefinition =
+                registry.FindAvailableItem(Capability::Redemption);
+            const float redemptionDelay =
+                redemptionDefinition &&
+                        redemptionDefinition->effectValues[0] > 0.0f
+                    ? redemptionDefinition->effectValues[0]
+                    : 2.5f;
+            if (lowestForecast.firstImpactAt > now) {
+                redemption.earliestAt = std::max(
+                    now, lowestForecast.firstImpactAt - redemptionDelay);
+                redemption.expiresAt = redemption.earliestAt + 0.35f;
+            }
             arbiter.Submit(redemption);
         }
     }
@@ -1044,10 +1187,28 @@ private:
                       primary->position.Distance(player.position),
                       1800.0f)
                 : std::min(closestDistance, 1800.0f);
+            const Point3 escapeRoute = disengage
+                ? player.position +
+                      Normalize2D(player.position - primary->position) *
+                          100.0f
+                : closest->position;
+            const Point3 chaseRoute =
+                closest->position +
+                Normalize2D(closest->position - player.position) *
+                    100.0f;
+            const bool pathSupports =
+                PathSupports(player, escapeRoute) &&
+                (!chase || PathSupports(*closest, chaseRoute));
+            const float pathConfidence =
+                (player.pathBranches > 1 ||
+                 closest->pathBranches > 1)
+                    ? 0.75f
+                    : 1.0f;
             const float timeGain =
-                travelDistance / speed -
-                travelDistance / (speed * 1.25f);
-            if ((disengage || chase) &&
+                (travelDistance / speed -
+                 travelDistance / (speed * 1.25f)) *
+                pathConfidence;
+            if (pathSupports && (disengage || chase) &&
                 control.severity < 4 &&
                 timeGain >= settings.ghostMinimumTimeGain) {
                 ActionRequest ghost = MakeRequest(
@@ -1063,6 +1224,162 @@ private:
                     selfForecast.confidence);
                 ghost.expectedValue = timeGain;
                 arbiter.Submit(ghost);
+            }
+        }
+
+        if (settings.movementItemsEnabled &&
+            settings.ModeFor(Capability::Shurelya) != ActionMode::Off &&
+            FindItem(player, Capability::Shurelya, registry) != nullptr &&
+            !HasMovementBoost(player, now)) {
+            const float shurelyaRange =
+                ItemRange(registry, Capability::Shurelya, 1000.0f);
+            int nearbyAllies = 0;
+            int threatenedAllies = 0;
+            float teamThreat = 0.0f;
+            store.ForEachChampion([&](const ChampionState& ally) {
+                if (!CombatValidationService::IsTargetableAlly(
+                        ally, player.team) ||
+                    ally.networkId == player.networkId) {
+                    return;
+                }
+                const float distance =
+                    ally.position.Distance(player.position);
+                if (distance > shurelyaRange) return;
+                ++nearbyAllies;
+                const ThreatForecast forecast =
+                    CombatPredictionService::Forecast(
+                        ally, store, now, settings.defensiveHorizon);
+                const float incoming = EffectiveThreatDamage(
+                    forecast, settings.includeDamageOverTime, false);
+                const float unmetDamage =
+                    std::max(0.0f, incoming -
+                        std::max(0.0f, ally.allShield));
+                if (forecast.threatCount > 0 &&
+                    unmetDamage > std::max(
+                        15.0f, ally.health.value * 0.08f)) {
+                    ++threatenedAllies;
+                    teamThreat += unmetDamage;
+                }
+            });
+
+            const CrowdControlSummary control =
+                SummarizeControl(player, registry, now);
+            const ChampionState* movementTarget =
+                primary ? primary : closest;
+            if (control.severity < 4 && nearbyAllies > 0) {
+                const bool defensive =
+                    threatenedAllies >= 2 ||
+                    (threatenedAllies > 0 &&
+                     damage >= player.health.value * 0.10f);
+                const bool engage =
+                    !defensive &&
+                    selfForecast.threatCount == 0 &&
+                    movementTarget &&
+                    closestDistance >= 450.0f &&
+                    closestDistance <= 1500.0f &&
+                    movementTarget->health.value >
+                        movementTarget->maxHealth.value * 0.20f &&
+                    PathSupports(player, movementTarget->position);
+                if (defensive || engage) {
+                    ActionRequest shurelya = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::Shurelya,
+                        defensive
+                            ? ActionPriority::Disengage
+                            : ActionPriority::Mobility,
+                        now,
+                        defensive
+                            ? "multiple visible allies need immediate movement to escape observed danger"
+                            : "nearby visible ally can convert movement speed into a safer engage",
+                        defensive
+                            ? (selfForecast.confidence == Confidence::Unknown
+                                ? Confidence::High
+                                : selfForecast.confidence)
+                            : Confidence::High);
+                    shurelya.expectedValue = defensive
+                        ? teamThreat +
+                            static_cast<float>(threatenedAllies) * 100.0f
+                        : static_cast<float>(nearbyAllies) *
+                            std::max(0.25f,
+                                closestDistance /
+                                    std::max(1.0f, player.moveSpeed) *
+                                    0.20f);
+                    shurelya.position = defensive && movementTarget
+                        ? player.position +
+                            Normalize2D(player.position -
+                                        movementTarget->position) *
+                                100.0f
+                        : (movementTarget
+                               ? movementTarget->position
+                               : player.position);
+                    arbiter.Submit(shurelya);
+                }
+            }
+        }
+
+        if (settings.movementItemsEnabled &&
+            settings.ModeFor(Capability::Youmuu) != ActionMode::Off &&
+            FindItem(player, Capability::Youmuu, registry) != nullptr &&
+            !HasMovementBoost(player, now)) {
+            const CrowdControlSummary control =
+                SummarizeControl(player, registry, now);
+            const ChampionState* movementTarget =
+                primary ? primary : closest;
+            if (control.severity < 4 && movementTarget) {
+                const bool disengage =
+                    primary &&
+                    damage >= player.maxHealth.value * 0.12f &&
+                    primary->position.Distance(player.position) <=
+                        1500.0f;
+                const bool chase =
+                    !disengage &&
+                    selfForecast.threatCount == 0 &&
+                    closest->health.value /
+                            std::max(1.0f, closest->maxHealth.value) <=
+                        0.55f &&
+                    closestDistance >= 400.0f &&
+                    closestDistance <= 1800.0f;
+                const Point3 route = disengage
+                    ? player.position +
+                        Normalize2D(player.position -
+                                    movementTarget->position) *
+                            100.0f
+                    : movementTarget->position;
+                const float travelDistance = disengage
+                    ? std::min(
+                          movementTarget->position.Distance(
+                              player.position),
+                          1800.0f)
+                    : std::min(closestDistance, 1800.0f);
+                const bool pathSupports =
+                    PathSupports(player, route);
+                const float speed =
+                    std::max(1.0f, player.moveSpeed);
+                const float pathConfidence =
+                    player.pathBranches > 1 ? 0.75f : 1.0f;
+                const float timeGain =
+                    (travelDistance / speed -
+                     travelDistance / (speed * 1.20f)) *
+                    pathConfidence;
+                if ((disengage || chase) && pathSupports &&
+                    timeGain >= settings.ghostMinimumTimeGain * 0.75f) {
+                    ActionRequest youmuu = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::Youmuu,
+                        disengage
+                            ? ActionPriority::Disengage
+                            : ActionPriority::Mobility,
+                        now,
+                        disengage
+                            ? "Youmuu creates meaningful separation from visible danger"
+                            : "Youmuu creates meaningful chase time against a low visible target",
+                        selfForecast.confidence == Confidence::Unknown
+                            ? Confidence::High
+                            : selfForecast.confidence);
+                    youmuu.expectedValue = timeGain;
+                    youmuu.position = route;
+                    arbiter.Submit(youmuu);
+                }
             }
         }
 
@@ -1087,7 +1404,14 @@ private:
                 gunbladeDefinition->effectValues[0] > 0.0f
                     ? gunbladeDefinition->effectValues[0]
                     : 175.0f;
-            if (closestDistance <= gunbladeRange &&
+            if (settings.ModeFor(Capability::Gunblade) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Gunblade,
+                    registry) != nullptr &&
+                !closest->recalling &&
+                !closest->teleporting &&
+                closestDistance <= gunbladeRange &&
                 committedDamage < targetEffectiveHealth &&
                 targetEffectiveHealth - committedDamage <=
                     gunbladeDamage) {
@@ -1110,15 +1434,22 @@ private:
                     275.0f);
             const float rocketbeltReach =
                 rocketbeltDash + 450.0f;
+            const CrowdControlSummary rocketbeltControl =
+                SummarizeControl(player, registry, now);
             if (settings.ModeFor(
                     Capability::Rocketbelt) !=
                     ActionMode::Off &&
                 FindItem(
                     player, Capability::Rocketbelt,
                     registry) != nullptr &&
+                !HasMovementBoost(player, now) &&
+                rocketbeltControl.severity < 4 &&
+                !closest->recalling &&
+                !closest->teleporting &&
                 closestDistance >= 300.0f &&
                 closestDistance <= rocketbeltReach &&
-                damage < player.health.value * 0.50f) {
+                damage < player.health.value * 0.50f &&
+                PathSupports(player, closest->position)) {
                 const Point3 direction = Normalize2D(
                     closest->position - player.position);
                 const Point3 endpoint =
@@ -1141,12 +1472,257 @@ private:
                 }
             }
 
-            const std::array<Capability, 5> cleaves = {
-                Capability::Stridebreaker,
-                Capability::Tiamat,
-                Capability::RavenousHydra,
-                Capability::TitanicHydra,
-                Capability::ProfaneHydra
+            const float stridebreakerRange =
+                ItemRange(registry, Capability::Stridebreaker, 450.0f);
+            if (settings.ModeFor(Capability::Stridebreaker) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Stridebreaker,
+                    registry) != nullptr &&
+                !HasProtectionImmunity(player, now) &&
+                SummarizeControl(player, registry, now).severity < 4) {
+                int nearbyEnemies = 0;
+                store.ForEachChampion(
+                    [&](const ChampionState& enemy) {
+                        if (CombatValidationService::
+                                IsTargetableEnemy(
+                                    enemy, player.team) &&
+                            !HasProtectionImmunity(enemy, now) &&
+                            enemy.position.Distance(
+                                player.position) <=
+                                stridebreakerRange) {
+                            ++nearbyEnemies;
+                        }
+                    });
+                const bool singleTargetControl =
+                    nearbyEnemies == 1 &&
+                    closestDistance <= stridebreakerRange &&
+                    closest->health.value >
+                        closest->maxHealth.value * 0.25f;
+                if (nearbyEnemies >= 2 || singleTargetControl) {
+                    ActionRequest stridebreaker = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::Stridebreaker,
+                        nearbyEnemies >= 2
+                            ? ActionPriority::Engage
+                            : ActionPriority::Disengage,
+                        now,
+                        nearbyEnemies >= 2
+                            ? "multiple visible enemies can be slowed by Stridebreaker"
+                            : "a visible target is in Stridebreaker control range",
+                        Confidence::High);
+                    stridebreaker.position = closest->position;
+                    stridebreaker.expectedValue =
+                        static_cast<float>(nearbyEnemies) * 100.0f;
+                    arbiter.Submit(stridebreaker);
+                }
+            }
+            const float randuinRange =
+                ItemRange(registry, Capability::Randuin, 450.0f);
+            if (settings.ModeFor(Capability::Randuin) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Randuin,
+                    registry) != nullptr &&
+                !HasProtectionImmunity(player, now) &&
+                SummarizeControl(player, registry, now).severity < 4) {
+                const ThreatForecast randuinForecast =
+                    CombatPredictionService::Forecast(
+                        player, store, now, 1.0f);
+                int nearbyEnemies = 0;
+                float pressure = 0.0f;
+                const ChampionState* peelEnemy = nullptr;
+                float peelScore = -1.0f;
+                store.ForEachChampion(
+                    [&](const ChampionState& enemy) {
+                        if (!CombatValidationService::
+                                IsTargetableEnemy(
+                                    enemy, player.team) ||
+                            HasProtectionImmunity(enemy, now)) {
+                            return;
+                        }
+                        const float distance =
+                            enemy.position.Distance(player.position);
+                        if (distance > randuinRange) {
+                            return;
+                        }
+                        ++nearbyEnemies;
+                        pressure +=
+                            std::max(0.0f,
+                                1.0f - distance /
+                                    std::max(1.0f, randuinRange)) *
+                            100.0f;
+                        const bool attackingPlayer =
+                            enemy.networkId ==
+                            randuinForecast.primarySource;
+                        const float score =
+                            (attackingPlayer ? 1000.0f : 0.0f) +
+                            std::max(0.0f,
+                                randuinRange - distance) +
+                            enemy.moveSpeed * 0.05f;
+                        if (score > peelScore) {
+                            peelScore = score;
+                            peelEnemy = &enemy;
+                        }
+                    });
+                const bool imminentPeel =
+                    randuinForecast.threatCount > 0 &&
+                    randuinForecast.incomingDamage > 0.0f;
+                if (peelEnemy &&
+                    (nearbyEnemies >= 2 || imminentPeel)) {
+                    ActionRequest randuin = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::Randuin,
+                        ActionPriority::Disengage, now,
+                        nearbyEnemies >= 2
+                            ? "multiple visible enemies are inside Randuin peel range"
+                            : "an observed threat makes Randuin peel valuable",
+                        imminentPeel
+                            ? randuinForecast.confidence
+                            : Confidence::High);
+                    randuin.targetId = peelEnemy->networkId;
+                    randuin.position = player.position;
+                    randuin.expectedValue =
+                        pressure +
+                        randuinForecast.incomingDamage * 0.50f +
+                        (randuinForecast.hardCc ? 75.0f : 0.0f);
+                    arbiter.Submit(randuin);
+                }
+            }
+
+
+            const float titanicRange =
+                ItemRange(registry, Capability::TitanicHydra, 450.0f);
+            if (settings.ModeFor(Capability::TitanicHydra) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::TitanicHydra,
+                    registry) != nullptr &&
+                !HasProtectionImmunity(player, now) &&
+                !HasActiveBuff(player, "titanic", now) &&
+                SummarizeControl(player, registry, now).severity < 4 &&
+                closestDistance <= titanicRange &&
+                !HasProtectionImmunity(*closest, now)) {
+                bool recentAttack = false;
+                store.Damage().ForEach(
+                    [&](const DamageRecord& record) {
+                        if (!recentAttack &&
+                            record.sourceId == player.networkId &&
+                            record.targetId == closest->networkId &&
+                            record.amount > 0.0f &&
+                            record.at <= now &&
+                            record.at >= now - 0.35f) {
+                            recentAttack = true;
+                        }
+                    });
+                if (recentAttack) {
+                    ActionRequest titanic = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::TitanicHydra,
+                        ActionPriority::Engage, now,
+                        "a recent visible basic attack can be woven with Titanic Hydra",
+                        Confidence::Confirmed);
+                    titanic.targetId = closest->networkId;
+                    titanic.position = closest->position;
+                    titanic.expectedValue =
+                        std::max(25.0f,
+                            closest->maxHealth.value * 0.04f);
+                    arbiter.Submit(titanic);
+                }
+            }
+
+            const float ravenousRange =
+                ItemRange(registry, Capability::RavenousHydra, 450.0f);
+            if (settings.ModeFor(Capability::RavenousHydra) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::RavenousHydra,
+                    registry) != nullptr &&
+                !HasProtectionImmunity(player, now) &&
+                SummarizeControl(player, registry, now).severity < 4) {
+                int nearbyEnemies = 0;
+                store.ForEachChampion(
+                    [&](const ChampionState& enemy) {
+                        if (CombatValidationService::
+                                IsTargetableEnemy(
+                                    enemy, player.team) &&
+                            !HasProtectionImmunity(enemy, now) &&
+                            enemy.position.Distance(
+                                player.position) <=
+                                ravenousRange) {
+                            ++nearbyEnemies;
+                        }
+                    });
+                if (nearbyEnemies >= 2) {
+                    const float missingHealth =
+                        std::max(0.0f,
+                            player.maxHealth.value -
+                                player.health.value);
+                    ActionRequest hydra = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::RavenousHydra,
+                        ActionPriority::Engage, now,
+                        "multiple visible targets justify Ravenous Hydra damage and healing",
+                        Confidence::High);
+                    hydra.position = closest->position;
+                    hydra.expectedValue =
+                        static_cast<float>(nearbyEnemies) * 30.0f +
+                        missingHealth * 0.10f;
+                    arbiter.Submit(hydra);
+                }
+            }
+
+            const float profaneRange =
+                ItemRange(registry, Capability::ProfaneHydra, 400.0f);
+            const ItemDefinition* profaneDefinition =
+                registry.FindAvailableItem(
+                    Capability::ProfaneHydra);
+            const float profaneDamage =
+                profaneDefinition &&
+                        profaneDefinition->effectValues[0] > 0.0f
+                    ? profaneDefinition->effectValues[0]
+                    : 100.0f;
+            const ThreatForecast profaneForecast =
+                CombatPredictionService::Forecast(
+                    *closest, store, now, 1.0f);
+            const float profaneCommittedDamage =
+                EffectiveThreatDamage(
+                    profaneForecast,
+                    settings.includeDamageOverTime,
+                    false);
+            const float profaneHealth =
+                closest->health.value +
+                std::max(0.0f, closest->allShield);
+            const float profaneProjectedHealth =
+                profaneHealth - profaneCommittedDamage;
+            if (settings.ModeFor(Capability::ProfaneHydra) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::ProfaneHydra,
+                    registry) != nullptr &&
+                !HasProtectionImmunity(player, now) &&
+                SummarizeControl(player, registry, now).severity < 4 &&
+                closestDistance <= profaneRange &&
+                profaneCommittedDamage < profaneHealth &&
+                profaneProjectedHealth > 0.0f &&
+                profaneProjectedHealth <= profaneDamage) {
+                ActionRequest profane = MakeRequest(
+                    player, registry, settings, runtimeMode,
+                    Capability::ProfaneHydra,
+                    ActionPriority::Execute, now,
+                    "visible target remains inside Profane Hydra execute damage",
+                    profaneForecast.confidence == Confidence::Unknown
+                        ? Confidence::High
+                        : profaneForecast.confidence);
+                profane.targetId = closest->networkId;
+                profane.position = closest->position;
+                profane.expectedValue =
+                    profaneDamage - profaneProjectedHealth;
+                arbiter.Submit(profane);
+            }
+
+            const std::array<Capability, 1> cleaves = {
+                Capability::Tiamat
             };
             for (const Capability capability : cleaves) {
                 const float range =
@@ -1170,6 +1746,8 @@ private:
                                 closest->maxHealth.value) <=
                         0.40f;
                 if (count <= 0 ||
+                    (capability == Capability::Tiamat &&
+                     count < 2) ||
                     (capability == Capability::ProfaneHydra &&
                      count < 2 && !executeActive)) {
                     continue;
@@ -1329,12 +1907,16 @@ private:
                 continue;
             }
 
+            constexpr float damageHistoryWindow = 1.25f;
+            constexpr float reactionWindow = 0.12f;
             float recentDamage = 0.0f;
             store.Damage().ForEach(
                 [&](const DamageRecord& record) {
                     if (record.targetId ==
                             objective.networkId &&
-                        record.at >= now - 1.25f &&
+                        record.at <= now &&
+                        record.at >=
+                            now - damageHistoryWindow &&
                         record.amount > 0.0f &&
                         static_cast<int>(
                             record.evidence.confidence) >=
@@ -1344,11 +1926,12 @@ private:
                     }
                 });
             const float damagePerSecond =
-                recentDamage / 1.25f;
-            const float reactionWindow = 0.12f;
+                recentDamage / damageHistoryWindow;
             const float projectedHealth =
-                objective.health -
-                damagePerSecond * reactionWindow;
+                std::max(
+                    0.0f,
+                    objective.health -
+                        damagePerSecond * reactionWindow);
             if (projectedHealth <= 0.0f ||
                 projectedHealth > smiteDamage) {
                 continue;
@@ -1399,8 +1982,18 @@ private:
         const float damage = EffectiveThreatDamage(
             forecast, settings.includeDamageOverTime,
             false);
+        const ObservedItem* potionItem =
+            FindItem(
+                player, Capability::Potion,
+                registry);
         if (settings.potionEnabled &&
-            healthRatio < 0.65f && healthRatio > 0.15f &&
+            settings.ModeFor(Capability::Potion) !=
+                ActionMode::Off &&
+            potionItem != nullptr &&
+            !player.recalling &&
+            !player.channeling &&
+            healthRatio < 0.65f &&
+            healthRatio > 0.15f &&
             damage < player.health.value +
                 std::max(0.0f, player.allShield) &&
             !HasPotionBuff(player, now) &&
@@ -1409,9 +2002,15 @@ private:
                 player, registry, settings, runtimeMode,
                 Capability::Potion,
                 ActionPriority::Utility, now,
-                "meaningful missing health and no potion effect is active");
+                "usable potion can restore meaningful missing health safely",
+                Confidence::High);
+            potion.position = player.position;
             potion.expectedValue =
-                (1.0f - healthRatio) * 100.0f;
+                (1.0f - healthRatio) * 100.0f +
+                (potionItem->maxCharges > 0
+                    ? static_cast<float>(
+                          potionItem->charges)
+                    : 1.0f);
             arbiter.Submit(potion);
         }
 
@@ -1462,9 +2061,68 @@ private:
                 }
             }
         }
-
         if (settings.offensiveItemsEnabled &&
+            settings.ModeFor(Capability::Tiamat) != ActionMode::Off &&
+            FindItem(
+                player, Capability::Tiamat,
+                registry) != nullptr &&
+            forecast.threatCount == 0 &&
+            !HasProtectionImmunity(player, now)) {
+            const WaveState& wave = store.Wave();
+            const float tiamatRange =
+                ItemRange(registry, Capability::Tiamat, 450.0f);
+            bool enemyNear = false;
+            store.ForEachChampion(
+                [&](const ChampionState& enemy) {
+                    if (!enemyNear &&
+                        CombatValidationService::
+                            IsTargetableEnemy(
+                                enemy, player.team) &&
+                        enemy.position.Distance(
+                            player.position) <=
+                            std::max(tiamatRange, 650.0f)) {
+                        enemyNear = true;
+                    }
+                });
+            const bool waveFresh =
+                wave.evidence.IsKnown() &&
+                !wave.evidence.IsExpired(now) &&
+                !wave.center.IsZero();
+            const bool waveClear =
+                waveFresh &&
+                wave.enemyMinions >= 3 &&
+                wave.enemyHealth > 0.0f &&
+                wave.center.Distance(player.position) <=
+                    tiamatRange + 150.0f &&
+                !Contains(wave.classification, "freeze");
+            if (!enemyNear && waveClear) {
+                ActionRequest tiamat = MakeRequest(
+                    player, registry, settings, runtimeMode,
+                    Capability::Tiamat,
+                    ActionPriority::WaveClear, now,
+                    "fresh visible enemy wave can be cleared outside combat",
+                    wave.evidence.confidence);
+                tiamat.position = wave.center;
+                tiamat.expectedValue =
+                    static_cast<float>(wave.enemyMinions) * 25.0f +
+                    std::max(0.0f, wave.enemyHealth) * 0.05f;
+                arbiter.Submit(tiamat);
+            }
+        }
+
+
+        const ObservedItem* actualizerItem =
+            FindItem(
+                player, Capability::Actualizer,
+                registry);
+        if (settings.offensiveItemsEnabled &&
+            settings.ModeFor(Capability::Actualizer) !=
+                ActionMode::Off &&
+            actualizerItem != nullptr &&
             player.maxMana.value > 0.0f &&
+            !player.recalling &&
+            !player.channeling &&
+            !HasProtectionImmunity(player, now) &&
             !HasActiveBuff(player, "actualizer", now)) {
             float plannedMana = 0.0f;
             int readyCombatSpells = 0;
@@ -1473,43 +2131,88 @@ private:
                 const ObservedSpell& spell =
                     player.spells[i];
                 if (spell.slot >= 0 && spell.slot <= 3 &&
-                    spell.ready) {
+                    spell.ready &&
+                    spell.cooldownRemaining <= 0.01f) {
                     plannedMana +=
                         std::max(0.0f, spell.manaCost);
                     ++readyCombatSpells;
                 }
             }
-            bool visibleEnemy = false;
+            int visibleEnemies = 0;
+            bool lowHealthAlly = false;
             store.ForEachChampion(
-                [&](const ChampionState& enemy) {
-                    if (!visibleEnemy &&
-                        CombatValidationService::
+                [&](const ChampionState& unit) {
+                    const float distance =
+                        unit.position.Distance(player.position);
+                    if (distance > 1200.0f || unit.dead ||
+                        !unit.visible) {
+                        return;
+                    }
+                    if (CombatValidationService::
                             IsTargetableEnemy(
-                                enemy, player.team) &&
-                        enemy.position.Distance(
-                            player.position) <= 1200.0f) {
-                        visibleEnemy = true;
+                                unit, player.team)) {
+                        ++visibleEnemies;
+                    } else if (unit.ally && !unit.local &&
+                               unit.maxHealth.value > 0.0f &&
+                               unit.health.value /
+                                       unit.maxHealth.value <
+                                   0.75f) {
+                        lowHealthAlly = true;
                     }
                 });
-            const float requiredMana = std::max(
-                plannedMana * 1.5f,
-                player.maxMana.value * 0.30f);
-            if (visibleEnemy && readyCombatSpells >= 2 &&
-                player.mana.value >= requiredMana &&
-                player.mana.value - requiredMana >=
-                    player.maxMana.value * 0.20f) {
+            const float windowMana =
+                std::max(plannedMana * 1.5f,
+                    player.maxMana.value * 0.30f);
+            const float reserveMana = std::max(
+                plannedMana * 0.25f,
+                player.maxMana.value * 0.20f);
+            const bool enoughMana =
+                player.mana.value >= windowMana + reserveMana;
+            const bool hasCombatValue =
+                visibleEnemies > 0 || lowHealthAlly;
+            if (hasCombatValue &&
+                readyCombatSpells >= 2 &&
+                enoughMana) {
                 ActionRequest actualizer = MakeRequest(
                     player, registry, settings, runtimeMode,
                     Capability::Actualizer,
                     ActionPriority::Engage, now,
-                    "observed mana sustains the planned eight-second spell window");
+                    "usable Actualizer can amplify a sustained eight-second combat window",
+                    Confidence::High);
+                actualizer.position = player.position;
                 actualizer.expectedValue =
-                    player.mana.value - requiredMana;
+                    static_cast<float>(readyCombatSpells) *
+                        30.0f +
+                    static_cast<float>(visibleEnemies) *
+                        20.0f +
+                    (lowHealthAlly ? 25.0f : 0.0f) +
+                    player.mana.value -
+                    (windowMana + reserveMana);
                 arbiter.Submit(actualizer);
             }
         }
 
-        if (settings.visionItemsEnabled) {
+        if (settings.visionItemsEnabled &&
+            !player.recalling &&
+            !player.channeling) {
+            const bool canOracle =
+                settings.ModeFor(Capability::Oracle) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Oracle,
+                    registry) != nullptr;
+            const bool canWard =
+                settings.ModeFor(Capability::Ward) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Ward,
+                    registry) != nullptr;
+            const bool canFarsight =
+                settings.ModeFor(Capability::Farsight) !=
+                    ActionMode::Off &&
+                FindItem(
+                    player, Capability::Farsight,
+                    registry) != nullptr;
             const float oracleRange =
                 ItemRange(
                     registry, Capability::Oracle, 750.0f);
@@ -1524,17 +2227,19 @@ private:
                         distance <= oracleRange) {
                         ++nearbyEnemyWards;
                     }
-                    if (ward.ally && distance <= 900.0f) {
+                    if (ward.ally && ward.visible &&
+                        distance <= 900.0f) {
                         ++nearbyFriendlyWards;
                     }
                 });
-            if (nearbyEnemyWards > 0) {
+            if (canOracle && nearbyEnemyWards > 0) {
                 ActionRequest oracle = MakeRequest(
                     player, registry, settings, runtimeMode,
                     Capability::Oracle,
                     ActionPriority::Utility, now,
                     "observed enemy vision is inside Oracle Lens range",
                     Confidence::Confirmed);
+                oracle.mode = ActionMode::Suggest;
                 oracle.expectedValue =
                     static_cast<float>(nearbyEnemyWards) *
                     10.0f;
@@ -1547,16 +2252,20 @@ private:
                 const float wardRange =
                     ItemRange(
                         registry, Capability::Ward, 600.0f);
-                ActionRequest vision = MakeRequest(
-                    player, registry, settings, runtimeMode,
-                    Capability::Ward,
-                    ActionPriority::Utility, now,
-                    "no observed friendly vision covers the current route");
-                vision.position =
-                    player.position +
-                    direction * std::min(wardRange, 600.0f);
-                vision.expectedValue = 2.0f;
-                if (!arbiter.Submit(vision)) {
+                if (canWard) {
+                    ActionRequest vision = MakeRequest(
+                        player, registry, settings, runtimeMode,
+                        Capability::Ward,
+                        ActionPriority::Utility, now,
+                        "no observed friendly vision covers the current route",
+                        Confidence::High);
+                    vision.mode = ActionMode::Suggest;
+                    vision.position =
+                        player.position +
+                        direction * std::min(wardRange, 600.0f);
+                    vision.expectedValue = 2.0f;
+                    arbiter.Submit(vision);
+                } else if (canFarsight) {
                     const float farsightRange =
                         ItemRange(
                             registry,
@@ -1565,7 +2274,9 @@ private:
                         player, registry, settings, runtimeMode,
                         Capability::Farsight,
                         ActionPriority::Utility, now,
-                        "Farsight can scout the uncovered observed route");
+                        "Farsight can scout the uncovered observed route",
+                        Confidence::High);
+                    farsight.mode = ActionMode::Suggest;
                     farsight.position =
                         player.position +
                         direction *
@@ -1576,10 +2287,23 @@ private:
             }
         }
 
-        if (settings.offensiveItemsEnabled) {
+        if (settings.offensiveItemsEnabled &&
+            settings.ModeFor(Capability::Herald) !=
+                ActionMode::Off &&
+            FindItem(
+                player, Capability::Herald,
+                registry) != nullptr &&
+            !player.recalling &&
+            !player.channeling) {
             const float heraldRange =
                 ItemRange(
                     registry, Capability::Herald, 1200.0f);
+            const WaveState& wave = store.Wave();
+            const bool waveFresh =
+                wave.evidence.IsKnown() &&
+                !wave.evidence.IsExpired(now) &&
+                wave.allyMinions > 0 &&
+                !wave.center.IsZero();
             for (std::size_t i = 0;
                  i < store.Structures().Size(); ++i) {
                 const StructureState& structure =
@@ -1587,23 +2311,46 @@ private:
                 if (!structure.alive || !structure.visible ||
                     structure.team == player.team ||
                     structure.kind != StructureKind::Turret ||
+                    structure.backdoorProtected ||
                     structure.position.Distance(
-                        player.position) > heraldRange) {
+                        player.position) > heraldRange ||
+                    structure.maxHealth <= 0.0f) {
                     continue;
                 }
+                const bool alliedWaveReady =
+                    waveFresh &&
+                    wave.center.Distance(
+                        structure.position) <=
+                        heraldRange + 300.0f;
+                const float turretHealthRatio =
+                    std::clamp(
+                        structure.health /
+                            structure.maxHealth,
+                        0.0f, 1.0f);
+                const bool lowTurretWindow =
+                    turretHealthRatio <= 0.65f;
+                if (!alliedWaveReady && !lowTurretWindow) {
+                    continue;
+                }
+                const Confidence confidence =
+                    alliedWaveReady
+                        ? wave.evidence.confidence
+                        : structure.evidence.confidence;
                 ActionRequest herald = MakeRequest(
                     player, registry, settings, runtimeMode,
                     Capability::Herald,
-                    ActionPriority::Utility, now,
-                    "visible enemy turret permits a Herald deployment suggestion",
-                    structure.evidence.confidence);
+                    ActionPriority::SecureObjective, now,
+                    alliedWaveReady
+                        ? "fresh allied wave is in range for a Herald turret timing window"
+                        : "visible enemy turret is low enough to justify Herald deployment",
+                    confidence);
                 herald.position = structure.position;
                 herald.expectedValue =
-                    structure.maxHealth > 0.0f
-                        ? 1.0f -
-                              structure.health /
-                                  structure.maxHealth
-                        : 1.0f;
+                    (1.0f - turretHealthRatio) * 100.0f +
+                    (alliedWaveReady
+                        ? static_cast<float>(wave.allyMinions) *
+                              15.0f
+                        : 0.0f);
                 arbiter.Submit(herald);
                 break;
             }
@@ -1699,6 +2446,9 @@ private:
             }
         }
     }
+    ThreatForecast selfForecast_{};
+    bool hasSelfForecast_ = false;
+    std::uint32_t knightsVowTargetId_ = 0;
 };
 
 } // namespace NightSharp::Companion

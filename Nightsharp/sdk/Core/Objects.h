@@ -96,6 +96,18 @@ public:
     std::string Name() const {
         return ::CoreSpellDataInst::Name(Ref());
     }
+    bool ReadName(char* out, int maxOut) const {
+        return ::CoreSpellDataInst::ReadName(
+            Ref(), out, maxOut);
+    }
+
+    bool ReadScriptName(char* out, int maxOut) const {
+        return ::CoreSpellDataInst::ReadResourceString(
+            Ref(),
+            Offset::SpellDataResourceLayout::ResScriptName,
+            out,
+            maxOut);
+    }
 
     CoreSpellBook::State State(float gameTime) const {
         return ::CoreSpellDataInst::SimpleState(Ref(), gameTime);
@@ -677,6 +689,14 @@ public:
     ::Core::Objects::ObjectHandle Handle() const {
         (void)Address();
         return handle_;
+    }
+
+    std::uint32_t CachedNetworkId() const {
+        return handle_.networkId;
+    }
+
+    std::uint32_t CachedIndex() const {
+        return handle_.index;
     }
 
     GameObjectTeam Team() const {
@@ -1356,6 +1376,7 @@ public:
     }
 
     std::vector<InventorySlot> InventoryItems() const;
+    void InventoryItems(std::vector<InventorySlot>& output) const;
 
     bool IsRecalling() const {
         return HasBuff("recall");

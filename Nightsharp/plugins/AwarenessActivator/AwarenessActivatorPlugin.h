@@ -37,6 +37,8 @@ public:
         }
         awareness_.Reset();
         layerGuard_.Reset();
+        updateFrame_ = 0;
+        attackRange_ = 0.0f;
         LoadPatchOverrides();
         bridge_.Attach(awareness_);
         loaded_ = bridge_.IsAttached();
@@ -53,20 +55,28 @@ public:
         menu_.Detach();
         bridge_.Detach();
         hasCandidate_ = false;
+        updateFrame_ = 0;
+        attackRange_ = 0.0f;
         loaded_ = false;
         NightSharpDebug::Logf("[AwarenessActivator] unloaded");
     }
 
     void OnUpdate() override {
+        NS_PROFILE("AwarenessActivator.OnUpdate");
         if (!loaded_ || !bridge_.IsAttached()) return;
-        menu_.SyncSettingsFromMenu();
 
+        ++updateFrame_;
         bridge_.Update();
+        if (updateFrame_ == 1u ||
+            (updateFrame_ % 15u) == 0u) {
+            RefreshAttackRange();
+        }
         HandleAudioAlerts();
         hasCandidate_ = false;
         if (!settings_.enabled) return;
 
-        const ActionRequest* request = activator_.Evaluate(awareness_, settings_);
+        const ActionRequest* request =
+            activator_.Evaluate(awareness_, settings_);
         if (!request) return;
         candidate_ = *request;
         hasCandidate_ = true;
@@ -74,6 +84,7 @@ public:
     }
 
     void OnRender() override {
+        NS_PROFILE("AwarenessActivator.OnRender");
         if (!loaded_ || !SDK::Drawing::IsEnabled()) return;
         if (settings_.hudEditor) DrawHudEditor();
         if (!settings_.drawOverlay || settings_.audioOnly) return;
@@ -188,7 +199,26 @@ public:
         ImGui::Text("events: %zu  alerts: %zu",
                     awareness_.Store().TeamfightTimeline().Size(),
                     awareness_.Store().Alerts().Size());
-        menu_.SyncMenuFromSettings();
+        if (ImGui::CollapsingHeader(
+                "Decision log viewer",
+                ImGuiTreeNodeFlags_DefaultOpen)) {
+            const auto& entries = awareness_.Log().Entries();
+            std::size_t shown = 0;
+            for (std::size_t i = entries.Size();
+                 i > 0 && shown < 8; --i, ++shown) {
+                const DecisionLogEntry& entry =
+                    entries.At(i - 1);
+                ImGui::Text(
+                    "[%6.2f] P%d %s: %s [%s]",
+                    entry.at, entry.priority, entry.subject,
+                    entry.outcome,
+                    ConfidenceName(entry.confidence));
+                ImGui::TextWrapped("  %s", entry.reason);
+            }
+            if (entries.Size() == 0) {
+                ImGui::TextUnformatted("No decisions recorded.");
+            }
+        }
     }
 
     bool LoadSucceeded() const override { return loaded_; }
@@ -215,6 +245,15 @@ private:
                 "[AwarenessActivator] presentation layer faulted: %u",
                 layer);
         }
+    }
+
+    void RefreshAttackRange() noexcept {
+        attackRange_ = 0.0f;
+        const auto player = SDK::GameObjects::Player();
+        if (!player.IsValid()) return;
+        attackRange_ = std::max(
+            0.0f, player.AttackRange() +
+                player.BoundingRadius());
     }
     static const char* ActionModeName(ActionMode mode) noexcept {
         switch (mode) {
@@ -450,14 +489,21 @@ private:
                 SDK::Drawing::DrawCircle(
                     minimap, 6.0f, style.thickness,
                     style.color, 18);
-                char label[96] = {};
+                char label[128] = {};
+                char confidence[24] = {};
+                if (!state.visible) {
+                    std::snprintf(
+                        confidence, sizeof(confidence), " [%s]",
+                        ConfidenceName(evidence.confidence));
+                }
                 std::snprintf(
-                    label, sizeof(label), "%c %s%s",
+                    label, sizeof(label), "%c %s%s%s",
                     style.marker,
                     settings_.streamerMode
                         ? "enemy"
                         : (state.name[0] ? state.name : "enemy"),
-                    state.visible ? "" : " last seen");
+                    state.visible ? "" : " last seen",
+                    confidence);
                 SDK::Drawing::DrawText(
                     minimap.x + 8.0f, minimap.y - 7.0f,
                     style.color, label);
@@ -468,7 +514,9 @@ private:
             const WardState& ward = wards.At(i);
             if (ward.destroyed ||
                 !IsValidPoint(ward.position) ||
-                !ward.evidence.IsKnown()) {
+                !ward.evidence.IsKnown() ||
+                !VisibilityGuard::CanExposePosition(
+                    ward.evidence, awareness_.Mode(), ward.visible)) {
                 continue;
             }
             SDK::Vector2 minimap{};
@@ -482,6 +530,15 @@ private:
             SDK::Drawing::DrawCircle(
                 minimap, 3.5f, style.thickness,
                 style.color, 12);
+            char label[128] = {};
+            std::snprintf(
+                label, sizeof(label), "%c ward%s [%s/%s]",
+                style.marker, ward.visible ? "" : " last seen",
+                ConfidenceName(ward.evidence.confidence),
+                ProvenanceName(ward.evidence.provenance));
+            SDK::Drawing::DrawText(
+                minimap.x + 5.0f, minimap.y - 5.0f,
+                style.color, label);
         }
 
         const auto& objectives =
@@ -510,11 +567,19 @@ private:
             SDK::Drawing::DrawCircle(
                 minimap, 5.0f, style.thickness,
                 style.color, 16);
+            char label[128] = {};
+            std::snprintf(
+                label, sizeof(label), "%c %s%s [%s/%s]",
+                style.marker, ObjectiveName(objective.kind),
+                objective.visible ? "" : " last seen",
+                ConfidenceName(objective.evidence.confidence),
+                ProvenanceName(objective.evidence.provenance));
             SDK::Drawing::DrawText(
                 minimap.x + 6.0f, minimap.y - 6.0f,
-                style.color, ObjectiveName(objective.kind));
+                style.color, label);
         }
     }
+
 
     void DrawChampions() const {
         const auto& store = awareness_.Store();
@@ -646,19 +711,43 @@ private:
         for (std::size_t i = 0; i < wards.Size(); ++i) {
             const WardState& ward = wards.At(i);
             if (ward.destroyed || !IsValidPoint(ward.position)) continue;
-            if (!ward.visible && ward.evidence.provenance != Provenance::ObservedEvent && ward.evidence.provenance != Provenance::LastSeen) continue;
+            const ExposureDecision exposure =
+                VisibilityGuard::CanExpose(
+                    ward.evidence, awareness_.Mode(),
+                    ward.visible, true);
+            if (!exposure.allowed) continue;
             const std::uint32_t color = ward.enemy
-                ? 0xFFFF7799u : (ward.visible ? 0xFF66FF99u : 0x9988AA99u);
-            SDK::Drawing::DrawCircle(ToSdkPoint(ward.position),
-                                     std::max(35.0f, ward.radius), color, 1.5f);
-            char label[128] = {};
+                ? 0xFFFF7799u
+                : (ward.visible ? 0xFF66FF99u : 0x9988AA99u);
+            const float radius = std::max(35.0f, ward.radius);
+            SDK::Drawing::DrawCircle(
+                ToSdkPoint(ward.position), radius, color, 1.5f);
+            const float now = awareness_.Now();
+            const float bonusRemaining = ward.bonusVisionUntil > 0.0f
+                ? std::max(0.0f, ward.bonusVisionUntil - now) : 0.0f;
+            if (ward.visible && ward.faelight &&
+                ward.bonusVisionObserved && bonusRemaining > 0.0f) {
+                SDK::Drawing::DrawCircle(
+                    ToSdkPoint(ward.position), radius,
+                    0x7799DDFFu, 2.0f);
+            }
+            char bonus[48] = {};
+            if (ward.visible && ward.faelight && bonusRemaining > 0.0f) {
+                std::snprintf(
+                    bonus, sizeof(bonus), " +25%% vision/%.0fs",
+                    bonusRemaining);
+            }
+            char label[160] = {};
             const float remaining = ward.expiresAt > 0.0f
-                ? std::max(0.0f, ward.expiresAt - awareness_.Now()) : 0.0f;
-            std::snprintf(label, sizeof(label), "%s%s %.0fs [%s]",
-                          ward.enemy ? "enemy " : "",
-                          ward.visible ? "ward" : "ward (last seen)",
-                          remaining, ConfidenceName(ward.evidence.confidence));
-            SDK::Drawing::DrawText(ToSdkPoint(ward.position), label, color, true);
+                ? std::max(0.0f, ward.expiresAt - now) : 0.0f;
+            std::snprintf(
+                label, sizeof(label), "%s%s %.0fs [%s/%s]%s",
+                ward.enemy ? "enemy " : "",
+                ward.visible ? "ward" : "ward (last seen)",
+                remaining, ConfidenceName(ward.evidence.confidence),
+                ProvenanceName(ward.evidence.provenance), bonus);
+            SDK::Drawing::DrawText(
+                ToSdkPoint(ward.position), label, color, true);
         }
     }
 
@@ -669,7 +758,8 @@ private:
         for (std::size_t i = 0; i < objectives.Size(); ++i) {
             const ObjectiveState& objective = objectives.At(i);
             const ExposureDecision exposure = VisibilityGuard::CanExpose(
-                objective.evidence, awareness_.Mode(), false, true);
+                objective.evidence, awareness_.Mode(),
+                objective.visible, true);
             if (!exposure.allowed) continue;
 
             const float now = awareness_.Now();
@@ -697,19 +787,28 @@ private:
                 std::snprintf(stateText, sizeof(stateText), "alive?");
             }
 
-            char label[160] = {};
-            std::snprintf(label, sizeof(label), "%s: %s [%s]",
-                          ObjectiveName(objective.kind), stateText,
-                          ConfidenceName(objective.evidence.confidence));
-            const std::uint32_t color =
+            const EvidenceVisualStyle style =
+                AwarenessPresentationPolicy::StyleFor(
+                    objective.evidence);
+            char label[192] = {};
+            std::snprintf(
+                label, sizeof(label), "%s%s: %s [%s/%s]",
+                objective.visible ? "" : "last seen ",
+                ObjectiveName(objective.kind), stateText,
+                ConfidenceName(objective.evidence.confidence),
+                ProvenanceName(objective.evidence.provenance));
+            const std::uint32_t statusColor =
                 objective.status == ObjectiveStatus::Dead ||
                 objective.status == ObjectiveStatus::Respawning
                     ? 0xFF888888u : 0xFFFFCC55u;
+            const std::uint32_t color = objective.visible
+                ? statusColor : style.color;
             SDK::Drawing::DrawText(18.0f, y, color, label);
             y += 16.0f;
             if (IsValidPoint(objective.position)) {
                 SDK::Drawing::DrawCircle(
-                    ToSdkPoint(objective.position), 220.0f, color, 2.0f);
+                    ToSdkPoint(objective.position), 220.0f,
+                    color, objective.visible ? 2.0f : style.thickness);
                 SDK::Drawing::DrawText(
                     ToSdkPoint(objective.position), label, color, true);
             }
@@ -722,7 +821,7 @@ private:
         for (std::size_t i = 0; i < camps.Size(); ++i) {
             const JungleCampState& camp = camps.At(i);
             const ExposureDecision exposure = VisibilityGuard::CanExpose(
-                camp.evidence, awareness_.Mode(), false, true);
+                camp.evidence, awareness_.Mode(), camp.visible, true);
             if (!exposure.allowed || !IsValidPoint(camp.position)) continue;
 
             const bool estimated =
@@ -760,17 +859,38 @@ private:
         const auto& structures = awareness_.Store().Structures();
         for (std::size_t i = 0; i < structures.Size(); ++i) {
             const StructureState& structure = structures.At(i);
-            if (!structure.alive || !IsValidPoint(structure.position)) continue;
-            const std::uint32_t color = structure.backdoorProtected
-                ? 0xFFAA88FFu : 0xFFFF8844u;
-            SDK::Drawing::DrawCircle(ToSdkPoint(structure.position),
-                                     180.0f, color, 1.5f);
-            char label[160] = {};
-            std::snprintf(label, sizeof(label), "%s plates:%d crystal:%.0f%% true:%.0f%s",
-                          StructureName(structure.kind), structure.plates,
-                          structure.overgrowthCharge, structure.nextTrueDamage,
-                          structure.backdoorProtected ? " [backdoor]" : "");
-            SDK::Drawing::DrawText(ToSdkPoint(structure.position), label, color, true);
+            if (!structure.alive ||
+                !IsValidPoint(structure.position)) {
+                continue;
+            }
+            const ExposureDecision exposure =
+                VisibilityGuard::CanExpose(
+                    structure.evidence, awareness_.Mode(),
+                    structure.visible, true);
+            if (!exposure.allowed) continue;
+            const EvidenceVisualStyle style =
+                AwarenessPresentationPolicy::StyleFor(
+                    structure.evidence);
+            const std::uint32_t baseColor =
+                structure.backdoorProtected
+                    ? 0xFFAA88FFu : 0xFFFF8844u;
+            const std::uint32_t color = structure.visible
+                ? baseColor : style.color;
+            char label[192] = {};
+            std::snprintf(
+                label, sizeof(label),
+                "%s%s plates:%d crystal:%.0f%% true:%.0f%s [%s/%s]",
+                structure.visible ? "" : "last seen ",
+                StructureName(structure.kind), structure.plates,
+                structure.overgrowthCharge, structure.nextTrueDamage,
+                structure.backdoorProtected ? " [backdoor]" : "",
+                ConfidenceName(structure.evidence.confidence),
+                ProvenanceName(structure.evidence.provenance));
+            SDK::Drawing::DrawCircle(
+                ToSdkPoint(structure.position), 180.0f,
+                color, structure.visible ? 1.5f : style.thickness);
+            SDK::Drawing::DrawText(
+                ToSdkPoint(structure.position), label, color, true);
         }
     }
 
@@ -815,10 +935,11 @@ private:
             }
             char label[160] = {};
             std::snprintf(
-                label, sizeof(label), "%.1fs %.0f dmg %s [%s]",
+                label, sizeof(label), "%.1fs %.0f dmg %s [%s/%s]",
                 std::max(0.0f, threat.impactAt - awareness_.Now()),
                 threat.damage, CrowdControlName(threat.control),
-                ConfidenceName(threat.evidence.confidence));
+                ConfidenceName(threat.evidence.confidence),
+                ProvenanceName(threat.evidence.provenance));
             SDK::Drawing::DrawText(
                 ToSdkPoint(center), label, color, true);
         }
@@ -833,9 +954,16 @@ private:
             });
         if (!player || player->dead || !IsValidPoint(player->position)) return;
 
-        const ThreatForecast forecast = CombatPredictionService::Forecast(
-            *player, awareness_.Store(), awareness_.Now(),
-            settings_.defensiveHorizon);
+        ThreatForecast fallbackForecast{};
+        const ThreatForecast* forecast =
+            activator_.HasSelfForecast()
+                ? &activator_.SelfForecast()
+                : &fallbackForecast;
+        if (!activator_.HasSelfForecast()) {
+            fallbackForecast = CombatPredictionService::Forecast(
+                *player, awareness_.Store(), awareness_.Now(),
+                settings_.defensiveHorizon);
+        }
         int controlCount = 0;
         float longestControl = 0.0f;
         for (std::size_t i = 0; i < player->buffCount; ++i) {
@@ -856,25 +984,18 @@ private:
         std::snprintf(
             label, sizeof(label),
             "combat: %.0f incoming / %d threats%s | CC %d %.1fs%s",
-            forecast.incomingDamage, forecast.threatCount,
-            forecast.hardCc ? " hard-CC" : "",
+            forecast->incomingDamage, forecast->threatCount,
+            forecast->hardCc ? " hard-CC" : "",
             controlCount, longestControl,
             player->channeling ? " | channeling" : "");
         SDK::Drawing::DrawText(
             ToSdkPoint(player->position), label,
-            forecast.incomingDamage >= player->health.value
+            forecast->incomingDamage >= player->health.value
                 ? 0xFFFF4466u : 0xFF66DDFFu, true);
-
-        const auto sdkPlayer = SDK::GameObjects::Player();
-        if (sdkPlayer.IsValid()) {
-            const float attackRange = std::max(
-                0.0f, sdkPlayer.AttackRange() +
-                      sdkPlayer.BoundingRadius());
-            if (attackRange > 0.0f) {
-                SDK::Drawing::DrawCircle(
-                    ToSdkPoint(player->position), attackRange,
-                    0x4455DDFFu, 1.0f);
-            }
+        if (attackRange_ > 0.0f) {
+            SDK::Drawing::DrawCircle(
+                ToSdkPoint(player->position), attackRange_,
+                0x4455DDFFu, 1.0f);
         }
         if (!player->lastDirection.IsZero()) {
             const Point3 endpoint =
@@ -907,7 +1028,15 @@ private:
                 const ActivitySample& sample = samples.At(i);
                 const float age =
                     std::max(0.0f, awareness_.Now() - sample.at);
-                if (age > 600.0f || !IsValidPoint(sample.position)) continue;
+                if (age > 600.0f ||
+                    !IsValidPoint(sample.position) ||
+                    !sample.evidence.IsKnown() ||
+                    !VisibilityGuard::CanExposePosition(
+                        sample.evidence, awareness_.Mode(),
+                        sample.evidence.provenance ==
+                            Provenance::VisibleNow)) {
+                    continue;
+                }
                 const std::uint32_t color =
                     sample.kind == ActivityKind::Death
                         ? 0x99FF3355u
@@ -926,7 +1055,11 @@ private:
             for (std::size_t i = 0; i < wards.Size(); ++i) {
                 const WardState& ward = wards.At(i);
                 if (ward.destroyed || !ward.ally ||
-                    !IsValidPoint(ward.position)) {
+                    !IsValidPoint(ward.position) ||
+                    !ward.evidence.IsKnown() ||
+                    !VisibilityGuard::CanExposePosition(
+                        ward.evidence, awareness_.Mode(),
+                        ward.visible)) {
                     continue;
                 }
                 SDK::Drawing::DrawCircle(
@@ -949,11 +1082,12 @@ private:
         const WaveState& wave = awareness_.Store().Wave();
         if (settings_.drawWave && wave.evidence.IsKnown()) {
             std::snprintf(
-                line, sizeof(line), "%s: %s %d-%d [%.0f/%s]",
+                line, sizeof(line), "%s: %s %d-%d [%.0f/%s/%s]",
                 AwarenessLocalization::Text("wave", locale),
                 wave.classification, wave.allyMinions,
                 wave.enemyMinions, wave.laneBias,
-                ConfidenceName(wave.evidence.confidence));
+                ConfidenceName(wave.evidence.confidence),
+                ProvenanceName(wave.evidence.provenance));
             SDK::Drawing::DrawText(x, y, 0xFF99DDAAu, line);
             y += 17.0f;
             if (IsValidPoint(wave.center)) {
@@ -966,11 +1100,13 @@ private:
         const RecallAdvice& recall = awareness_.Insights().recall;
         if (recall.evidence.IsKnown()) {
             std::snprintf(
-                line, sizeof(line), "%s: %d/100 %s - %s",
+                line, sizeof(line), "%s: %d/100 %s - %s [%s/%s]",
                 AwarenessLocalization::Text("recall", locale),
                 recall.score,
                 recall.recommended ? "recommended" : "hold",
-                recall.reason);
+                recall.reason,
+                ConfidenceName(recall.evidence.confidence),
+                ProvenanceName(recall.evidence.provenance));
             SDK::Drawing::DrawText(
                 x, y,
                 recall.recommended ? 0xFF77EEAAu : 0xFFBBBB88u,
@@ -982,9 +1118,11 @@ private:
             awareness_.Insights().wardEfficiency;
         if (wards.evidence.IsKnown()) {
             std::snprintf(
-                line, sizeof(line), "%s: %d/100 active %d objective %d",
+                line, sizeof(line), "%s: %d/100 active %d objective %d [%s/%s]",
                 AwarenessLocalization::Text("wards", locale),
-                wards.score, wards.active, wards.objectiveCoverage);
+                wards.score, wards.active, wards.objectiveCoverage,
+                ConfidenceName(wards.evidence.confidence),
+                ProvenanceName(wards.evidence.provenance));
             SDK::Drawing::DrawText(x, y, 0xFF77CCAAu, line);
             y += 17.0f;
         }
@@ -993,12 +1131,13 @@ private:
         for (std::size_t i = 0; i < setups.Size() && i < 3; ++i) {
             const ObjectiveSetupAssessment& setup = setups.At(i);
             std::snprintf(
-                line, sizeof(line), "%s %s: %d/100 %s A%d E%d V%d [%s]",
+                line, sizeof(line), "%s %s: %d/100 %s A%d E%d V%d [%s/%s]",
                 AwarenessLocalization::Text("objective", locale),
                 ObjectiveName(setup.kind), setup.score, setup.rating,
                 setup.nearbyAllies, setup.nearbyEnemies,
                 setup.alliedVision,
-                ConfidenceName(setup.evidence.confidence));
+                ConfidenceName(setup.evidence.confidence),
+                ProvenanceName(setup.evidence.provenance));
             SDK::Drawing::DrawText(x, y, 0xFFDDCC77u, line);
             y += 17.0f;
         }
@@ -1033,10 +1172,13 @@ private:
             awareness_.Insights().deathRecap;
         if (recap.evidence.IsKnown()) {
             std::snprintf(
-                line, sizeof(line), "%s: %.0f damage / %d sources / %.1fs",
+                line, sizeof(line),
+                "%s: %.0f damage / %d sources / %.1fs [%s/%s]",
                 AwarenessLocalization::Text("death", locale),
                 recap.totalDamage, recap.sourceCount,
-                std::max(0.0f, recap.deathAt - recap.firstDamageAt));
+                std::max(0.0f, recap.deathAt - recap.firstDamageAt),
+                ConfidenceName(recap.evidence.confidence),
+                ProvenanceName(recap.evidence.provenance));
             SDK::Drawing::DrawText(x, y, 0xFFFF8899u, line);
             y += 17.0f;
         }
@@ -1314,6 +1456,8 @@ private:
     ActionRequest candidate_{};
     bool loaded_ = false;
     bool hasCandidate_ = false;
+    std::uint64_t updateFrame_ = 0;
+    float attackRange_ = 0.0f;
     std::uint32_t lastAttemptFingerprint_ = 0;
     float lastAttemptAt_ = -100.0f;
     std::uint32_t lastAudioAlertId_ = 0;

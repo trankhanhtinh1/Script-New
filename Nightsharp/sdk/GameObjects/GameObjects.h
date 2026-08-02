@@ -8,8 +8,8 @@
 #include "StructureScan.h"
 #include "../Events/Events.h"
 #include "../../CrashTrace.h"
-
 #include <Windows.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -17,6 +17,7 @@
 #include <mutex>
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -87,8 +88,11 @@ namespace detail {
     inline std::vector<MissileClient> MissilesList;
 
     inline AIHeroClient PlayerObject;
+    inline std::unordered_set<std::uint32_t> LiveNetworkIds;
+    inline std::unordered_set<std::uint32_t> LiveObjectIndexes;
     inline bool Initialized = false;
-
+    inline bool NativeUpdateHooked = false;
+    inline int LastPruneTick = -1;
 
     // ------------------------- string helpers ------------------------------
     inline std::string ToLower(std::string value) {
@@ -334,14 +338,16 @@ namespace detail {
     inline bool ContainsByNetworkId(const std::vector<T>& vec, int netId) {
         if (netId == 0 || vec.empty()) return false;
         for (const auto& item : vec) {
-            if (static_cast<int>(item.Handle().networkId) == netId) return true;
+            if (static_cast<int>(item.CachedNetworkId()) == netId) {
+                return true;
+            }
         }
         return false;
     }
 
     template <typename T>
     inline void PushUniqueByNetworkId(std::vector<T>& vec, const T& obj) {
-        const int netId = static_cast<int>(obj.Handle().networkId);
+        const int netId = static_cast<int>(obj.CachedNetworkId());
         if (netId != 0 && ContainsByNetworkId(vec, netId)) {
             return;
         }
@@ -352,7 +358,7 @@ namespace detail {
     inline void EraseByNetworkId(std::vector<T>& vec, int netId) {
         if (vec.empty()) return;
         vec.erase(std::remove_if(vec.begin(), vec.end(), [netId](const T& obj) {
-            return static_cast<int>(obj.Handle().networkId) == netId;
+            return static_cast<int>(obj.CachedNetworkId()) == netId;
         }), vec.end());
     }
 
@@ -360,7 +366,10 @@ namespace detail {
     inline void CleanInvalid(std::vector<T>& vec) {
         if (vec.empty()) return;
         vec.erase(std::remove_if(vec.begin(), vec.end(), [](const T& obj) {
-            return !obj.IsValid();
+            const std::uint32_t networkId = obj.CachedNetworkId();
+            const std::uint32_t index = obj.CachedIndex();
+            return (LiveNetworkIds.find(networkId) == LiveNetworkIds.end()) &&
+                   (LiveObjectIndexes.find(index) == LiveObjectIndexes.end());
         }), vec.end());
     }
 
@@ -420,10 +429,58 @@ namespace detail {
         CleanInvalid(MissilesList);
     }
 
+    inline bool RefreshLiveNetworkIds() {
+        std::uintptr_t objects[16384] = {};
+        const int count = ::Core::ObjectManager::EnumerateAllIncludingStructures(
+            objects, 16384);
+        if (count <= 0) {
+            return false;
+        }
+
+        if (LiveNetworkIds.bucket_count() <
+            static_cast<std::size_t>(count) * 2u) {
+            LiveNetworkIds.reserve(static_cast<std::size_t>(count) * 2u);
+            LiveObjectIndexes.reserve(static_cast<std::size_t>(count) * 2u);
+        }
+        LiveNetworkIds.clear();
+        LiveObjectIndexes.clear();
+        for (int i = 0; i < count; ++i) {
+            const uintptr_t object = objects[i];
+            if (!::Core::ObjectManager::IsLiveEntry(object)) {
+                continue;
+            }
+            const std::uint32_t index =
+                ::Core::Objects::ReadIndex(object);
+            const std::uint32_t networkId =
+                ::Core::Objects::ReadNetworkId(object);
+            if (index != 0 && index != 0xFFFFFFFFu) {
+                LiveObjectIndexes.insert(index);
+            }
+            if (networkId != 0 && networkId != 0xFFFFFFFFu) {
+                LiveNetworkIds.insert(networkId);
+            }
+        }
+        return !LiveNetworkIds.empty() || !LiveObjectIndexes.empty();
+    }
+
+    inline void PruneInvalidObjectsForFrame(int tick) {
+        if (LastPruneTick == tick) {
+            return;
+        }
+        LastPruneTick = tick;
+        if (RefreshLiveNetworkIds()) {
+            CleanInvalidObjects();
+        }
+    }
+
+    inline bool IsNetworkIdLive(std::uint32_t networkId) {
+        return networkId != 0 &&
+               networkId != 0xFFFFFFFFu &&
+               LiveNetworkIds.find(networkId) != LiveNetworkIds.end();
+    }
     inline void OnObjectAdd(const GameObject& object) {
         if (!object.IsValid()) return;
         Lock lk(g_mutex);
-        CleanInvalidObjects();
 
         PopulateStatic(object);
 
@@ -745,9 +802,18 @@ namespace detail {
         return list;
     }
 
-    // ------------------- lifecycle events (EnsoulSharp-style) ---------------
-    // Backing for GameObjects::OnCreate / OnDelete. Handlers are plain function
-    // pointers (EnsoulSharp's GameObjectCreate delegate carries the sender).
+    // Reuse caller-owned storage so periodic observers do not allocate a
+    // temporary vector every frame.
+    template <typename T>
+    inline void SnapshotInto(const std::vector<T>& list,
+                             std::vector<T>& output) {
+        Lock lk(g_mutex);
+        output.assign(list.begin(), list.end());
+    }
+
+    // Object-create/delete delivery is only a fast hint.  The authoritative
+    // cache maintenance runs from OnNativeGameUpdate so a missed delete
+    // cannot leave freed handles in any list.
     using LifecycleHandler = void(*)(const GameObject&);
     inline std::vector<LifecycleHandler> CreateHandlers;
     inline std::vector<LifecycleHandler> DeleteHandlers;
@@ -786,6 +852,12 @@ namespace detail {
         }
     }
 
+    inline void OnNativeGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
+        const int tick = static_cast<int>(::GetTickCount());
+        Lock lk(g_mutex);
+        PruneInvalidObjectsForFrame(tick);
+    }
+
     inline void OnNativeObjectCreate(const SDK::Events::ObjectEventArgs& args) {
         if (args.Sender.IsValid()) {
             const auto start = NightSharpPerf::Now();
@@ -807,9 +879,9 @@ namespace detail {
         DispatchLifecycle("GameObjects::OnDelete", DeleteHandlers, args);
     }
 
-    // Subscribe our forwarders to the (deferred, update-tick) native lifecycle
-    // events exactly once. Kept out from under g_mutex while calling into
-    // SDK::Events so the two subsystems' locks never nest.
+    // Subscribe our forwarders to native lifecycle events exactly once.  The
+    // create/delete callbacks are only hints; frame reconciliation is
+    // authoritative because native delete delivery can be missed.
     inline void EnsureNativeLifecycleHooked() {
         {
             Lock lk(g_mutex);
@@ -817,7 +889,10 @@ namespace detail {
                 return;
             }
             NativeLifecycleHooked = true;
+            NativeUpdateHooked = true;
+            LastPruneTick = -1;
         }
+        SDK::Events::AddOnGameUpdate(&OnNativeGameUpdate);
         SDK::Events::AddOnCreateObject(&OnNativeObjectCreate);
         SDK::Events::AddOnDeleteObject(&OnNativeObjectDelete);
         SeedAllGameObjects();
@@ -825,12 +900,21 @@ namespace detail {
 
     inline void ReleaseNativeLifecycleHook() {
         bool wasHooked = false;
+        bool wasUpdateHooked = false;
         {
             Lock lk(g_mutex);
             wasHooked = NativeLifecycleHooked;
+            wasUpdateHooked = NativeUpdateHooked;
             NativeLifecycleHooked = false;
+            NativeUpdateHooked = false;
+            LastPruneTick = -1;
+            LiveNetworkIds.clear();
+            LiveObjectIndexes.clear();
             CreateHandlers.clear();
             DeleteHandlers.clear();
+        }
+        if (wasUpdateHooked) {
+            SDK::Events::RemoveOnGameUpdate(&OnNativeGameUpdate);
         }
         if (wasHooked) {
             SDK::Events::RemoveOnCreateObject(&OnNativeObjectCreate);
@@ -931,10 +1015,24 @@ inline AIHeroClient Player() {
     EnsureInitialized();
     return detail::PlayerObject;
 }
+inline bool IsNetworkIdAlive(std::uint32_t networkId) {
+    if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+        return false;
+    }
+    EnsureInitialized();
+    detail::Lock lk(detail::g_mutex);
+    detail::PruneInvalidObjectsForFrame(
+        static_cast<int>(::GetTickCount()));
+    return detail::IsNetworkIdLive(networkId);
+}
+
 
 // ------------------------------- accessors ----------------------------------
 inline std::vector<AIHeroClient> Heroes() {
     return detail::Snapshot(detail::HeroesList);
+}
+inline void Heroes(std::vector<AIHeroClient>& output) {
+    detail::SnapshotInto(detail::HeroesList, output);
 }
 
 inline std::vector<AIHeroClient> AllyHeroes() {
@@ -958,19 +1056,34 @@ inline std::vector<AIMinionClient> EnemyMinions() {
 }
 
 inline std::vector<AIMinionClient> AllyLaneMinions() { return detail::Snapshot(detail::AllyLaneMinionsList); }
+inline void AllyLaneMinions(std::vector<AIMinionClient>& output) {
+    detail::SnapshotInto(detail::AllyLaneMinionsList, output);
+}
 inline std::vector<AIMinionClient> EnemyLaneMinions() { return detail::Snapshot(detail::EnemyLaneMinionsList); }
+inline void EnemyLaneMinions(std::vector<AIMinionClient>& output) {
+    detail::SnapshotInto(detail::EnemyLaneMinionsList, output);
+}
 inline std::vector<AIMinionClient> AllySpecialMinions() { return detail::Snapshot(detail::AllySpecialMinionsList); }
 inline std::vector<AIMinionClient> EnemySpecialMinions() { return detail::Snapshot(detail::EnemySpecialMinionsList); }
 inline std::vector<AIMinionClient> AllyIgnoredMinions() { return detail::Snapshot(detail::AllyIgnoredMinionsList); }
 inline std::vector<AIMinionClient> EnemyIgnoredMinions() { return detail::Snapshot(detail::EnemyIgnoredMinionsList); }
 inline std::vector<AIMinionClient> Wards() { return detail::Snapshot(detail::WardsList); }
+inline void Wards(std::vector<AIMinionClient>& output) {
+    detail::SnapshotInto(detail::WardsList, output);
+}
 inline std::vector<AIMinionClient> AllyWards() { return detail::Snapshot(detail::AllyWardsList); }
 inline std::vector<AIMinionClient> EnemyWards() { return detail::Snapshot(detail::EnemyWardsList); }
 inline std::vector<AIMinionClient> Jungle() { return detail::Snapshot(detail::JungleList); }
 inline std::vector<AIMinionClient> JungleMinions() { return Jungle(); }
 inline std::vector<AIMinionClient> JungleSmall() { return detail::Snapshot(detail::JungleSmallList); }
 inline std::vector<AIMinionClient> JungleLarge() { return detail::Snapshot(detail::JungleLargeList); }
+inline void JungleLarge(std::vector<AIMinionClient>& output) {
+    detail::SnapshotInto(detail::JungleLargeList, output);
+}
 inline std::vector<AIMinionClient> JungleLegendary() { return detail::Snapshot(detail::JungleLegendaryList); }
+inline void JungleLegendary(std::vector<AIMinionClient>& output) {
+    detail::SnapshotInto(detail::JungleLegendaryList, output);
+}
 inline std::vector<AIMinionClient> SmallJungle() { return JungleSmall(); }
 inline std::vector<AIMinionClient> LargeJungle() { return JungleLarge(); }
 inline std::vector<AIMinionClient> EpicJungle() { return JungleLegendary(); }

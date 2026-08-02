@@ -77,11 +77,19 @@ public:
     }
 
     void SetSelected(const ::SDK::AIHeroClient& target) {
-        selected_ = target;
+        if (!target.IsValid()) {
+            selectedNetworkId_ = 0;
+            return;
+        }
+        const int networkId = target.NetworkId();
+        selectedNetworkId_ = networkId > 0 ? networkId : 0;
     }
 
     ::SDK::AIHeroClient Selected() const {
-        return selected_;
+        return selectedNetworkId_ > 0
+            ? ::SDK::GameObjects::GetUnitByNetworkId<
+                ::SDK::AIHeroClient>(selectedNetworkId_)
+            : ::SDK::AIHeroClient();
     }
 
     bool Blacklist(int networkId) const {
@@ -201,9 +209,15 @@ private:
     void RefreshHeroes() {
         if (!priorityMenu_ || !blacklistMenu_) return;
 
+        bool selectedIsLive = selectedNetworkId_ <= 0;
         for (const auto& hero : ::SDK::GameObjects::EnemyHeroes()) {
             if (!hero.IsValid() || hero.NetworkId() <= 0) continue;
+            const int networkId = hero.NetworkId();
             EnsureHeroEntries(hero);
+            selectedIsLive = selectedIsLive || networkId == selectedNetworkId_;
+        }
+        if (!selectedIsLive) {
+            selectedNetworkId_ = 0;
         }
     }
 
@@ -268,7 +282,7 @@ private:
             // Clicking empty space clears the selected identity.  The
             // selector may still explain that identity elsewhere, but it can
             // no longer influence a new request as a manual preference.
-            selected_ = {};
+            selectedNetworkId_ = 0;
         }
     }
 
@@ -281,25 +295,25 @@ private:
             }
         }
         if (heroes.empty()) {
-            selected_ = {};
+            selectedNetworkId_ = 0;
             return;
         }
 
         std::size_t next = 0;
         for (std::size_t i = 0; i < heroes.size(); ++i) {
-            if (selected_.Compare(heroes[i])) {
+            if (selectedNetworkId_ == heroes[i].NetworkId()) {
                 next = (i + 1) % heroes.size();
                 break;
             }
         }
-        selected_ = heroes[next];
+        selectedNetworkId_ = heroes[next].NetworkId();
     }
 
     ::SDK::Menu* parent_ = nullptr;
     ::SDK::Menu* native_ = nullptr;
     ::SDK::Menu* blacklistMenu_ = nullptr;
     ::SDK::Menu* priorityMenu_ = nullptr;
-    ::SDK::AIHeroClient selected_ = {};
+    int selectedNetworkId_ = 0;
     std::unordered_set<int> blacklisted_;
     std::unordered_map<int, int> priorities_;
     std::unordered_map<int, ::SDK::MenuBool*> blacklistItems_;

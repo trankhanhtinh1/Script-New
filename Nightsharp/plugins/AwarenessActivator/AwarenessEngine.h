@@ -2,6 +2,7 @@
 
 #include "AwarenessActivatorCore.h"
 #include "AwarenessInsights.h"
+#include "../../SectionProfiler.h"
 
 #include <algorithm>
 #include <cmath>
@@ -68,12 +69,14 @@ public:
     }
 
     void BeginFrame(float now) {
+        NS_PROFILE("Awareness.Engine.BeginFrame");
         lastNow_ = now;
         store_.SetNow(now);
         TickTimers(now);
     }
 
     void ObserveChampion(const ChampionObservation& observation) {
+        NS_PROFILE("Awareness.Engine.ObserveChampion");
         if (observation.networkId == 0 ||
             observation.networkId == 0xFFFFFFFFu) {
             return;
@@ -481,6 +484,11 @@ public:
                 }
             }
             break;
+        case EventType::ObjectDeleted:
+            if (event.visibleAtEvent) {
+                store_.EraseChampion(event.objectId);
+            }
+            break;
         case EventType::InventoryChanged:
         case EventType::SummonerSpellChanged:
             if (subject) {
@@ -497,6 +505,7 @@ public:
     }
 
     void TickTimers(float now) {
+        NS_PROFILE("Awareness.Engine.TickTimers");
         store_.SetNow(now);
         float elapsed = 0.0f;
         if (lastTimerAt_ >= 0.0f && now >= lastTimerAt_) {
@@ -546,14 +555,19 @@ public:
         }
         for (std::size_t i = 0; i < store_.Wards().Size(); ++i) {
             auto& ward = store_.Wards().At(i);
-            if (ward.bonusVisionUntil > 0.0f && ward.bonusVisionUntil <= now) {
+            if (ward.bonusVisionUntil > 0.0f &&
+                ward.bonusVisionUntil <= now) {
                 ward.bonusVisionUntil = 0.0f;
+                ward.bonusVisionObserved = false;
                 if (ward.faelight) ward.radius /= 1.25f;
             }
-            if (!ward.destroyed && ward.expiresAt > 0.0f && ward.expiresAt <= now) {
+            if (!ward.destroyed && ward.expiresAt > 0.0f &&
+                ward.expiresAt <= now) {
                 ward.destroyed = true;
                 ward.destroyedAt = ward.expiresAt;
                 ward.visible = false;
+                ward.faelight = false;
+                ward.bonusVisionObserved = false;
                 ward.evidence = { Provenance::Estimated, Confidence::Medium,
                                   now, 0.0f, HashId("timer.ward-expiry") };
             }
@@ -615,15 +629,28 @@ public:
             auto& alert = store_.Alerts().At(i);
             if (alert.expiresAt > 0.0f && alert.expiresAt <= now) alert.priority = 0;
         }
+        store_.PruneInvalid(now);
     }
     void RaiseAlert(const AlertState& alert) {
         if (alert.id == 0) return;
+        bool accepted = false;
         UpsertBy(store_.Alerts(), alert.id,
                  [&](AlertState& current) {
-                     if (current.cooldownUntil > lastNow_ && alert.priority <= current.priority) return;
+                     if (current.cooldownUntil > lastNow_ &&
+                         alert.priority <= current.priority) {
+                         return;
+                     }
                      current = alert;
+                     accepted = true;
                  },
-                 [](const AlertState& value) { return value.id; });
+                 [](const AlertState& value) {
+                     return value.id;
+                 });
+        if (accepted) {
+            decisionLog_.Add(
+                alert.at, alert.title, "alert raised",
+                alert.detail, alert.priority, alert.confidence);
+        }
     }
 
     void ObserveWave(const WaveObservation& observation) noexcept {
@@ -1302,11 +1329,6 @@ private:
             itemName);
         CopyText(alert.detail, detail);
         RaiseAlert(alert);
-        decisionLog_.Add(
-            lastNow_, state.name[0] ? state.name : "enemy",
-            EconomyInsightService::IsPowerSpike(purchased)
-                ? "item spike" : "purchase",
-            detail, alert.priority, Confidence::Confirmed);
     }
 
     void PublishLevelSpike(const ChampionState& state) {
@@ -1328,10 +1350,6 @@ private:
             state.level.value);
         CopyText(alert.detail, detail);
         RaiseAlert(alert);
-        decisionLog_.Add(
-            lastNow_, state.name[0] ? state.name : "enemy",
-            "level spike", detail, alert.priority,
-            Confidence::Confirmed);
     }
 
     void PublishVisibility(const ChampionState& state, bool visible) {

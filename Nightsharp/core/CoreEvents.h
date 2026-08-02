@@ -65,8 +65,17 @@ struct ObjectInfo {
     Vec3 Position = {};
     char Name[64] = {};
     char CharacterName[64] = {};
+    // A frame-reconciled lifecycle notification has identity and cached
+    // metadata but deliberately no game pointer.  It is valid for handlers
+    // that consume the payload fields while preventing accidental wrapper
+    // construction from freed memory.
+    bool IdentityOnly = false;
 
-    bool IsValid() const { return Ptr != 0; }
+    bool IsValid() const {
+        return Ptr != 0 ||
+               (IdentityOnly &&
+                (NetworkId != 0 && NetworkId != 0xFFFFFFFFu));
+    }
 };
 
 struct RawEventArgs {
@@ -1409,16 +1418,20 @@ inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
             ? raw.Object
             : detail::ReadObjectIdentity(object, networkId);
     } else if (raw.Id == Hooks::OnDelete) {
-        // sub_28EFE0: RCX = GameObject* (this pointer), fires GameEventId.OnDelete
+        // Delete hooks can run after the native object has been destroyed.
+        // Preserve identity/metadata, never forward the raw game pointer.
         object = static_cast<uintptr_t>(raw.Rcx);
         args.Sender = raw.Object.IsValid()
             ? raw.Object
             : detail::ReadObjectIdentity(object);
+        args.Sender.Ptr = 0;
+        args.Sender.IdentityOnly = true;
     } else {
         return args;
     }
 
-    if (!args.Sender.IsValid() || !detail::IsValidNetworkId(args.Sender.NetworkId)) {
+    if (!args.Sender.IsValid() ||
+        !detail::IsValidNetworkId(args.Sender.NetworkId)) {
         return ObjectEventArgs{};
     }
 
@@ -1565,6 +1578,15 @@ inline ObjectEventArgs DecodeMissileEvent(const RawEventArgs& raw) {
             static_cast<int>(sizeof(args.SpellName)),
             args.MissileName);
     }
+    if (raw.Id == Hooks::OnMissileDelete) {
+        args.Sender.Ptr = 0;
+        args.Sender.IdentityOnly = true;
+        args.Source.Ptr = 0;
+        args.Source.IdentityOnly = args.SourceNetworkId != 0;
+        args.Target.Ptr = 0;
+        args.Target.IdentityOnly = args.TargetNetworkId != 0;
+    }
+
     return args;
 }
 

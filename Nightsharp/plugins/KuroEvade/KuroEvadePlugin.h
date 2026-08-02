@@ -50,9 +50,7 @@ public:
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
         SDK::Events::AddOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
-        SDK::Events::AddOnDeleteObject(&KuroEvadePlugin::OnObjectDeleteStatic);
         SDK::Events::AddOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
-        SDK::Events::AddOnMissileDelete(&KuroEvadePlugin::OnMissileDeleteStatic);
         SDK::Game::AddOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
         SDK::Orbwalker::OnBeforeMove += &KuroEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::OnUpdate += &KuroEvadePlugin::OnUpdateStatic;
@@ -64,9 +62,7 @@ public:
         SDK::Game::OnUpdate -= &KuroEvadePlugin::OnUpdateStatic;
         SDK::Orbwalker::OnBeforeMove -= &KuroEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::RemoveOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
-        SDK::Events::RemoveOnMissileDelete(&KuroEvadePlugin::OnMissileDeleteStatic);
         SDK::Events::RemoveOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
-        SDK::Events::RemoveOnDeleteObject(&KuroEvadePlugin::OnObjectDeleteStatic);
         SDK::Events::RemoveOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
@@ -388,17 +384,6 @@ private:
         }
     }
 
-    static void OnObjectDeleteStatic(const SDK::Events::ObjectEventArgs& args) {
-        if (s_instance) {
-            s_instance->m_detector.OnObjectDelete(args);
-        }
-    }
-
-    static void OnMissileDeleteStatic(const SDK::Events::ObjectEventArgs& args) {
-        if (s_instance) {
-            s_instance->m_detector.OnMissileDelete(args);
-        }
-    }
 
     static void OnUpdateStatic() {
         if (s_instance) {

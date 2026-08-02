@@ -242,6 +242,24 @@ public:
     void ForEach(Fn&& fn) const {
         for (std::size_t i = 0; i < count_; ++i) fn(At(i));
     }
+    template <typename Predicate>
+    std::size_t RemoveIf(Predicate&& shouldRemove) noexcept {
+        std::size_t write = 0;
+        std::size_t removed = 0;
+        for (std::size_t read = 0; read < count_; ++read) {
+            T& current = At(read);
+            if (shouldRemove(current)) {
+                ++removed;
+                continue;
+            }
+            if (write != read) {
+                At(write) = current;
+            }
+            ++write;
+        }
+        count_ = write;
+        return removed;
+    }
 private:
     std::array<T, Capacity> values_{};
     std::size_t head_ = 0;
@@ -595,7 +613,7 @@ public:
         AddItem(SDK::ItemId::Seeker_s_Armguard, "SeekersArmguard", "Seeker's Armguard", 120.0f, 2.5f, 0.0f, Capability::Seeker);
         AddItem(SDK::ItemId::Seraph_s_Embrace, "SeraphsEmbrace", "Seraph's Embrace", 90.0f, 3.0f, 0.0f, Capability::Seraph);
         AddItem(SDK::ItemId::Locket_of_the_Iron_Solari, "LocketOfTheIronSolari", "Locket of the Iron Solari", 90.0f, 2.5f, 850.0f, Capability::Locket);
-        AddItem(SDK::ItemId::Redemption, "Redemption", "Redemption", 90.0f, 0.0f, 5500.0f, Capability::Redemption);
+        AddItem(SDK::ItemId::Redemption, "Redemption", "Redemption", 90.0f, 0.0f, 5500.0f, Capability::Redemption, std::array<float, 3>{ 2.5f, 0.0f, 0.0f });
         AddItem(SDK::ItemId::Shurelya_s_Battlesong, "ShurelyasBattlesong", "Shurelya's Battlesong", 75.0f, 4.0f, 1000.0f, Capability::Shurelya);
         AddItem(SDK::ItemId::Youmuu_s_Ghostblade, "YoumuusGhostblade", "Youmuu's Ghostblade", 45.0f, 6.0f, 0.0f, Capability::Youmuu);
         AddItem(SDK::ItemId::Hextech_Rocketbelt, "HextechRocketbelt", "Hextech Rocketbelt", 40.0f, 0.0f, 275.0f, Capability::Rocketbelt);
@@ -671,11 +689,37 @@ public:
                 RulesetMask(activeRuleset_)) != 0;
     }
     bool IsAvailable(const ItemDefinition& value) const noexcept {
-        return !value.disabled && value.dataActive &&
+        return !value.disabled && !value.legacy &&
+               value.dataActive && value.inStore &&
+               value.purchasable &&
                value.capability != Capability::None &&
                value.mapId == activeMapId_ &&
                (value.rulesetsMask &
                 RulesetMask(activeRuleset_)) != 0;
+    }
+
+    void ApplySdkItemData(SDK::ItemId id, std::string_view displayName,
+                          float cooldownMin, float cooldownMax,
+                          float durationMin, float durationMax,
+                          float rangeMin, float rangeMax,
+                          bool active, bool inStore,
+                          bool purchasable) {
+        ItemDefinition value{};
+        if (const ItemDefinition* existing = FindItem(id)) {
+            value = *existing;
+        }
+        value.itemId = id;
+        if (!displayName.empty()) CopyText(value.displayName, displayName);
+        value.cooldown = std::max(cooldownMax, cooldownMin);
+        value.duration = std::max(durationMax, durationMin);
+        value.range = std::max(rangeMax, rangeMin);
+        // Some current active items are missing the generated Active tag.
+        // A known capability remains usable when its real inventory spell
+        // proves the item active; patch overrides can still disable it.
+        value.dataActive = active || value.capability != Capability::None;
+        value.inStore = inStore;
+        value.purchasable = purchasable;
+        AddItem(value);
     }
 
     bool AddSpell(const SpellDefinition& value) noexcept { return AddReplace(spells_, spellCount_, value, [](const auto& x) { return x.idHash; }); }
@@ -798,26 +842,6 @@ public:
         value.dataActive = true;
         AddItem(value);
     }
-    void ApplySdkItemData(SDK::ItemId id, std::string_view displayName,
-                          float cooldownMin, float cooldownMax,
-                          float durationMin, float durationMax,
-                          float rangeMin, float rangeMax,
-                          bool active, bool inStore,
-                          bool purchasable) {
-        ItemDefinition value{};
-        if (const ItemDefinition* existing = FindItem(id)) {
-            value = *existing;
-        }
-        value.itemId = id;
-        if (!displayName.empty()) CopyText(value.displayName, displayName);
-        value.cooldown = std::max(cooldownMax, cooldownMin);
-        value.duration = std::max(durationMax, durationMin);
-        value.range = std::max(rangeMax, rangeMin);
-        value.dataActive = active;
-        value.inStore = inStore;
-        value.purchasable = purchasable;
-        AddItem(value);
-    }
     void AddBuff(std::string_view id, CrowdControl control, bool cleanseable, bool qssable,
                  bool mikaelable, float danger, float minimumDuration) {
         BuffDefinition value{}; value.idHash = HashId(id); CopyText(value.internalId, id);
@@ -893,6 +917,7 @@ struct ObservedItem {
     float cooldownRemaining = 0.0f;
     bool usable = false;
     bool active = false;
+    Capability capability = Capability::None;
     char name[64] = {};
     Evidence evidence{};
     int Id() const noexcept { return SDK::ItemIdValue(itemId); }
@@ -929,6 +954,7 @@ struct ObservedSpell {
     std::uint32_t previousIdHash = 0;
     float rechargeReadyAt = 0.0f;
     bool resetObserved = false;
+    Capability capability = Capability::None;
     char name[64] = {};
     Evidence evidence{};
 };
@@ -996,8 +1022,10 @@ struct WardState {
     std::uint32_t networkId = 0, ownerId = 0, team = 0;
     WardKind kind = WardKind::Unknown;
     Point3 position{};
-    float placedAt = 0.0f, expiresAt = 0.0f, destroyedAt = 0.0f, radius = 0.0f, bonusVisionUntil = 0.0f;
-    bool visible = false, destroyed = false, faelight = false, oracleActive = false;
+    float placedAt = 0.0f, expiresAt = 0.0f, destroyedAt = 0.0f,
+          radius = 0.0f, bonusVisionUntil = 0.0f;
+    bool visible = false, destroyed = false, faelight = false;
+    bool bonusVisionObserved = false, oracleActive = false;
     bool enemy = false, ally = false;
     Evidence evidence{};
 };
@@ -1201,6 +1229,9 @@ private:
 
 class StateStore final {
 public:
+    StateStore() {
+        champions_.reserve(32);
+    }
     void Reset() {
         champions_.clear(); wards_.Clear(); objectives_.Clear(); jungles_.Clear(); structures_.Clear();
         threats_.Clear(); alerts_.Clear(); damage_.Clear(); teamfight_.Clear(); wave_ = {};
@@ -1230,6 +1261,54 @@ public:
     }
     bool EraseChampion(std::uint32_t networkId) noexcept {
         return champions_.erase(networkId) != 0;
+    }
+    std::size_t PruneInvalid(float now) noexcept {
+        std::size_t removed = 0;
+        for (auto it = champions_.begin(); it != champions_.end();) {
+            const ChampionState& champion = it->second;
+            const bool invalid =
+                champion.networkId == 0 ||
+                !champion.position.IsValid() ||
+                !champion.lastSeenPosition.IsValid() ||
+                (!champion.health.evidence.IsKnown() &&
+                 champion.lastObservedAt <= 0.0f);
+            if (invalid) {
+                it = champions_.erase(it);
+                ++removed;
+            } else {
+                ++it;
+            }
+        }
+        removed += threats_.RemoveIf([now](const ThreatState& threat) {
+            return threat.id == 0 ||
+                   !threat.start.IsValid() ||
+                   !threat.end.IsValid() ||
+                   (!threat.visible &&
+                    (threat.endAt <= 0.0f || threat.endAt <= now)) ||
+                   threat.evidence.IsExpired(now);
+        });
+        removed += wards_.RemoveIf([now](const WardState& ward) {
+            return ward.networkId == 0 ||
+                   !ward.position.IsValid() ||
+                   (ward.destroyed && ward.destroyedAt > 0.0f &&
+                    now - ward.destroyedAt > 8.0f);
+        });
+        removed += jungles_.RemoveIf([](const JungleCampState& camp) {
+            return camp.campKey == 0 &&
+                   camp.networkId == 0 &&
+                   camp.campId[0] == '\0';
+        });
+        removed += structures_.RemoveIf([](const StructureState& structure) {
+            return structure.networkId == 0 ||
+                   !structure.position.IsValid();
+        });
+        removed += alerts_.RemoveIf([now](const AlertState& alert) {
+            return alert.id == 0 ||
+                   (alert.priority == 0 &&
+                    alert.expiresAt > 0.0f &&
+                    alert.expiresAt <= now);
+        });
+        return removed;
     }
     template <typename Fn> void ForEachChampion(Fn&& fn) { for (auto& pair : champions_) fn(pair.second); }
     template <typename Fn> void ForEachChampion(Fn&& fn) const { for (const auto& pair : champions_) fn(pair.second); }
@@ -1486,6 +1565,22 @@ private:
 
 enum class ActionMode : std::uint8_t { Off = 0, Suggest, Confirm, Auto };
 enum class ActionPriority : int { PreventDeath = 1, BreakHardCc = 2, SaveAlly = 3, Disengage = 4, SecureObjective = 5, Execute = 6, Engage = 7, Mobility = 8, WaveClear = 9, Utility = 10 };
+constexpr int ActionPriorityRank(
+    ActionPriority priority) noexcept {
+    switch (priority) {
+    case ActionPriority::PreventDeath: return 1;
+    case ActionPriority::BreakHardCc: return 2;
+    case ActionPriority::SaveAlly: return 3;
+    case ActionPriority::Disengage: return 4;
+    case ActionPriority::SecureObjective: return 5;
+    case ActionPriority::Execute: return 6;
+    case ActionPriority::Engage: return 7;
+    case ActionPriority::Mobility: return 8;
+    case ActionPriority::WaveClear: return 9;
+    case ActionPriority::Utility: return 10;
+    }
+    return 100;
+}
 enum ActionResource : std::uint32_t { ResourceNone = 0, ResourceCleanse = 1u << 0, ResourceProtection = 1u << 1, ResourceMobility = 1u << 2, ResourceExecute = 1u << 3, ResourceObjective = 1u << 4, ResourceWave = 1u << 5, ResourceVision = 1u << 6, ResourceUtility = 1u << 7 };
 
 inline std::uint32_t ResourceFor(Capability capability) noexcept {
@@ -1502,6 +1597,17 @@ inline std::uint32_t ResourceFor(Capability capability) noexcept {
     default: return ResourceUtility;
     }
 }
+inline std::uint32_t ConflictFor(Capability capability) noexcept {
+    const std::uint32_t resource = ResourceFor(capability);
+    switch (capability) {
+    case Capability::Flash:
+    case Capability::Zhonya:
+    case Capability::Seeker:
+        return resource | ResourceMobility | ResourceProtection;
+    default:
+        return resource;
+    }
+}
 
 struct ActionRequest {
     Capability capability = Capability::None;
@@ -1513,10 +1619,21 @@ struct ActionRequest {
     int spellSlot = -1;
     int itemSlot = -1;
     Point3 position{};
-    float expectedValue = 0.0f, createdAt = 0.0f, expiresAt = 0.0f;
+    float expectedValue = 0.0f, createdAt = 0.0f, expiresAt = 0.0f, earliestAt = 0.0f;
     Confidence confidence = Confidence::Unknown;
     std::uint32_t conflictMask = ResourceNone;
     char reason[192] = {}, sourceModule[48] = {};
+    bool IsExpired(float now) const noexcept {
+        return expiresAt > 0.0f && now >= expiresAt;
+    }
+    bool IsReady(float now) const noexcept {
+        return !IsExpired(now) && earliestAt <= now;
+    }
+    bool IsExplainable() const noexcept {
+        return reason[0] != '\0' &&
+               sourceModule[0] != '\0' &&
+               confidence != Confidence::Unknown;
+    }
 };
 
 struct SafetyPolicy {
@@ -1531,10 +1648,31 @@ class ActionArbiter final {
 public:
     explicit ActionArbiter(DecisionLog* log = nullptr) : log_(log) {}
     void SetLog(DecisionLog* log) noexcept { log_ = log; }
-    void Clear() noexcept { count_ = 0; selectedResourceMask_ = ResourceNone; selected_ = {}; }
+    void SetDebounceSeconds(float seconds) noexcept {
+        debounceSeconds_ = seconds > 0.0f ? seconds : 0.0f;
+    }
+    void Clear() noexcept {
+        count_ = 0;
+        selectedResourceMask_ = ResourceNone;
+        selected_ = {};
+    }
     bool Submit(const ActionRequest& request) noexcept {
-        if (request.capability == Capability::None || request.mode == ActionMode::Off || count_ >= candidates_.size()) return false;
-        candidates_[count_++] = request; return true;
+        if (request.capability == Capability::None ||
+            request.mode == ActionMode::Off ||
+            count_ >= candidates_.size()) {
+            return false;
+        }
+        ActionRequest normalized = request;
+        if (normalized.resourceMask == ResourceNone) {
+            normalized.resourceMask =
+                ResourceFor(normalized.capability);
+        }
+        if (normalized.conflictMask == ResourceNone) {
+            normalized.conflictMask =
+                ConflictFor(normalized.capability);
+        }
+        candidates_[count_++] = normalized;
+        return true;
     }
     const ActionRequest* Resolve(float now) noexcept {
         selected_ = {};
@@ -1542,16 +1680,41 @@ public:
         if (count_ == 0) return nullptr;
         std::array<std::size_t, 64> order{};
         for (std::size_t i = 0; i < count_; ++i) order[i] = i;
-        std::sort(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(count_), [&](std::size_t lhs, std::size_t rhs) {
-            const auto& a = candidates_[lhs]; const auto& b = candidates_[rhs];
-            if (static_cast<int>(a.priority) != static_cast<int>(b.priority)) return static_cast<int>(a.priority) < static_cast<int>(b.priority);
-            if (a.expectedValue != b.expectedValue) return a.expectedValue > b.expectedValue;
-            return a.createdAt < b.createdAt;
-        });
+        std::sort(
+            order.begin(),
+            order.begin() +
+                static_cast<std::ptrdiff_t>(count_),
+            [&](std::size_t lhs, std::size_t rhs) {
+                const auto& a = candidates_[lhs];
+                const auto& b = candidates_[rhs];
+                if (ActionPriorityRank(a.priority) !=
+                    ActionPriorityRank(b.priority)) {
+                    return ActionPriorityRank(a.priority) <
+                        ActionPriorityRank(b.priority);
+                }
+                if (a.expectedValue != b.expectedValue) {
+                    return a.expectedValue > b.expectedValue;
+                }
+                if (a.createdAt != b.createdAt) {
+                    return a.createdAt < b.createdAt;
+                }
+                if (a.capability != b.capability) {
+                    return static_cast<int>(a.capability) <
+                        static_cast<int>(b.capability);
+                }
+                if (a.targetId != b.targetId) {
+                    return a.targetId < b.targetId;
+                }
+                return lhs < rhs;
+            });
         for (std::size_t position = 0; position < count_; ++position) {
             const ActionRequest& candidate = candidates_[order[position]];
-            if (candidate.expiresAt > 0.0f && candidate.expiresAt <= now) {
+            if (candidate.IsExpired(now)) {
                 Log(candidate, "expired", "request expired before decision");
+                continue;
+            }
+            if (!candidate.IsReady(now)) {
+                Log(candidate, "deferred", "request is waiting for its scheduled action window");
                 continue;
             }
             if (selected_.capability == Capability::None) {
@@ -1567,19 +1730,60 @@ public:
                 Log(candidate, "deferred", "a higher-priority action owns this decision tick");
             }
         }
-        return selected_.capability == Capability::None ? nullptr : &selected_;
+        if (selected_.capability == Capability::None) {
+            return nullptr;
+        }
+        if (hasLastSelected_ &&
+            now > lastSelectedAt_ &&
+            now - lastSelectedAt_ < debounceSeconds_ &&
+            SameAction(lastSelected_, selected_)) {
+            Log(selected_, "debounced",
+                "duplicate action remains inside the reaction debounce window");
+            selected_ = {};
+            selectedResourceMask_ = ResourceNone;
+            return nullptr;
+        }
+        lastSelected_ = selected_;
+        lastSelectedAt_ = now;
+        hasLastSelected_ = true;
+        return &selected_;
     }
     const ActionRequest* Selected() const noexcept { return selected_.capability == Capability::None ? nullptr : &selected_; }
     std::size_t CandidateCount() const noexcept { return count_; }
     const ActionRequest& Candidate(std::size_t index) const noexcept { return candidates_[index]; }
 private:
-    void Log(const ActionRequest& request, std::string_view outcome, std::string_view reason) noexcept {
-        if (log_) log_->Add(request.createdAt, CapabilityName(request.capability), outcome, reason, static_cast<int>(request.priority), request.confidence);
+    static bool SameAction(const ActionRequest& lhs,
+                           const ActionRequest& rhs) noexcept {
+        return lhs.capability == rhs.capability &&
+               lhs.mode == rhs.mode &&
+               lhs.itemId == rhs.itemId &&
+               lhs.itemSlot == rhs.itemSlot &&
+               lhs.spellSlot == rhs.spellSlot &&
+               lhs.targetId == rhs.targetId &&
+               lhs.position.x == rhs.position.x &&
+               lhs.position.y == rhs.position.y &&
+               lhs.position.z == rhs.position.z &&
+               lhs.expectedValue == rhs.expectedValue;
+    }
+    void Log(const ActionRequest& request,
+             std::string_view outcome,
+             std::string_view reason) noexcept {
+        if (log_) {
+            log_->Add(request.createdAt,
+                      CapabilityName(request.capability),
+                      outcome, reason,
+                      static_cast<int>(request.priority),
+                      request.confidence);
+        }
     }
     std::array<ActionRequest, 64> candidates_{};
     std::size_t count_ = 0;
     std::uint32_t selectedResourceMask_ = ResourceNone;
     ActionRequest selected_{};
+    ActionRequest lastSelected_{};
+    float lastSelectedAt_ = 0.0f;
+    float debounceSeconds_ = 0.25f;
+    bool hasLastSelected_ = false;
     DecisionLog* log_ = nullptr;
 };
 

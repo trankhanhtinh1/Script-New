@@ -6,6 +6,7 @@
 #include "../../Core/CoreItem.h"
 #include "../../Core/CoreObjectManager.h"
 
+#include "../../SectionProfiler.h"
 #include <Windows.h>
 
 #include <algorithm>
@@ -21,7 +22,21 @@ namespace NightSharp::Companion {
 
 class SdkObservationBridge final {
 public:
-    SdkObservationBridge() = default;
+    SdkObservationBridge() {
+        heroesSnapshot_.reserve(16);
+        allyLaneMinionsSnapshot_.reserve(64);
+        enemyLaneMinionsSnapshot_.reserve(64);
+        wardsSnapshot_.reserve(64);
+        jungleLegendarySnapshot_.reserve(32);
+        jungleLargeSnapshot_.reserve(32);
+        inventorySnapshot_.reserve(8);
+        knownWards_.reserve(64);
+        knownMissiles_.reserve(128);
+        knownStructures_.reserve(64);
+        knownObjectiveKinds_.reserve(16);
+        knownJungleKeys_.reserve(64);
+        recentCasts_.reserve(128);
+    }
     ~SdkObservationBridge() { Detach(); }
 
     bool Attach(AwarenessEngine& awareness) {
@@ -75,6 +90,12 @@ public:
     void Reset() {
         inGame_ = false;
         frame_ = 0;
+        registryRefreshFrame_ = 0;
+        lastPingFrame_ = 0;
+        lastPingMs_ = 0;
+        mapId_ = 0;
+        ruleset_ = RoleQuestRuleset::Rotating;
+        swiftplay_ = false;
         lastMode_ = RuntimeMode::Companion;
         localTeam_ = 0;
         knownWards_.clear();
@@ -82,12 +103,19 @@ public:
         knownStructures_.clear();
         knownObjectiveKinds_.clear();
         knownJungleKeys_.clear();
+        heroesSnapshot_.clear();
+        allyLaneMinionsSnapshot_.clear();
+        enemyLaneMinionsSnapshot_.clear();
+        wardsSnapshot_.clear();
+        jungleLegendarySnapshot_.clear();
+        jungleLargeSnapshot_.clear();
+        inventorySnapshot_.clear();
         recentCasts_.clear();
         objectiveSeen_.fill(false);
-        registryRefreshFrame_ = 0;
     }
 
     void Update() {
+        NS_PROFILE("Awareness.SdkBridge.Update");
         if (!awareness_) return;
         if (!SDK::Game::IsReady()) {
             if (inGame_) {
@@ -102,34 +130,62 @@ public:
             awareness_->Reset();
         }
         ++frame_;
-        const RuntimeMode mode = ResolveMode();
-        if (mode != lastMode_) {
+        const bool firstFrame = frame_ == 1u;
+
+        const int mapId = static_cast<int>(SDK::Map::Id());
+        char gameMode[64] = {};
+        SDK::MissionInfo::ReadGameMode(
+            gameMode, static_cast<int>(sizeof(gameMode)));
+        const RuntimeMode mode = ResolveMode(gameMode);
+        const RoleQuestRuleset ruleset =
+            ResolveRuleset(mapId, gameMode);
+        if (firstFrame || mode != lastMode_) {
             awareness_->SetMode(mode);
             lastMode_ = mode;
         }
-        awareness_->SetMapId(
-            static_cast<int>(SDK::Map::Id()));
-        awareness_->SetRuleset(ResolveRuleset());
+        if (firstFrame || mapId != mapId_) {
+            mapId_ = mapId;
+            awareness_->SetMapId(mapId_);
+        }
+        if (firstFrame || ruleset != ruleset_) {
+            ruleset_ = ruleset;
+            swiftplay_ = ruleset_ == RoleQuestRuleset::Swiftplay;
+            awareness_->SetRuleset(ruleset_);
+        }
         const float rawTime = SDK::Game::Time();
-        awareness_->UpdateClock(rawTime, SDK::Game::Ping());
+        if (frame_ == 1u || frame_ - lastPingFrame_ >= 15u) {
+            lastPingMs_ = SDK::Game::Ping();
+            lastPingFrame_ = frame_;
+        }
+        awareness_->UpdateClock(rawTime, lastPingMs_);
         awareness_->BeginFrame(awareness_->Now());
         if (frame_ == 1u) SeedObjectiveTimers();
 
         const auto player = SDK::GameObjects::Player();
         if (!player.IsValid()) return;
         localTeam_ = static_cast<std::uint32_t>(player.Team());
-        ObserveHeroes(player);
-        ObserveWards();
-        ObserveObjectives();
-        ObserveJungleCamps();
-        ObserveWave(player);
-        if ((frame_ % 4u) == 0u) ObserveStructures();
-        if (registryRefreshFrame_ == 0 || frame_ - registryRefreshFrame_ > 120u) {
+        if (firstFrame || (frame_ % 3u) == 0u) {
+            ObserveHeroes(player);
+        }
+        if (frame_ == 1u || (frame_ % 4u) == 0u) {
+            ObserveWards();
+            ObserveWave(player);
+        }
+        if (frame_ == 1u || (frame_ % 8u) == 0u) {
+            ObserveObjectives();
+            ObserveJungleCamps(jungleLargeSnapshot_);
+            ObserveStructures();
+        }
+        if (registryRefreshFrame_ == 0 ||
+            frame_ - registryRefreshFrame_ > 120u) {
             RefreshSdkRegistry(player);
             registryRefreshFrame_ = frame_;
         }
-        awareness_->RefreshInsights();
+        if (frame_ == 1u || (frame_ % 4u) == 0u) {
+            awareness_->RefreshInsights();
+        }
     }
+
 
     bool IsAttached() const noexcept { return attached_; }
     RuntimeMode Mode() const noexcept { return lastMode_; }
@@ -156,15 +212,10 @@ private:
         return false;
     }
 
-    static std::string Lower(std::string value) {
-        for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        return value;
-    }
-
-    static std::string ObjectName(const SDK::GameObject& object) {
-        std::string name = object.CharacterName();
-        if (name.empty()) name = object.Name();
-        return Lower(std::move(name));
+    static std::string_view ObjectName(const SDK::GameObject& object) {
+        const std::string& characterName = object.CharacterName();
+        if (!characterName.empty()) return characterName;
+        return object.Name();
     }
 
     static bool IsObservable(const ::Core::Events::ObjectInfo& info,
@@ -177,18 +228,15 @@ private:
         return IsObservable(args.Sender, localTeam);
     }
 
-    static RuntimeMode ResolveMode() {
-        const std::string mode = Lower(SDK::MissionInfo::GameMode());
+    static RuntimeMode ResolveMode(std::string_view mode) {
         if (Contains(mode, "practice")) return RuntimeMode::Practice;
         if (Contains(mode, "replay")) return RuntimeMode::Replay;
         if (Contains(mode, "spectator")) return RuntimeMode::Spectator;
         return RuntimeMode::Companion;
     }
-    static RoleQuestRuleset ResolveRuleset() {
-        if (static_cast<int>(SDK::Map::Id()) != 11) {
-            return RoleQuestRuleset::Rotating;
-        }
-        const std::string mode = Lower(SDK::MissionInfo::GameMode());
+    static RoleQuestRuleset ResolveRuleset(
+        int mapId, std::string_view mode) {
+        if (mapId != 11) return RoleQuestRuleset::Rotating;
         return Contains(mode, "swift")
             ? RoleQuestRuleset::Swiftplay
             : RoleQuestRuleset::Standard;
@@ -217,7 +265,8 @@ private:
     }
 
     void ObserveHeroes(const SDK::AIHeroClient& player) {
-        const auto heroes = SDK::GameObjects::Heroes();
+        SDK::GameObjects::Heroes(heroesSnapshot_);
+        const auto& heroes = heroesSnapshot_;
         std::array<std::uint32_t, 64> observedIds{};
         std::size_t observedCount = 0;
         bool sawPlayer = false;
@@ -243,6 +292,12 @@ private:
             observedIds.data(), observedCount);
     }
 
+    void ObserveLocalHero(const SDK::AIHeroClient& player) {
+        if (!player.IsValid()) return;
+        awareness_->ObserveChampion(
+            BuildChampionObservation(player));
+    }
+
     ChampionObservation BuildChampionObservation(const SDK::AIHeroClient& hero) const {
         ChampionObservation observation{};
         observation.networkId = static_cast<std::uint32_t>(hero.NetworkId());
@@ -263,9 +318,13 @@ private:
                 : (prior ? prior->invulnerable : false);
         observation.clone = hero.IsClone();
         if (observation.visible || observation.ally) {
-            observation.position = ToPoint(hero.Position());
-            observation.direction = ToPoint(hero.Direction());
-            observation.pathEnd = ToPoint(hero.PathEnd());
+            const auto book = hero.Spellbook();
+            const Vec3 position = hero.Position();
+            const Vec3 direction = hero.Direction();
+            const Vec3 pathEnd = hero.PathEnd();
+            observation.position = ToPoint(position);
+            observation.direction = ToPoint(direction);
+            observation.pathEnd = ToPoint(pathEnd);
             observation.pathBranches = std::clamp(hero.WaypointCount(), 0, 32);
             observation.moveSpeed = std::max(0.0f, hero.MoveSpeed());
             observation.abilityHaste = std::max(0.0f, ::CoreAIHeroClient::AbilityHaste(hero.Address()));
@@ -286,9 +345,9 @@ private:
             observation.healthRegen =
                 std::max(0.0f, hero.HealthRegenRate());
             observation.recalling = hero.IsRecalling();
-            observation.channeling = hero.Spellbook().IsChanneling();
-            BuildItems(hero, observation);
-            BuildSpells(hero, observation);
+            observation.channeling = book.IsChanneling();
+            BuildItems(hero, observation, book);
+            BuildSpells(book, observation);
             BuildBuffs(hero, observation);
             observation.possession =
                 IsViegoPossession(observation);
@@ -301,85 +360,153 @@ private:
         return observation;
     }
 
-    void BuildItems(const SDK::AIHeroClient& hero, ChampionObservation& observation) const {
-        const auto items = hero.InventoryItems();
+    void BuildItems(const SDK::AIHeroClient& hero,
+                    ChampionObservation& observation,
+                    const SDK::SpellBookClient& book) const {
+        std::array<::CoreItem::ItemSlot, 8> raw{};
+        const bool includeBonusSlot = observation.local || observation.ally;
+        const int count = includeBonusSlot
+            ? ::CoreItem::SnapshotAllSlots(
+                  hero.Address(), raw.data(),
+                  static_cast<int>(raw.size()))
+            : ::CoreItem::SnapshotItems(
+                  hero.Address(), raw.data(),
+                  ::CoreItem::kVisibleSlotCount);
         const float now = awareness_->Now();
-        for (const auto& slot : items) {
-            if (!slot.IsValid() || observation.itemCount >= observation.items.size()) continue;
-            const int normalizedId = ::CoreItem::NormalizeItemId(slot.Id());
-            ObservedItem& item = observation.items[observation.itemCount++];
+        for (int i = 0; i < count; ++i) {
+            const SDK::InventorySlot slot(raw[static_cast<std::size_t>(i)]);
+            if (!slot.IsValid() ||
+                observation.itemCount >= observation.items.size()) {
+                continue;
+            }
+            const int normalizedId =
+                ::CoreItem::NormalizeItemId(slot.Id());
+            ObservedItem& item =
+                observation.items[observation.itemCount++];
             item.itemId = SDK::ItemIdFromValue(normalizedId);
             item.slot = slot.SlotIndex();
-            item.active = slot.IsActiveItem();
-            const auto spell = hero.Spellbook().GetSpell(slot.GetSpellSlot());
-            if (spell.IsValid()) {
-                item.cooldownRemaining = std::max(0.0f, spell.RemainingCooldown(now));
-                item.charges = std::max(0, spell.Ammo());
-                item.maxCharges = std::max(0, spell.MaxAmmo());
-                item.usable = item.cooldownRemaining <= 0.01f &&
-                              spell.State(now) == CoreSpellBook::State_Ready;
-            } else {
-                item.usable = false;
-            }
-            if (const auto* entry = slot.DatabaseEntry()) {
+            const SDK::SpellSlot itemSpellSlot = slot.GetSpellSlot();
+            const auto spell = itemSpellSlot != SDK::SpellSlot::Unknown
+                ? book.GetSpell(itemSpellSlot)
+                : SDK::SpellDataInstClient{};
+            const bool spellValid = spell.IsValid();
+            const auto* entry = slot.DatabaseEntry();
+            if (entry) {
                 CopyText(item.name, entry->Name);
                 awareness_->Registry().ApplySdkItemData(
-                    item.itemId,
-                    entry->Name,
-                    entry->CooldownMin,
-                    entry->CooldownMax,
-                    entry->DurationMin,
-                    entry->DurationMax,
-                    entry->RangeMin,
-                    entry->RangeMax,
-                    entry->Active,
-                    entry->InStore,
+                    item.itemId, entry->Name,
+                    entry->CooldownMin, entry->CooldownMax,
+                    entry->DurationMin, entry->DurationMax,
+                    entry->RangeMin, entry->RangeMax,
+                    entry->Active, entry->InStore,
                     entry->PriceTotal > 0);
             } else {
                 CopyText(item.name, slot.IdText());
             }
+            const ItemDefinition* definition =
+                awareness_->Registry().FindAvailableItem(item.itemId);
+            item.active = (entry && entry->Active) ||
+                          (spellValid && definition != nullptr);
+            if (spellValid) {
+                item.cooldownRemaining =
+                    std::max(0.0f, spell.RemainingCooldown(now));
+                item.charges = std::max(0, spell.Ammo());
+                item.maxCharges = std::max(0, spell.MaxAmmo());
+                item.usable =
+                    item.cooldownRemaining <= 0.01f &&
+                    spell.State(now) == CoreSpellBook::State_Ready &&
+                    (item.maxCharges <= 1 || item.charges > 0);
+            } else {
+                item.usable = false;
+            }
+            if (definition) item.capability = definition->capability;
+            item.evidence = {
+                Provenance::VisibleNow, Confidence::Confirmed,
+                now, 0.0f, HashId("sdk.item")
+            };
         }
     }
 
-    static void AddObservedSpell(const SDK::SpellDataInstClient& spell,
-                                 float now,
-                                 ChampionObservation& observation) {
-        if (!spell.IsValid() || observation.spellCount >= observation.spells.size()) return;
+    static void AddObservedSpell(
+        const SDK::SpellDataInstClient& spell,
+        float now,
+        const PatchRegistry& registry,
+        ChampionObservation& observation) {
+        if (!spell.IsValid() ||
+            observation.spellCount >= observation.spells.size()) {
+            return;
+        }
         ObservedSpell& output = observation.spells[observation.spellCount++];
         output.slot = static_cast<int>(spell.Slot());
-        const std::string script = spell.ScriptName();
-        const std::string display = spell.Name();
-        CopyText(output.name, script.empty() ? display : script);
-        output.idHash = HashId(script.empty() ? display : script);
-        output.cooldownRemaining = std::max(0.0f, spell.RemainingCooldown(now));
+        char scriptName[128] = {};
+        char displayName[128] = {};
+        const bool hasScriptName =
+            spell.ReadScriptName(scriptName, static_cast<int>(sizeof(scriptName)));
+        const bool hasDisplayName =
+            spell.ReadName(displayName, static_cast<int>(sizeof(displayName)));
+        const char* name = hasScriptName
+            ? scriptName
+            : (hasDisplayName ? displayName : "");
+        const std::string_view nameView(name);
+        CopyText(output.name, nameView);
+        output.idHash = HashId(nameView);
+        if (output.slot >= 4) {
+            if (const auto* definition =
+                    registry.ResolveAvailableSummoner(
+                        output.idHash, nameView)) {
+                output.capability = definition->capability;
+            }
+        }
+        output.cooldownRemaining =
+            std::max(0.0f, spell.RemainingCooldown(now));
         output.cooldownMin = output.cooldownRemaining;
         output.cooldownMax = output.cooldownRemaining;
         output.rechargeDuration =
-            std::max(output.cooldownRemaining, std::max(0.0f, spell.Cooldown()));
+            std::max(output.cooldownRemaining,
+                     std::max(0.0f, spell.Cooldown()));
         output.manaCost = std::max(0.0f, spell.ManaCost());
         output.cooldownKind = CooldownKind::ExactObserved;
         output.charges = std::max(0, spell.Ammo());
         output.maxCharges = std::max(1, spell.MaxAmmo());
         output.ready = output.cooldownRemaining <= 0.01f &&
                        spell.State(now) == CoreSpellBook::State_Ready &&
-                       (output.charges > 0 || output.maxCharges <= 1);
-        output.charging = output.maxCharges > 1 && output.charges > 0 && !output.ready;
-        output.evidence = { Provenance::VisibleNow, Confidence::Confirmed, now, 0.0f, HashId("sdk.spell") };
+                       (output.charges > 0 ||
+                        output.maxCharges <= 1);
+        output.charging = output.maxCharges > 1 &&
+                          output.charges > 0 && !output.ready;
+        output.evidence = {
+            Provenance::VisibleNow, Confidence::Confirmed,
+            now, 0.0f, HashId("sdk.spell")
+        };
     }
-
-    void BuildSpells(const SDK::AIHeroClient& hero, ChampionObservation& observation) const {
+    void BuildSpells(const SDK::SpellBookClient& book,
+                     ChampionObservation& observation) const {
         static constexpr std::array<SDK::SpellSlot, 6> kSlots = {
             SDK::SpellSlot::Q, SDK::SpellSlot::W, SDK::SpellSlot::E,
-            SDK::SpellSlot::R, SDK::SpellSlot::Summoner1, SDK::SpellSlot::Summoner2,
+            SDK::SpellSlot::R, SDK::SpellSlot::Summoner1,
+            SDK::SpellSlot::Summoner2
         };
         const float now = awareness_->Now();
-        const auto book = hero.Spellbook();
-        for (const auto slot : kSlots) AddObservedSpell(book.GetSpell(slot), now, observation);
+        const PatchRegistry& registry = awareness_->Registry();
+        for (const auto slot : kSlots) {
+            AddObservedSpell(
+                book.GetSpell(slot), now, registry, observation);
+        }
     }
+    void BuildRoleQuest(ChampionObservation& observation,
+                        const ChampionState* prior) const {
+        const RoleQuestRuleset ruleset = ruleset_;
+        observation.roleQuest = RoleQuestTracker::Resolve(
+            awareness_->Registry(), observation.items,
+            observation.itemCount, ruleset,
+            prior ? &prior->roleQuest : nullptr);
+    }
+
 
     void BuildBuffs(const SDK::AIHeroClient& hero, ChampionObservation& observation) const {
         if (!hero.IsValid() || observation.buffCount >= observation.buffs.size()) return;
-        const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(hero.Address(), awareness_->Now());
+        const float now = awareness_->Now();
+        const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(hero.Address(), now);
         if (!snapshot) return;
         for (int i = 0; i < snapshot->count && observation.buffCount < observation.buffs.size(); ++i) {
             const auto& source = snapshot->entries[i];
@@ -391,9 +518,13 @@ private:
             target.startTime = source.startTime;
             target.endTime = source.endTime;
             CopyText(target.name, source.name);
-            target.evidence = { Provenance::VisibleNow, Confidence::Confirmed, awareness_->Now(), source.endTime, HashId("sdk.buff") };
+            target.evidence = {
+                Provenance::VisibleNow, Confidence::Confirmed,
+                now, source.endTime, HashId("sdk.buff")
+            };
         }
     }
+
     static bool IsViegoPossession(
         const ChampionObservation& observation) noexcept {
         if (!TextEqualsInsensitive(observation.championId, "Viego")) {
@@ -410,20 +541,6 @@ private:
         return false;
     }
 
-    void BuildRoleQuest(ChampionObservation& observation,
-                        const ChampionState* prior) const {
-        RoleQuestRuleset ruleset = RoleQuestRuleset::Rotating;
-        if (static_cast<int>(SDK::Map::Id()) == 11) {
-            ruleset = IsSwiftplay()
-                ? RoleQuestRuleset::Swiftplay
-                : RoleQuestRuleset::Standard;
-        }
-        observation.roleQuest = RoleQuestTracker::Resolve(
-            awareness_->Registry(), observation.items,
-            observation.itemCount, ruleset,
-            prior ? &prior->roleQuest : nullptr);
-    }
-
     void ObserveWave(const SDK::AIHeroClient& player) {
         WaveObservation observation{};
         observation.at = awareness_->Now();
@@ -432,6 +549,8 @@ private:
         int centerCount = 0;
         observation.allyFront = 100000.0f;
         observation.enemyFront = 100000.0f;
+        SDK::GameObjects::AllyLaneMinions(allyLaneMinionsSnapshot_);
+        SDK::GameObjects::EnemyLaneMinions(enemyLaneMinionsSnapshot_);
         const auto observe = [&](const auto& units, bool ally) {
             for (const auto& unit : units) {
                 if (!unit.IsValid() || unit.IsDead() ||
@@ -456,8 +575,8 @@ private:
                 ++centerCount;
             }
         };
-        observe(SDK::GameObjects::AllyLaneMinions(), true);
-        observe(SDK::GameObjects::EnemyLaneMinions(), false);
+        observe(allyLaneMinionsSnapshot_, true);
+        observe(enemyLaneMinionsSnapshot_, false);
         if (observation.allyFront >= 100000.0f) observation.allyFront = 0.0f;
         if (observation.enemyFront >= 100000.0f) observation.enemyFront = 0.0f;
         if (centerCount > 0) {
@@ -466,16 +585,16 @@ private:
         }
         awareness_->ObserveWave(observation);
     }
-
     void ObserveWards() {
-        const auto wards = SDK::GameObjects::Wards();
+        SDK::GameObjects::Wards(wardsSnapshot_);
+        const auto& wards = wardsSnapshot_;
+        const float now = awareness_->Now();
         for (const auto& ward : wards) {
             if (!ward.IsValid()) continue;
             const std::uint32_t id =
                 static_cast<std::uint32_t>(ward.NetworkId());
             if (id == 0) continue;
 
-            const float now = awareness_->Now();
             const std::uint32_t team =
                 static_cast<std::uint32_t>(ward.Team());
             const bool ally = localTeam_ != 0 && team == localTeam_;
@@ -487,7 +606,7 @@ private:
                 continue;
             }
 
-            const std::string name = ObjectName(ward);
+            const std::string_view name = ObjectName(ward);
             WardState state = previous ? *previous : WardState{};
             state.networkId = id;
             state.team = team;
@@ -512,7 +631,7 @@ private:
                 state.kind = ClassifyWard(name);
                 state.radius =
                     state.kind == WardKind::Control ? 900.0f : 600.0f;
-                ApplyFaelightState(ward, name, state);
+                ApplyFaelightState(ward, name, state, now);
                 state.evidence = {
                     visible ? Provenance::VisibleNow
                             : Provenance::ObservedEvent,
@@ -548,10 +667,10 @@ private:
 
     template <typename Unit>
     void ApplyFaelightState(const Unit& ward, std::string_view objectName,
-                             WardState& state) const {
+                            WardState& state, float now) const {
         bool faelight = Contains(objectName, "faelight");
         const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(
-            ward.Address(), awareness_->Now());
+            ward.Address(), now);
         if (snapshot) {
             for (int i = 0; i < snapshot->count; ++i) {
                 if (snapshot->entries[i].isActive &&
@@ -561,10 +680,18 @@ private:
                 }
             }
         }
-        if (!faelight) return;
-        state.faelight = true;
-        state.radius *= 1.25f;
-        state.bonusVisionUntil = state.placedAt + 45.0f;
+        state.faelight = faelight;
+        const float bonusEnd = state.placedAt + 45.0f;
+        const bool bonusActive = faelight &&
+            (bonusEnd <= 0.0f || now < bonusEnd);
+        state.bonusVisionObserved = bonusActive;
+        state.bonusVisionUntil = bonusActive ? bonusEnd : 0.0f;
+        if (bonusActive) {
+            // Faelight adds a fixed +25% radius while the observed
+            // superward bonus window is active.  The extra region is not
+            // retained after the observation window expires.
+            state.radius *= 1.25f;
+        }
     }
 
     static WardKind ClassifyWard(std::string_view name) noexcept {
@@ -597,8 +724,8 @@ private:
         return nullptr;
     }
 
-    bool IsSwiftplay() const {
-        return Contains(Lower(SDK::MissionInfo::GameMode()), "swift");
+    bool IsSwiftplay() const noexcept {
+        return swiftplay_;
     }
 
     bool ObjectiveEnabled(ObjectiveKind kind) const {
@@ -617,7 +744,7 @@ private:
     }
 
     void SeedObjectiveTimers() {
-        if (static_cast<int>(SDK::Map::Id()) != 11) return;
+        if (mapId_ != 11) return;
         const float now = awareness_->Now();
         awareness_->Registry().ForEachObjective([&](const ObjectiveDefinition& definition) {
             if (!ObjectiveEnabled(definition.kind)) return;
@@ -640,7 +767,7 @@ private:
     template <typename Unit>
     void ObserveObjectiveUnit(const Unit& unit, std::array<bool, 8>& seen) {
         if (!unit.IsValid()) return;
-        const std::string name = ObjectName(unit);
+        const std::string_view name = ObjectName(unit);
         const ObjectiveKind kind = ClassifyObjective(name);
         if (kind == ObjectiveKind::Unknown || !ObjectiveEnabled(kind)) return;
         const std::size_t kindIndex = static_cast<std::size_t>(kind);
@@ -715,10 +842,14 @@ private:
 
     void ObserveObjectives() {
         objectiveSeen_.fill(false);
-        const auto legendary = SDK::GameObjects::JungleLegendary();
-        for (const auto& unit : legendary) ObserveObjectiveUnit(unit, objectiveSeen_);
-        const auto large = SDK::GameObjects::JungleLarge();
-        for (const auto& unit : large) ObserveObjectiveUnit(unit, objectiveSeen_);
+        SDK::GameObjects::JungleLegendary(jungleLegendarySnapshot_);
+        for (const auto& unit : jungleLegendarySnapshot_) {
+            ObserveObjectiveUnit(unit, objectiveSeen_);
+        }
+        SDK::GameObjects::JungleLarge(jungleLargeSnapshot_);
+        for (const auto& unit : jungleLargeSnapshot_) {
+            ObserveObjectiveUnit(unit, objectiveSeen_);
+        }
     }
 
     static ObjectiveKind ClassifyObjective(std::string_view name) noexcept {
@@ -739,11 +870,12 @@ private:
         return nullptr;
     }
 
-    void ObserveJungleCamps() {
-        const auto camps = SDK::GameObjects::JungleLarge();
+    void ObserveJungleCamps(
+        const std::vector<SDK::AIMinionClient>& camps) {
+        const float now = awareness_->Now();
         for (const auto& unit : camps) {
             if (!unit.IsValid()) continue;
-            const std::string name = ObjectName(unit);
+            const std::string_view name = ObjectName(unit);
             if (ClassifyObjective(name) != ObjectiveKind::Unknown || !IsKnownCamp(name)) continue;
             const std::uint32_t networkId = static_cast<std::uint32_t>(unit.NetworkId());
             if (networkId == 0) continue;
@@ -763,28 +895,28 @@ private:
                 state.alive = !unit.IsDead();
                 state.confidence = Confidence::Confirmed;
                 state.evidence = { Provenance::VisibleNow, Confidence::Confirmed,
-                                   awareness_->Now(), 0.0f, HashId("sdk.jungle") };
+                                   now, 0.0f, HashId("sdk.jungle") };
                 if (state.alive) {
-                    state.lastSeenAliveAt = awareness_->Now();
+                    state.lastSeenAliveAt = now;
                     state.observedDeath = false;
                     state.estimatedDeathAt = 0.0f;
                     state.sourceJunglerId = 0;
                 } else if (!previous || previous->alive) {
                     state.observedDeath = true;
-                    state.confirmedDeathAt = awareness_->Now();
-                    state.respawnAt = awareness_->Now() + CampRespawn(name);
+                    state.confirmedDeathAt = now;
+                    state.respawnAt = now + CampRespawn(name);
                     state.estimatedDeathAt = 0.0f;
                     state.sourceJunglerId = 0;
                 }
             } else if (state.evidence.provenance == Provenance::Estimated) {
                 const float age = std::max(
-                    0.0f, awareness_->Now() - state.estimatedDeathAt);
+                    0.0f, now - state.estimatedDeathAt);
                 state.confidence = age <= 20.0f
                     ? state.confidence : Confidence::Low;
                 state.evidence.confidence = state.confidence;
             } else {
                 const float age = std::max(
-                    0.0f, awareness_->Now() - state.lastSeenAliveAt);
+                    0.0f, now - state.lastSeenAliveAt);
                 state.confidence = age <= 30.0f
                     ? Confidence::High : Confidence::Medium;
                 state.evidence.provenance = Provenance::LastSeen;
@@ -801,7 +933,7 @@ private:
         if (known != knownJungleKeys_.end()) return known->second;
         for (std::size_t i = 0; i < awareness_->Store().Jungles().Size(); ++i) {
             const auto& camp = awareness_->Store().Jungles().At(i);
-            if (std::string_view(camp.campId) == name &&
+            if (TextEqualsInsensitive(std::string_view(camp.campId), name) &&
                 camp.position.Distance(position) <= 1200.0f) {
                 return camp.campKey;
             }
@@ -839,6 +971,7 @@ private:
     }
 
     void ObserveStructures() {
+        const float now = awareness_->Now();
         uintptr_t objects[16384] = {};
         const int count = ::Core::ObjectManager::EnumerateAllIncludingStructures(objects, 16384);
         for (int i = 0; i < count; ++i) {
@@ -886,13 +1019,13 @@ private:
                 state.overgrowthCharge = 0.0f;
                 state.overgrowthReadyAt = 0.0f;
                 state.nextTrueDamage = 0.0f;
-                ApplyStructureBuffState(unit, state);
+                ApplyStructureBuffState(unit, state, now);
             } else if (!previous) {
                 state.position = ToPoint(unit.Position());
                 state.alive = true;
                 state.evidence = {
                     Provenance::Estimated, Confidence::Low,
-                    awareness_->Now(), 0.0f, HashId("map.structure")
+                    now, 0.0f, HashId("map.structure")
                 };
             } else {
                 state.evidence.provenance = Provenance::LastSeen;
@@ -901,18 +1034,19 @@ private:
             if (state.visible) {
                 state.evidence = {
                     Provenance::VisibleNow, Confidence::Confirmed,
-                    awareness_->Now(), 0.0f, HashId("sdk.structure")
+                    now, 0.0f, HashId("sdk.structure")
                 };
             }
             awareness_->ObserveStructure(state);
-            knownStructures_[id] = awareness_->Now();
+            knownStructures_[id] = now;
         }
     }
 
     void ApplyStructureBuffState(const SDK::AIBaseClient& unit,
-                                 StructureState& state) const {
+                                 StructureState& state,
+                                 float now) const {
         const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(
-            unit.Address(), awareness_->Now());
+            unit.Address(), now);
         if (!snapshot) return;
         for (int i = 0; i < snapshot->count; ++i) {
             const auto& buff = snapshot->entries[i];
@@ -927,7 +1061,7 @@ private:
                 state.overgrowthActive = true;
                 const float minimumHold = IsSwiftplay() ? 30.0f : 60.0f;
                 const float scaleWindow = IsSwiftplay() ? 180.0f : 240.0f;
-                const float elapsed = std::max(0.0f, awareness_->Now() - buff.startTime);
+                const float elapsed = std::max(0.0f, now - buff.startTime);
                 const float charge = std::clamp(
                     (elapsed - minimumHold) / scaleWindow, 0.0f, 1.0f);
                 state.overgrowthCharge = charge * 100.0f;
@@ -966,8 +1100,8 @@ private:
     }
 
     void RefreshSdkRegistry(const SDK::AIHeroClient& player) {
-        for (const auto& slot : player.InventoryItems()) {
-            if (!slot.IsValid()) continue;
+        player.InventoryItems(inventorySnapshot_);
+        for (const auto& slot : inventorySnapshot_) {
             const int id = ::CoreItem::NormalizeItemId(slot.Id());
             const SDK::ItemId typedId = SDK::ItemIdFromValue(id);
             if (const auto* entry = slot.DatabaseEntry()) {
@@ -1205,7 +1339,7 @@ private:
 
     void HandleIntegerChange(const ::Core::Events::IntegerPropertyChangeEventArgs& args) {
         if (!awareness_ || args.Sender.NetworkId == 0 || !IsObservable(args.Sender, localTeam_)) return;
-        const std::string property = Lower(args.Property);
+        const std::string_view property(args.Property);
         GameEvent event{};
         event.at = awareness_->Now();
         event.objectId = args.Sender.NetworkId;
@@ -1353,7 +1487,19 @@ private:
     bool inGame_ = false;
     std::uint64_t frame_ = 0;
     std::uint64_t registryRefreshFrame_ = 0;
+    std::uint64_t lastPingFrame_ = 0;
+    int lastPingMs_ = 0;
+    int mapId_ = 0;
+    RoleQuestRuleset ruleset_ = RoleQuestRuleset::Rotating;
+    bool swiftplay_ = false;
     std::uint32_t localTeam_ = 0;
+    std::vector<SDK::AIHeroClient> heroesSnapshot_{};
+    std::vector<SDK::AIMinionClient> allyLaneMinionsSnapshot_{};
+    std::vector<SDK::AIMinionClient> enemyLaneMinionsSnapshot_{};
+    std::vector<SDK::AIMinionClient> wardsSnapshot_{};
+    std::vector<SDK::AIMinionClient> jungleLegendarySnapshot_{};
+    std::vector<SDK::AIMinionClient> jungleLargeSnapshot_{};
+    std::vector<SDK::InventorySlot> inventorySnapshot_{};
     RuntimeMode lastMode_ = RuntimeMode::Companion;
     std::unordered_map<std::uint32_t, float> knownWards_{};
     std::unordered_map<std::uint32_t, float> knownMissiles_{};

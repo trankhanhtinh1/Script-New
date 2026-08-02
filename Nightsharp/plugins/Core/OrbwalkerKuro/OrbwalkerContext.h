@@ -49,7 +49,7 @@ struct OrbwalkerRuntimeContext {
     int lastRengarLeapTick = 0;
     int lastCritProcessSpellTick = -1;
     int lastCritProcessSpellTargetNetworkId = 0;
-
+    int apheliosReturnMissileNetworkId = 0;
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
     float visualWindupWeight = 0.0f;

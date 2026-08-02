@@ -148,7 +148,22 @@
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
     <ClCompile Include="Plugins\PluginBootstrap.cpp" />
+    <ClCompile Include="Plugins\Registration\7UPAIORegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\AwarenessActivatorRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\ChampionCastSpellRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\DeveloperToolsRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\EzEvadeRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\KuroEvadeRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\KuroTargetSelectorRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\ObjectDefinitionDrawRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\Orbwalker7UPRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\PlayerEventFilterRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\SharpShooterAIORegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\SpellTrackingDebugRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\ZDEvadeRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\Ziblldev9898Registration.cpp" />
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp" />
     <ClCompile Include="Third_Party\clipper\clipper.cpp" />
   </ItemGroup>
@@ -228,6 +243,14 @@
     <ClInclude Include="overlay\OverlayManager.h" />
     <ClInclude Include="overlay\OverlayStatus.h" />
     <ClInclude Include="overlay\VmtHook.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\ActivatorEngine.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorCore.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessInsights.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\PatchOverrides.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\SdkObservationBridge.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Common.h" />
     <ClInclude Include="Plugins\Champion\7UPAIO\Ezreal.h" />

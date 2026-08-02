@@ -2,10 +2,14 @@
 
 #include "AwarenessActivatorCore.h"
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -20,7 +24,7 @@ public:
 
         std::size_t applied = 0;
         std::string line;
-        std::array<std::string, 16> fields{};
+        std::array<std::string, 24> fields{};
         while (std::getline(input, line)) {
             const std::size_t count = SplitCsv(line, fields);
             if (count == 0 || fields[0].empty() || fields[0][0] == '#') continue;
@@ -55,8 +59,9 @@ private:
         value = value.substr(first, last - first + 1);
     }
 
-    static std::size_t SplitCsv(const std::string& line,
-                                std::array<std::string, 16>& fields) {
+    static std::size_t SplitCsv(
+        const std::string& line,
+        std::array<std::string, 24>& fields) {
         for (auto& field : fields) field.clear();
         bool quoted = false;
         std::size_t index = 0;
@@ -97,7 +102,11 @@ private:
         errno = 0;
         char* end = nullptr;
         const long parsed = std::strtol(text.c_str(), &end, 10);
-        if (errno != 0 || end == text.c_str() || *end != '\0') return false;
+        if (errno != 0 || end == text.c_str() || *end != '\0' ||
+            parsed < std::numeric_limits<int>::min() ||
+            parsed > std::numeric_limits<int>::max()) {
+            return false;
+        }
         value = static_cast<int>(parsed);
         return true;
     }
@@ -195,7 +204,7 @@ private:
     }
 
     static bool ApplySpell(PatchRegistry& registry,
-                           const std::array<std::string, 16>& field) {
+                           const std::array<std::string, 24>& field) {
         SpellDefinition value{};
         value.idHash = HashId(field[1]);
         CopyText(value.internalId, field[1]);
@@ -216,7 +225,7 @@ private:
     }
 
     static bool ApplySummoner(PatchRegistry& registry,
-                              const std::array<std::string, 16>& field) {
+                              const std::array<std::string, 24>& field) {
         SummonerDefinition value{};
         const std::uint32_t idHash = HashId(field[1]);
         if (const SummonerDefinition* previous =
@@ -254,7 +263,7 @@ private:
     }
 
     static bool ApplyItem(PatchRegistry& registry,
-                          const std::array<std::string, 16>& field) {
+                          const std::array<std::string, 24>& field) {
         int id = 0;
         if (!ParseInt(field[1], id)) return false;
         ItemDefinition value{};
@@ -290,7 +299,7 @@ private:
     }
 
     static bool ApplyBuff(PatchRegistry& registry,
-                          const std::array<std::string, 16>& field) {
+                          const std::array<std::string, 24>& field) {
         BuffDefinition value{};
         value.idHash = HashId(field[1]);
         CopyText(value.internalId, field[1]);
@@ -304,7 +313,7 @@ private:
     }
 
     static bool ApplyObjective(PatchRegistry& registry,
-                               const std::array<std::string, 16>& field) {
+                               const std::array<std::string, 24>& field) {
         ObjectiveDefinition value{};
         value.kind = ParseObjectiveKind(field[1]);
         if (value.kind == ObjectiveKind::Unknown) return false;
@@ -318,7 +327,7 @@ private:
     }
 
     static bool ApplyQuest(PatchRegistry& registry,
-                           const std::array<std::string, 16>& field) {
+                           const std::array<std::string, 24>& field) {
         RoleQuestDefinition value{};
         int itemId = 0;
         if (!ParseInt(field[2], itemId) ||

@@ -31,6 +31,9 @@
     <Filter Include="Plugins">
       <UniqueIdentifier>{AE613BBF-5736-BDEB-C908-CC9D3DD30AF4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\AwarenessActivator">
+      <UniqueIdentifier>{CBB8B2CB-CE56-E2DC-B47F-996125729FC2}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\Champion">
       <UniqueIdentifier>{A3239344-03F4-19C5-E5F8-249EDD5CD8A2}</UniqueIdentifier>
     </Filter>
@@ -778,7 +781,52 @@
     <ClCompile Include="Plugins\PluginBootstrap.cpp">
       <Filter>Plugins</Filter>
     </ClCompile>
+    <ClCompile Include="Plugins\Registration\7UPAIORegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\AwarenessActivatorRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\ChampionCastSpellRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\DeveloperToolsRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\EzEvadeRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
     <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\KuroEvadeRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\KuroTargetSelectorRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\ObjectDefinitionDrawRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\Orbwalker7UPRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\PlayerEventFilterRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\SharpShooterAIORegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\SpellTrackingDebugRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\ZDEvadeRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\Ziblldev9898Registration.cpp">
       <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="SDK\Data\EmbeddedAssets.cpp">
@@ -993,6 +1041,30 @@
     </ClInclude>
     <ClInclude Include="overlay\VmtHook.h">
       <Filter>overlay</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\ActivatorEngine.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorCore.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessInsights.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\PatchOverrides.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\SdkObservationBridge.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Champion\7UPAIO\7UPAIO.h">
       <Filter>Plugins\Champion\7UPAIO</Filter>

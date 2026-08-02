@@ -124,19 +124,17 @@ private:
     static void OnDoCastStatic(const Events::ProcessSpellEventArgs& args);
     static void OnStopCastStatic(const Events::StopCastEventArgs& args);
     static void OnMissileCreateStatic(const Events::ObjectEventArgs& args);
-    static void OnCreateObjectStatic(const Events::ObjectEventArgs& args);
-    static void OnDeleteObjectStatic(const Events::ObjectEventArgs& args);
     static void OnDrawStatic();
     static void OnPlayAnimationStatic(const Events::PlayAnimationEventArgs& args);
     static void OnDashStatic(const Events::Dash::DashArgs& args);
 
     void OnGameUpdate();
+    void ReconcileApheliosReturnMissile();
+    void ReconcileRetainedObjects();
     void OnProcessSpell(const Events::ProcessSpellEventArgs& args);
     void OnDoCast(const Events::ProcessSpellEventArgs& args);
     void OnStopCast(const Events::StopCastEventArgs& args);
     void OnMissileCreate(const Events::ObjectEventArgs& args);
-    void OnCreateObject(const Events::ObjectEventArgs& args);
-    void OnDeleteObject(const Events::ObjectEventArgs& args);
     void OnDraw();
     void OnPlayAnimation(const Events::PlayAnimationEventArgs& args);
     void OnDash(const Events::Dash::DashArgs& args);

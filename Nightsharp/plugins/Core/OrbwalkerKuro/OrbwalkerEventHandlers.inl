@@ -35,17 +35,6 @@ inline void OrbwalkerBase::OnMissileCreateStatic(const Events::ObjectEventArgs& 
     }
 }
 
-inline void OrbwalkerBase::OnCreateObjectStatic(const Events::ObjectEventArgs& args) {
-    if (OrbwalkingDetail::RuntimeInstance) {
-        OrbwalkingDetail::RuntimeInstance->OnCreateObject(args);
-    }
-}
-
-inline void OrbwalkerBase::OnDeleteObjectStatic(const Events::ObjectEventArgs& args) {
-    if (OrbwalkingDetail::RuntimeInstance) {
-        OrbwalkingDetail::RuntimeInstance->OnDeleteObject(args);
-    }
-}
 
 inline void OrbwalkerBase::OnDrawStatic() {
     if (OrbwalkingDetail::RuntimeInstance) {
@@ -53,8 +42,76 @@ inline void OrbwalkerBase::OnDrawStatic() {
     }
 }
 
+inline void OrbwalkerBase::ReconcileApheliosReturnMissile() {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() ||
+        SDK::ChampionIdFromName(player.CharacterName().c_str()) !=
+            SDK::ChampionId::Aphelios) {
+        context_.apheliosReturnMissileNetworkId = 0;
+        return;
+    }
+
+    const int playerNetworkId = player.NetworkId();
+    int observedNetworkId = 0;
+    for (const auto& missile : GameObjects::Missiles()) {
+        if (!missile.IsValid() ||
+            missile.CasterNetworkId() != playerNetworkId) {
+            continue;
+        }
+        const std::string name = missile.Name();
+        const std::string characterName = missile.CharacterName();
+        if (_stricmp(name.c_str(), "ApheliosCrescendumAttackMisIn") == 0 ||
+            _stricmp(characterName.c_str(),
+                     "ApheliosCrescendumAttackMisIn") == 0) {
+            observedNetworkId = missile.NetworkId();
+            break;
+        }
+    }
+
+    const int previousNetworkId =
+        context_.apheliosReturnMissileNetworkId;
+    if (previousNetworkId != 0 &&
+        previousNetworkId != observedNetworkId) {
+        ResetAutoAttackTimerWithReason(
+            "Aphelios Crescendum return missile",
+            "frame-reconciled missile lifetime",
+            "missile-return",
+            player.CharacterName().c_str(),
+            "ApheliosCrescendumAttackMisIn",
+            -1,
+            "ApheliosCrescendumAttackMisIn",
+            "ApheliosCrescendumAttackMisIn",
+            static_cast<std::uint32_t>(previousNetworkId),
+            static_cast<std::uint32_t>(playerNetworkId));
+    }
+    context_.apheliosReturnMissileNetworkId = observedNetworkId;
+}
+inline void OrbwalkerBase::ReconcileRetainedObjects() {
+    const auto isLive = [](const AttackableUnit& object) {
+        const std::uint32_t networkId = object.CachedNetworkId();
+        return networkId != 0 &&
+               GameObjects::IsNetworkIdAlive(networkId);
+    };
+
+    if (!isLive(context_.forceTarget)) {
+        context_.forceTarget = {};
+    }
+    if (!isLive(context_.lastTarget)) {
+        context_.lastTarget = {};
+    }
+    if (!isLive(context_.laneClearMinion)) {
+        context_.laneClearMinion = {};
+    }
+    if (!isLive(context_.cachedTarget)) {
+        context_.cachedTarget = {};
+        context_.cachedTargetTick = -1;
+        context_.cachedShouldWaitTick = -1;
+    }
+}
+
 inline void OrbwalkerBase::OnGameUpdate() {
     NightSharpPerf::ScopedTimer timer("OrbwalkerKuro::OnGameUpdate");
+    ReconcileRetainedObjects();
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
         context_.activeMode = OrbwalkingMode::None;
@@ -388,37 +445,6 @@ inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
 }
 
-inline void OrbwalkerBase::OnCreateObject(const Events::ObjectEventArgs& args) {
-    OrbwalkingDetail::OnObjectCreate(args);
-}
-
-inline void OrbwalkerBase::OnDeleteObject(const Events::ObjectEventArgs& args) {
-    OrbwalkingDetail::OnObjectDelete(args);
-
-    const auto player = GameObjects::Player();
-    const SDK::ChampionId playerChampionId = player.IsValid()
-        ? SDK::ChampionIdFromName(player.CharacterName().c_str())
-        : SDK::ChampionId::Unknown;
-    if (player.IsValid() && playerChampionId == SDK::ChampionId::Aphelios) {
-        if (args.Sender.IsValid() && args.Sender.Type == ::Core::Objects::ObjectType::MissileClient) {
-            if (args.SourceNetworkId == player.NetworkId() &&
-                (_stricmp(args.Sender.Name, "ApheliosCrescendumAttackMisIn") == 0 ||
-                 _stricmp(args.MissileName, "ApheliosCrescendumAttackMisIn") == 0)) {
-                ResetAutoAttackTimerWithReason(
-                    "Aphelios Crescendum return missile",
-                    "OnDeleteObject",
-                    "missile-return",
-                    player.CharacterName().c_str(),
-                    args.SpellName,
-                    -1,
-                    args.Sender.Name,
-                    args.MissileName,
-                    args.Sender.NetworkId,
-                    args.SourceNetworkId);
-            }
-        }
-    }
-}
 
 namespace OrbwalkingDetail {
 

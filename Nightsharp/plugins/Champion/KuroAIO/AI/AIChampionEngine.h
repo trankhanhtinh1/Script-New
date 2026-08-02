@@ -24,11 +24,12 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
-
 namespace Plugins::KuroAIO::AI::Engine {
 
 inline const ChampionProfile* ActiveProfile = nullptr;
@@ -70,12 +71,13 @@ inline int PendingInterruptTick = 0;
 
 struct TrackedObject {
     std::uint32_t NetworkId = 0;
-    Vector3 Position = {};
+    SDK::Events::ObjectEventArgs Event = {};
     int LastSeenTick = 0;
+    bool GenericLifecycle = false;
+    bool MissileLifecycle = false;
 };
 
-inline std::array<TrackedObject, 64> TrackedObjects = {};
-inline std::size_t TrackedObjectCount = 0;
+inline std::unordered_map<std::uint32_t, TrackedObject> TrackedObjects;
 
 inline constexpr float kInfiniteSpeed = FLT_MAX;
 inline constexpr int kManualInputLockMs = 80;
@@ -530,11 +532,29 @@ inline float MaximumTargetRange() {
     return std::min(5500.0f, range + mobilityReach + 150.0f);
 }
 
+inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForMode(Mode mode) {
+    switch (mode) {
+    case Mode::Combo: return SDK::KuroTargetSelector::TargetPurpose::ComboPrimary;
+    case Mode::Harass: return SDK::KuroTargetSelector::TargetPurpose::Harass;
+    case Mode::Flee: return SDK::KuroTargetSelector::TargetPurpose::FleeThreat;
+    default: return SDK::KuroTargetSelector::TargetPurpose::General;
+    }
+}
+
 inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForSpell(
     const SpellSpec& spec,
     Mode mode) {
     using namespace SDK::KuroTargetSelector;
 
+    // A normal mode is already the caller's action context.  Do not let a
+    // broad profile bit such as Aphelios Q's Interrupt/AntiGapcloser flags
+    // turn an ordinary combo or harass cast into a reactive-only request.
+    if (mode != Mode::Automatic) {
+        return KuroPurposeForMode(mode);
+    }
+
+    // Automatic requests are used by the event-driven interrupt and
+    // anti-gapcloser paths, so retain their spell-specific precedence there.
     if (Has(spec.Intents, Intent::Interrupt)) {
         return TargetPurpose::Interrupt;
     }
@@ -548,25 +568,10 @@ inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForSpell(
     if (Has(spec.Intents, Intent::Peel)) {
         return TargetPurpose::Peel;
     }
-    if (mode == Mode::Flee || Has(spec.Intents, Intent::Disengage)) {
+    if (Has(spec.Intents, Intent::Disengage)) {
         return TargetPurpose::FleeThreat;
     }
-    if (mode == Mode::Combo) {
-        return TargetPurpose::ComboPrimary;
-    }
-    if (mode == Mode::Harass) {
-        return TargetPurpose::Harass;
-    }
     return TargetPurpose::General;
-}
-
-inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForMode(Mode mode) {
-    switch (mode) {
-    case Mode::Combo: return SDK::KuroTargetSelector::TargetPurpose::ComboPrimary;
-    case Mode::Harass: return SDK::KuroTargetSelector::TargetPurpose::Harass;
-    case Mode::Flee: return SDK::KuroTargetSelector::TargetPurpose::FleeThreat;
-    default: return SDK::KuroTargetSelector::TargetPurpose::General;
-    }
 }
 
 inline SDK::KuroTargetSelector::RouteKind KuroRouteForSpell(
@@ -603,9 +608,13 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     const SpellSpec* spec = nullptr) {
     using namespace SDK::KuroTargetSelector;
 
-    const TargetPurpose purpose = spec
-        ? KuroPurposeForSpell(*spec, mode)
-        : KuroPurposeForMode(mode);
+    // Target planning describes the current orbwalker mode, not one
+    // multi-purpose spell.  Profiles such as Aphelios intentionally mark Q
+    // as damage, interrupt, peel, and anti-gapcloser; inferring a reactive
+    // purpose here rejects every ordinary combo target as non-channeling.
+    // Spell-specific intent remains available to execution validation below,
+    // where the caller is already evaluating a concrete action.
+    const TargetPurpose purpose = KuroPurposeForMode(mode);
     auto request = Plugins::KuroAIO::MakeKuroTargetRequest(
         range, damageType, purpose, DecisionPhase::Planning);
     request.RequesterId = spec
@@ -1856,18 +1865,125 @@ inline bool TryManualUltimate() {
                    StepRule::None, false, true);
 }
 
-inline void PruneTrackedObjects() {
+inline bool IsValidTrackedNetworkId(std::uint32_t networkId) {
+    return networkId != 0 && networkId != 0xFFFFFFFFu;
+}
+
+inline void CopyTrackedText(char* destination,
+                            std::size_t capacity,
+                            const std::string& value) {
+    if (!destination || capacity == 0) {
+        return;
+    }
+    strncpy_s(destination, capacity, value.c_str(), _TRUNCATE);
+}
+
+inline void SanitizeTrackedInfo(::Core::Events::ObjectInfo& info) {
+    info.Ptr = 0;
+    info.IdentityOnly = IsValidTrackedNetworkId(info.NetworkId);
+}
+
+inline void RefreshTrackedMetadata(TrackedObject& tracked) {
+    const auto object =
+        SDK::GameObjects::GetUnitByNetworkId<SDK::GameObject>(
+            static_cast<int>(tracked.NetworkId));
+    if (!object.IsValid()) {
+        return;
+    }
+    auto& sender = tracked.Event.Sender;
+    sender.Ptr = 0;
+    sender.NetworkId = tracked.NetworkId;
+    sender.Index = object.CachedIndex();
+    sender.Type = object.Type();
+    sender.Position = object.Position();
+    CopyTrackedText(sender.Name, sizeof(sender.Name), object.Name());
+    CopyTrackedText(sender.CharacterName, sizeof(sender.CharacterName),
+                    object.CharacterName());
+    sender.IdentityOnly = IsValidTrackedNetworkId(sender.NetworkId);
+}
+
+inline void RememberTrackedObject(
+    const SDK::Events::ObjectEventArgs& args,
+    bool missileLifecycle) {
+    std::uint32_t networkId = args.Sender.NetworkId;
+    if (!IsValidTrackedNetworkId(networkId) && missileLifecycle) {
+        networkId = args.MissileNetworkId;
+    }
+    if (!IsValidTrackedNetworkId(networkId)) {
+        return;
+    }
+
+    TrackedObject& tracked = TrackedObjects[networkId];
+    tracked.NetworkId = networkId;
+    tracked.LastSeenTick = SDK::Variables::TickCount();
+    tracked.Event = args;
+    tracked.Event.Raw = {};
+    SanitizeTrackedInfo(tracked.Event.Sender);
+    SanitizeTrackedInfo(tracked.Event.Source);
+    SanitizeTrackedInfo(tracked.Event.Target);
+    tracked.Event.Sender.NetworkId = networkId;
+    tracked.Event.Sender.IdentityOnly = true;
+    if (missileLifecycle) {
+        tracked.MissileLifecycle = true;
+        tracked.Event.MissileNetworkId = networkId;
+        if (tracked.Event.Sender.Type ==
+            ::Core::Objects::ObjectType::Unknown) {
+            tracked.Event.Sender.Type =
+                ::Core::Objects::ObjectType::MissileClient;
+        }
+    } else {
+        tracked.GenericLifecycle = true;
+    }
+    RefreshTrackedMetadata(tracked);
+}
+
+inline SDK::Events::ObjectEventArgs MakeDetachedTrackedEvent(
+    const TrackedObject& tracked) {
+    SDK::Events::ObjectEventArgs event = tracked.Event;
+    event.Raw = {};
+    event.Sender.Ptr = 0;
+    event.Sender.NetworkId = tracked.NetworkId;
+    event.Sender.IdentityOnly = true;
+    if (tracked.MissileLifecycle) {
+        event.MissileNetworkId = tracked.NetworkId;
+    }
+    if (event.SourceNetworkId != 0) {
+        event.Source.Ptr = 0;
+        event.Source.IdentityOnly = true;
+    }
+    if (event.TargetNetworkId != 0) {
+        event.Target.Ptr = 0;
+        event.Target.IdentityOnly = true;
+    }
+    return event;
+}
+
+inline void ReconcileTrackedObjects() {
+    std::vector<TrackedObject> expired;
+    expired.reserve(TrackedObjects.size());
     const int now = SDK::Variables::TickCount();
-    std::size_t write = 0;
-    for (std::size_t i = 0; i < TrackedObjectCount; ++i) {
-        if (TrackedObjects[i].NetworkId != 0 && now - TrackedObjects[i].LastSeenTick <= 15000) {
-            TrackedObjects[write++] = TrackedObjects[i];
+    for (auto it = TrackedObjects.begin(); it != TrackedObjects.end();) {
+        if (!SDK::GameObjects::IsNetworkIdAlive(it->first)) {
+            expired.push_back(it->second);
+            it = TrackedObjects.erase(it);
+        } else {
+            it->second.LastSeenTick = now;
+            ++it;
         }
     }
-    for (std::size_t i = write; i < TrackedObjectCount; ++i) {
-        TrackedObjects[i] = {};
+
+    for (const TrackedObject& tracked : expired) {
+        const SDK::Events::ObjectEventArgs event =
+            MakeDetachedTrackedEvent(tracked);
+        if (tracked.GenericLifecycle && ActiveController &&
+            ActiveController->OnObjectDelete) {
+            ActiveController->OnObjectDelete(event);
+        }
+        if (tracked.MissileLifecycle && ActiveController &&
+            ActiveController->OnMissileDelete) {
+            ActiveController->OnMissileDelete(event);
+        }
     }
-    TrackedObjectCount = write;
 }
 
 inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
@@ -1876,6 +1992,7 @@ inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
     }
 
     const int now = SDK::Variables::TickCount();
+    ReconcileTrackedObjects();
     const int decisionDelay = (Orbwalker::ActiveMode() == OrbwalkingMode::Combo)
         ? 10
         : std::max(15, Slider(HumanMenu, "DecisionRate", 28));
@@ -1885,7 +2002,6 @@ inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
     LastDecisionTick = now;
 
     RefreshRuntimeSpells();
-    PruneTrackedObjects();
     if (!CanAct(false)) {
         return;
     }
@@ -2057,43 +2173,19 @@ inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (ActiveController && ActiveController->OnObjectCreate) {
         ActiveController->OnObjectCreate(args);
     }
-    if (!ObjectMatchesProfile(args) || TrackedObjectCount >= TrackedObjects.size()) {
-        return;
-    }
-    TrackedObjects[TrackedObjectCount++] = {
-        args.Sender.NetworkId,
-        args.Sender.Position,
-        SDK::Variables::TickCount()
-    };
-}
-
-inline void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
-    if (!Loaded) {
-        return;
-    }
-    if (ActiveController && ActiveController->OnObjectDelete) {
-        ActiveController->OnObjectDelete(args);
-    }
-    if (args.Sender.NetworkId == 0) {
-        return;
-    }
-    for (std::size_t i = 0; i < TrackedObjectCount; ++i) {
-        if (TrackedObjects[i].NetworkId == args.Sender.NetworkId) {
-            TrackedObjects[i].LastSeenTick = 0;
-        }
+    if (ObjectMatchesProfile(args)) {
+        RememberTrackedObject(args, false);
     }
 }
 
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
-    if (Loaded && ActiveController && ActiveController->OnMissileCreate) {
+    if (!Loaded) {
+        return;
+    }
+    if (ActiveController && ActiveController->OnMissileCreate) {
         ActiveController->OnMissileCreate(args);
     }
-}
-
-inline void OnMissileDelete(const SDK::Events::ObjectEventArgs& args) {
-    if (Loaded && ActiveController && ActiveController->OnMissileDelete) {
-        ActiveController->OnMissileDelete(args);
-    }
+    RememberTrackedObject(args, true);
 }
 
 inline void OnDraw() {
@@ -2282,8 +2374,8 @@ inline void OnGameLoad(const ChampionProfile& profile,
     LastAfterAttackTick = 0;
     LastBeforeAttackTick = 0;
     LastSlotCastTick.fill(0);
-    TrackedObjects.fill({});
-    TrackedObjectCount = 0;
+    TrackedObjects.clear();
+    TrackedObjects.reserve(128);
     ResetPlan();
 
     for (int index = 0; index < 4; ++index) {
@@ -2301,9 +2393,7 @@ inline void OnGameLoad(const ChampionProfile& profile,
     SDK::Events::hook.OnGapCloser += &OnGapcloser;
     SDK::Events::hook.OnInterruptableTarget += &OnInterruptable;
     SDK::Events::hook.OnCreateObject += &OnObjectCreate;
-    SDK::Events::hook.OnDeleteObject += &OnObjectDelete;
     SDK::Events::hook.OnMissileCreate += &OnMissileCreate;
-    SDK::Events::hook.OnMissileDelete += &OnMissileDelete;
     SDK::Events::hook.OnBuffAdd += &OnBuffAdd;
     SDK::Events::hook.OnBuffRemove += &OnBuffRemove;
     SDK::Events::hook.OnBuffUpdate += &OnBuffUpdate;
@@ -2327,9 +2417,7 @@ inline void OnUnload() {
     SDK::Events::hook.OnGapCloser -= &OnGapcloser;
     SDK::Events::hook.OnInterruptableTarget -= &OnInterruptable;
     SDK::Events::hook.OnCreateObject -= &OnObjectCreate;
-    SDK::Events::hook.OnDeleteObject -= &OnObjectDelete;
     SDK::Events::hook.OnMissileCreate -= &OnMissileCreate;
-    SDK::Events::hook.OnMissileDelete -= &OnMissileDelete;
     SDK::Events::hook.OnBuffAdd -= &OnBuffAdd;
     SDK::Events::hook.OnBuffRemove -= &OnBuffRemove;
     SDK::Events::hook.OnBuffUpdate -= &OnBuffUpdate;
@@ -2350,7 +2438,7 @@ inline void OnUnload() {
     LockedTargetNetworkId = 0;
     PendingGapcloserNetworkId = 0;
     PendingInterruptNetworkId = 0;
-    TrackedObjectCount = 0;
+    TrackedObjects.clear();
 }
 
 } // namespace Plugins::KuroAIO::AI::Engine

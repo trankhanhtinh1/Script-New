@@ -25,13 +25,6 @@ inline AzirSoldierRules::Point2 PlanarPoint(const Vector3& position) {
     return { position.x, position.z };
 }
 
-inline void OnObjectCreate(const Events::ObjectEventArgs& args) {
-    (void)args;
-}
-
-inline void OnObjectDelete(const Events::ObjectEventArgs& args) {
-    (void)args;
-}
 
 inline std::vector<AIMinionClient> GetAzirSandSoldiers(
     const AIHeroClient& player
