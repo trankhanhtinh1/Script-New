@@ -37,3 +37,6 @@ bin/
 obj/
 *.bak
 Nightsharp/PredictedInputCache_NightSharp_Release_x64.dat
+/Nightsharp/plugins/Champion/KuroAIO/AI/Research
+/Nightsharp/tests
+run_kuro_tests.bat
