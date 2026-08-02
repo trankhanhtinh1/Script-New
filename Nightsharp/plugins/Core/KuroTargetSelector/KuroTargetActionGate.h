@@ -2,6 +2,9 @@
 
 #include "KuroTargetSelectorContracts.h"
 
+#include "../../../sdk/Enumerations/ChampionId.h"
+#include "../../../sdk/Enumerations/SpellSlot.h"
+
 #include "../../../sdk/Extensions/Unit.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Math/Collision.h"
@@ -11,6 +14,8 @@
 #include <array>
 #include <cmath>
 #include <cfloat>
+
+#include <cstring>
 
 namespace SDK::KuroTargetSelector {
 
@@ -121,6 +126,21 @@ public:
             route.Kind == RouteKind::ChargedProjectile;
     }
 
+    static bool IsApheliosSeverumMainHand(const AIHeroClient& player) {
+        if (!player.IsValid() ||
+            ChampionIdFromName(player.CharacterName().c_str()) !=
+                ChampionId::Aphelios) {
+            return false;
+        }
+        const auto q = player.Spellbook().GetSpell(SpellSlot::Q);
+        if (!q.IsValid()) {
+            return false;
+        }
+        return _stricmp(q.ScriptName().c_str(), "ApheliosSeverumQ") == 0 ||
+            _stricmp(q.Name().c_str(), "ApheliosSeverumQ") == 0 ||
+            _stricmp(q.IconName().c_str(), "ApheliosSeverumQ") == 0;
+    }
+
     static bool IsProjectileWallBlocked(const Vector3& start,
                                         const Vector3& destination,
                                         float radius = 0.0f) {
@@ -130,6 +150,19 @@ public:
         }
         return Collision::HasProjectileWallCollision(
             start, destination, std::max(0.0f, radius));
+    }
+    // Severum basic attacks bypass Yasuo/Samira projectile walls, while Mel
+    // W remains a valid blocker for the same auto attack.
+
+    static bool IsAutoAttackWallBlocked(const Vector3& start,
+                                        const Vector3& destination,
+                                        float radius,
+                                        const AIHeroClient& player) {
+        if (IsApheliosSeverumMainHand(player)) {
+            return Collision::HasMelWallCollision(
+                start, destination, std::max(0.0f, radius));
+        }
+        return IsProjectileWallBlocked(start, destination, radius);
     }
 
     static TargetRequest MakeAutoAttackRequest(
@@ -209,20 +242,28 @@ private:
         const Vector3 fallbackStart = ResolveSource(request, player);
         const Vector3 fallbackEnd = ResolveDestination(request, target);
         const float radius = std::max(0.0f, route.ProjectileRadius);
+        const auto wallBlocked = [&](const Vector3& start,
+                                     const Vector3& destination,
+                                     float segmentRadius) {
+            return route.Kind == RouteKind::AutoAttack
+                ? IsAutoAttackWallBlocked(
+                    start, destination, segmentRadius, player)
+                : IsProjectileWallBlocked(
+                    start, destination, segmentRadius);
+        };
 
         if (route.CheckAllSegments && route.SegmentCount > 0) {
             const std::size_t count =
                 std::min(route.SegmentCount, route.Segments.size());
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& segment = route.Segments[i];
-                if (segment.Projectile && IsProjectileWallBlocked(
+                if (segment.Projectile && wallBlocked(
                         segment.Start, segment.End,
                         std::max(radius, segment.Radius))) {
                     return RejectReason::ProjectileWall;
                 }
             }
-        } else if (IsProjectileWallBlocked(
-                       fallbackStart, fallbackEnd, radius)) {
+        } else if (wallBlocked(fallbackStart, fallbackEnd, radius)) {
             return RejectReason::ProjectileWall;
         }
 
@@ -232,8 +273,7 @@ private:
         if (route.CheckAllSegments &&
             route.SecondarySource.IsValid() &&
             !route.SecondarySource.IsZero() &&
-            IsProjectileWallBlocked(
-                route.SecondarySource, fallbackEnd, radius)) {
+            wallBlocked(route.SecondarySource, fallbackEnd, radius)) {
             return RejectReason::ProjectileWall;
         }
         return RejectReason::None;
@@ -246,6 +286,7 @@ private:
             target.HasBuff("vladimirsanguinepool") ||
             target.HasBuff("fizztrickslippery");
     }
+
 };
 
 } // namespace SDK::KuroTargetSelector

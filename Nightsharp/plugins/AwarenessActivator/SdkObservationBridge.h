@@ -1,16 +1,17 @@
 #pragma once
 
 #include "AwarenessEngine.h"
+#include "AwarenessDiagnostics.h"
 #include "../../SDK/SDK.h"
 #include "../../Core/CoreAIHeroClient.h"
 #include "../../Core/CoreItem.h"
-#include "../../Core/CoreObjectManager.h"
 
 #include "../../SectionProfiler.h"
 #include <Windows.h>
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -24,6 +25,7 @@ class SdkObservationBridge final {
 public:
     SdkObservationBridge() {
         heroesSnapshot_.reserve(16);
+        renderHeroesSnapshot_.reserve(64);
         allyLaneMinionsSnapshot_.reserve(64);
         enemyLaneMinionsSnapshot_.reserve(64);
         wardsSnapshot_.reserve(64);
@@ -32,7 +34,6 @@ public:
         inventorySnapshot_.reserve(8);
         knownWards_.reserve(64);
         knownMissiles_.reserve(128);
-        knownStructures_.reserve(64);
         knownObjectiveKinds_.reserve(16);
         knownJungleKeys_.reserve(64);
         recentCasts_.reserve(128);
@@ -90,9 +91,16 @@ public:
     void Reset() {
         inGame_ = false;
         frame_ = 0;
-        registryRefreshFrame_ = 0;
-        lastPingFrame_ = 0;
         lastPingMs_ = 0;
+        lastPingAt_ = -1000.0f;
+        lastContextAt_ = -1000.0f;
+        lastLocalHeroAt_ = -1000.0f;
+        lastHeroesAt_ = -1000.0f;
+        lastWardsAt_ = -1000.0f;
+        lastWaveAt_ = -1000.0f;
+        lastObjectivesAt_ = -1000.0f;
+        lastRegistryAt_ = -1000.0f;
+        lastInsightsAt_ = -1000.0f;
         mapId_ = 0;
         ruleset_ = RoleQuestRuleset::Rotating;
         swiftplay_ = false;
@@ -100,10 +108,12 @@ public:
         localTeam_ = 0;
         knownWards_.clear();
         knownMissiles_.clear();
-        knownStructures_.clear();
         knownObjectiveKinds_.clear();
         knownJungleKeys_.clear();
         heroesSnapshot_.clear();
+        renderReadIndex_.store(0, std::memory_order_release);
+        renderSnapshots_[0] = {};
+        renderSnapshots_[1] = {};
         allyLaneMinionsSnapshot_.clear();
         enemyLaneMinionsSnapshot_.clear();
         wardsSnapshot_.clear();
@@ -132,69 +142,219 @@ public:
         ++frame_;
         const bool firstFrame = frame_ == 1u;
 
-        const int mapId = static_cast<int>(SDK::Map::Id());
-        char gameMode[64] = {};
-        SDK::MissionInfo::ReadGameMode(
-            gameMode, static_cast<int>(sizeof(gameMode)));
-        const RuntimeMode mode = ResolveMode(gameMode);
-        const RoleQuestRuleset ruleset =
-            ResolveRuleset(mapId, gameMode);
-        if (firstFrame || mode != lastMode_) {
-            awareness_->SetMode(mode);
-            lastMode_ = mode;
-        }
-        if (firstFrame || mapId != mapId_) {
-            mapId_ = mapId;
-            awareness_->SetMapId(mapId_);
-        }
-        if (firstFrame || ruleset != ruleset_) {
-            ruleset_ = ruleset;
-            swiftplay_ = ruleset_ == RoleQuestRuleset::Swiftplay;
-            awareness_->SetRuleset(ruleset_);
-        }
         const float rawTime = SDK::Game::Time();
-        if (frame_ == 1u || frame_ - lastPingFrame_ >= 15u) {
+        if (IsDue(rawTime, lastContextAt_, 1.0f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeContext);
+            const int mapId = static_cast<int>(SDK::Map::Id());
+            char gameMode[64] = {};
+            SDK::MissionInfo::ReadGameMode(
+                gameMode, static_cast<int>(sizeof(gameMode)));
+            const RuntimeMode mode = ResolveMode(gameMode);
+            const RoleQuestRuleset ruleset =
+                ResolveRuleset(mapId, gameMode);
+            if (firstFrame || mode != lastMode_) {
+                awareness_->SetMode(mode);
+                lastMode_ = mode;
+            }
+            if (firstFrame || mapId != mapId_) {
+                mapId_ = mapId;
+                awareness_->SetMapId(mapId_);
+            }
+            if (firstFrame || ruleset != ruleset_) {
+                ruleset_ = ruleset;
+                swiftplay_ =
+                    ruleset_ == RoleQuestRuleset::Swiftplay;
+                awareness_->SetRuleset(ruleset_);
+            }
+            scope.SetCounts(1, 1, 0, 1);
+        }
+
+        if (IsDue(rawTime, lastPingAt_, 0.25f)) {
             lastPingMs_ = SDK::Game::Ping();
-            lastPingFrame_ = frame_;
         }
         awareness_->UpdateClock(rawTime, lastPingMs_);
-        awareness_->BeginFrame(awareness_->Now());
-        if (frame_ == 1u) SeedObjectiveTimers();
+        const float now = awareness_->Now();
+        awareness_->BeginFrame(now);
+        if (firstFrame) SeedObjectiveTimers();
 
         const auto player = SDK::GameObjects::Player();
         if (!player.IsValid()) return;
         localTeam_ = static_cast<std::uint32_t>(player.Team());
-        if (firstFrame || (frame_ % 3u) == 0u) {
-            ObserveHeroes(player);
+
+        // These cadences are time based instead of frame based. The old
+        // modulo scheduling multiplied SDK scans when FPS was uncapped.
+        const bool fullHeroScan = IsDue(now, lastHeroesAt_, 0.10f);
+        if (fullHeroScan) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeHeroes);
+            const std::size_t observed = ObserveHeroes(player);
+            lastLocalHeroAt_ = now;
+            const std::size_t scanned = heroesSnapshot_.size();
+            scope.SetCounts(
+                scanned, observed,
+                scanned >= observed ? scanned - observed : 0,
+                scanned);
+        } else if (IsDue(now, lastLocalHeroAt_, 1.0f / 30.0f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeLocalHero);
+            ObserveLocalHero(player);
+            scope.SetCounts(1, 1, 0, 1);
         }
-        if (frame_ == 1u || (frame_ % 4u) == 0u) {
+
+        if (IsDue(now, lastWardsAt_, 0.20f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeWards);
             ObserveWards();
+            scope.SetCounts(
+                wardsSnapshot_.size(), 0, 0,
+                wardsSnapshot_.size());
+        }
+        if (IsDue(now, lastWaveAt_, 0.25f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeWave);
             ObserveWave(player);
+            const std::size_t scanned =
+                allyLaneMinionsSnapshot_.size() +
+                enemyLaneMinionsSnapshot_.size();
+            scope.SetCounts(scanned, 0, 0, scanned);
         }
-        if (frame_ == 1u || (frame_ % 8u) == 0u) {
-            ObserveObjectives();
-            ObserveJungleCamps(jungleLargeSnapshot_);
-            ObserveStructures();
+        if (IsDue(now, lastObjectivesAt_, 0.50f)) {
+            {
+                auto scope = BeginDiagnostic(
+                    AwarenessDiagnostics::Stage::BridgeObjectives);
+                ObserveObjectives();
+                const std::size_t scanned =
+                    jungleLegendarySnapshot_.size() +
+                    jungleLargeSnapshot_.size();
+                scope.SetCounts(scanned, 0, 0, scanned);
+            }
+            {
+                auto scope = BeginDiagnostic(
+                    AwarenessDiagnostics::Stage::BridgeJungle);
+                ObserveJungleCamps(jungleLargeSnapshot_);
+                scope.SetCounts(
+                    jungleLargeSnapshot_.size(), 0, 0,
+                    jungleLargeSnapshot_.size());
+            }
         }
-        if (registryRefreshFrame_ == 0 ||
-            frame_ - registryRefreshFrame_ > 120u) {
+
+        if (IsDue(now, lastRegistryAt_, 5.0f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeRegistry);
             RefreshSdkRegistry(player);
-            registryRefreshFrame_ = frame_;
+            scope.SetCounts(
+                inventorySnapshot_.size(), 0, 0,
+                inventorySnapshot_.size());
         }
-        if (frame_ == 1u || (frame_ % 4u) == 0u) {
+        if (IsDue(now, lastInsightsAt_, 0.25f)) {
+            auto scope = BeginDiagnostic(
+                AwarenessDiagnostics::Stage::BridgeInsights);
             awareness_->RefreshInsights();
+            const std::size_t objects =
+                awareness_->Store().ChampionCount() +
+                awareness_->Store().Wards().Size() +
+                awareness_->Store().Objectives().Size() +
+                awareness_->Store().Jungles().Size();
+            scope.SetCounts(objects, 0, 0, objects);
         }
     }
 
+
+    struct RenderPosition final {
+        std::uint32_t networkId = 0;
+        Point3 position = {};
+        bool visible = false;
+        bool dead = false;
+    };
+
+    void SetDiagnostics(AwarenessDiagnostics* diagnostics) noexcept {
+        diagnostics_ = diagnostics;
+    }
+
+    std::size_t RefreshRenderPositions() noexcept {
+        if (!awareness_ || !SDK::Game::IsReady()) return 0;
+
+        const std::uint32_t readIndex =
+            renderReadIndex_.load(std::memory_order_acquire);
+        const std::uint32_t writeIndex = readIndex == 0 ? 1u : 0u;
+        RenderPositionSnapshot& snapshot =
+            renderSnapshots_[writeIndex];
+        snapshot.count = 0;
+        SDK::GameObjects::Heroes(renderHeroesSnapshot_);
+
+        for (const auto& hero : renderHeroesSnapshot_) {
+            if (!hero.IsValid() ||
+                snapshot.count >= snapshot.positions.size()) {
+                continue;
+            }
+            const std::uint32_t networkId =
+                static_cast<std::uint32_t>(hero.NetworkId());
+            if (networkId == 0) continue;
+
+            RenderPosition& position =
+                snapshot.positions[snapshot.count++];
+            position.networkId = networkId;
+            position.visible = hero.IsVisible() || hero.IsMe();
+            position.dead = hero.IsDead();
+            position.position = position.visible
+                ? ToPoint(hero.Position()) : Point3{};
+        }
+        renderReadIndex_.store(
+            writeIndex, std::memory_order_release);
+        return snapshot.count;
+    }
+
+    const RenderPosition* FindRenderPosition(
+        std::uint32_t networkId) const noexcept {
+        if (networkId == 0) return nullptr;
+        const std::uint32_t readIndex =
+            renderReadIndex_.load(std::memory_order_acquire);
+        const RenderPositionSnapshot& snapshot =
+            renderSnapshots_[readIndex];
+        for (std::size_t i = 0; i < snapshot.count; ++i) {
+            if (snapshot.positions[i].networkId == networkId) {
+                return &snapshot.positions[i];
+            }
+        }
+        return nullptr;
+    }
+    bool ReadRenderPosition(std::uint32_t networkId,
+                            RenderPosition& out) const noexcept {
+        const RenderPosition* position = FindRenderPosition(networkId);
+        if (!position) return false;
+        out = *position;
+        return true;
+    }
 
     bool IsAttached() const noexcept { return attached_; }
     RuntimeMode Mode() const noexcept { return lastMode_; }
 
 private:
     static inline SdkObservationBridge* active_ = nullptr;
+    struct RenderPositionSnapshot final {
+        std::array<RenderPosition, 64> positions{};
+        std::size_t count = 0;
+    };
+
+    AwarenessDiagnostics::Scope BeginDiagnostic(
+        AwarenessDiagnostics::Stage stage) noexcept {
+        return diagnostics_
+            ? diagnostics_->Begin(stage)
+            : AwarenessDiagnostics::Scope{};
+    }
 
     static Point3 ToPoint(const Vec3& value) noexcept { return { value.x, value.y, value.z }; }
     static Vec3 ToVec3(const Point3& value) noexcept { return { value.x, value.y, value.z }; }
+
+    static bool IsDue(float now, float& lastAt, float interval) noexcept {
+        if (!std::isfinite(now)) return false;
+        if (lastAt < 0.0f || now < lastAt || now - lastAt >= interval) {
+            lastAt = now;
+            return true;
+        }
+        return false;
+    }
 
     static bool Contains(std::string_view value, std::string_view needle) noexcept {
         if (needle.empty() || value.size() < needle.size()) return false;
@@ -264,7 +424,7 @@ private:
         return localTeam != 0 && info.Team != 0 && info.Team != localTeam && info.Team != 300;
     }
 
-    void ObserveHeroes(const SDK::AIHeroClient& player) {
+    std::size_t ObserveHeroes(const SDK::AIHeroClient& player) {
         SDK::GameObjects::Heroes(heroesSnapshot_);
         const auto& heroes = heroesSnapshot_;
         std::array<std::uint32_t, 64> observedIds{};
@@ -290,6 +450,7 @@ private:
         }
         awareness_->CompleteChampionSnapshot(
             observedIds.data(), observedCount);
+        return observedCount;
     }
 
     void ObserveLocalHero(const SDK::AIHeroClient& player) {
@@ -883,14 +1044,24 @@ private:
             const std::uint32_t campKey = ResolveCampKey(networkId, name, observedPosition);
             const JungleCampState* previous = FindJungleCamp(campKey);
             const bool visible = unit.IsVisible();
-            if (!visible && !previous) continue;
 
             JungleCampState state = previous ? *previous : JungleCampState{};
             state.networkId = networkId;
             state.campKey = campKey;
             CopyText(state.campId, name);
             state.visible = visible;
-            if (visible) {
+            if (!previous && !visible) {
+                // Camp positions are static map information. Seed a low-
+                // confidence alive estimate so the minimap can show every
+                // known camp without claiming an observed spawn state.
+                state.position = observedPosition;
+                state.alive = true;
+                state.confidence = Confidence::Low;
+                state.evidence = {
+                    Provenance::Estimated, Confidence::Low, now, 0.0f,
+                    HashId("sdk.jungle-seed")
+                };
+            } else if (visible) {
                 state.position = observedPosition;
                 state.alive = !unit.IsDead();
                 state.confidence = Confidence::Confirmed;
@@ -970,134 +1141,8 @@ private:
         return buffCamp ? 300.0f : 135.0f;
     }
 
-    void ObserveStructures() {
-        const float now = awareness_->Now();
-        uintptr_t objects[16384] = {};
-        const int count = ::Core::ObjectManager::EnumerateAllIncludingStructures(objects, 16384);
-        for (int i = 0; i < count; ++i) {
-            const uintptr_t address = objects[i];
-            if (!Globals::IsValidPtr(address)) continue;
-            const auto type = ::Core::ObjectManager::InferLifecycleType(address);
-            StructureKind kind = StructureKind::Unknown;
-            if (type == ::Core::Objects::ObjectType::AITurretClient) kind = StructureKind::Turret;
-            else if (type == ::Core::Objects::ObjectType::BarracksDampenerClient) kind = StructureKind::Inhibitor;
-            else if (type == ::Core::Objects::ObjectType::HQClient) kind = StructureKind::Nexus;
-            if (kind == StructureKind::Unknown) continue;
 
-            const auto handle = ::Core::ObjectManager::MakeHandle(address, type);
-            SDK::AIBaseClient unit(handle);
-            if (!unit.IsValid()) continue;
-            if (kind == StructureKind::Turret) {
-                SDK::AITurretClient turret(handle);
-                if (turret.IsFountainTurret() || turret.IsShurimaTurret()) continue;
-            }
-            const std::uint32_t id = static_cast<std::uint32_t>(unit.NetworkId());
-            if (id == 0) continue;
-            const StructureState* previous = FindStructure(id);
-            StructureState state = previous ? *previous : StructureState{};
-            state.networkId = id;
-            state.kind = kind;
-            state.team = static_cast<std::uint32_t>(unit.Team());
-            state.visible = unit.IsVisible();
-            if (state.visible) {
-                state.position = ToPoint(unit.Position());
-                state.alive = !unit.IsDead();
-                state.health = std::max(0.0f, unit.Health());
-                state.maxHealth = std::max(0.0f, unit.MaxHealth());
-                if (kind == StructureKind::Turret && state.maxHealth > 0.0f) {
-                    const float missing =
-                        1.0f - std::clamp(state.health / state.maxHealth, 0.0f, 1.0f);
-                    int claimed = 0;
-                    for (const float threshold :
-                         { 0.10f, 0.25f, 0.45f, 0.70f, 1.00f }) {
-                        if (missing + 0.0001f >= threshold) ++claimed;
-                    }
-                    state.plates = 5 - claimed;
-                }
-                state.backdoorProtected = false;
-                state.overgrowthActive = false;
-                state.overgrowthCharge = 0.0f;
-                state.overgrowthReadyAt = 0.0f;
-                state.nextTrueDamage = 0.0f;
-                ApplyStructureBuffState(unit, state, now);
-            } else if (!previous) {
-                state.position = ToPoint(unit.Position());
-                state.alive = true;
-                state.evidence = {
-                    Provenance::Estimated, Confidence::Low,
-                    now, 0.0f, HashId("map.structure")
-                };
-            } else {
-                state.evidence.provenance = Provenance::LastSeen;
-                state.evidence.confidence = Confidence::Medium;
-            }
-            if (state.visible) {
-                state.evidence = {
-                    Provenance::VisibleNow, Confidence::Confirmed,
-                    now, 0.0f, HashId("sdk.structure")
-                };
-            }
-            awareness_->ObserveStructure(state);
-            knownStructures_[id] = now;
-        }
-    }
 
-    void ApplyStructureBuffState(const SDK::AIBaseClient& unit,
-                                 StructureState& state,
-                                 float now) const {
-        const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(
-            unit.Address(), now);
-        if (!snapshot) return;
-        for (int i = 0; i < snapshot->count; ++i) {
-            const auto& buff = snapshot->entries[i];
-            if (!buff.isActive) continue;
-            const std::string_view name(buff.name);
-            if (Contains(name, "backdoor") || Contains(name, "turretshield")) {
-                state.backdoorProtected = true;
-            }
-            if (Contains(name, "crystallineovergrowth") ||
-                Contains(name, "crystalline_overgrowth") ||
-                Contains(name, "overgrowth")) {
-                state.overgrowthActive = true;
-                const float minimumHold = IsSwiftplay() ? 30.0f : 60.0f;
-                const float scaleWindow = IsSwiftplay() ? 180.0f : 240.0f;
-                const float elapsed = std::max(0.0f, now - buff.startTime);
-                const float charge = std::clamp(
-                    (elapsed - minimumHold) / scaleWindow, 0.0f, 1.0f);
-                state.overgrowthCharge = charge * 100.0f;
-                state.overgrowthReadyAt = buff.endTime;
-                float levelTotal = 0.0f;
-                int levelCount = 0;
-                awareness_->Store().ForEachChampion([&](const ChampionState& champion) {
-                    if (champion.clone || champion.team == state.team ||
-                        champion.level.value <= 0) return;
-                    levelTotal += static_cast<float>(champion.level.value);
-                    ++levelCount;
-                });
-                const float averageLevel = levelCount > 0
-                    ? levelTotal / static_cast<float>(levelCount)
-                    : 1.0f;
-                const float levelScale =
-                    std::clamp((averageLevel - 1.0f) / 17.0f, 0.0f, 1.0f);
-                const float minimumPercent = IsSwiftplay()
-                    ? 0.0215f + 0.1105f * levelScale
-                    : 0.0200f + 0.0680f * levelScale;
-                const float maximumPercent = IsSwiftplay()
-                    ? 0.0376f + 0.3584f * levelScale
-                    : 0.0330f + 0.1560f * levelScale;
-                state.nextTrueDamage = state.maxHealth *
-                    (minimumPercent + (maximumPercent - minimumPercent) * charge);
-            }
-        }
-    }
-
-    const StructureState* FindStructure(std::uint32_t id) const {
-        for (std::size_t i = 0; i < awareness_->Store().Structures().Size(); ++i) {
-            const auto& structure = awareness_->Store().Structures().At(i);
-            if (structure.networkId == id) return &structure;
-        }
-        return nullptr;
-    }
 
     void RefreshSdkRegistry(const SDK::AIHeroClient& player) {
         player.InventoryItems(inventorySnapshot_);
@@ -1144,26 +1189,10 @@ private:
         if (!event.visibleAtEvent && event.enemy) return;
         if (type == EventType::SpellCastStarted) {
             recentCasts_[event.sourceId] = event;
-            ObserveStructureAttack(event);
         }
         Publish(event);
     }
 
-    void ObserveStructureAttack(const GameEvent& event) {
-        const StructureState* previous = FindStructure(event.sourceId);
-        if (!previous || previous->kind != StructureKind::Turret) return;
-        StructureState state = *previous;
-        ++state.shotCount;
-        if (state.targetId != 0 && event.targetId != 0 && state.targetId != event.targetId) {
-            ++state.aggroSwitches;
-        }
-        state.targetId = event.targetId;
-        if (Contains(event.name, "overgrowth")) {
-            state.overgrowthActive = false;
-            state.nextTrueDamage = 0.0f;
-        }
-        awareness_->ObserveStructure(state);
-    }
 
     void HandleMissileCreate(const ::Core::Events::ObjectEventArgs& args) {
         if (!awareness_ || args.Sender.NetworkId == 0) return;
@@ -1231,10 +1260,29 @@ private:
         CopyText(event.name, spellName);
         Publish(event);
     }
+    static SDK::AIHeroClient FindHeroByNetworkId(std::uint32_t networkId) {
+        if (networkId == 0) return {};
+        const auto heroes = SDK::GameObjects::Heroes();
+        for (const auto& hero : heroes) {
+            if (hero.CachedNetworkId() == networkId) return hero;
+        }
+        return {};
+    }
+
+    static SDK::AIBaseClient FindUnitByNetworkId(std::uint32_t networkId) {
+        if (networkId == 0) return {};
+        const auto objects = SDK::GameObjects::AllGameObjects();
+        for (const auto& object : objects) {
+            if (object.CachedNetworkId() == networkId) {
+                return SDK::AIBaseClient(object.Handle());
+            }
+        }
+        return {};
+    }
+
     float ResolveSpellRadius(std::uint32_t sourceId, int slot, float fallback) const {
         if (sourceId == 0 || slot < 0 || slot > 3) return fallback;
-        const auto source = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIHeroClient>(
-            static_cast<int>(sourceId));
+        const auto source = FindHeroByNetworkId(sourceId);
         if (!source.IsValid()) return fallback;
         const auto spell = source.Spellbook().GetSpell(static_cast<SDK::SpellSlot>(slot));
         if (!spell.IsValid()) return fallback;
@@ -1251,10 +1299,8 @@ private:
             });
         }
         if (targetId == 0) return 0.0f;
-        const auto source = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIHeroClient>(
-            static_cast<int>(sourceId));
-        const auto target = SDK::ObjectManager::GetUnitByNetworkId<SDK::AIBaseClient>(
-            static_cast<int>(targetId));
+        const auto source = FindHeroByNetworkId(sourceId);
+        const auto target = FindUnitByNetworkId(targetId);
         if (!source.IsValid() || !target.IsValid()) return 0.0f;
         return std::max(0.0f, source.GetSpellDamage(
             target, static_cast<SDK::SpellSlot>(slot)));
@@ -1292,9 +1338,10 @@ private:
         event.value = args.PathCount;
         event.speed = args.Speed;
         event.visibleAtEvent = true;
+        event.startPosition = ToPoint(args.Sender.Position);
         if (args.PathCount > 0) {
-            event.startPosition = ToPoint(args.Path[0]);
-            event.endPosition = ToPoint(args.Path[std::min(args.PathCount, 32) - 1]);
+            event.endPosition = ToPoint(
+                args.Path[std::min(args.PathCount, 32) - 1]);
         }
         Publish(event);
     }
@@ -1435,18 +1482,6 @@ private:
         }
         if (jungle != knownJungleKeys_.end()) knownJungleKeys_.erase(jungle);
 
-        if (observable) {
-            if (const StructureState* previous = FindStructure(id)) {
-                StructureState structure = *previous;
-                structure.alive = false;
-                structure.visible = false;
-                structure.health = 0.0f;
-                structure.evidence = { Provenance::ObservedEvent, Confidence::Confirmed,
-                                       awareness_->Now(), 0.0f, HashId("sdk.structure-delete") };
-                awareness_->ObserveStructure(structure);
-            }
-        }
-        knownStructures_.erase(id);
         recentCasts_.erase(id);
 
         if (!observable && IsEnemyObject(args.Sender, localTeam_)) return;
@@ -1483,17 +1518,28 @@ private:
     static void OnIntegerPropertyChange(const SDK::Events::IntegerPropertyChangeEventArgs& args) { if (active_) active_->HandleIntegerChange(args); }
 
     AwarenessEngine* awareness_ = nullptr;
+    AwarenessDiagnostics* diagnostics_ = nullptr;
     bool attached_ = false;
     bool inGame_ = false;
     std::uint64_t frame_ = 0;
-    std::uint64_t registryRefreshFrame_ = 0;
-    std::uint64_t lastPingFrame_ = 0;
     int lastPingMs_ = 0;
+    float lastPingAt_ = -1000.0f;
+    float lastContextAt_ = -1000.0f;
+    float lastLocalHeroAt_ = -1000.0f;
+    float lastHeroesAt_ = -1000.0f;
+    float lastWardsAt_ = -1000.0f;
+    float lastWaveAt_ = -1000.0f;
+    float lastObjectivesAt_ = -1000.0f;
+    float lastRegistryAt_ = -1000.0f;
+    float lastInsightsAt_ = -1000.0f;
     int mapId_ = 0;
     RoleQuestRuleset ruleset_ = RoleQuestRuleset::Rotating;
     bool swiftplay_ = false;
     std::uint32_t localTeam_ = 0;
     std::vector<SDK::AIHeroClient> heroesSnapshot_{};
+    std::vector<SDK::AIHeroClient> renderHeroesSnapshot_{};
+    std::array<RenderPositionSnapshot, 2> renderSnapshots_{};
+    std::atomic<std::uint32_t> renderReadIndex_{0};
     std::vector<SDK::AIMinionClient> allyLaneMinionsSnapshot_{};
     std::vector<SDK::AIMinionClient> enemyLaneMinionsSnapshot_{};
     std::vector<SDK::AIMinionClient> wardsSnapshot_{};
@@ -1503,7 +1549,6 @@ private:
     RuntimeMode lastMode_ = RuntimeMode::Companion;
     std::unordered_map<std::uint32_t, float> knownWards_{};
     std::unordered_map<std::uint32_t, float> knownMissiles_{};
-    std::unordered_map<std::uint32_t, float> knownStructures_{};
     std::unordered_map<std::uint32_t, ObjectiveKind> knownObjectiveKinds_{};
     std::unordered_map<std::uint32_t, std::uint32_t> knownJungleKeys_{};
     std::unordered_map<std::uint32_t, GameEvent> recentCasts_{};

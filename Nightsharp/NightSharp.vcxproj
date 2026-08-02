@@ -147,6 +147,7 @@
     <ClCompile Include="overlay\D3D11Hook.cpp" />
     <ClCompile Include="overlay\Overlay.cpp" />
     <ClCompile Include="overlay\OverlayManager.cpp" />
+    <ClCompile Include="Plugins\AwarenessActivator\AwarenessIconAssets.cpp" />
     <ClCompile Include="Plugins\PluginBootstrap.cpp" />
     <ClCompile Include="Plugins\Registration\7UPAIORegistration.cpp" />
     <ClCompile Include="Plugins\Registration\AwarenessActivatorRegistration.cpp" />
@@ -248,6 +249,8 @@
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessIconAssets.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessImGuiRenderer.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessInsights.h" />
     <ClInclude Include="Plugins\AwarenessActivator\PatchOverrides.h" />
     <ClInclude Include="Plugins\AwarenessActivator\SdkObservationBridge.h" />

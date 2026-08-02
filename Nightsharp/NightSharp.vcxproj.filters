@@ -778,6 +778,9 @@
     <ClCompile Include="overlay\OverlayManager.cpp">
       <Filter>overlay</Filter>
     </ClCompile>
+    <ClCompile Include="Plugins\AwarenessActivator\AwarenessIconAssets.cpp">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClCompile>
     <ClCompile Include="Plugins\PluginBootstrap.cpp">
       <Filter>Plugins</Filter>
     </ClCompile>
@@ -1055,6 +1058,12 @@
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessIconAssets.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessImGuiRenderer.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessInsights.h">

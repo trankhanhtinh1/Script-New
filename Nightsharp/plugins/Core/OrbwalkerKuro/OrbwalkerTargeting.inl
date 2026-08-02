@@ -212,8 +212,9 @@ inline bool IsWallBlocked(const AIHeroClient& player, const AttackableUnit& targ
         from = player.Position();
     }
 
-    const bool blocked = Collisions::HasProjectileWallCollision(
-        from, target.Position(), 0.0f);
+    const bool blocked =
+        SDK::KuroTargetSelector::KuroTargetActionGate::IsAutoAttackWallBlocked(
+            from, target.Position(), 0.0f, player);
     if (entry) {
         entry->tick = now;
         entry->networkId = networkId;

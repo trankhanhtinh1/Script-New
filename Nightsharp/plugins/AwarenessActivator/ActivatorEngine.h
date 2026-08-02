@@ -72,23 +72,35 @@ public:
     bool reserveSmiteCharge = true;
     bool includeDamageOverTime = true;
     bool barrierLethalOnly = false;
-    bool ignoreTurretDamage = false;
     bool drawOverlay = true;
+    bool drawIcons = true;
     bool drawWorldLayer = true;
     bool drawMinimapLayer = true;
     bool drawAlertCenter = true;
     bool drawEnemyHud = true;
     bool drawCombatState = true;
     bool drawReachableAreas = true;
+    // Draws only path destinations that were observed while the champion was
+    // visible. The observation expires after the expected travel window.
+    bool drawPathTargets = true;
     bool drawThreats = true;
     bool drawWards = true;
     bool drawJungle = true;
-    bool drawStructures = true;
     bool drawObjectives = true;
     bool drawInsights = true;
     bool drawWave = true;
     bool drawActivityHeatmap = false;
     bool drawVisionHeatmap = false;
+    // Keeps expensive world-space drawing and decision scans bounded on
+    // high-refresh-rate clients. Minimap information remains global.
+    bool performanceMode = true;
+    // Optional per-stage profiler. Disabled by default so render/update paths
+    // do not take a clock or accumulate counters when diagnostics are unused.
+    bool diagnosticsEnabled = false;
+    bool diagnosticsConsoleLog = false;
+    bool diagnosticsVerbose = true;
+    float diagnosticsReportInterval = 60.0f;
+    float diagnosticsSlowFrameMs = 8.0f;
     bool audioOnly = false;
     bool streamerMode = false;
     bool vietnamese = false;
@@ -104,10 +116,10 @@ public:
     float healMissingHealthThreshold = 0.28f;
     float exhaustDamageThreshold = 0.20f;
     float ghostMinimumTimeGain = 0.35f;
+    float worldDrawDistance = 4500.0f;
+    float reachableAreaMaxRadius = 2500.0f;
     float alertPanelX = 18.0f;
     float alertPanelY = 22.0f;
-    float enemyHudX = 18.0f;
-    float enemyHudY = 390.0f;
     int rolePresetIndex = 0;
     std::array<ActionMode, 64> modes_{};
     std::array<CapabilitySafety, 64> safety_{};
@@ -360,17 +372,10 @@ private:
 
     static float EffectiveThreatDamage(
         const ThreatForecast& forecast,
-        bool includeDamageOverTime,
-        bool ignoreTurretDamage) noexcept {
+        bool includeDamageOverTime) noexcept {
         float damage = forecast.incomingDamage;
         if (!includeDamageOverTime) {
             damage -= forecast.damageOverTime;
-        }
-        if (ignoreTurretDamage) {
-            damage -= forecast.turretDamage;
-            if (!includeDamageOverTime) {
-                damage += forecast.turretDamageOverTime;
-            }
         }
         return std::max(0.0f, damage);
     }
@@ -414,18 +419,6 @@ private:
                     threat, now, 1.0f) &&
                 CombatPredictionService::Contains(
                     threat, point)) {
-                return true;
-            }
-        }
-        for (std::size_t i = 0;
-             i < store.Structures().Size(); ++i) {
-            const StructureState& structure =
-                store.Structures().At(i);
-            if (structure.alive && structure.visible &&
-                structure.kind == StructureKind::Turret &&
-                structure.team != 0 &&
-                structure.team != player.team &&
-                structure.position.Distance(point) <= 950.0f) {
                 return true;
             }
         }
@@ -535,8 +528,7 @@ private:
         ActionRequest request{};
         request.capability = capability;
         request.mode = EffectiveMode(settings.ModeFor(capability), runtimeMode, settings);
-        if (capability == Capability::Herald ||
-            capability == Capability::KnightsVow) {
+        if (capability == Capability::KnightsVow) {
             request.mode = request.mode == ActionMode::Off
                 ? ActionMode::Off
                 : ActionMode::Suggest;
@@ -700,10 +692,8 @@ private:
         const float existingShield =
             std::max(0.0f, player.allShield);
         const float damage = EffectiveThreatDamage(
-            forecast, settings.includeDamageOverTime, false);
-        const float barrierDamage = EffectiveThreatDamage(
-            forecast, settings.includeDamageOverTime,
-            settings.ignoreTurretDamage);
+            forecast, settings.includeDamageOverTime);
+        const float barrierDamage = damage;
         const bool lethal =
             damage >= player.health.value + existingShield;
         const bool burst =
@@ -898,8 +888,7 @@ private:
                     ally, store, now,
                     settings.defensiveHorizon);
             const float incoming = EffectiveThreatDamage(
-                forecast, settings.includeDamageOverTime,
-                false);
+                forecast, settings.includeDamageOverTime);
             const bool threatened =
                 forecast.threatCount > 0 &&
                 incoming > std::max(0.0f, ally.allShield);
@@ -1132,8 +1121,7 @@ private:
             primary = nullptr;
         }
         const float damage = EffectiveThreatDamage(
-            selfForecast, settings.includeDamageOverTime,
-            false);
+            selfForecast, settings.includeDamageOverTime);
 
         if (settings.summonersEnabled && primary) {
             const float exhaustRange =
@@ -1250,7 +1238,7 @@ private:
                     CombatPredictionService::Forecast(
                         ally, store, now, settings.defensiveHorizon);
                 const float incoming = EffectiveThreatDamage(
-                    forecast, settings.includeDamageOverTime, false);
+                    forecast, settings.includeDamageOverTime);
                 const float unmetDamage =
                     std::max(0.0f, incoming -
                         std::max(0.0f, ally.allShield));
@@ -1688,8 +1676,7 @@ private:
             const float profaneCommittedDamage =
                 EffectiveThreatDamage(
                     profaneForecast,
-                    settings.includeDamageOverTime,
-                    false);
+                    settings.includeDamageOverTime);
             const float profaneHealth =
                 closest->health.value +
                 std::max(0.0f, closest->allShield);
@@ -1980,8 +1967,7 @@ private:
                       player.maxHealth.value
                 : 1.0f;
         const float damage = EffectiveThreatDamage(
-            forecast, settings.includeDamageOverTime,
-            false);
+            forecast, settings.includeDamageOverTime);
         const ObservedItem* potionItem =
             FindItem(
                 player, Capability::Potion,
@@ -2287,164 +2273,7 @@ private:
             }
         }
 
-        if (settings.offensiveItemsEnabled &&
-            settings.ModeFor(Capability::Herald) !=
-                ActionMode::Off &&
-            FindItem(
-                player, Capability::Herald,
-                registry) != nullptr &&
-            !player.recalling &&
-            !player.channeling) {
-            const float heraldRange =
-                ItemRange(
-                    registry, Capability::Herald, 1200.0f);
-            const WaveState& wave = store.Wave();
-            const bool waveFresh =
-                wave.evidence.IsKnown() &&
-                !wave.evidence.IsExpired(now) &&
-                wave.allyMinions > 0 &&
-                !wave.center.IsZero();
-            for (std::size_t i = 0;
-                 i < store.Structures().Size(); ++i) {
-                const StructureState& structure =
-                    store.Structures().At(i);
-                if (!structure.alive || !structure.visible ||
-                    structure.team == player.team ||
-                    structure.kind != StructureKind::Turret ||
-                    structure.backdoorProtected ||
-                    structure.position.Distance(
-                        player.position) > heraldRange ||
-                    structure.maxHealth <= 0.0f) {
-                    continue;
-                }
-                const bool alliedWaveReady =
-                    waveFresh &&
-                    wave.center.Distance(
-                        structure.position) <=
-                        heraldRange + 300.0f;
-                const float turretHealthRatio =
-                    std::clamp(
-                        structure.health /
-                            structure.maxHealth,
-                        0.0f, 1.0f);
-                const bool lowTurretWindow =
-                    turretHealthRatio <= 0.65f;
-                if (!alliedWaveReady && !lowTurretWindow) {
-                    continue;
-                }
-                const Confidence confidence =
-                    alliedWaveReady
-                        ? wave.evidence.confidence
-                        : structure.evidence.confidence;
-                ActionRequest herald = MakeRequest(
-                    player, registry, settings, runtimeMode,
-                    Capability::Herald,
-                    ActionPriority::SecureObjective, now,
-                    alliedWaveReady
-                        ? "fresh allied wave is in range for a Herald turret timing window"
-                        : "visible enemy turret is low enough to justify Herald deployment",
-                    confidence);
-                herald.position = structure.position;
-                herald.expectedValue =
-                    (1.0f - turretHealthRatio) * 100.0f +
-                    (alliedWaveReady
-                        ? static_cast<float>(wave.allyMinions) *
-                              15.0f
-                        : 0.0f);
-                arbiter.Submit(herald);
-                break;
-            }
-        }
 
-        if (settings.summonersEnabled &&
-            forecast.threatCount == 0 &&
-            !player.channeling && !player.recalling) {
-            bool enemyNearPlayer = false;
-            store.ForEachChampion(
-                [&](const ChampionState& enemy) {
-                    if (!enemyNearPlayer &&
-                        CombatValidationService::
-                            IsTargetableEnemy(
-                                enemy, player.team) &&
-                        enemy.position.Distance(
-                            player.position) <= 1200.0f) {
-                        enemyNearPlayer = true;
-                    }
-                });
-            const float teleportRange =
-                SummonerRange(
-                    registry, Capability::Teleport,
-                    25000.0f);
-            const StructureState* destination = nullptr;
-            float destinationScore = 0.0f;
-            if (!enemyNearPlayer) {
-                for (std::size_t i = 0;
-                     i < store.Structures().Size(); ++i) {
-                    const StructureState& structure =
-                        store.Structures().At(i);
-                    const float distance =
-                        structure.position.Distance(
-                            player.position);
-                    if (!structure.alive ||
-                        !structure.visible ||
-                        structure.team != player.team ||
-                        structure.networkId == 0 ||
-                        distance < 2500.0f ||
-                        distance > teleportRange ||
-                        static_cast<int>(
-                            structure.evidence.confidence) <
-                            static_cast<int>(
-                                Confidence::High)) {
-                        continue;
-                    }
-                    int enemies = 0;
-                    int allies = 0;
-                    store.ForEachChampion(
-                        [&](const ChampionState& champion) {
-                            if (champion.dead ||
-                                !champion.visible) {
-                                return;
-                            }
-                            if (champion.position.Distance(
-                                    structure.position) >
-                                1000.0f) {
-                                return;
-                            }
-                            if (champion.enemy) ++enemies;
-                            if (champion.ally &&
-                                !champion.local) {
-                                ++allies;
-                            }
-                        });
-                    if (enemies <= 0 ||
-                        (allies <= 0 && enemies < 2)) {
-                        continue;
-                    }
-                    const float score =
-                        static_cast<float>(enemies) * 100.0f +
-                        static_cast<float>(allies) * 40.0f +
-                        distance * 0.001f;
-                    if (score > destinationScore) {
-                        destinationScore = score;
-                        destination = &structure;
-                    }
-                }
-            }
-            if (destination) {
-                ActionRequest teleport = MakeRequest(
-                    player, registry, settings, runtimeMode,
-                    Capability::Teleport,
-                    ActionPriority::Mobility, now,
-                    "visible distant fight supports a Teleport confirmation",
-                    destination->evidence.confidence);
-                teleport.targetId =
-                    destination->networkId;
-                teleport.position =
-                    destination->position;
-                teleport.expectedValue = destinationScore;
-                arbiter.Submit(teleport);
-            }
-        }
     }
     ThreatForecast selfForecast_{};
     bool hasSelfForecast_ = false;

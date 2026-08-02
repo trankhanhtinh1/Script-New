@@ -25,6 +25,7 @@ public:
         insights_.Reset();
         lastNow_ = 0.0f;
         lastTimerAt_ = -1.0f;
+        lastPruneAt_ = -1.0f;
     }
 
     void SetMode(RuntimeMode mode) noexcept {
@@ -72,7 +73,14 @@ public:
         NS_PROFILE("Awareness.Engine.BeginFrame");
         lastNow_ = now;
         store_.SetNow(now);
-        TickTimers(now);
+
+        // OnUpdate can be tied to uncapped render FPS. Cooldown/timer state
+        // does not need to be recomputed hundreds of times per second.
+        constexpr float kTimerStep = 1.0f / 30.0f;
+        if (lastTimerAt_ < 0.0f || now < lastTimerAt_ ||
+            now - lastTimerAt_ >= kTimerStep) {
+            TickTimers(now);
+        }
     }
 
     void ObserveChampion(const ChampionObservation& observation) {
@@ -311,11 +319,6 @@ public:
                  });
     }
 
-    void ObserveStructure(const StructureState& observation) {
-        if (observation.networkId == 0) return;
-        Upsert(store_.Structures(), observation.networkId,
-               [&](StructureState& current) { current = observation; });
-    }
 
     void ObserveThreat(const ThreatState& observation) {
         if (observation.id == 0) return;
@@ -392,13 +395,37 @@ public:
             break;
         case EventType::PathChanged:
             if (subject && event.visibleAtEvent) {
-                const Point3 direction = Normalize2D(event.endPosition - event.startPosition);
+                const Point3 start = IsValidPathPoint(event.startPosition)
+                    ? event.startPosition : subject->position;
+                const Point3 direction = Normalize2D(
+                    event.endPosition - start);
                 if (!direction.IsZero()) subject->lastDirection = direction;
                 subject->pathBranches = std::max(0, event.value);
                 subject->lastSeenSpeed = std::max(0.0f, event.speed);
                 subject->reachableRadius = 0.0f;
-                if (subject->visible && !event.endPosition.IsZero()) {
-                    subject->lastSeenPosition = event.endPosition;
+
+                const float pathDistance =
+                    IsValidPathPoint(event.endPosition)
+                        ? start.Distance(event.endPosition) : 0.0f;
+                if (event.value > 0 && pathDistance >= 35.0f) {
+                    subject->pathStartPosition = start;
+                    subject->pathTargetPosition = event.endPosition;
+                    subject->pathUpdatedAt = event.at;
+                    subject->pathNodeCount = event.value;
+                    const float travelSeconds = event.speed > 1.0f
+                        ? pathDistance / event.speed : 2.0f;
+                    const float lifetime = std::clamp(
+                        travelSeconds + 0.75f, 1.0f, 8.0f);
+                    subject->pathExpectedArrivalAt =
+                        event.at + std::clamp(
+                            travelSeconds, 0.25f, 7.25f);
+                    subject->pathEvidence = {
+                        Provenance::ObservedEvent, Confidence::Confirmed,
+                        event.at, event.at + lifetime,
+                        HashId("event.path-target")
+                    };
+                } else {
+                    ClearPathTarget(*subject);
                 }
             }
             break;
@@ -406,6 +433,7 @@ public:
             if (subject) {
                 subject->recalling = true;
                 subject->channeling = true;
+                ClearPathTarget(*subject);
             }
             break;
         case EventType::RecallEnded:
@@ -418,6 +446,7 @@ public:
             if (subject) {
                 subject->teleporting = true;
                 subject->channeling = true;
+                ClearPathTarget(*subject);
                 if (subject->enemy && event.visibleAtEvent) {
                     AlertState alert{};
                     alert.id = subject->networkId ^ HashId("alert.enemy-teleport");
@@ -629,7 +658,14 @@ public:
             auto& alert = store_.Alerts().At(i);
             if (alert.expiresAt > 0.0f && alert.expiresAt <= now) alert.priority = 0;
         }
-        store_.PruneInvalid(now);
+        // Pruning scans and compacts every fixed ring. Running it once per
+        // second is enough because individual records already carry expiry
+        // flags and visibility checks.
+        if (lastPruneAt_ < 0.0f || now < lastPruneAt_ ||
+            now - lastPruneAt_ >= 1.0f) {
+            store_.PruneInvalid(now);
+            lastPruneAt_ = now;
+        }
     }
     void RaiseAlert(const AlertState& alert) {
         if (alert.id == 0) return;
@@ -862,6 +898,7 @@ private:
         arbiter_.Clear();
         insights_.Reset();
         lastTimerAt_ = -1.0f;
+        lastPruneAt_ = -1.0f;
     }
 
     void ReconcileAfterReconnect() {
@@ -1440,6 +1477,19 @@ private:
         RaiseAlert(alert);
     }
 
+    static bool IsValidPathPoint(const Point3& point) noexcept {
+        return point.IsValid() && !point.IsZero();
+    }
+
+    static void ClearPathTarget(ChampionState& state) noexcept {
+        state.pathStartPosition = {};
+        state.pathTargetPosition = {};
+        state.pathUpdatedAt = 0.0f;
+        state.pathExpectedArrivalAt = 0.0f;
+        state.pathNodeCount = 0;
+        state.pathEvidence = {};
+    }
+
     bool IsJungleCandidate(const ChampionState& state) const noexcept {
         if (std::strcmp(state.roleQuest.role, "Jungle") == 0) return true;
         for (std::size_t i = 0; i < state.spellCount; ++i) {
@@ -1476,7 +1526,17 @@ private:
         best->observedDeath = false;
         best->estimatedDeathAt = lastNow_;
         best->sourceJunglerId = jungler.networkId;
-        best->respawnAt = 0.0f;
+        const bool buffCamp =
+            TextContainsInsensitive(best->campId, "blue") ||
+            TextContainsInsensitive(best->campId, "red") ||
+            TextContainsInsensitive(best->campId, "bramble") ||
+            TextContainsInsensitive(best->campId, "sentinel");
+        const bool swiftplay =
+            store_.Ruleset() == RoleQuestRuleset::Swiftplay;
+        const float respawnDuration = swiftplay
+            ? (buffCamp ? 270.0f : 120.0f)
+            : (buffCamp ? 300.0f : 135.0f);
+        best->respawnAt = lastNow_ + respawnDuration;
         best->confidence =
             bestDistance <= 1800.0f && csDelta >= 2.0f
                 ? Confidence::Medium : Confidence::Low;
@@ -1617,6 +1677,7 @@ private:
     RuntimeMode mode_ = RuntimeMode::Companion;
     float lastNow_ = 0.0f;
     float lastTimerAt_ = -1.0f;
+    float lastPruneAt_ = -1.0f;
 };
 
 } // namespace NightSharp::Companion

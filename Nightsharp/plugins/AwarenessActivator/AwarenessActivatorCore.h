@@ -419,7 +419,7 @@ enum class Capability : std::uint16_t {
     Teleport, Qss, Mercurial, Mikael, Zhonya, Seeker, Seraph, Locket, Redemption,
     Shurelya, Youmuu, Rocketbelt, Stridebreaker, Gunblade, Tiamat,
     RavenousHydra, TitanicHydra, ProfaneHydra, Randuin, Actualizer, Oracle,
-    Farsight, Ward, Herald, Potion, KnightsVow,
+    Farsight, Ward, Potion, KnightsVow,
 };
 
 inline const char* CapabilityName(Capability capability) noexcept {
@@ -440,15 +440,13 @@ inline const char* CapabilityName(Capability capability) noexcept {
     case Capability::ProfaneHydra: return "ProfaneHydra"; case Capability::Randuin: return "Randuin";
     case Capability::Actualizer: return "Actualizer"; case Capability::Oracle: return "Oracle";
     case Capability::Farsight: return "Farsight"; case Capability::Ward: return "Ward";
-    case Capability::Herald: return "Herald"; case Capability::Potion: return "Potion";
-    case Capability::KnightsVow: return "KnightsVow"; default: return "None";
+    case Capability::Potion: return "Potion"; case Capability::KnightsVow: return "KnightsVow"; default: return "None";
     }
 }
 
 enum class WardKind : std::uint8_t { Unknown = 0, Stealth, Control, Farsight, Support, Zombie, Trap, Faelight, OracleSweep };
 enum class ObjectiveKind : std::uint8_t { Unknown = 0, ElementalDragon, DragonSoul, ElderDragon, VoidGrubs, RiftHerald, Baron, Scuttle };
 enum class ObjectiveStatus : std::uint8_t { NotSpawned = 0, SpawningSoon, AliveVisible, AliveUnknown, InCombatVisible, Dead, Respawning, Disabled };
-enum class StructureKind : std::uint8_t { Unknown = 0, Turret, Inhibitor, Nexus };
 enum class ThreatGeometry : std::uint8_t { Point = 0, Line, Circle, Cone, Ring };
 enum class CrowdControl : std::uint8_t { None = 0, Stun, Root, Charm, Fear, Taunt, Blind, Silence, Polymorph, Slow, Sleep, Suppression, Airborne, Stasis, Grounded };
 enum class CloneKind : std::uint8_t {
@@ -634,7 +632,6 @@ public:
         AddItem(SDK::ItemId::Farsight_Alteration, "FarsightAlteration", "Farsight Alteration", 5.0f, 0.0f, 4000.0f, Capability::Farsight);
         AddItem(SDK::ItemId::Stealth_Ward, "StealthWard", "Stealth Ward", 90.0f, 90.0f, 600.0f, Capability::Ward);
         AddItem(SDK::ItemId::Control_Ward, "ControlWard", "Control Ward", 0.0f, 0.0f, 600.0f, Capability::Ward);
-        AddItem(SDK::ItemId::Eye_of_the_Herald, "EyeOfTheHerald", "Eye of the Herald", 0.0f, 0.0f, 0.0f, Capability::Herald);
         AddItem(SDK::ItemId::Health_Potion, "HealthPotion", "Health Potion", 0.0f, 12.0f, 0.0f, Capability::Potion);
         AddItem(SDK::ItemId::Refillable_Potion, "RefillablePotion", "Refillable Potion", 0.0f, 12.0f, 0.0f, Capability::Potion);
         AddItem(SDK::ItemId::Corrupting_Potion, "CorruptingPotion", "Corrupting Potion", 0.0f, 12.0f, 0.0f, Capability::Potion);
@@ -704,19 +701,39 @@ public:
                           float rangeMin, float rangeMax,
                           bool active, bool inStore,
                           bool purchasable) {
-        ItemDefinition value{};
-        if (const ItemDefinition* existing = FindItem(id)) {
-            value = *existing;
+        const float cooldown = std::max(cooldownMax, cooldownMin);
+        const float duration = std::max(durationMax, durationMin);
+        const float range = std::max(rangeMax, rangeMin);
+        const ItemDefinition* existing = FindItem(id);
+        const bool dataActive =
+            active || (existing && existing->capability != Capability::None);
+
+        // Hero snapshots may report the same item data dozens of times per
+        // second. Avoid the linear AddReplace scan and full structure copy
+        // when the generated SDK entry has not changed.
+        if (existing &&
+            std::fabs(existing->cooldown - cooldown) <= 0.001f &&
+            std::fabs(existing->duration - duration) <= 0.001f &&
+            std::fabs(existing->range - range) <= 0.001f &&
+            existing->dataActive == dataActive &&
+            existing->inStore == inStore &&
+            existing->purchasable == purchasable &&
+            (displayName.empty() ||
+             std::string_view(existing->displayName) == displayName)) {
+            return;
         }
+
+        ItemDefinition value{};
+        if (existing) value = *existing;
         value.itemId = id;
         if (!displayName.empty()) CopyText(value.displayName, displayName);
-        value.cooldown = std::max(cooldownMax, cooldownMin);
-        value.duration = std::max(durationMax, durationMin);
-        value.range = std::max(rangeMax, rangeMin);
+        value.cooldown = cooldown;
+        value.duration = duration;
+        value.range = range;
         // Some current active items are missing the generated Active tag.
         // A known capability remains usable when its real inventory spell
         // proves the item active; patch overrides can still disable it.
-        value.dataActive = active || value.capability != Capability::None;
+        value.dataActive = dataActive;
         value.inStore = inStore;
         value.purchasable = purchasable;
         AddItem(value);
@@ -996,6 +1013,13 @@ struct ChampionState {
     Evidence specialStateEvidence{};
     float visibilityAge = 0.0f, lastSeenAt = 0.0f, moveSpeed = 0.0f, abilityHaste = 0.0f;
     Point3 position{}, lastSeenPosition{}, lastDirection{};
+    // Path destination is observed event data, not the champion's last seen
+    // position. Keeping these separate prevents a movement command from
+    // teleporting the last-seen marker to the end of the path.
+    Point3 pathStartPosition{}, pathTargetPosition{};
+    float pathUpdatedAt = 0.0f, pathExpectedArrivalAt = 0.0f;
+    int pathNodeCount = 0;
+    Evidence pathEvidence{};
     float lastSeenSpeed = 0.0f, reachableRadius = 0.0f;
     float neutralMinionsKilled = 0.0f;
     ProvenanceValue<float> currentGold{}, totalGold{};
@@ -1052,17 +1076,6 @@ struct JungleCampState {
     Evidence evidence{};
 };
 
-struct StructureState {
-    std::uint32_t networkId = 0;
-    StructureKind kind = StructureKind::Unknown;
-    std::uint32_t team = 0;
-    Point3 position{};
-    float health = 0.0f, maxHealth = 0.0f, overgrowthCharge = 0.0f, overgrowthReadyAt = 0.0f, nextTrueDamage = 0.0f;
-    int plates = -1, shotCount = 0, aggroSwitches = 0;
-    std::uint32_t targetId = 0;
-    bool visible = false, alive = false, backdoorProtected = false, overgrowthActive = false;
-    Evidence evidence{};
-};
 
 struct ThreatState {
     std::uint32_t id = 0, sourceId = 0, targetId = 0, spellHash = 0;
@@ -1233,7 +1246,7 @@ public:
         champions_.reserve(32);
     }
     void Reset() {
-        champions_.clear(); wards_.Clear(); objectives_.Clear(); jungles_.Clear(); structures_.Clear();
+        champions_.clear(); wards_.Clear(); objectives_.Clear(); jungles_.Clear();
         threats_.Clear(); alerts_.Clear(); damage_.Clear(); teamfight_.Clear(); wave_ = {};
         ++sessionGeneration_;
     }
@@ -1298,10 +1311,6 @@ public:
                    camp.networkId == 0 &&
                    camp.campId[0] == '\0';
         });
-        removed += structures_.RemoveIf([](const StructureState& structure) {
-            return structure.networkId == 0 ||
-                   !structure.position.IsValid();
-        });
         removed += alerts_.RemoveIf([now](const AlertState& alert) {
             return alert.id == 0 ||
                    (alert.priority == 0 &&
@@ -1320,8 +1329,6 @@ public:
     const FixedRing<ObjectiveState, 16>& Objectives() const noexcept { return objectives_; }
     FixedRing<JungleCampState, 64>& Jungles() noexcept { return jungles_; }
     const FixedRing<JungleCampState, 64>& Jungles() const noexcept { return jungles_; }
-    FixedRing<StructureState, 64>& Structures() noexcept { return structures_; }
-    const FixedRing<StructureState, 64>& Structures() const noexcept { return structures_; }
     FixedRing<ThreatState, 128>& Threats() noexcept { return threats_; }
     const FixedRing<ThreatState, 128>& Threats() const noexcept { return threats_; }
     FixedRing<AlertState, 64>& Alerts() noexcept { return alerts_; }
@@ -1347,7 +1354,6 @@ private:
     FixedRing<WardState, 128> wards_{};
     FixedRing<ObjectiveState, 16> objectives_{};
     FixedRing<JungleCampState, 64> jungles_{};
-    FixedRing<StructureState, 64> structures_{};
     FixedRing<ThreatState, 128> threats_{};
     FixedRing<AlertState, 64> alerts_{};
     FixedRing<DamageRecord, 128> damage_{};
@@ -1366,8 +1372,6 @@ struct ThreatForecast {
     float dodgeableDamage = 0.0f;
     float blockableDamage = 0.0f;
     float damageOverTime = 0.0f;
-    float turretDamage = 0.0f;
-    float turretDamageOverTime = 0.0f;
     float primaryDamage = 0.0f;
     float firstImpactAt = 0.0f;
     float lastImpactAt = 0.0f;
@@ -1446,24 +1450,6 @@ public:
             }
             if (threat.endAt - threat.impactAt > 0.25f) {
                 forecast.damageOverTime += damage;
-            }
-            bool turretSource = false;
-            for (std::size_t structureIndex = 0;
-                 structureIndex < store.Structures().Size();
-                 ++structureIndex) {
-                const StructureState& structure =
-                    store.Structures().At(structureIndex);
-                if (structure.networkId == threat.sourceId &&
-                    structure.kind == StructureKind::Turret) {
-                    turretSource = true;
-                    break;
-                }
-            }
-            if (turretSource) {
-                forecast.turretDamage += damage;
-                if (threat.endAt - threat.impactAt > 0.25f) {
-                    forecast.turretDamageOverTime += damage;
-                }
             }
             forecast.firstImpactAt = forecast.threatCount == 0
                 ? threat.impactAt
@@ -1591,7 +1577,7 @@ inline std::uint32_t ResourceFor(Capability capability) noexcept {
     case Capability::Redemption: return ResourceProtection;
     case Capability::Flash: case Capability::Ghost: case Capability::Teleport: case Capability::Shurelya: case Capability::Youmuu: case Capability::Rocketbelt: return ResourceMobility;
     case Capability::Ignite: case Capability::Gunblade: case Capability::ProfaneHydra: return ResourceExecute;
-    case Capability::Smite: case Capability::Herald: return ResourceObjective;
+    case Capability::Smite: return ResourceObjective;
     case Capability::Tiamat: case Capability::RavenousHydra: case Capability::TitanicHydra: case Capability::Stridebreaker: return ResourceWave;
     case Capability::Oracle: case Capability::Farsight: case Capability::Ward: return ResourceVision;
     default: return ResourceUtility;

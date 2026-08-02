@@ -80,6 +80,17 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     if (!ChampionCanAttack(player)) {
         return false;
     }
+
+    const SDK::ChampionId championId =
+        SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (championId == SDK::ChampionId::Rengar &&
+        (player.HasBuff("RengarQ") ||
+         player.HasBuff("RengarQEmp") ||
+         player.HasBuff("rengarqbase") ||
+         player.HasBuff("rengarqemp"))) {
+        return true;
+    }
+
     if (context_.lastAutoAttackTick <= 0) {
         return true;
     }
@@ -509,6 +520,17 @@ inline bool OrbwalkerBase::ChampionRequiresDoCastBeforeMove(const AIHeroClient& 
 inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
     const SDK::ChampionId championId =
         SDK::ChampionIdFromName(player.CharacterName().c_str());
+    if (player.HasBuff("tahmkenchwhasdevouredtarget") ||
+        player.HasBuff("tahmkenchwdevoured")) {
+        return false;
+    }
+    if (SDK::HasBuffOfType(player, SDK::BuffType::Fear)) {
+        return false;
+    }
+    if (SDK::HasBuffOfType(player, SDK::BuffType::Polymorph) ||
+        player.HasBuff("Polymorph")) {
+        return false;
+    }
     if (championId == SDK::ChampionId::Graves &&
         !player.HasBuff("gravesbasicattackammo1")) {
         return false;
@@ -518,7 +540,12 @@ inline bool OrbwalkerBase::ChampionCanAttack(const AIHeroClient& player) const {
         return false;
     }
     if (championId == SDK::ChampionId::Aphelios &&
-        (player.HasBuff("ApheliosSeverumQ") || player.HasBuff("apheliospreload"))) {
+        (player.HasBuff("ApheliosSeverumQ") ||
+         player.HasBuff("apheliospreload"))) {
+        return false;
+    }
+    if (championId == SDK::ChampionId::Kaisa &&
+        player.HasBuff("KaisaE")) {
         return false;
     }
     return true;

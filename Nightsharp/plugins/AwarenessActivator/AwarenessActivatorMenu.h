@@ -73,20 +73,22 @@ public:
                  settings.drawMinimapLayer);
         BindBool(awareness, "DrawAlertCenter", "Draw prioritized alert center",
                  settings.drawAlertCenter);
-        BindBool(awareness, "DrawEnemyHud", "Draw enemy side HUD",
+        BindBool(awareness, "DrawEnemyHud",
+                 "Draw enemy overhead cooldown HUD",
                  settings.drawEnemyHud);
         BindBool(awareness, "DrawCombatState", "Draw combat awareness state",
                  settings.drawCombatState);
         BindBool(awareness, "DrawReachableAreas", "Draw enemy reachable areas",
                  settings.drawReachableAreas);
+        BindBool(awareness, "DrawPathTargets",
+                 "Draw observed movement targets on minimap",
+                 settings.drawPathTargets);
         BindBool(awareness, "DrawThreats", "Draw threat geometry",
                  settings.drawThreats);
         BindBool(awareness, "DrawWards", "Draw wards and vision",
                  settings.drawWards);
-        BindBool(awareness, "DrawJungle", "Draw jungle camp confidence",
+        BindBool(awareness, "DrawJungle", "Draw jungle camp timers and confidence",
                  settings.drawJungle);
-        BindBool(awareness, "DrawStructures", "Draw turret and structure state",
-                 settings.drawStructures);
         BindBool(awareness, "DrawObjectives", "Draw objective state and timers",
                  settings.drawObjectives);
         BindBool(awareness, "DrawInsights", "Draw advanced insights",
@@ -97,6 +99,32 @@ public:
                  settings.drawActivityHeatmap);
         BindBool(awareness, "DrawVisionHeatmap", "Draw vision coverage heatmap",
                  settings.drawVisionHeatmap);
+        BindBool(awareness, "PerformanceMode",
+                 "Performance mode (bounded world drawing)",
+                 settings.performanceMode);
+        BindBool(awareness, "DiagnosticsEnabled",
+                 "Profile Awareness FPS by stage",
+                 settings.diagnosticsEnabled);
+        BindBool(awareness, "DiagnosticsConsoleLog",
+                 "Log Awareness FPS to debug console",
+                 settings.diagnosticsConsoleLog);
+        BindBool(awareness, "DiagnosticsVerbose",
+                 "Include object counts and complexity",
+                 settings.diagnosticsVerbose);
+        BindFloat(awareness, "DiagnosticsReportInterval",
+                  "Diagnostics report interval (frames)",
+                  settings.diagnosticsReportInterval,
+                  15.0f, 600.0f);
+        BindFloat(awareness, "DiagnosticsSlowFrameMs",
+                  "Log slow render frame threshold (ms)",
+                  settings.diagnosticsSlowFrameMs,
+                  1.0f, 50.0f);
+        BindFloat(awareness, "WorldDrawDistance",
+                  "World draw distance",
+                  settings.worldDrawDistance, 1800.0f, 9000.0f);
+        BindFloat(awareness, "ReachableAreaMaxRadius",
+                  "Reachable area radius cap",
+                  settings.reachableAreaMaxRadius, 800.0f, 6000.0f);
         BindBool(awareness, "AudioOnly", "Audio-only accessibility mode",
                  settings.audioOnly);
         BindBool(awareness, "StreamerMode", "Privacy-preserving streamer mode",
@@ -112,10 +140,6 @@ public:
                   settings.alertPanelX, 0.0f, 3800.0f);
         BindFloat(layout, "AlertPanelY", "Alert panel Y",
                   settings.alertPanelY, 0.0f, 2100.0f);
-        BindFloat(layout, "EnemyHudX", "Enemy HUD X",
-                  settings.enemyHudX, 0.0f, 3800.0f);
-        BindFloat(layout, "EnemyHudY", "Enemy HUD Y",
-                  settings.enemyHudY, 0.0f, 2100.0f);
 
         SDK::Menu* presets = awareness->AddSubMenu(
             new SDK::Menu("Presets", "Role and champion presets"));
@@ -156,9 +180,6 @@ public:
         BindBool(categories, "BarrierLethalOnly",
                  "Barrier only for lethal damage",
                  settings.barrierLethalOnly);
-        BindBool(categories, "IgnoreTurretDamage",
-                 "Ignore turret damage for Barrier",
-                 settings.ignoreTurretDamage);
 
         SDK::Menu* thresholds = activator->AddSubMenu(
             new SDK::Menu("Thresholds", "Reaction thresholds"));
@@ -232,7 +253,6 @@ public:
         BindMode(utility, Capability::Oracle, "Oracle Lens");
         BindMode(utility, Capability::Farsight, "Farsight");
         BindMode(utility, Capability::Ward, "Ward");
-        BindMode(utility, Capability::Herald, "Herald");
         BindMode(utility, Capability::Potion, "Potion");
         BindMode(utility, Capability::KnightsVow, "Knight's Vow");
 
@@ -437,14 +457,17 @@ private:
                      vi ? "Hiện trung tâm cảnh báo ưu tiên"
                         : "Draw prioritized alert center");
             SetLabel(awareness, "DrawEnemyHud",
-                     vi ? "Hiện HUD đối thủ"
-                        : "Draw enemy side HUD");
+                     vi ? "Hiện cooldown trên đầu đối thủ"
+                        : "Draw enemy overhead cooldown HUD");
             SetLabel(awareness, "DrawCombatState",
                      vi ? "Hiện trạng thái giao tranh"
                         : "Draw combat awareness state");
             SetLabel(awareness, "DrawReachableAreas",
                      vi ? "Hiện vùng đối thủ có thể tới"
                         : "Draw enemy reachable areas");
+            SetLabel(awareness, "DrawPathTargets",
+                     vi ? "Hiện đích di chuyển đã quan sát trên bản đồ nhỏ"
+                        : "Draw observed movement targets on minimap");
             SetLabel(awareness, "DrawThreats",
                      vi ? "Hiện vùng nguy hiểm"
                         : "Draw threat geometry");
@@ -452,8 +475,8 @@ private:
                      vi ? "Hiện mắt và tầm nhìn"
                         : "Draw wards and vision");
             SetLabel(awareness, "DrawJungle",
-                     vi ? "Hiện độ tin cậy bãi rừng"
-                        : "Draw jungle camp confidence");
+                     vi ? "Hiện bộ đếm và độ tin cậy bãi rừng"
+                        : "Draw jungle camp timers and confidence");
             SetLabel(awareness, "DrawObjectives",
                      vi ? "Hiện mục tiêu và bộ đếm"
                         : "Draw objective state and timers");
@@ -469,6 +492,15 @@ private:
             SetLabel(awareness, "DrawVisionHeatmap",
                      vi ? "Bản đồ nhiệt tầm nhìn"
                         : "Draw vision coverage heatmap");
+            SetLabel(awareness, "DiagnosticsEnabled",
+                     vi ? "Đo FPS Awareness theo từng stage"
+                        : "Profile Awareness FPS by stage");
+            SetLabel(awareness, "DiagnosticsConsoleLog",
+                     vi ? "Ghi log FPS Awareness ra debug console"
+                        : "Log Awareness FPS to debug console");
+            SetLabel(awareness, "DiagnosticsVerbose",
+                     vi ? "Ghi số đối tượng và độ phức tạp"
+                        : "Include object counts and complexity");
             SetLabel(awareness, "AudioOnly",
                      vi ? "Chế độ trợ năng chỉ âm thanh"
                         : "Audio-only accessibility mode");
@@ -518,9 +550,6 @@ private:
                 SetLabel(categories, "BarrierLethalOnly",
                          vi ? "Chỉ dùng Lá Chắn khi chí mạng"
                             : "Barrier only for lethal damage");
-                SetLabel(categories, "IgnoreTurretDamage",
-                         vi ? "Bỏ qua sát thương trụ cho Lá Chắn"
-                            : "Ignore turret damage for Barrier");
             }
             if (SDK::Menu* thresholds =
                     activator->GetSubMenu("Thresholds")) {
