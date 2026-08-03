@@ -184,36 +184,9 @@ def _validate_target(
             )
 
 
-def _validate_scalar(
-    target_id: str,
-    resolved: int,
-    validations: Mapping[str, Any],
-) -> None:
-    minimum = int(validations.get("minimum", 0))
-    maximum = validations.get("maximum")
-    if resolved < minimum:
-        raise CatalogError(
-            f"{target_id}: resolved value 0x{resolved:X} is below "
-            f"minimum 0x{minimum:X}"
-        )
-    if maximum is not None and resolved > int(maximum):
-        raise CatalogError(
-            f"{target_id}: resolved value 0x{resolved:X} exceeds "
-            f"maximum 0x{int(maximum):X}"
-        )
-
-    alignment = int(validations.get("alignment", 1))
-    if alignment > 1 and resolved % alignment:
-        raise CatalogError(
-            f"{target_id}: resolved value 0x{resolved:X} is not "
-            f"{alignment}-byte aligned"
-        )
-
-
 def _resolve_locator(
     adapter: MemoryAdapter,
     target_id: str,
-    target_kind: str,
     locator: Mapping[str, Any],
     match_address: int,
 ) -> int:
@@ -243,76 +216,12 @@ def _resolve_locator(
             instruction_size,
             addend,
         )
-    elif kind in {"u8", "u16", "u32", "s8", "s16", "s32"}:
-        value_offset = int(resolver["value_offset"])
-        signed = kind.startswith("s")
-        size = int(kind[1:]) // 8
-        resolved = int.from_bytes(
-            _read_exact(adapter, instruction_address + value_offset, size),
-            byteorder="little",
-            signed=signed,
-        ) + addend
-    elif isinstance(kind, str) and kind.startswith("rel32_target_"):
-        scalar_kind = kind.removeprefix("rel32_target_")
-        if scalar_kind not in {"u8", "u16", "u32", "s8", "s16", "s32"}:
-            raise CatalogError(
-                f"{target_id}: unsupported chained scalar kind "
-                f"{scalar_kind!r}"
-            )
-
-        expected_opcodes = resolver.get("opcodes")
-        if expected_opcodes:
-            opcode = _read_exact(adapter, instruction_address, 1)[0]
-            allowed_opcodes = {int(value) for value in expected_opcodes}
-            if opcode not in allowed_opcodes:
-                formatted = ", ".join(
-                    f"0x{value:02X}" for value in sorted(allowed_opcodes)
-                )
-                raise CatalogError(
-                    f"{target_id}: expected rel32 opcode in "
-                    f"[{formatted}] at 0x{instruction_address:X}, "
-                    f"found 0x{opcode:02X}"
-                )
-
-        target_address = _relative_target(
-            adapter,
-            instruction_address,
-            int(resolver["displacement_offset"]),
-            int(resolver["instruction_size"]),
-            0,
-        )
-        value_offset = int(resolver["target_value_offset"])
-        signed = scalar_kind.startswith("s")
-        size = int(scalar_kind[1:]) // 8
-        resolved = int.from_bytes(
-            _read_exact(adapter, target_address + value_offset, size),
-            byteorder="little",
-            signed=signed,
-        ) + addend
-    elif isinstance(kind, str) and kind.startswith("function_start_"):
-        scalar_kind = kind.removeprefix("function_start_")
-        if scalar_kind not in {"u8", "u16", "u32", "s8", "s16", "s32"}:
-            raise CatalogError(
-                f"{target_id}: unsupported function-relative scalar kind "
-                f"{scalar_kind!r}"
-            )
-        function_address = adapter.function_start(instruction_address)
-        value_offset = int(resolver["target_value_offset"])
-        signed = scalar_kind.startswith("s")
-        size = int(scalar_kind[1:]) // 8
-        resolved = int.from_bytes(
-            _read_exact(adapter, function_address + value_offset, size),
-            byteorder="little",
-            signed=signed,
-        ) + addend
     else:
         raise CatalogError(f"{target_id}: unsupported resolver kind {kind!r}")
 
-    validations = locator.get("validations", {})
-    if target_kind == "field":
-        _validate_scalar(target_id, resolved, validations)
-    else:
-        _validate_target(adapter, target_id, resolved, validations)
+    _validate_target(
+        adapter, target_id, resolved, locator.get("validations", {})
+    )
     return resolved
 
 
@@ -342,11 +251,6 @@ def resolve_catalog(
         mode = target.get("mode", "scan")
         if mode != "scan":
             continue
-        target_kind = target.get("target_kind", "function")
-        if target_kind not in {"field", "function", "global"}:
-            raise CatalogError(
-                f"{target_id}: unsupported target kind {target_kind!r}"
-            )
 
         resolved_candidates: list[tuple[int, int, int]] = []
         locator_report: list[dict[str, Any]] = []
@@ -379,40 +283,21 @@ def resolve_catalog(
             if not matches:
                 current_report["status"] = "not-found"
                 continue
-            if len(matches) != 1 and target_kind != "field":
+            if len(matches) != 1:
                 current_report["status"] = "ambiguous"
                 raise CatalogError(
                     f"{target_id}: locator {locator_index} is ambiguous "
                     f"({len(matches)} matches)"
                 )
 
-            match_values = {
-                _resolve_locator(
-                    adapter, target_id, target_kind, locator, match_address
-                )
-                for match_address in matches
-            }
-            if len(match_values) != 1:
-                current_report["status"] = "ambiguous-values"
-                formatted = ", ".join(
-                    f"0x{value:X}" for value in sorted(match_values)
-                )
-                raise CatalogError(
-                    f"{target_id}: locator {locator_index} matched "
-                    f"{len(matches)} field instructions with disagreeing "
-                    f"values ({formatted})"
-                )
-            resolved = next(iter(match_values))
-            resolved_candidates.append((resolved, locator_index, matches[0]))
-            current_report["status"] = (
-                "resolved-consensus" if len(matches) > 1 else "resolved"
+            resolved = _resolve_locator(
+                adapter, target_id, locator, matches[0]
             )
-            if target_kind == "field":
-                current_report["resolved_value"] = f"0x{resolved:X}"
-            else:
-                current_report["resolved_rva"] = (
-                    f"0x{resolved - image_base:X}"
-                )
+            resolved_candidates.append((resolved, locator_index, matches[0]))
+            current_report["status"] = "resolved"
+            current_report["resolved_rva"] = (
+                f"0x{resolved - image_base:X}"
+            )
 
         if not resolved_candidates:
             if target.get("required", True):
@@ -427,155 +312,12 @@ def resolve_catalog(
             )
 
         resolved_value = resolved_candidates[0][0]
-        if target_kind == "field":
-            results[target_id] = resolved_value
-            report.append(
-                {
-                    "id": target_id,
-                    "target_kind": target_kind,
-                    "resolved_value": f"0x{resolved_value:X}",
-                    "locators": locator_report,
-                }
-            )
-        else:
-            resolved_rva = resolved_value - image_base
-            results[target_id] = resolved_rva
-            report.append(
-                {
-                    "id": target_id,
-                    "target_kind": target_kind,
-                    "resolved_rva": f"0x{resolved_rva:X}",
-                    "locators": locator_report,
-                }
-            )
-
-    return results, report
-
-
-def resolve_reflection_fields(
-    adapter: Any,
-    catalog: Mapping[str, Any],
-    fixture_sha256: str | None = None,
-) -> tuple[dict[str, int], list[dict[str, Any]]]:
-    """Resolve relative fields from reflection-registration string xrefs.
-
-    The IDA adapter supplies the architecture-specific instruction decoding.
-    This pure-Python layer applies per-group base addends and enforces that
-    every usable xref and every alternative locator agree on one field value.
-    """
-
-    results: dict[str, int] = {}
-    report: list[dict[str, Any]] = []
-
-    for target in catalog.get("targets", []):
-        if target.get("mode", "scan") != "reflection_field":
-            continue
-
-        target_id = target.get("id")
-        if not target_id:
-            raise CatalogError("reflection field target is missing id")
-        if target_id in results:
-            raise CatalogError(
-                f"duplicate reflection field target id: {target_id}"
-            )
-        if target.get("target_kind") != "field":
-            raise CatalogError(
-                f"{target_id}: reflection targets must use target_kind 'field'"
-            )
-
-        resolved_candidates: list[int] = []
-        locator_report: list[dict[str, Any]] = []
-        for locator_index, locator in enumerate(target.get("locators", [])):
-            fixture_allowlist = locator.get("fixtures")
-            if fixture_allowlist and fixture_sha256 not in fixture_allowlist:
-                locator_report.append(
-                    {
-                        "locator": locator_index,
-                        "property": locator.get("property", ""),
-                        "status": "skipped-fixture",
-                        "matches": [],
-                    }
-                )
-                continue
-
-            property_name = str(locator.get("property", ""))
-            if not property_name:
-                raise CatalogError(
-                    f"{target_id}: reflection locator {locator_index} "
-                    "is missing property"
-                )
-            base_registers = [
-                str(register).lower()
-                for register in locator.get("base_registers", [])
-            ]
-            raw_candidates = adapter.find_reflection_field(
-                property_name,
-                base_registers,
-                int(locator.get("max_instructions", 16)),
-            )
-            base_addend = int(locator.get("base_addend", 0))
-            values = {
-                int(candidate["displacement"]) + base_addend
-                for candidate in raw_candidates
-            }
-            current_report: dict[str, Any] = {
-                "locator": locator_index,
-                "property": property_name,
-                "matches": [
-                    {
-                        "xref": f"0x{int(candidate['xref']):X}",
-                        "displacement": (
-                            f"0x{int(candidate['displacement']):X}"
-                        ),
-                    }
-                    for candidate in raw_candidates
-                ],
-            }
-            locator_report.append(current_report)
-
-            if not raw_candidates:
-                current_report["status"] = "not-found"
-                continue
-            if len(values) != 1:
-                current_report["status"] = "ambiguous-values"
-                formatted = ", ".join(
-                    f"0x{value:X}" for value in sorted(values)
-                )
-                raise CatalogError(
-                    f"{target_id}: reflection locator {locator_index} "
-                    f"disagrees ({formatted})"
-                )
-
-            resolved = next(iter(values))
-            _validate_scalar(
-                target_id, resolved, locator.get("validations", {})
-            )
-            resolved_candidates.append(resolved)
-            current_report["status"] = (
-                "resolved-consensus"
-                if len(raw_candidates) > 1
-                else "resolved"
-            )
-            current_report["resolved_value"] = f"0x{resolved:X}"
-
-        if not resolved_candidates:
-            if target.get("required", True):
-                raise CatalogError(f"{target_id}: no reflection locator matched")
-            continue
-        distinct = set(resolved_candidates)
-        if len(distinct) != 1:
-            formatted = ", ".join(f"0x{value:X}" for value in sorted(distinct))
-            raise CatalogError(
-                f"{target_id}: reflection locators disagree ({formatted})"
-            )
-
-        resolved_value = resolved_candidates[0]
-        results[target_id] = resolved_value
+        resolved_rva = resolved_value - image_base
+        results[target_id] = resolved_rva
         report.append(
             {
                 "id": target_id,
-                "target_kind": "field",
-                "resolved_value": f"0x{resolved_value:X}",
+                "resolved_rva": f"0x{resolved_rva:X}",
                 "locators": locator_report,
             }
         )

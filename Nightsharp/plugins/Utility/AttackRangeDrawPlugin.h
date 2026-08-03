@@ -36,12 +36,10 @@ public:
         }
 
         const Vec3 position = player.Position();
-        const float baseRange = player.AttackRange();
-        const float boundingRadius = player.BoundingRadius();
         float drawRange = SDK::Utils::AutoAttack::GetRealAutoAttackRange(player);
 
         if (!IsSaneRange(drawRange)) {
-            drawRange = baseRange + std::max(0.0f, boundingRadius);
+            drawRange = player.AttackRange();
         }
 
         if (!position.IsValid() || position.IsZero() || !IsSaneRange(drawRange)) {
@@ -49,10 +47,7 @@ public:
         }
 
         DrawWorldCircle(position, drawRange, 0xAA66FF66u, 2.0f);
-        if (IsSaneRange(boundingRadius)) {
-            DrawWorldCircle(position, boundingRadius, 0x88FFD13Du, 1.0f);
-        }
-        DrawLabel(position, baseRange, boundingRadius, drawRange);
+        DrawLabel(position, drawRange);
     }
 
 private:
@@ -67,10 +62,7 @@ private:
         SDK::Drawing::DrawCircle(center, radius, color, thickness, 64);
     }
 
-    static void DrawLabel(const Vec3& center,
-                          float baseRange,
-                          float boundingRadius,
-                          float drawRange) {
+    static void DrawLabel(const Vec3& center, float drawRange) {
         Vec2 screen{};
         if (!SDK::Drawing::WorldToScreen(center, screen)) {
             return;
@@ -80,9 +72,7 @@ private:
         std::snprintf(
             text,
             sizeof(text),
-            "AA %.0f + radius %.0f = %.0f",
-            baseRange,
-            boundingRadius,
+            "AA %.0f",
             drawRange);
         SDK::Drawing::DrawText(screen.x + 12.0f, screen.y - 24.0f, 0xFFFFFFFFu, text);
     }

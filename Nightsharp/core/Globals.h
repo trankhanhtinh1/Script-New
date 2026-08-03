@@ -3,7 +3,10 @@
 #include <Windows.h>
 #include <cstddef>
 #include <cstdint>
+#include <source_location>
 #include <type_traits>
+
+#include "../OffsetCrashLogger.h"
 
 namespace Globals {
 
@@ -122,13 +125,21 @@ namespace Globals {
     }
 
     template <typename T>
-    inline T Read(uintptr_t addr) {
+    inline T Read(
+        uintptr_t addr,
+        const std::source_location& location =
+            std::source_location::current()) {
         static_assert(std::is_trivially_copyable_v<T>,
                       "Globals::Read<T> only supports trivially-copyable types");
         if (!IsValidPtr(addr)) {
             return T{};
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            addr,
+            sizeof(T),
+            location);
         __try {
             return *reinterpret_cast<T*>(addr);
         }
@@ -138,13 +149,22 @@ namespace Globals {
     }
 
     template <typename T>
-    inline bool Write(uintptr_t addr, T value) {
+    inline bool Write(
+        uintptr_t addr,
+        T value,
+        const std::source_location& location =
+            std::source_location::current()) {
         static_assert(std::is_trivially_copyable_v<T>,
                       "Globals::Write<T> only supports trivially-copyable types");
         if (!IsValidPtr(addr)) {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Write,
+            addr,
+            sizeof(T),
+            location);
         __try {
             *reinterpret_cast<T*>(addr) = value;
             return true;
@@ -154,11 +174,19 @@ namespace Globals {
         }
     }
 
-    inline uintptr_t ReadPtr(uintptr_t addr) {
-        return Read<uintptr_t>(addr);
+    inline uintptr_t ReadPtr(
+        uintptr_t addr,
+        const std::source_location& location =
+            std::source_location::current()) {
+        return Read<uintptr_t>(addr, location);
     }
 
-    inline bool ReadStdString(uintptr_t nameAddr, char* out, int maxOut) {
+    inline bool ReadStdString(
+        uintptr_t nameAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
@@ -173,6 +201,11 @@ namespace Globals {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            nameAddr,
+            0x20,
+            location);
         __try {
             const size_t len = *reinterpret_cast<const size_t*>(nameAddr + 0x10);
             const size_t capacity = *reinterpret_cast<const size_t*>(nameAddr + 0x18);
@@ -200,7 +233,12 @@ namespace Globals {
         }
     }
 
-    inline bool ReadRiotString(uintptr_t nameAddr, char* out, int maxOut) {
+    inline bool ReadRiotString(
+        uintptr_t nameAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
@@ -213,6 +251,11 @@ namespace Globals {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            nameAddr,
+            0x18,
+            location);
         __try {
             const int len = *reinterpret_cast<const int*>(nameAddr + 0x10);
             const int maxLen = *reinterpret_cast<const int*>(nameAddr + 0x14);
@@ -240,23 +283,34 @@ namespace Globals {
         }
     }
 
-    inline bool ReadGameString(uintptr_t nameAddr, char* out, int maxOut) {
+    inline bool ReadGameString(
+        uintptr_t nameAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             return false;
         }
         out[0] = 0;
 
-        if (ReadStdString(nameAddr, out, maxOut)) {
+        if (ReadStdString(nameAddr, out, maxOut, location)) {
             return true;
         }
-        return ReadRiotString(nameAddr, out, maxOut);
+        return ReadRiotString(nameAddr, out, maxOut, location);
     }
 
     inline bool IsRuntimeStringChar(unsigned char ch) {
         return ch >= 0x20 && ch <= 0x7E;
     }
 
-    inline bool CopyRuntimeChars(uintptr_t src, size_t len, char* out, int maxOut) {
+    inline bool CopyRuntimeChars(
+        uintptr_t src,
+        size_t len,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1 || len == 0 || len >= static_cast<size_t>(maxOut) ||
             !IsValidPtr(src)) {
             if (out && maxOut > 0) {
@@ -265,6 +319,11 @@ namespace Globals {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            src,
+            len,
+            location);
         __try {
             for (size_t i = 0; i < len; ++i) {
                 const unsigned char ch =
@@ -284,7 +343,12 @@ namespace Globals {
         }
     }
 
-    inline bool ReadCompactString(uintptr_t nameAddr, char* out, int maxOut) {
+    inline bool ReadCompactString(
+        uintptr_t nameAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
@@ -297,6 +361,11 @@ namespace Globals {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            nameAddr,
+            0x10,
+            location);
         __try {
             const uintptr_t ptr = *reinterpret_cast<const uintptr_t*>(nameAddr);
             const int len = *reinterpret_cast<const int*>(nameAddr + 0x8);
@@ -305,7 +374,12 @@ namespace Globals {
                 out[0] = 0;
                 return false;
             }
-            return CopyRuntimeChars(ptr, static_cast<size_t>(len), out, maxOut);
+            return CopyRuntimeChars(
+                ptr,
+                static_cast<size_t>(len),
+                out,
+                maxOut,
+                location);
         }
         __except (1) {
             out[0] = 0;
@@ -313,7 +387,12 @@ namespace Globals {
         }
     }
 
-    inline bool ReadCString(uintptr_t strAddr, char* out, int maxOut) {
+    inline bool ReadCString(
+        uintptr_t strAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             if (out && maxOut > 0) {
                 out[0] = 0;
@@ -326,6 +405,11 @@ namespace Globals {
             return false;
         }
 
+        NightSharpDebug::OffsetCrashLog::RecordMemory(
+            NightSharpDebug::OffsetCrashLog::Operation::Read,
+            strAddr,
+            static_cast<std::size_t>(maxOut),
+            location);
         __try {
             int count = 0;
             for (; count < (maxOut - 1); ++count) {
@@ -352,36 +436,49 @@ namespace Globals {
         }
     }
 
-    inline bool ReadRuntimeStringField(uintptr_t fieldAddr, char* out, int maxOut) {
+    inline bool ReadRuntimeStringField(
+        uintptr_t fieldAddr,
+        char* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || maxOut <= 1) {
             return false;
         }
         out[0] = 0;
 
-        if (ReadGameString(fieldAddr, out, maxOut)) {
+        if (ReadGameString(fieldAddr, out, maxOut, location)) {
             return true;
         }
 
-        if (ReadCompactString(fieldAddr, out, maxOut)) {
+        if (ReadCompactString(fieldAddr, out, maxOut, location)) {
             return true;
         }
 
-        const uintptr_t ptr = Read<uintptr_t>(fieldAddr);
-        if (ReadCString(ptr, out, maxOut)) {
+        const uintptr_t ptr = Read<uintptr_t>(fieldAddr, location);
+        if (ReadCString(ptr, out, maxOut, location)) {
             return true;
         }
 
-        return ReadCString(fieldAddr, out, maxOut);
+        return ReadCString(fieldAddr, out, maxOut, location);
     }
 
-    inline int ReadPtrArray(uintptr_t listAddr, int count, uintptr_t* out, int maxOut) {
+    inline int ReadPtrArray(
+        uintptr_t listAddr,
+        int count,
+        uintptr_t* out,
+        int maxOut,
+        const std::source_location& location =
+            std::source_location::current()) {
         if (!out || count <= 0 || count > maxOut || !IsValidPtr(listAddr)) {
             return 0;
         }
 
         __try {
             for (int i = 0; i < count; ++i) {
-                out[i] = Read<uintptr_t>(listAddr + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
+                out[i] = Read<uintptr_t>(
+                    listAddr + static_cast<uintptr_t>(i) * sizeof(uintptr_t),
+                    location);
             }
             return count;
         }

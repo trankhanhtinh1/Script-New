@@ -10,7 +10,6 @@ entries, mid-function semantic blocks, or xrefs to globals/callees.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import re
 import sys
@@ -31,12 +30,6 @@ REPOSITORY_ROOT = TOOLS_DIR.parent
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
-import tools.offset_scanner_core as _scanner_core  # noqa: E402
-
-# IDA keeps Python modules alive between Script File invocations.  Reload the
-# pure scanner core so rerunning an updated script never uses stale resolvers.
-_scanner_core = importlib.reload(_scanner_core)
-
 from tools.offset_scanner_core import (  # noqa: E402
     CatalogError,
     MemoryAdapter,
@@ -44,7 +37,6 @@ from tools.offset_scanner_core import (  # noqa: E402
     atomic_write_text,
     find_pattern_offsets,
     resolve_catalog,
-    resolve_reflection_fields,
 )
 
 
@@ -66,9 +58,6 @@ class IdaMemoryAdapter(MemoryAdapter):
         self._segments = []
         self._segment_bytes: dict[tuple[int, int], bytes] = {}
         self._pattern_cache: dict[tuple[str, tuple[str, ...]], list[int]] = {}
-        self._reflection_cache: dict[
-            tuple[str, tuple[str, ...], int], list[dict[str, int]]
-        ] = {}
         for index in range(ida_segment.get_segm_qty()):
             segment = ida_segment.getnseg(index)
             if segment is not None:
@@ -101,8 +90,14 @@ class IdaMemoryAdapter(MemoryAdapter):
                     )
                 segment_data = bytes(segment_data)
                 self._segment_bytes[bounds] = segment_data
-            offsets = find_pattern_offsets(segment_data, pattern)
+            remaining = 2 - len(matches)
+            offsets = find_pattern_offsets(
+                segment_data, pattern, max_results=remaining
+            )
             matches.extend(bounds[0] + offset for offset in offsets)
+            if len(matches) > 1:
+                self._pattern_cache[cache_key] = matches
+                return list(matches)
         self._pattern_cache[cache_key] = matches
         return list(matches)
 
@@ -135,144 +130,6 @@ class IdaMemoryAdapter(MemoryAdapter):
     def image_base(self) -> int:
         return int(self._ida_nalt.get_imagebase())
 
-    def find_reflection_field(
-        self,
-        property_name: str,
-        base_registers: Sequence[str],
-        max_instructions: int,
-    ) -> list[dict[str, int]]:
-        """Find reflected field registration calls and decode their RCX field.
-
-        Riot's registration helpers receive `(fieldAddress, owner, name, ...)`
-        in RCX/RDX/R8.  A semantic string xref therefore survives code motion
-        while the LEA/MOV that defines RCX exposes the relative field value.
-        """
-
-        import ida_bytes
-        import ida_funcs
-        import ida_idaapi
-        import ida_idp
-        import ida_ua
-        import idautils
-        import idc
-
-        cache_key = (
-            property_name,
-            tuple(register.lower() for register in base_registers),
-            max_instructions,
-        )
-        cached = self._reflection_cache.get(cache_key)
-        if cached is not None:
-            return [dict(candidate) for candidate in cached]
-
-        needle = property_name.encode("utf-8") + b"\0"
-        string_addresses: list[int] = []
-        for segment in self._segments:
-            segment_name = self._ida_segment.get_segm_name(segment)
-            if segment_name not in {".rdata", ".data"}:
-                continue
-            cursor = int(segment.start_ea)
-            segment_end = int(segment.end_ea)
-            while cursor < segment_end:
-                string_address = int(
-                    ida_bytes.find_bytes(
-                        needle, cursor, range_end=segment_end
-                    )
-                )
-                if string_address == ida_idaapi.BADADDR:
-                    break
-                string_addresses.append(string_address)
-                cursor = string_address + 1
-
-        allowed_bases = {register.lower() for register in base_registers}
-        candidates: list[dict[str, int]] = []
-        for string_address in string_addresses:
-            for xref in idautils.XrefsTo(string_address):
-                xref_address = int(xref.frm)
-                function = ida_funcs.get_func(xref_address)
-                if function is None:
-                    continue
-
-                string_instruction = ida_ua.insn_t()
-                if ida_ua.decode_insn(
-                    string_instruction, xref_address
-                ) <= 0:
-                    continue
-                if idc.print_insn_mnem(xref_address).lower() != "lea":
-                    continue
-                destination = ida_idp.get_reg_name(
-                    string_instruction.ops[0].reg, 8
-                ).lower()
-                if destination != "r8":
-                    continue
-                if int(string_instruction.ops[1].addr) != string_address:
-                    continue
-
-                call_address: int | None = None
-                cursor_ea = xref_address
-                for _ in range(max_instructions):
-                    cursor_ea = int(idc.next_head(cursor_ea, function.end_ea))
-                    if cursor_ea >= function.end_ea:
-                        break
-                    if idc.print_insn_mnem(cursor_ea).lower() == "call":
-                        call_address = cursor_ea
-                        break
-                if call_address is None:
-                    continue
-
-                rcx_displacement: int | None = None
-                rcx_base = ""
-                cursor_ea = call_address
-                for _ in range(max_instructions):
-                    cursor_ea = int(
-                        idc.prev_head(cursor_ea, function.start_ea)
-                    )
-                    if cursor_ea < function.start_ea:
-                        break
-                    instruction = ida_ua.insn_t()
-                    if ida_ua.decode_insn(instruction, cursor_ea) <= 0:
-                        continue
-                    first_operand = instruction.ops[0]
-                    if first_operand.type != ida_ua.o_reg:
-                        continue
-                    first_register = ida_idp.get_reg_name(
-                        first_operand.reg, 8
-                    ).lower()
-                    if first_register != "rcx":
-                        continue
-
-                    mnemonic = idc.print_insn_mnem(cursor_ea).lower()
-                    source = instruction.ops[1]
-                    if mnemonic == "mov" and source.type == ida_ua.o_reg:
-                        rcx_base = ida_idp.get_reg_name(
-                            source.reg, 8
-                        ).lower()
-                        rcx_displacement = 0
-                    elif mnemonic == "lea" and source.type == ida_ua.o_displ:
-                        rcx_base = ida_idp.get_reg_name(
-                            source.reg, 8
-                        ).lower()
-                        rcx_displacement = int(source.addr)
-                    break
-
-                if rcx_displacement is None:
-                    continue
-                if allowed_bases and rcx_base not in allowed_bases:
-                    continue
-                candidates.append(
-                    {
-                        "xref": xref_address,
-                        "call": call_address,
-                        "function": int(function.start_ea),
-                        "displacement": rcx_displacement,
-                    }
-                )
-
-        self._reflection_cache[cache_key] = [
-            dict(candidate) for candidate in candidates
-        ]
-        return candidates
-
 
 def _input_metadata() -> dict[str, object]:
     import ida_nalt
@@ -301,7 +158,7 @@ def _validate_fixture(
     expected_by_id = {
         target["id"]: target.get("expected", {}).get(sha256)
         for target in catalog.get("targets", [])
-        if target.get("mode", "scan") in {"scan", "reflection_field"}
+        if target.get("mode", "scan") == "scan"
     }
     missing = sorted(
         target_id
@@ -359,20 +216,9 @@ def run() -> dict[str, object]:
     metadata = _input_metadata()
     adapter = IdaMemoryAdapter()
 
-    rva_results, rva_report = resolve_catalog(
+    results, target_report = resolve_catalog(
         adapter, catalog, fixture_sha256=str(metadata["sha256"]).lower()
     )
-    field_results, field_report = resolve_reflection_fields(
-        adapter, catalog, fixture_sha256=str(metadata["sha256"]).lower()
-    )
-    overlap = sorted(set(rva_results) & set(field_results))
-    if overlap:
-        raise CatalogError(
-            "target(s) resolved by both RVA and field scanners: "
-            + ", ".join(overlap)
-        )
-    results = {**rva_results, **field_results}
-    target_report = rva_report + field_report
     version = _validate_fixture(catalog, metadata, results)
     rendered = apply_replacements(template, results)
     rendered = _render_source_metadata(
@@ -400,7 +246,7 @@ def run() -> dict[str, object]:
         REPORT_PATH, json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     )
     print(
-        f"[NightSharp] resolved {len(results)} target(s) for {version}; "
+        f"[NightSharp] resolved {len(results)} RVA(s) for {version}; "
         f"wrote {OUTPUT_PATH}"
     )
     return report

@@ -812,11 +812,50 @@ public:
         return ObjectDetail::ReadEngineInvulnerable(a);
     }
 
+    // Gameplay ("bounding") radius — the radius the *server* uses for range
+    // checks (auto attacks, castRangeUseBoundingBoxes spells, collision).
+    //
+    // IMPORTANT (verified in IDA, League of Legends.exe):
+    //   Offset::All::Radius (obj+0x7C) is written by the object constructor
+    //   from the *"SelectionRadius"* character-record property
+    //   (`sub_E3DB90`: `*((float *)a1 + 31) = ...("SelectionRadius")`, i.e.
+    //   31*4 = 0x7C).  SelectionRadius is the *click/hitbox* radius used by
+    //   mouse picking and is noticeably LARGER than the gameplay radius
+    //   (e.g. Jinx: selection 110 vs gameplay 65).  The neighbouring
+    //   "PathfindingCollisionRadius" property is stored obfuscated at
+    //   obj+0x73C and cannot be read directly.
+    //
+    // Using SelectionRadius in the auto-attack formula
+    // (AttackRange + selfRadius + targetRadius) inflated every reported range
+    // by ~45-90 units per unit involved, which is why the drawn AA circle was
+    // visibly bigger than the real one. Prefer the static `gameplayRadius`
+    // from UnitData.json and only fall back to the runtime field when the
+    // unit is unknown to GameData.
     float BoundingRadius() const {
         const uintptr_t a = Address();
         if (!a) return 0.0f;
-        const float radius = ::Core::Objects::ReadBoundingRadius(a);
-        return radius > 0.0f ? radius : 65.0f;
+
+        if (const float g = GameplayRadiusFromGameData(); g > 0.0f) {
+            return g;
+        }
+
+        const float r = ::Core::Objects::ReadBoundingRadius(a);
+        if (!(r == r) || r < 0.0f || r > 10000.0f) {
+            return 65.0f;
+        }
+        // No static data for this unit: approximate the gameplay radius from
+        // the selection radius instead of returning the (too large) raw value.
+        return SelectionToGameplayRadius(r);
+    }
+
+    // Raw obj+0x7C value — the *selection* (click/hitbox) radius. Exposed for
+    // code that genuinely wants the picking radius rather than the gameplay
+    // one (e.g. mouse-over / HUD hit tests).
+    float SelectionRadius() const {
+        const uintptr_t a = Address();
+        if (!a) return 0.0f;
+        const float r = ::Core::Objects::ReadBoundingRadius(a);
+        return (r == r && r >= 0.0f && r <= 10000.0f) ? r : 65.0f;
     }
 
     Vector3 Position() const {
@@ -981,6 +1020,38 @@ protected:
     mutable ::Core::Objects::ObjectHandle handle_ = {};
 
 private:
+    // Static `gameplayRadius` from UnitData.json for this unit, or 0 when the
+    // unit is unknown / data isn't loaded yet.
+    float GameplayRadiusFromGameData() const {
+        if (!SDK::Data::GameData::IsLoaded()) {
+            return 0.0f;
+        }
+        const std::string& charName = CharacterName();
+        if (charName.empty()) {
+            return 0.0f;
+        }
+        const auto* info = SDK::Data::GameData::GetUnitInfoByName(charName);
+        if (!info) {
+            return 0.0f;
+        }
+        const float g = info->gameplayRadius;
+        return (g == g && g > 0.0f && g <= 1000.0f) ? g : 0.0f;
+    }
+
+    // Fallback when GameData has no entry for the unit: derive an approximate
+    // gameplay radius from the runtime *selection* radius.
+    //
+    // Riot's character records keep both values; sampling Map11 units gives a
+    // consistent selection >= gameplay relationship with a ~0.62 mean ratio
+    // (e.g. Jinx 110/65, Garen 120/65, lane minions 65/48, SRU_Baron 350/280).
+    // Scaling by 0.62 and clamping to a sane unit range lands much closer to
+    // the real hitbox than returning the raw selection radius did.
+    static float SelectionToGameplayRadius(float selectionRadius) {
+        constexpr float kSelectionToGameplay = 0.62f;
+        const float approx = selectionRadius * kSelectionToGameplay;
+        return std::clamp(approx, 1.0f, selectionRadius);
+    }
+
     inline static std::string s_cachedChampionName;
 };
 

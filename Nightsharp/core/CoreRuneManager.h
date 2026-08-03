@@ -45,33 +45,16 @@ struct ManagerSnapshot {
     bool IsValid() const { return Globals::IsValidPtr(address); }
 };
 
-// Resolve IRuneManager through the same virtual getter used by
-// /liveclientdata/activeplayerrunes. The current embedded member is +0x50B8,
-// but using the getter avoids coupling runtime access to that layout value.
+// Resolve the IRuneManager sub-object address from AIHeroClient.
+// vfunc[0x808] returns hero + 0x50E8 (confirmed via sub_7FF72E8CA650).
+// The RuneManager is an EMBEDDED sub-object (not a pointer), so we use
+// hero + offset directly (constructor sub_7FF72E8A5DA0 writes the vtable
+// at player+0x50E8).
 inline uintptr_t Resolve(uintptr_t hero) {
     if (!Globals::IsValidPtr(hero)) {
         return 0;
     }
-
-    const uintptr_t vtable = Globals::Read<uintptr_t>(hero);
-    if (!Globals::IsValidPtr(vtable)) {
-        return 0;
-    }
-    const uintptr_t getter = Globals::Read<uintptr_t>(
-        vtable + Offset::RuneManagerRuntime::GetRuneManagerVFunc);
-    if (!Globals::IsValidPtr(getter)) {
-        return 0;
-    }
-
-    using GetRuneManagerFn = uintptr_t(__fastcall*)(uintptr_t);
-    __try {
-        const uintptr_t manager =
-            reinterpret_cast<GetRuneManagerFn>(getter)(hero);
-        return Globals::IsValidPtr(manager) ? manager : 0;
-    }
-    __except (1) {
-        return 0;
-    }
+    return hero + Offset::AIHeroClient::RuneManager;
 }
 
 inline RuneData ReadRuneData(uintptr_t data) {

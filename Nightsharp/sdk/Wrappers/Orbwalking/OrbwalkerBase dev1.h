@@ -2208,7 +2208,7 @@ protected:
         if (Bool(drawingMenu_, "DrawAttackRange", true)) {
             float drawRange = Utils::AutoAttack::GetRealAutoAttackRange(player);
             if (!IsSaneDrawRange(drawRange)) {
-                drawRange = player.AttackRange() + std::max(0.0f, player.BoundingRadius());
+                drawRange = player.AttackRange();
             }
             if (playerPosition.IsValid() && !playerPosition.IsZero() && IsSaneDrawRange(drawRange)) {
                 Drawing::DrawCircle(playerPosition, drawRange, 0xAA66FF66u, 2.0f, 64);
@@ -2993,11 +2993,13 @@ protected:
     }
 
     bool PlayerCanAttack(const AIHeroClient& player) const {
-        return CoreAttackableUnit::CanAttack(player.Address());
+        constexpr std::uint32_t canAttack = 0x1;
+        return (CoreAttackableUnit::ActionState1(player.Address()) & canAttack) != 0;
     }
 
     bool PlayerCanMove(const AIHeroClient& player) const {
-        return CoreAttackableUnit::CanMove(player.Address());
+        constexpr std::uint32_t canMove = 0x4;
+        return (CoreAttackableUnit::ActionState1(player.Address()) & canMove) != 0;
     }
 
     bool CanAttackWithWindWall(const AttackableUnit& target) const {

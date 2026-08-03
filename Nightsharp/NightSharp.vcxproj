@@ -160,6 +160,7 @@
     <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
     <ClInclude Include="CrashTrace.h" />
+    <ClInclude Include="OffsetCrashLogger.h" />
     <ClInclude Include="crt_shim.h" />
     <ClInclude Include="DebugLog.h" />
     <ClInclude Include="FpsDropDebug.h" />

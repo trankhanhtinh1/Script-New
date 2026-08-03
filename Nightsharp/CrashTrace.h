@@ -1,8 +1,10 @@
 #pragma once
 
 #include "CrashBridge.h"
+#include "OffsetCrashLogger.h"
 
 #include <intrin.h>
+#include <source_location>
 
 #pragma intrinsic(_ReturnAddress)
 
@@ -17,10 +19,21 @@ enum class LifecycleAction : std::uint32_t {
 inline void Record(
     nscrash::TraceTag tag,
     std::uint64_t arg0 = 0,
-    std::uint64_t arg1 = 0) noexcept {
+    std::uint64_t arg1 = 0,
+    const std::source_location& location =
+        std::source_location::current()) noexcept {
+    const auto programCounter =
+        reinterpret_cast<std::uint64_t>(_ReturnAddress());
+    const std::uint64_t arguments[] = {arg0, arg1};
+    OffsetCrashLog::RecordTrace(
+        static_cast<std::uint32_t>(tag),
+        static_cast<std::uintptr_t>(programCounter),
+        arguments,
+        _countof(arguments),
+        location);
     CrashBridge::Trace(
         tag,
-        reinterpret_cast<std::uint64_t>(_ReturnAddress()),
+        programCounter,
         arg0,
         arg1);
 }
@@ -33,10 +46,28 @@ inline std::uint64_t RecordDetailed(
     std::uint64_t arg3,
     std::uint64_t arg4,
     std::uint64_t arg5,
-    const char* text) noexcept {
+    const char* text,
+    const std::source_location& location =
+        std::source_location::current()) noexcept {
+    const auto programCounter =
+        reinterpret_cast<std::uint64_t>(_ReturnAddress());
+    const std::uint64_t arguments[] = {
+        arg0,
+        arg1,
+        arg2,
+        arg3,
+        arg4,
+        arg5,
+    };
+    OffsetCrashLog::RecordTrace(
+        static_cast<std::uint32_t>(tag),
+        static_cast<std::uintptr_t>(programCounter),
+        arguments,
+        _countof(arguments),
+        location);
     return CrashBridge::TraceDetailed(
         tag,
-        reinterpret_cast<std::uint64_t>(_ReturnAddress()),
+        programCounter,
         arg0,
         arg1,
         arg2,
@@ -58,10 +89,32 @@ inline std::uint64_t RecordExtended(
     std::uint64_t arg7,
     std::uint64_t arg8,
     std::uint64_t arg9,
-    const char* text) noexcept {
+    const char* text,
+    const std::source_location& location =
+        std::source_location::current()) noexcept {
+    const auto programCounter =
+        reinterpret_cast<std::uint64_t>(_ReturnAddress());
+    const std::uint64_t arguments[] = {
+        arg0,
+        arg1,
+        arg2,
+        arg3,
+        arg4,
+        arg5,
+        arg6,
+        arg7,
+        arg8,
+        arg9,
+    };
+    OffsetCrashLog::RecordTrace(
+        static_cast<std::uint32_t>(tag),
+        static_cast<std::uintptr_t>(programCounter),
+        arguments,
+        _countof(arguments),
+        location);
     return CrashBridge::TraceExtended(
         tag,
-        reinterpret_cast<std::uint64_t>(_ReturnAddress()),
+        programCounter,
         arg0,
         arg1,
         arg2,

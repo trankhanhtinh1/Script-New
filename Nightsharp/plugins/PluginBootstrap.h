@@ -12,7 +12,7 @@
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/Orbwalker7UP/Orbwalker7UP.h"
 #include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
-#include "Core/PlayerBuffDebugPlugin.h"
+#include "Core/BuffInspectorPlugin.h"
 #include "Core/PlayerEventFilterPlugin.h"
 #include "Core/SpellTrackingDebugPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
@@ -71,7 +71,7 @@ namespace PluginBootstrap {
     inline void ApplyDebugAutoLoadOverrides() {
         static constexpr const char* kDebugPluginIds[] = {
             "core.player_event_filter",
-            "core.player_buff_debug",
+            "core.buff_inspector",
             "core.spell_tracking_debug",
             "utility.attack_range_draw_test",
             "utility.movement_state_draw",
@@ -148,7 +148,7 @@ namespace PluginBootstrap {
         PluginManager::Get().Register<Orbwalker7UPPlugin>();
         PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
         PluginManager::Get().Register<PlayerEventFilterPlugin>();
-        PluginManager::Get().Register<PlayerBuffDebugPlugin>();
+        PluginManager::Get().Register<BuffInspectorPlugin>();
         PluginManager::Get().Register<SpellTrackingDebugPlugin>();
         NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
 

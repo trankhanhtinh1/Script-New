@@ -32,6 +32,9 @@ namespace PluginRegistry {
         bool       (*RuntimeUnload)(void*) = nullptr;
         void       (*RuntimeMenu)(void*) = nullptr;
         bool         HasRuntimeMenuUI = false;
+        // Được set khi OnMenu của plugin ném exception (vd: stack overflow).
+        // Dùng để hiển thị cảnh báo trong Runtime Panel thay vì panel trống.
+        bool         RuntimeMenuCrashed = false;
         bool       (*CanLoadFn)(void*) = nullptr;
         bool         CanLoadCached = true;
         bool         CanLoadChecked = false;
@@ -255,6 +258,7 @@ namespace PluginRegistry {
             }
             if (ok) {
                 p.Loaded = true;
+                p.RuntimeMenuCrashed = false;
             }
         }
     }
@@ -357,10 +361,19 @@ namespace PluginRegistry {
                           GetExceptionInformation())) {
                 NightSharpDebug::Logf("[PluginRegistry] RuntimeMenu crashed; disabling id=%s",
                                       p.InternalId ? p.InternalId : "");
+                // Đánh dấu để UI báo lỗi rõ ràng. Trước đây chỉ gán
+                // RuntimeMenu = nullptr nên panel mở ra hoàn toàn trống,
+                // không có cách nào biết plugin đã crash.
+                p.RuntimeMenuCrashed = true;
                 p.Loaded = false;
                 p.RuntimeMenu = nullptr;
             }
         }
+    }
+
+    // Trả về true nếu OnMenu của plugin đã crash và bị vô hiệu hoá.
+    inline bool DidRuntimeMenuCrash(int idx) {
+        return idx >= 0 && idx < PluginCount && Plugins[idx].RuntimeMenuCrashed;
     }
 
     inline const char* CategoryName(PluginCategory category) {

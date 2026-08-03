@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "DebugLog.h"
+#include "OffsetCrashLogger.h"
 #include "Core/CoreBypass.h"
 
 #pragma comment(lib, "Dbghelp.lib")
@@ -599,6 +600,11 @@ inline LONG LogAndDumpException(const char* stage, EXCEPTION_POINTERS* exception
 
     if (exceptionPointers && exceptionPointers->ExceptionRecord &&
         IsSeriousException(exceptionPointers->ExceptionRecord->ExceptionCode)) {
+        NightSharpDebug::OffsetCrashLog::WriteCrashReport(
+            stage,
+            exceptionPointers,
+            g_module,
+            reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
         NightSharpDebug::CrashBridge::CaptureException(
             nscrash::CrashKind::Handled,
             stage,
@@ -612,6 +618,11 @@ inline LONG WINAPI UnhandledFilter(EXCEPTION_POINTERS* exceptionPointers) {
     NightSharpDebug::LogException("UnhandledExceptionFilter", exceptionPointers);
     if (exceptionPointers && exceptionPointers->ExceptionRecord &&
         IsSeriousException(exceptionPointers->ExceptionRecord->ExceptionCode)) {
+        NightSharpDebug::OffsetCrashLog::WriteCrashReport(
+            "UnhandledExceptionFilter",
+            exceptionPointers,
+            g_module,
+            reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
         NightSharpDebug::CrashBridge::CaptureException(
             nscrash::CrashKind::Unhandled,
             "UnhandledExceptionFilter",
@@ -645,6 +656,11 @@ inline LONG WINAPI VectoredHandler(EXCEPTION_POINTERS* exceptionPointers) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
+    NightSharpDebug::OffsetCrashLog::WriteCrashReport(
+        "VectoredFirstChance",
+        exceptionPointers,
+        g_module,
+        reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr)));
     NightSharpDebug::CrashBridge::ObserveFirstChance(exceptionPointers);
 
     return EXCEPTION_CONTINUE_SEARCH;
