@@ -104,6 +104,8 @@ private:
     static constexpr int kAttackRetryDelayMs = 45;
     static constexpr int kPendingEventGraceMs = 150;
     static constexpr int kDuplicateAttackEventMs = 80;
+    static constexpr int kPostFlashAttackGraceMs = 260;
+
     static constexpr float kMoveDuplicateDistance = 55.0f;
     static constexpr float kMaxPingLeadMs = 90.0f;
     // Attack safety is a fraction of the current attack cycle, clamped so it
@@ -171,6 +173,9 @@ private:
     bool EvadeOwnsActions(int now) const;
     bool EvadeBlocksMovement(int now) const;
     bool EvadeBlocksAttack(int now) const;
+    bool IsPostFlashAttackGraceActive(int now) const;
+    void ClearPostFlashAttackGrace();
+
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;
     float LiveAttackSpeedMod(const AIHeroClient& player) const;

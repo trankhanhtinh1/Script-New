@@ -29,6 +29,24 @@ inline int LastQCastTick = 0;
 inline int LastWCastTick = 0;
 inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
+inline constexpr int kCombatWAfterRLockMs = 900;
+inline constexpr int kCombatWRetryThrottleMs = 400;
+inline constexpr float kMinimumRocketJumpDisplacement = 200.0f;
+
+// Buster Shot displaces the target.  A jump request immediately after it is
+// based on stale target state and usually becomes an accidental second commit.
+inline bool RecentBusterShot(int lockMs = kCombatWAfterRLockMs) {
+    const int now = Now();
+    return LastRCastTick > 0 && now >= LastRCastTick &&
+        now - LastRCastTick < std::max(0, lockMs);
+}
+
+inline bool MeaningfulRocketJumpLanding(const Vector3& landing) {
+    const auto player = GameObjects::Player();
+    return player.IsValid() && landing.IsValid() && !landing.IsZero() &&
+        player.Position().Distance2D(landing) >=
+            kMinimumRocketJumpDisplacement;
+}
 inline int LastAfterAttackTick = 0;
 inline int LastAfterAttackTargetId = 0;
 inline int PendingRapidFireTargetId = 0;
@@ -178,6 +196,17 @@ inline bool TargetedSpellReach(const AIBaseClient& target) {
             TargetedRange() + target.BoundingRadius();
 }
 
+inline bool RocketJumpTargetIsWorthCommitting(
+    const AIHeroClient& target,
+    const Vector3& landing,
+    Mode mode) {
+    return ShouldCommitTargetedRocketJump(
+        mode == Mode::Combo || mode == Mode::Harass,
+        RecentBusterShot(),
+        target.IsValid() && !InAutoAttackRange(target),
+        MeaningfulRocketJumpLanding(landing));
+}
+
 inline void ReleaseTristanaFocus() {
     (void)AICombatTargetCoordinator::FocusLease::Release(
         kFocusLeaseOwnerId);
@@ -325,13 +354,22 @@ inline JumpContext BuildJumpContext(const AIHeroClient& target,
 
 inline bool CastWOnTarget(const AIHeroClient& target,
                           Mode mode) {
-    if (!CanUse(1, mode) || !Engine::ValidEnemy(target, 940.0f) ||
+    // W is a high-commit execute/engage tool, not generic automatic KS.
+    if (mode != Mode::Combo && mode != Mode::Harass) return false;
+    if (!CanUse(1, mode) ||
+        !Engine::ValidEnemy(target, 940.0f) ||
         ControllerHelpers::HasSpellShieldOrImmunity(target) ||
-        !CastThrottlePassed(LastWCastTick, 80)) return false;
+        !CastThrottlePassed(LastWCastTick, kCombatWRetryThrottleMs)) {
+        return false;
+    }
     SDK::PredictionOutput prediction{};
     const bool hit = PredictionHits(
         1, target, SDK::HitChance::High, false, &prediction);
     const Vector3 landing = prediction.GetCastPosition();
+    if (!hit ||
+        !RocketJumpTargetIsWorthCommitting(target, landing, mode)) {
+        return false;
+    }
     const int maximumEnemies = Slider(JumpMenu, "MaximumEnemies", 1);
     auto context = BuildJumpContext(target, prediction, maximumEnemies);
     context.PredictionHits = context.PredictionHits && hit;
@@ -346,6 +384,7 @@ inline bool CastWFlee(const AIHeroClient& threat) {
         !CastThrottlePassed(LastWCastTick, 80)) return false;
     const Vector3 landing = Engine::BestSafePosition(
         Engine::ResolvedSpecs[1], threat, AimPolicy::SafeCursor);
+    if (!MeaningfulRocketJumpLanding(landing)) return false;
     const int maximumEnemies = Slider(JumpMenu, "MaximumEnemies", 1);
     JumpContext context{};
     context.PredictionHits = landing.IsValid() && !landing.IsZero();
@@ -417,11 +456,18 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     const bool eWall = TargetProjectileWall(2, target, 45.0f);
     const bool e = CanUse(2, mode, true) && TargetedSpellReach(target) &&
         attack && !spellShield && !eWall && !HasExplosiveCharge(target);
+    const bool wCandidate =
+        mode == Mode::Combo || mode == Mode::Harass;
     SDK::PredictionOutput wPrediction{};
-    const bool wReady = CanUse(1, mode) && distance <= 940.0f &&
+    const bool wReady = wCandidate && !RecentBusterShot() &&
+        CanUse(1, mode) &&
+        distance <= 940.0f &&
         PredictionHits(1, target, SDK::HitChance::High, false, &wPrediction);
-    const bool w = wReady && !spellShield && ShouldRocketJump(BuildJumpContext(
-        target, wPrediction, Slider(JumpMenu, "MaximumEnemies", 1)));
+    const Vector3 wLanding = wPrediction.GetCastPosition();
+    const bool w = wReady && !spellShield &&
+        RocketJumpTargetIsWorthCommitting(target, wLanding, mode) &&
+        ShouldRocketJump(BuildJumpContext(
+            target, wPrediction, Slider(JumpMenu, "MaximumEnemies", 1)));
     const bool rReady = CanUse(3, mode) && TargetedSpellReach(target) &&
         !spellShield;
     const auto rContext = BuildBusterContext(target, mode, false);
@@ -576,8 +622,9 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
             return context;
         });
     if (!Engine::ValidEnemy(target)) return false;
-    if (CastR(target, Mode::Automatic, false, false)) return true;
-    return CastWOnTarget(target, Mode::Automatic);
+    // Never spend Rocket Jump from the generic automatic kill-secure loop.
+    // R is targeted and does not sacrifice Tristana's position.
+    return CastR(target, Mode::Automatic, false, false);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {

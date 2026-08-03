@@ -59,9 +59,33 @@ static float CurrentQRange() {
 static bool AllowTurret() {
     return Key(KeyMenu, "AllowTurret");
 }
+static bool IsEnemyHeroInAutoAttackRange() {
+    const auto target = Orbwalker::GetTarget();
+    return target.IsValid() &&
+           target.IsHero() &&
+           target.IsEnemy() &&
+           AutoAttack::InAutoAttackRange(target);
+}
+
+static bool ShouldHoldQForAutoAttack() {
+    if (Orbwalker::IsWindingUp()) {
+        return true;
+    }
+
+    return IsEnemyHeroInAutoAttackRange() &&
+           ::Plugins::KuroAIO::CanAttack(250);
+}
+
+static bool CastQSpell(Spell& spell, const Vector3& position) {
+    return !ShouldHoldQForAutoAttack() && spell.Cast(position);
+}
+
 
 static bool CastPosition(Spell& spell, const Vector3& position) {
     if (!spell.IsReady() || position.IsZero()) {
+        return false;
+    }
+    if ((&spell == &Q || &spell == &Q3) && ShouldHoldQForAutoAttack()) {
         return false;
     }
     if ((&spell == &Q || &spell == &Q3) &&
@@ -324,7 +348,7 @@ static bool CastQDuringDash() {
                     player.Position(),
                     player.Position().Extend(Game::CursorPos(), Q3.Range),
                     Q3.Width * 0.5f)) &&
-                Q.Cast(player.Position())) {
+                CastQSpell(Q, player.Position())) {
                 LastQ = now;
                 return true;
             }
@@ -334,7 +358,7 @@ static bool CastQDuringDash() {
     // Check minions in EQ radius when in clear mode
     if (IsClearMode() && Bool(ClearMenu, "QClear")) {
         for (const auto& minion : ClearUnits(radius + 30.0f)) {
-            if (Q.Cast(player.Position())) {
+            if (CastQSpell(Q, player.Position())) {
                 LastQ = now;
                 return true;
             }
@@ -350,7 +374,7 @@ static bool CastEQCircleQ() {
         return false;
     }
 
-    if (Q.Cast(player.Position())) {
+    if (CastQSpell(Q, player.Position())) {
         LastQ = SDK::Variables::TickCount();
         return true;
     }
@@ -639,10 +663,12 @@ static bool TryEQFlash(bool requireKey) {
         return false;
     }
 
-    Q.Cast(player.Position());
+    const bool qCast = CastQSpell(Q, player.Position());
     if (Flash.Cast(flashPosition)) {
         LastEQFlash = now;
-        LastQ = now;
+        if (qCast) {
+            LastQ = now;
+        }
         return true;
     }
     return false;
@@ -835,7 +861,7 @@ static void Clear() {
             const auto units = ClearUnits(Q3.Range);
             const auto farm = Q3.GetLineFarmLocation(units, Q3.Width);
             if (farm.MinionsHit >= Slider(ClearMenu, "Q3Minions", 3)) {
-                if (Q3.Cast(Vector3::From2D(farm.Position))) {
+                if (CastQSpell(Q3, Vector3::From2D(farm.Position))) {
                     LastQ = SDK::Variables::TickCount();
                     return;
                 }
@@ -851,14 +877,14 @@ static void Clear() {
             }
         }
 
-        if (lastHit.IsValid() && Q.Cast(lastHit.Position())) {
+        if (lastHit.IsValid() && CastQSpell(Q, lastHit.Position())) {
             LastQ = SDK::Variables::TickCount();
             return;
         }
 
         if (IsClearMode() || Key(KeyMenu, "AutoStack")) {
             for (const auto& unit : ClearUnits(Q.Range)) {
-                if (Q.Cast(unit.Position())) {
+                if (CastQSpell(Q, unit.Position())) {
                     LastQ = SDK::Variables::TickCount();
                     return;
                 }
@@ -928,7 +954,7 @@ static void AutoStack() {
     }
 
     for (const auto& unit : ClearUnits(Q.Range)) {
-        if (Q.Cast(unit.Position())) {
+        if (CastQSpell(Q, unit.Position())) {
             LastQ = SDK::Variables::TickCount();
             return;
         }

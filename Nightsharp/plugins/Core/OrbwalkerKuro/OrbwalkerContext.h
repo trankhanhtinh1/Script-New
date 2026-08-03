@@ -34,6 +34,9 @@ struct OrbwalkerRuntimeContext {
     int lastAfterAttackStartTick = 0;
     int lastAttackDoCastWaitTick = 0;
     int lastAutoAttackResetTick = 0;
+    int postFlashAttackGraceUntilTick = 0;
+    int postFlashTargetNetworkId = 0;
+
     int pendingAkshanSecondShotTick = 0;
     int lastFakeMoveClickTick = 0;
     int lastFakeAttackClickTick = 0;

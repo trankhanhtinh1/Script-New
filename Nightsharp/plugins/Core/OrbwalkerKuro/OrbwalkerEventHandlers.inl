@@ -3,6 +3,53 @@
 using namespace ::SDK;
 
 namespace OrbwalkerKuro {
+namespace OrbwalkingDetail {
+
+inline bool IsFlashSpellName(const char* name) {
+    return name && name[0] &&
+           (_stricmp(name, "flash") == 0 ||
+            ::Core::Objects::ContainsInsensitive(name, "summonerflash") ||
+            ::Core::Objects::ContainsInsensitive(name, "summoner_flash"));
+}
+
+inline bool IsLocalFlashSpell(
+    const Events::ProcessSpellEventArgs& args) {
+    if (!Events::IsLocalPlayer(args.Sender)) {
+        return false;
+    }
+
+    const char* names[] = {
+        args.SpellName,
+        args.ScriptName,
+        args.SpellSlotName,
+        args.PayloadSpellName,
+        args.MissileName,
+        args.PayloadMissileName,
+    };
+    for (const char* name : names) {
+        if (IsFlashSpellName(name)) {
+            return true;
+        }
+    }
+
+    if (args.Slot != static_cast<int>(SpellSlot::Summoner1) &&
+        args.Slot != static_cast<int>(SpellSlot::Summoner2)) {
+        return false;
+    }
+
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) {
+        return false;
+    }
+    const auto spell = player.Spellbook().GetSpell(
+        static_cast<SpellSlot>(args.Slot));
+    return IsFlashSpellName(spell.Name().c_str()) ||
+           IsFlashSpellName(spell.ScriptName().c_str()) ||
+           IsFlashSpellName(spell.IconName().c_str());
+}
+
+} // namespace OrbwalkingDetail
+
 
 inline void OrbwalkerBase::OnGameUpdateStatic(const Events::GameUpdateEventArgs& args) {
     (void)args;
@@ -86,6 +133,7 @@ inline void OrbwalkerBase::ReconcileApheliosReturnMissile() {
     }
     context_.apheliosReturnMissileNetworkId = observedNetworkId;
 }
+
 inline void OrbwalkerBase::ReconcileRetainedObjects() {
     const auto isLive = [](const AttackableUnit& object) {
         const std::uint32_t networkId = object.CachedNetworkId();
@@ -107,6 +155,11 @@ inline void OrbwalkerBase::ReconcileRetainedObjects() {
         context_.cachedTargetTick = -1;
         context_.cachedShouldWaitTick = -1;
     }
+    if (context_.postFlashTargetNetworkId != 0 &&
+        !GameObjects::IsNetworkIdAlive(
+            static_cast<std::uint32_t>(context_.postFlashTargetNetworkId))) {
+        ClearPostFlashAttackGrace();
+    }
 }
 
 inline void OrbwalkerBase::OnGameUpdate() {
@@ -114,6 +167,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
     ReconcileRetainedObjects();
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
+        ClearPostFlashAttackGrace();
         context_.activeMode = OrbwalkingMode::None;
         return;
     }
@@ -122,12 +176,14 @@ inline void OrbwalkerBase::OnGameUpdate() {
 
     if (context_.activeMode == OrbwalkingMode::None) {
         ClearPendingAttackState();
+        ClearPostFlashAttackGrace();
         return;
     }
 
     const int now = Tick();
-
-
+    if (!IsPostFlashAttackGraceActive(now)) {
+        ClearPostFlashAttackGrace();
+    }
 
     if (EvadeOwnsActions(now)) {
         ExpirePendingAttack();
@@ -146,9 +202,15 @@ inline void OrbwalkerBase::OnGameUpdate() {
     }
 
     const Vector3 position = context_.orbwalkerPosition.IsZero() ? Game::CursorPos() : context_.orbwalkerPosition;
-    const AttackableUnit target = CanAttack() ? GetTarget() : AttackableUnit();
+    const bool preservePostFlashTarget =
+        IsPostFlashAttackGraceActive(now);
+    const AttackableUnit target =
+        (CanAttack() || preservePostFlashTarget)
+            ? GetTarget()
+            : AttackableUnit();
     Orbwalk(target, position);
 }
+
 
 inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const bool isAttack = IsLocalAutoAttack(args);
@@ -220,6 +282,23 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    if (OrbwalkingDetail::IsLocalFlashSpell(args)) {
+        const int now = Tick();
+        int targetNetworkId = context_.pendingAttackTargetNetworkId;
+        if (targetNetworkId <= 0 && context_.lastTarget.IsValid()) {
+            targetNetworkId = context_.lastTarget.NetworkId();
+        }
+        if (targetNetworkId <= 0 && context_.cachedTarget.IsValid()) {
+            targetNetworkId = context_.cachedTarget.NetworkId();
+        }
+        context_.postFlashTargetNetworkId = targetNetworkId > 0
+            ? targetNetworkId
+            : 0;
+        context_.postFlashAttackGraceUntilTick =
+            now + kPostFlashAttackGraceMs;
+        context_.cachedTargetTick = -1;
+    }
+
     const bool isAttack = IsLocalAutoAttack(args);
     const AutoAttackResetMatch resetMatch = GetLocalAutoAttackResetMatch(args);
 

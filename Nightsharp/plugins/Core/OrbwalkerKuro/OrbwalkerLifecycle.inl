@@ -149,5 +149,15 @@ inline bool OrbwalkerBase::IsAutoAttackReset(std::string name) {
 inline int OrbwalkerBase::Tick() {
     return Game::TickCount();
 }
+inline bool OrbwalkerBase::IsPostFlashAttackGraceActive(int now) const {
+    return context_.postFlashTargetNetworkId > 0 &&
+           context_.postFlashAttackGraceUntilTick > now;
+}
+
+inline void OrbwalkerBase::ClearPostFlashAttackGrace() {
+    context_.postFlashAttackGraceUntilTick = 0;
+    context_.postFlashTargetNetworkId = 0;
+}
+
 
 } // namespace OrbwalkerKuro

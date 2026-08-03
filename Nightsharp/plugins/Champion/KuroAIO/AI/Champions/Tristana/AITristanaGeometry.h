@@ -89,4 +89,12 @@ inline bool ShouldRocketJump(const JumpContext& context) {
     return context.Lethal && !context.BetterAttack;
 }
 
+inline bool ShouldCommitTargetedRocketJump(bool combatMode,
+                                           bool recentBusterShot,
+                                           bool targetOutsideAttackRange,
+                                           bool meaningfulLanding) {
+    return combatMode && !recentBusterShot &&
+           targetOutsideAttackRange && meaningfulLanding;
+}
+
 } // namespace Plugins::KuroAIO::AI::Controllers::Tristana::Geometry

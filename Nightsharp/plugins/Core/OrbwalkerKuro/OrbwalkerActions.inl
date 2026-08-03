@@ -427,6 +427,17 @@ inline void OrbwalkerBase::Orbwalk(const AttackableUnit& target, const Vector3& 
             return;
         }
     }
+    const int now = Tick();
+    if (target.IsValid() &&
+        IsPostFlashAttackGraceActive(now) &&
+        context_.postFlashTargetNetworkId == target.NetworkId() &&
+        OrbwalkingDetail::IsValidCurrentKuroAutoAttackTarget(
+            GameObjects::Player(),
+            target,
+            SDK::KuroTargetSelector::ActiveService())) {
+        return;
+    }
+
 
     OrbProbe p("Orb-Move");
     if (CanMove(0.0f, false)) {

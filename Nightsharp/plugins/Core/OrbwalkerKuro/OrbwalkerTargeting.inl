@@ -246,6 +246,7 @@ MakeKuroAutoAttackExecutionRequest(const AIHeroClient& player,
         ? RouteKind::NonProjectile
         : RouteKind::AutoAttack;
     request.Route.Start = player.ServerPosition();
+    request.Route.IntendedTargetId = target.NetworkId();
     request.Route.ProjectileWallCheck =
         request.Route.Kind != RouteKind::NonProjectile;
     return request;
@@ -883,6 +884,58 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     const int forceTargetNetworkId = context_.forceTarget.IsValid()
         ? context_.forceTarget.NetworkId()
         : 0;
+
+    auto cacheTarget = [&](const AttackableUnit& target) -> AttackableUnit {
+        context_.cachedTarget = target;
+        context_.cachedTargetTick = now;
+        context_.cachedTargetMode = mode;
+        context_.cachedTargetForceTargetNetworkId = forceTargetNetworkId;
+        return target;
+    };
+
+    const auto selection = advanced
+        ? advanced->GetSelectionState()
+        : SDK::KuroTargetSelector::SelectionState{};
+    const bool explicitTargetOverride =
+        context_.forceTarget.IsValid() ||
+        (advanced &&
+         (selection.ManualOverrideActive ||
+          (selection.PreferSelectedTarget &&
+           selection.SelectedNetworkId > 0)));
+    const auto focusLease =
+        Plugins::AICombatTargetCoordinator::FocusLease::Snapshot(now);
+    const bool hardFocusLease =
+        focusLease.Status ==
+            Plugins::AICombatTargetCoordinator::LeaseStatus::Active &&
+        focusLease.Strength ==
+            Plugins::AICombatTargetCoordinator::LeaseStrength::Hard &&
+        !focusLease.ManualOverride &&
+        focusLease.TargetNetworkId > 0;
+
+    const bool postFlashGrace = IsPostFlashAttackGraceActive(now);
+    if (!postFlashGrace) {
+        ClearPostFlashAttackGrace();
+    }
+    const bool preservePostFlashTarget =
+        postFlashGrace &&
+        !explicitTargetOverride &&
+        !hardFocusLease &&
+        (mode == OrbwalkingMode::Combo ||
+         mode == OrbwalkingMode::Hybrid ||
+         mode == OrbwalkingMode::Harass);
+    if (preservePostFlashTarget && context_.postFlashTargetNetworkId > 0) {
+        const AttackableUnit postFlashTarget =
+            GameObjects::GetUnitByNetworkId<AttackableUnit>(
+                context_.postFlashTargetNetworkId);
+        if (postFlashTarget.IsValid() &&
+            postFlashTarget.IsHero() &&
+            OrbwalkingDetail::IsValidCurrentKuroAutoAttackTarget(
+                player, postFlashTarget, advanced)) {
+            return cacheTarget(postFlashTarget);
+        }
+        ClearPostFlashAttackGrace();
+    }
+
     constexpr int kTargetSelectionThrottleMs = 35;
     // Farm targets are deliberately re-evaluated every call. A target that was
     // killable 20 ms ago may now already be covered by an allied projectile;
@@ -899,14 +952,6 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             return context_.cachedTarget;
         }
     }
-
-    auto cacheTarget = [&](const AttackableUnit& target) -> AttackableUnit {
-        context_.cachedTarget = target;
-        context_.cachedTargetTick = now;
-        context_.cachedTargetMode = mode;
-        context_.cachedTargetForceTargetNetworkId = forceTargetNetworkId;
-        return target;
-    };
 
     ReadAttackTimingsFromMemory(player);
     const int farmDelay = menu_.DelayFarm();
