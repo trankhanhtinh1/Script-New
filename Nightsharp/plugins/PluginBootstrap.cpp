@@ -12,7 +12,7 @@
 #include "Core/ObjectLifecycleTestPlugins.h"
 #include "Core/OrbwalkerKuro/OrbwalkerKuroPlugin.h"
 #include "Core/TargetSelectorImpulse/TargetSelectorImpulsePlugin.h"
-//#include "Core/PlayerBuffDebugPlugin.h"
+#include "Core/BuffInspectorPlugin.h"
 #include "Utility/AttackRangeDrawPlugin.h"
 #include "Utility/IsDeadDebugPlugin.h"
 #include "Utility/MovementStateDrawPlugin.h"
@@ -54,7 +54,7 @@ const char* ChampionNameProvider() {
 void ApplyDebugAutoLoadOverrides() {
     static constexpr const char* kDebugPluginIds[] = {
         "core.player_event_filter",
-        "core.player_buff_debug",
+        "core.buff_inspector",
         "core.spell_tracking_debug",
         "utility.attack_range_draw_test",
         "utility.movement_state_draw",
@@ -135,7 +135,7 @@ void EnsureRegistered() {
     Registration::RegisterKuroTargetSelector(PluginManager::Get());
     PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
     Registration::RegisterPlayerEventFilter(PluginManager::Get());
-    //PluginManager::Get().Register<PlayerBuffDebugPlugin>();
+    PluginManager::Get().Register<BuffInspectorPlugin>();
     Registration::RegisterSpellTrackingDebug(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins complete");
 

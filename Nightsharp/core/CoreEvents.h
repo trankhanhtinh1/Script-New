@@ -561,9 +561,7 @@ namespace detail {
 
         Read(object + Offset::All::NetId, info.NetworkId);
         Read(object + Offset::All::Index, info.Index);
-        std::uint8_t teamSlot = 0;
-        Read(object + Offset::All::Team, teamSlot);
-        info.Team = teamSlot;
+        Read(object + Offset::All::Team, info.Team);
         info.IsDead = ::Core::Objects::IsDead(object);
         info.IsVisible = ::Core::Objects::ReadVisibleFlag(object);
         Read(object + Offset::All::Position, info.Position);
@@ -819,23 +817,16 @@ namespace detail {
     }
 
     inline ObjectInfo ReadSpellbookOwner(uintptr_t spellbook) {
-        if (!spellbook) {
-            return {};
+        uint32_t casterNetworkId = 0;
+        Read(spellbook + Offset::SpellBookLayout::CasterNetId, casterNetworkId);
+        ObjectInfo owner = ResolveObjectByNetworkId(casterNetworkId);
+        if (owner.IsValid()) {
+            return owner;
         }
 
-        if (spellbook > Offset::SpellRuntime::SpellBookOffset) {
-            const uintptr_t embeddedOwner =
-                spellbook - Offset::SpellRuntime::SpellBookOffset;
-            if (LooksLikeObject(embeddedOwner)) {
-                return ReadObject(embeddedOwner);
-            }
-        }
-
-        uint32_t casterIndex = 0;
-        Read(spellbook + Offset::SpellBookLayout::CasterIndex, casterIndex);
-        return casterIndex != 0
-            ? ResolveObjectByIndex(static_cast<int>(casterIndex))
-            : ObjectInfo{};
+        uintptr_t ownerAddress = 0;
+        Read(spellbook + Offset::SpellBookLayout::Owner, ownerAddress);
+        return LooksLikeObject(ownerAddress) ? ReadObject(ownerAddress) : ObjectInfo{};
     }
 
     inline bool IsSlotValid(int slot) {
@@ -890,7 +881,9 @@ namespace detail {
             return slot;
         }
 
-        return -1;
+        uint8_t activeSlot = 0xFF;
+        Read(castInfo + Offset::SpellCastInfoLayout::SpellSlot, activeSlot);
+        return IsSlotValid(static_cast<int>(activeSlot)) ? static_cast<int>(activeSlot) : -1;
     }
 
     inline bool ReadBoolByte(uintptr_t address) {
@@ -933,13 +926,17 @@ namespace detail {
         }
 
         int slot = -1;
-        Read(cast + Offset::ActiveSpellCastLayout::SpellSlot, slot);
+        Read(cast + Offset::SpellCastInfoLayout::SpellSlot, slot);
         if (slot != expectedSlot) {
-            return false;
+            uint8_t slotByte = 0xFF;
+            Read(cast + Offset::SpellCastInfoLayout::SpellSlot, slotByte);
+            if (static_cast<int>(slotByte) != expectedSlot) {
+                return false;
+            }
         }
 
-        ReadVector3(cast + Offset::ActiveSpellCastLayout::StartPosition, start);
-        ReadVector3(cast + Offset::ActiveSpellCastLayout::EndPosition, end);
+        ReadVector3(cast + Offset::SpellCastInfoLayout::StartPosition, start);
+        ReadVector3(cast + Offset::SpellCastInfoLayout::EndPosition, end);
         return IsValidCastLine(start, end);
     }
 
@@ -1062,7 +1059,10 @@ namespace detail {
                 static_cast<uint32_t>(rdx & 0xFFFFFFFFu));
         } else if (id == Hooks::OnDelete) {
             args.Object = ReadObjectIdentity(rcx);
-        } else if (id != Hooks::OnGameUpdate) {
+        } else if (id != Hooks::OnGameUpdate &&
+                   id != Hooks::OnBuffAdd &&
+                   id != Hooks::OnBuffRemove &&
+                   id != Hooks::OnBuffUpdate) {
             args.Object = ReadObject(rcx);
         }
         return args;
@@ -1358,14 +1358,14 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
     //   R8  = buff-name string-view
     //   R9  = owner + 0x2B0
     //
-    // sub_2234A0:
+    // sub_21F220:
     //   RDX = same per-unit event bridge
     //   R8  = buff-name string-view
-    //   R9  = current stack/count value
+    //   R9/Stack0/Stack1 = native counter payload
     BuffEventArgs args{};
     args.Raw = raw;
     args.EventBridge = static_cast<uintptr_t>(raw.Rdx);
-    args.BuffAddress = detail::FirstBuffArg(raw);
+    args.BuffAddress = 0;
 
     detail::CopyStringView(
         raw.R8,
@@ -1393,10 +1393,24 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
             }
         }
     } else if (raw.Id == Hooks::OnBuffUpdate) {
-        args.Count = static_cast<int>(raw.R9);
+        auto decodeCount = [](uintptr_t value) -> int {
+            return value <= static_cast<uintptr_t>(::CoreBuffs::Detail::kMaxStackCount)
+                ? static_cast<int>(value)
+                : 0;
+        };
+
+        args.Count = decodeCount(raw.Stack0);
+        if (args.Count <= 0) {
+            args.Count = decodeCount(raw.R9);
+        }
+        if (args.Count <= 0) {
+            args.Count = decodeCount(raw.Stack1);
+        }
     }
 
-    detail::AssignBuffSender(args, raw);
+    if (!args.Sender.IsValid()) {
+        args.Sender = detail::ResolveBuffBridgeOwner(args.EventBridge);
+    }
     if (args.Sender.IsValid()) {
         detail::RememberBuffBridgeOwner(args.EventBridge, args.Sender.Ptr);
     }
@@ -1624,9 +1638,10 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
     //     internal state, then uses fields in CastInfo (RDX) for slot/flags.
     //     So no offset on RCX directly stores the caster NetId.
     //
-    // Strategy: SpellBookClient is embedded in its owner, so subtract the
-    // verified SpellBookOffset and validate the resulting object. The book's
-    // +0x30 CasterIndex is the fallback; +0x08/+0xA8 are not owner/net-id fields.
+    // Strategy: identify the owning hero by comparing RCX to every live
+    // hero pointer + SpellRuntime::SpellBookOffset. The first match wins. This is O(N) over
+    // heroes (≤10 in a normal game) per hook invocation and is the only
+    // way that survives reset across builds.
     ProcessSpellEventArgs args{};
     args.Raw = raw;
     args.Spellbook = raw.Rcx;
@@ -1636,15 +1651,54 @@ inline ProcessSpellEventArgs DecodeProcessSpell(const RawEventArgs& raw) {
         detail::FillCastInfoFields(args.CastInfo, args);
     }
 
-    args.Sender = detail::ReadSpellbookOwner(raw.Rcx);
+    // 1) Primary: RCX - SpellBookOffset should be a hero pointer. Validate by reading
+    //    NetId from that candidate and resolving through ObjectManager.
+    if (raw.Rcx > Offset::SpellRuntime::SpellBookOffset) {
+        const uintptr_t candidateHero =
+            raw.Rcx - Offset::SpellRuntime::SpellBookOffset;
+        if (detail::LooksLikeObject(candidateHero)) {
+            args.Sender = detail::ReadObject(candidateHero);
+        }
+    }
 
-    // Last resort: CastInfo.SrcIndex.
+    // 2) Fallback: SpellBook owner pointer (+0x08) — works on some builds.
+    if (!args.Sender.IsValid() && raw.Rcx) {
+        uintptr_t ownerPtr = 0;
+        detail::Read(raw.Rcx + Offset::SpellBookLayout::Owner, ownerPtr);
+        if (detail::LooksLikeObject(ownerPtr)) {
+            args.Sender = detail::ReadObject(ownerPtr);
+        }
+    }
+
+    // 3) Fallback: probe known NetId offsets on RCX.
+    if (!args.Sender.IsValid() && raw.Rcx) {
+        constexpr uint32_t kOffsets[] = { 0xA8, 0x98, 0x2DC };
+        for (uint32_t off : kOffsets) {
+            uint32_t netId = 0;
+            detail::Read(raw.Rcx + off, netId);
+            if (netId == 0 || netId == 0xFFFFFFFFu) {
+                continue;
+            }
+            ObjectInfo candidate = detail::ResolveObjectByNetworkId(netId);
+            if (!candidate.IsValid()) {
+                candidate = detail::ResolveObjectByIndex(static_cast<int>(netId));
+            }
+            if (candidate.IsValid()) {
+                args.Sender = candidate;
+                break;
+            }
+        }
+    }
+
+    // 4) Last resort: CastInfo.SrcIndex.
     if (!args.Sender.IsValid() && args.SourceIndex > 0) {
         args.Sender = detail::ResolveObjectByIndex(args.SourceIndex);
     }
 
     if (args.Sender.IsValid()) {
         args.CasterNetworkId = args.Sender.NetworkId;
+    } else if (args.Spellbook) {
+        detail::Read(args.Spellbook + Offset::SpellBookLayout::CasterNetId, args.CasterNetworkId);
     }
 
     // Same silent-Q hazard as DecodeDoCast: ReadEventSlot() walks candidate
@@ -1810,8 +1864,8 @@ inline StopCastEventArgs DecodeStopCast(const RawEventArgs& raw) {
     // active-cast vector — NOT a SpellBookClient — so reading +0x08/+0xA8 as
     // SpellBook layout yields garbage.
     //
-    // Strategy: first test whether RCX is the embedded SpellBookClient, then
-    // use the verified SrcIndex fields on the inner/outer cast variants.
+    // Strategy: try several candidate offsets to recover the caster network
+    // id, then validate by resolving each candidate through ObjectManager.
     // First valid hero wins. If nothing resolves, the sender stays empty and
     // IsLocalPlayer will (correctly) reject the event.
     StopCastEventArgs args{};
@@ -1826,52 +1880,42 @@ inline StopCastEventArgs DecodeStopCast(const RawEventArgs& raw) {
     args.ForceStop = !args.KeepAnimationPlaying;
 
     if (raw.Rcx) {
-        args.Sender = detail::ReadSpellbookOwner(raw.Rcx);
-
-        // Inner event/cast record uses +0xA0; the outer active object embeds
-        // that record at +0x08, so the same source index is at outer+0xA8.
-        constexpr uint32_t kOffsets[] = {
-            Offset::SpellCastInfoEventLayout::SrcIndex,
-            Offset::ActiveSpellCastLayout::InnerRecord +
-                Offset::SpellCastInfoEventLayout::SrcIndex,
-        };
+        // Try every offset where a 32-bit CasterNetId/SrcIndex is known to
+        // live across the SpellBook/SpellCast variants we may end up on:
+        //   +0xA8  → SpellBookLayout::CasterNetId  (canonical spellbook)
+        //   +0x98  → SpellCastInfoEventLayout::SrcIndex (active cast struct)
+        //   +0x2DC → SpellCastInfoLayout::CasterNetId (active-cast variant)
+        constexpr uint32_t kOffsets[] = { 0xA8, 0x98, 0x2DC };
         for (uint32_t off : kOffsets) {
-            if (args.Sender.IsValid()) {
-                break;
-            }
-            uint32_t sourceIndex = 0;
-            detail::Read(raw.Rcx + off, sourceIndex);
-            if (sourceIndex == 0 || sourceIndex == 0xFFFFFFFFu) {
+            uint32_t netId = 0;
+            detail::Read(raw.Rcx + off, netId);
+            if (netId == 0 || netId == 0xFFFFFFFFu) {
                 continue;
             }
-            const ObjectInfo candidate =
-                detail::ResolveObjectByIndex(static_cast<int>(sourceIndex));
+            // SrcIndex (+0x98) is an index, not a NetId, so try both lookups.
+            ObjectInfo candidate = detail::ResolveObjectByNetworkId(netId);
+            if (!candidate.IsValid()) {
+                candidate = detail::ResolveObjectByIndex(static_cast<int>(netId));
+            }
             if (candidate.IsValid()) {
                 args.Sender = candidate;
+                args.CasterNetworkId = candidate.NetworkId;
+                break;
             }
         }
 
-        if (args.Sender.IsValid()) {
-            args.CasterNetworkId = args.Sender.NetworkId;
-            args.Spellbook =
-                args.Sender.Ptr + Offset::SpellRuntime::SpellBookOffset;
+        // Fallback: classic spellbook owner pointer.
+        if (!args.Sender.IsValid()) {
+            args.Sender = detail::ReadSpellbookOwner(args.Spellbook);
+            if (args.Sender.IsValid()) {
+                args.CasterNetworkId = args.Sender.NetworkId;
+            }
         }
     }
 
-    uintptr_t activeCast = 0;
-    if (args.Spellbook) {
-        detail::Read(
-            args.Spellbook + Offset::SpellRuntime::ActiveSpellCast,
-            activeCast);
-    }
-    if (activeCast) {
-        detail::Read(
-            activeCast + Offset::ActiveSpellCastLayout::SpellSlot,
-            args.Slot);
-        if (!detail::IsSlotValid(args.Slot)) {
-            args.Slot = -1;
-        }
-    }
+    // ActiveSlot field is at +0xB4 on a real spellbook; harmless to read
+    // (errors caught by detail::Read SEH wrapper) even when RCX isn't one.
+    detail::Read(args.Spellbook + Offset::SpellBookLayout::ActiveSlot, args.Slot);
     return args;
 }
 

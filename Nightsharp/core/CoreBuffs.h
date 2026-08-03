@@ -1,16 +1,5 @@
 #pragma once
 
-// ============================================================================
-// CoreBuffs.h - Buff manager iteration and active buff queries
-// ----------------------------------------------------------------------------
-// High-performance Buff Manager with:
-//   1. Dynamic BuffManagerOffset scanning [0x2000..0x3800]
-//   2. FNV-1a Case-Insensitive String Hashing (O(1) integer matching)
-//   3. Thread-Local Per-Frame Snapshot Caching (0 RPM reads on repeated queries)
-//   4. Backward-compatible APIs for string & pre-hashed queries
-// ============================================================================
-
-#include "../DebugLog.h"
 #include "CoreRuntime.h"
 #include "CoreObjectManager.h"
 #include "Globals.h"
@@ -24,21 +13,54 @@
 #include <cmath>
 
 #if defined(_WIN32)
-#include <windows.h>   // lstrcmpiA
+#include <windows.h>
 #endif
 
 namespace CoreBuffs {
 
-    // Offset of the `char*` name field inside ScriptBaseBuff
-    constexpr uintptr_t kScriptBaseNameOffset = 0x8;
-
-    // ── Reuse Shared FNV-1a Hash Helpers from SDK::Utils ──
     using SDK::Utils::HashName;
     using SDK::Utils::HashNameLen;
     using SDK::Utils::StrEqualInsensitive;
 
     inline constexpr uint32_t kRecallHash = HashName("recall");
 
+    namespace Detail {
+        inline constexpr uintptr_t kScriptBaseNameOffset = 0x8;
+        inline constexpr int kMaxStackCount = 512;
+        inline constexpr int kMaxManagerEntries = 512;
+
+        inline bool ReadManagerVector(uintptr_t obj, uintptr_t& begin, uintptr_t& end, int& count) {
+            if (!Globals::IsValidPtr(obj)) return false;
+
+            const uintptr_t manager = obj + Offset::BuffManagerRuntime::BuffManagerOffset;
+            if (!Globals::IsValidPtr(manager)) return false;
+
+            begin = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
+            end = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
+            if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end < begin) {
+                return false;
+            }
+
+            const uintptr_t bytes = end - begin;
+            if (bytes == 0 || bytes % Offset::BuffEntryLayout::EntryStride != 0) {
+                return false;
+            }
+
+            const uintptr_t capacityEnd = Globals::Read<uintptr_t>(
+                manager + Offset::BuffManagerLayout::EntriesCapacityEnd);
+            if (Globals::IsValidPtr(capacityEnd) && capacityEnd < end) {
+                return false;
+            }
+
+            count = static_cast<int>(bytes / Offset::BuffEntryLayout::EntryStride);
+            return count > 0 && count <= kMaxManagerEntries;
+        }
+
+        inline bool IsValidStackCount(int count) {
+            return count >= 0 && count <= kMaxStackCount;
+        }
+
+    }
 
     struct BuffRef {
         uintptr_t address = 0;
@@ -48,40 +70,45 @@ namespace CoreBuffs {
         }
 
         int GetType() const {
+            if (!IsValid()) return -1;
             return static_cast<int>(Globals::Read<uint8_t>(address + Offset::BuffDataLayout::BuffType));
         }
 
         int GetStacks() const {
             if (!IsValid()) return 0;
 
-            const int count = Globals::Read<int>(
-                address + Offset::BuffDataLayout::BuffStackCount);
-            if (count >= 0 && count < 1000) {
-                return count;
-            }
-            return 0;
+            const int count = Globals::Read<int>(address + Offset::BuffDataLayout::BuffStackCount);
+            return Detail::IsValidStackCount(count) ? count : 0;
+        }
+
+        int GetLiveStackCount() const {
+            return GetStacks();
         }
 
         int GetCounterCurrent() const {
+            if (!IsValid()) return 0;
             return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterCurrent);
         }
 
         int GetCounterMax() const {
+            if (!IsValid()) return 0;
             return Globals::Read<int>(address + Offset::BuffDataLayout::BuffCounterMax);
         }
 
         float GetStartTime() const {
+            if (!IsValid()) return 0.0f;
             return Globals::Read<float>(address + Offset::BuffDataLayout::BuffStartTime);
         }
 
         float GetEndTime() const {
+            if (!IsValid()) return 0.0f;
             return Globals::Read<float>(address + Offset::BuffDataLayout::BuffEndTime);
         }
 
         float GetRemainingTime(float gameTime) const {
             const float endTime = GetEndTime();
             if (endTime <= 0.0f) return 0.0f;
-            return endTime > gameTime ? (endTime - gameTime) : 0.0f;
+            return endTime > gameTime ? endTime - gameTime : 0.0f;
         }
 
         bool IsPermanent() const {
@@ -89,24 +116,14 @@ namespace CoreBuffs {
         }
 
         bool IsActive(float gameTime) const {
-            if (!IsValid()) return false;
+            if (!IsValid() || GetLiveStackCount() <= 0) return false;
 
-            const int liveCount = Globals::Read<int>(
-                address + Offset::BuffDataLayout::BuffStackCount);
-            if (liveCount == 0 || GetStacks() <= 0) {
-                return false;
-            }
-
-            const auto scriptBase = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffScriptPtr);
-            if (!Globals::IsValidPtr(scriptBase)) {
-                return false;
-            }
+            const uintptr_t scriptBase = Globals::Read<uintptr_t>(
+                address + Offset::BuffDataLayout::BuffScriptPtr);
+            if (!Globals::IsValidPtr(scriptBase)) return false;
 
             const float endTime = GetEndTime();
-            if (endTime <= 0.0f) {
-                return true;
-            }
-            return endTime > gameTime;
+            return endTime <= 0.0f || endTime > gameTime;
         }
 
         bool ReadName(char* out, int maxOut) const {
@@ -115,28 +132,26 @@ namespace CoreBuffs {
                 return false;
             }
 
-            const auto scriptBase = Globals::Read<uintptr_t>(address + Offset::BuffDataLayout::BuffScriptPtr);
+            const uintptr_t scriptBase = Globals::Read<uintptr_t>(
+                address + Offset::BuffDataLayout::BuffScriptPtr);
             if (!Globals::IsValidPtr(scriptBase)) {
                 out[0] = 0;
                 return false;
             }
 
-            const auto charPtr = Globals::Read<uintptr_t>(scriptBase + kScriptBaseNameOffset);
-            return Globals::ReadCString(charPtr, out, maxOut);
+            const uintptr_t namePtr = Globals::Read<uintptr_t>(
+                scriptBase + Detail::kScriptBaseNameOffset);
+            return Globals::ReadCString(namePtr, out, maxOut);
         }
 
         uint32_t GetCasterNetworkId() const {
-            if (!IsValid()) return 0;
+            if (!IsValid() || GetLiveStackCount() <= 0) return 0;
 
-            const auto arrayBegin = Globals::Read<uintptr_t>(
+            const uintptr_t arrayBegin = Globals::Read<uintptr_t>(
                 address + Offset::BuffDataLayout::BuffStackArrayBegin);
             if (!Globals::IsValidPtr(arrayBegin)) return 0;
 
-            const int stackCount = Globals::Read<int>(
-                address + Offset::BuffDataLayout::BuffStackCount);
-            if (stackCount <= 0 || stackCount >= 1000) return 0;
-
-            const auto scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
+            const uintptr_t scriptInstance = Globals::Read<uintptr_t>(arrayBegin);
             if (!Globals::IsValidPtr(scriptInstance)) return 0;
 
             return Globals::Read<uint32_t>(
@@ -144,9 +159,8 @@ namespace CoreBuffs {
         }
 
         uintptr_t GetCaster() const {
-            const auto netId = GetCasterNetworkId();
-            if (netId == 0) return 0;
-            return ::Core::ObjectManager::FindByNetworkId(netId);
+            const uint32_t netId = GetCasterNetworkId();
+            return netId == 0 ? 0 : ::Core::ObjectManager::FindByNetworkId(netId);
         }
     };
 
@@ -197,92 +211,34 @@ namespace CoreBuffs {
         CachedBuffCursor = 0;
     }
 
-
-
-    // ── Manager accessors ──
-
-    inline uintptr_t ResolveBuffManagerOffset(uintptr_t obj) {
-        static uintptr_t s_cachedOffset = 0;
-        if (s_cachedOffset != 0) {
-            return s_cachedOffset;
-        }
-
-        if (!Globals::IsValidPtr(obj)) return Offset::BuffManagerRuntime::BuffManagerOffset;
-
-        for (uintptr_t offset = 0x2000; offset <= 0x3800; offset += 8) {
-            const uintptr_t manager = obj + offset;
-            const uintptr_t start = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
-            const uintptr_t end   = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
-
-            if (!Globals::IsValidPtr(start) || !Globals::IsValidPtr(end) || end <= start) {
-                continue;
-            }
-
-            const uintptr_t diff = end - start;
-            if (diff > 16000 || (diff % Offset::BuffEntryLayout::EntryStride != 0)) {
-                continue;
-            }
-
-            const uintptr_t entryBuff = Globals::Read<uintptr_t>(start + Offset::BuffEntryLayout::EntryBuff);
-            if (!Globals::IsValidPtr(entryBuff)) {
-                continue;
-            }
-
-            const uintptr_t scriptBase = Globals::Read<uintptr_t>(entryBuff + Offset::BuffDataLayout::BuffScriptPtr);
-            if (!Globals::IsValidPtr(scriptBase)) {
-                continue;
-            }
-
-            const uintptr_t namePtr = Globals::Read<uintptr_t>(scriptBase + kScriptBaseNameOffset);
-            if (!Globals::IsValidPtr(namePtr)) {
-                continue;
-            }
-
-            char sampleName[64] = {};
-            if (Globals::ReadCString(namePtr, sampleName, sizeof(sampleName)) &&
-                sampleName[0] >= 'A' && sampleName[0] <= 'z') {
-                s_cachedOffset = offset;
-                NightSharpDebug::Logf("[CoreBuffs] 100%% VERIFIED REAL BuffManagerOffset = 0x%X (Sample: %s)",
-                    static_cast<unsigned>(offset), sampleName);
-                return s_cachedOffset;
-            }
-        }
-
+    inline uintptr_t ResolveBuffManagerOffset(uintptr_t) {
         return Offset::BuffManagerRuntime::BuffManagerOffset;
     }
 
     inline uintptr_t GetBuffManager(uintptr_t obj) {
-        if (!Globals::IsValidPtr(obj)) return 0;
-        return obj + ResolveBuffManagerOffset(obj);
+        return Globals::IsValidPtr(obj)
+            ? obj + Offset::BuffManagerRuntime::BuffManagerOffset
+            : 0;
     }
 
     inline int Enumerate(uintptr_t obj, uintptr_t* out, int maxOut) {
-        if (!out || maxOut <= 0 || !Globals::IsValidPtr(obj)) return 0;
+        if (!out || maxOut <= 0) return 0;
 
-        const auto manager = GetBuffManager(obj);
-        if (!Globals::IsValidPtr(manager)) return 0;
-
-        const auto begin = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesStart);
-        const auto end   = Globals::Read<uintptr_t>(manager + Offset::BuffManagerLayout::EntriesEnd);
-        if (!Globals::IsValidPtr(begin) || !Globals::IsValidPtr(end) || end <= begin) {
-            return 0;
-        }
-
-        const auto bytes = static_cast<size_t>(end - begin);
-        const auto count = static_cast<int>(bytes / Offset::BuffEntryLayout::EntryStride);
-        if (count <= 0 || count > 512) return 0;
+        uintptr_t begin = 0;
+        uintptr_t end = 0;
+        int count = 0;
+        if (!Detail::ReadManagerVector(obj, begin, end, count)) return 0;
 
         int written = 0;
         for (int i = 0; i < count && written < maxOut; ++i) {
-            const auto entry = begin + static_cast<uintptr_t>(i * Offset::BuffEntryLayout::EntryStride);
-            const auto buff = Globals::Read<uintptr_t>(entry + Offset::BuffEntryLayout::EntryBuff);
-            if (!Globals::IsValidPtr(buff)) continue;
-            out[written++] = buff;
+            const uintptr_t entry = begin + static_cast<uintptr_t>(
+                i * Offset::BuffEntryLayout::EntryStride);
+            const uintptr_t buff = Globals::Read<uintptr_t>(
+                entry + Offset::BuffEntryLayout::EntryBuff);
+            if (Globals::IsValidPtr(buff)) out[written++] = buff;
         }
         return written;
     }
-
-    // ── Name helpers ──
 
     inline bool NameContainsInsensitive(const char* text, const char* token) {
         if (!text || !token || !text[0] || !token[0]) return false;
@@ -306,12 +262,13 @@ namespace CoreBuffs {
 
     inline void CopyStringSafe(char* dest, const char* src, size_t destSize) {
         if (!dest || destSize == 0) return;
-        if (!src) { dest[0] = '\0'; return; }
-        size_t i = 0;
-        for (; i + 1 < destSize && src[i] != '\0'; ++i) {
-            dest[i] = src[i];
+        if (!src) {
+            dest[0] = 0;
+            return;
         }
-        dest[i] = '\0';
+        size_t i = 0;
+        for (; i + 1 < destSize && src[i] != 0; ++i) dest[i] = src[i];
+        dest[i] = 0;
     }
 
     inline void ApplyBuffAddEvent(uintptr_t obj, const char* name, int count, uintptr_t buffAddress) {
@@ -322,10 +279,8 @@ namespace CoreBuffs {
         for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
             if (CachedBuffEntries[i].object == obj && CachedBuffEntries[i].address == buffAddress) {
                 CachedBuffEntries[i].count = count;
-                if (name[0] != '\0') {
-                    CopyStringSafe(CachedBuffEntries[i].name, name, sizeof(CachedBuffEntries[i].name));
-                    CachedBuffEntries[i].hash = HashName(name);
-                }
+                CopyStringSafe(CachedBuffEntries[i].name, name, sizeof(CachedBuffEntries[i].name));
+                CachedBuffEntries[i].hash = HashName(name);
                 return;
             }
         }
@@ -348,7 +303,9 @@ namespace CoreBuffs {
 #endif
         for (int i = 0; i < kMaxCachedBuffEntries; ++i) {
             if (CachedBuffEntries[i].object == obj &&
-                (buffAddress != 0 ? CachedBuffEntries[i].address == buffAddress : (name && StrEqualInsensitive(CachedBuffEntries[i].name, name)))) {
+                (buffAddress != 0
+                    ? CachedBuffEntries[i].address == buffAddress
+                    : (name && StrEqualInsensitive(CachedBuffEntries[i].name, name)))) {
                 CachedBuffEntries[i] = {};
                 return;
             }
@@ -359,13 +316,11 @@ namespace CoreBuffs {
         ApplyBuffAddEvent(obj, name, count, buffAddress);
     }
 
-
     inline float ResolveGameTime() {
         const auto& ctx = CoreRuntime::GetContext();
-        if (!ctx.moduleBase) {
-            return 0.0f;
-        }
-        return Globals::Read<float>(ctx.moduleBase + Offset::GameRuntime::GameTime);
+        return ctx.moduleBase
+            ? Globals::Read<float>(ctx.moduleBase + Offset::GameRuntime::GameTime)
+            : 0.0f;
     }
 
     inline bool IsRecallBuffName(const char* name) {
@@ -373,55 +328,43 @@ namespace CoreBuffs {
     }
 
     inline bool NameMatchesQuery(const char* buffName, const char* query) {
-        if (StrEqualInsensitive(buffName, query)) {
-            return true;
-        }
+        if (StrEqualInsensitive(buffName, query)) return true;
         return IsRecallBuffName(query) && IsRecallBuffName(buffName);
     }
 
     inline uintptr_t GetActiveSpellCast(uintptr_t obj) {
-        if (!Globals::IsValidPtr(obj)) return 0;
-        const auto spellBook = obj + Offset::SpellRuntime::SpellBookOffset;
-        return Globals::Read<uintptr_t>(
-            spellBook + Offset::SpellRuntime::ActiveSpellCast);
+        return Globals::IsValidPtr(obj)
+            ? Globals::Read<uintptr_t>(obj + Offset::SpellRuntime::ActiveSpellCast)
+            : 0;
     }
 
     inline bool IsRecallSlotCastingActive(uintptr_t obj) {
         if (!Globals::IsValidPtr(obj)) return false;
 
         constexpr int kRecallSpellSlot = 13;
-        const auto spellBook = obj + Offset::SpellRuntime::SpellBookOffset;
-        const auto recallSlotPtr = Globals::Read<uintptr_t>(
+        const uintptr_t spellBook = obj + Offset::SpellRuntime::SpellBookOffset;
+        const uintptr_t recallSlotPtr = Globals::Read<uintptr_t>(
             spellBook + Offset::SpellBookLayout::SpellSlotArray +
             static_cast<uintptr_t>(kRecallSpellSlot * sizeof(uintptr_t)));
         if (Globals::IsValidPtr(recallSlotPtr)) {
-            const auto recallCast = Globals::Read<uintptr_t>(
+            const uintptr_t recallCast = Globals::Read<uintptr_t>(
                 recallSlotPtr + Offset::SpellSlotLayout::SlotActiveSpellCast);
             if (Globals::IsValidPtr(recallCast)) return true;
         }
 
-        const auto cast = GetActiveSpellCast(obj);
+        const uintptr_t cast = GetActiveSpellCast(obj);
         if (!Globals::IsValidPtr(cast)) return false;
-
-        const int slot = Globals::Read<std::int32_t>(
-            cast + Offset::ActiveSpellCastLayout::SpellSlot);
-        return slot == kRecallSpellSlot;
+        return Globals::Read<uint8_t>(cast + Offset::SpellCastInfoLayout::SpellSlot) == kRecallSpellSlot;
     }
 
     inline bool IsRecallChannelActive(uintptr_t obj) {
         if (IsRecallSlotCastingActive(obj)) return true;
-        const auto cast = GetActiveSpellCast(obj);
-        return Globals::IsValidPtr(cast);
+        return Globals::IsValidPtr(GetActiveSpellCast(obj));
     }
 
     inline bool IsSuppressedByLiveState(uintptr_t obj, const char* buffName) {
-        if (IsRecallBuffName(buffName)) {
-            return !IsRecallChannelActive(obj);
-        }
-        return false;
+        return IsRecallBuffName(buffName) && !IsRecallChannelActive(obj);
     }
-
-    // ── Thread-Local Frame Snapshot Caching (Zero-RPM per-frame caching) ──
 
     struct FrameBuffEntry {
         uintptr_t address = 0;
@@ -442,64 +385,64 @@ namespace CoreBuffs {
         FrameBuffEntry entries[64] = {};
     };
 
+    inline bool IsMatchingEntry(const FrameBuffEntry& entry, uint32_t queryHash) {
+        return entry.hash == queryHash || (queryHash == kRecallHash && entry.isRecall);
+    }
+
     inline const ThreadFrameBuffSnapshot* GetOrBuildFrameBuffSnapshot(uintptr_t obj, float gameTime) {
         if (!Globals::IsValidPtr(obj)) return nullptr;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
-        constexpr int kSlots = 16;
-        static thread_local ThreadFrameBuffSnapshot s_frameCache[kSlots] = {};
+        constexpr size_t kSlots = 16;
+        static thread_local ThreadFrameBuffSnapshot frameCache[kSlots] = {};
         const size_t slot = (obj >> 4) & (kSlots - 1);
+        ThreadFrameBuffSnapshot& snapshot = frameCache[slot];
 
-        ThreadFrameBuffSnapshot& snap = s_frameCache[slot];
-        if (snap.object == obj && std::fabs(snap.gameTime - gameTime) < 0.0001f) {
-            return &snap;
+        if (snapshot.object == obj && std::fabs(snapshot.gameTime - gameTime) < 0.0001f) {
+            return &snapshot;
         }
 
-        snap.object = obj;
-        snap.gameTime = gameTime;
-        snap.count = 0;
+        snapshot.object = obj;
+        snapshot.gameTime = gameTime;
+        snapshot.count = 0;
 
         uintptr_t buffs[128] = {};
         const int numBuffs = Enumerate(obj, buffs, 128);
-        for (int i = 0; i < numBuffs && snap.count < 64; ++i) {
-            BuffRef buff{ buffs[i] };
-            FrameBuffEntry& e = snap.entries[snap.count];
-            e.address = buffs[i];
-            if (!buff.ReadName(e.name, static_cast<int>(sizeof(e.name)))) continue;
-            e.hash = HashName(e.name);
-            e.startTime = buff.GetStartTime();
-            e.endTime = buff.GetEndTime();
-            e.stacks = buff.GetStacks();
-            e.type = static_cast<uint8_t>(buff.GetType());
-            e.isActive = buff.IsActive(gameTime);
-            e.isRecall = IsRecallBuffName(e.name);
-            snap.count++;
+        for (int i = 0; i < numBuffs && snapshot.count < 64; ++i) {
+            BuffRef buff{buffs[i]};
+            FrameBuffEntry entry{};
+            entry.address = buffs[i];
+            if (!buff.ReadName(entry.name, static_cast<int>(sizeof(entry.name)))) continue;
+            entry.hash = HashName(entry.name);
+            entry.startTime = buff.GetStartTime();
+            entry.endTime = buff.GetEndTime();
+            entry.stacks = buff.GetStacks();
+            entry.type = static_cast<uint8_t>(buff.GetType());
+            entry.isActive = buff.IsActive(gameTime);
+            entry.isRecall = IsRecallBuffName(entry.name);
+            snapshot.entries[snapshot.count++] = entry;
         }
-        return &snap;
+        return &snapshot;
     }
-
-    // ── High-Performance Query API (Supports uint32_t FNV-1a Hash & string) ──
 
     inline bool HasBuff(uintptr_t obj, uint32_t nameHash, float gameTime = -1.0f) {
         if (nameHash == 0 || !Globals::IsValidPtr(obj)) return false;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
-        const bool isRecallQuery = (nameHash == kRecallHash);
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return false;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return false;
 
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            if (e.hash == nameHash || (isRecallQuery && e.isRecall)) return true;
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (IsMatchingEntry(entry, nameHash)) return true;
         }
         return false;
     }
 
     inline bool HasBuff(uintptr_t obj, const char* name) {
-        if (!name || !name[0]) return false;
-        return HasBuff(obj, HashName(name));
+        return name && name[0] && HasBuff(obj, HashName(name));
     }
 
     inline bool HasActiveBuff(uintptr_t obj, uint32_t nameHash, float gameTime) {
@@ -507,23 +450,20 @@ namespace CoreBuffs {
     }
 
     inline bool HasActiveBuff(uintptr_t obj, const char* name, float gameTime) {
-        if (!name || !name[0]) return false;
-        return HasBuff(obj, HashName(name), gameTime);
+        return name && name[0] && HasBuff(obj, HashName(name), gameTime);
     }
 
     inline bool HasBuffContaining(uintptr_t obj, const char* token, int requiredType = -1) {
         if (!token || !token[0]) return false;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, ResolveGameTime());
+        if (!snapshot) return false;
 
-        const float gameTime = ResolveGameTime();
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return false;
-
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (requiredType >= 0 && static_cast<int>(e.type) != requiredType) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            if (NameContainsInsensitive(e.name, token)) return true;
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (requiredType >= 0 && static_cast<int>(entry.type) != requiredType) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (NameContainsInsensitive(entry.name, token)) return true;
         }
         return false;
     }
@@ -531,59 +471,68 @@ namespace CoreBuffs {
     inline bool HasActiveBuffContaining(uintptr_t obj, const char* token, int requiredType = -1, float gameTime = -1.0f) {
         if (!token || !token[0]) return false;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
-        return HasBuffContaining(obj, token, requiredType);
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return false;
+
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (requiredType >= 0 && static_cast<int>(entry.type) != requiredType) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (NameContainsInsensitive(entry.name, token)) return true;
+        }
+        return false;
     }
 
     inline int GetBuffStacks(uintptr_t obj, uint32_t nameHash, float gameTime = -1.0f) {
         if (nameHash == 0 || !Globals::IsValidPtr(obj)) return 0;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
-        const bool isRecallQuery = (nameHash == kRecallHash);
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return 0;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return 0;
 
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            if (e.hash == nameHash || (isRecallQuery && e.isRecall)) return e.stacks;
+        int bestStacks = 0;
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (IsMatchingEntry(entry, nameHash) && entry.stacks > bestStacks) {
+                bestStacks = entry.stacks;
+            }
         }
-        return 0;
+        return bestStacks;
     }
 
     inline int GetBuffStacks(uintptr_t obj, const char* name) {
-        if (!name || !name[0]) return 0;
-        return GetBuffStacks(obj, HashName(name));
+        return name && name[0] ? GetBuffStacks(obj, HashName(name)) : 0;
     }
 
     inline int GetActiveBuffStacks(uintptr_t obj, const char* name, float gameTime) {
-        if (!name || !name[0]) return 0;
-        return GetBuffStacks(obj, HashName(name), gameTime);
+        return name && name[0] ? GetBuffStacks(obj, HashName(name), gameTime) : 0;
     }
 
     inline float GetBuffRemainingTime(uintptr_t obj, uint32_t nameHash, float gameTime = -1.0f) {
         if (nameHash == 0 || !Globals::IsValidPtr(obj)) return 0.0f;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
-        const bool isRecallQuery = (nameHash == kRecallHash);
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return 0.0f;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return 0.0f;
 
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            if (e.hash == nameHash || (isRecallQuery && e.isRecall)) {
-                if (e.endTime <= 0.0f) return 0.0f;
-                return e.endTime > gameTime ? (e.endTime - gameTime) : 0.0f;
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (IsMatchingEntry(entry, nameHash)) {
+                return entry.endTime > 0.0f && entry.endTime > gameTime
+                    ? entry.endTime - gameTime
+                    : 0.0f;
             }
         }
         return 0.0f;
     }
 
     inline float GetBuffRemainingTime(uintptr_t obj, const char* name, float gameTime) {
-        if (!name || !name[0]) return 0.0f;
-        return GetBuffRemainingTime(obj, HashName(name), gameTime);
+        return name && name[0] ? GetBuffRemainingTime(obj, HashName(name), gameTime) : 0.0f;
     }
 
     inline BuffRef FindActiveByName(uintptr_t obj, const char* name, float gameTime = -1.0f) {
@@ -591,17 +540,14 @@ namespace CoreBuffs {
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
         const uint32_t queryHash = HashName(name);
-        const bool isRecallQuery = (queryHash == kRecallHash);
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return {};
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return {};
 
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            if (e.hash == queryHash || (isRecallQuery && e.isRecall)) {
-                return BuffRef{ e.address };
-            }
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (!entry.isActive) continue;
+            if (entry.isRecall && !IsRecallChannelActive(obj)) continue;
+            if (IsMatchingEntry(entry, queryHash)) return BuffRef{entry.address};
         }
         return {};
     }
@@ -612,14 +558,15 @@ namespace CoreBuffs {
 
     inline BuffRef FindRawByName(uintptr_t obj, const char* name) {
         if (!name || !name[0]) return {};
+
         const uint32_t queryHash = HashName(name);
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
-        char buf[96] = {};
+        char buffer[96] = {};
         for (int i = 0; i < count; ++i) {
-            BuffRef buff{ buffs[i] };
-            if (!buff.ReadName(buf, static_cast<int>(sizeof(buf)))) continue;
-            if (HashName(buf) == queryHash || NameMatchesQuery(buf, name)) return buff;
+            BuffRef buff{buffs[i]};
+            if (!buff.ReadName(buffer, static_cast<int>(sizeof(buffer)))) continue;
+            if (HashName(buffer) == queryHash || NameMatchesQuery(buffer, name)) return buff;
         }
         return {};
     }
@@ -628,18 +575,15 @@ namespace CoreBuffs {
         return FindRawByName(obj, name).IsValid();
     }
 
-
     inline bool HasBuffType(uintptr_t obj, int type) {
-        const float gameTime = ResolveGameTime();
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        if (!snap) return false;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, ResolveGameTime());
+        if (!snapshot) return false;
 
-        for (int i = 0; i < snap->count; ++i) {
-            const auto& e = snap->entries[i];
-            if (!e.isActive) continue;
-            if (static_cast<int>(e.type) != type) continue;
-            if (e.isRecall && !IsRecallChannelActive(obj)) continue;
-            return true;
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (entry.isActive && static_cast<int>(entry.type) == type) {
+                if (!entry.isRecall || IsRecallChannelActive(obj)) return true;
+            }
         }
         return false;
     }
@@ -648,7 +592,7 @@ namespace CoreBuffs {
         uintptr_t buffs[256] = {};
         const int count = Enumerate(obj, buffs, 256);
         for (int i = 0; i < count; ++i) {
-            const BuffRef buff{ buffs[i] };
+            const BuffRef buff{buffs[i]};
             if (buff.IsValid() && buff.GetType() == type) return true;
         }
         return false;
@@ -656,13 +600,21 @@ namespace CoreBuffs {
 
     inline bool HasActiveBuffType(uintptr_t obj, int type, float gameTime) {
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
-        return HasBuffType(obj, type);
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, gameTime);
+        if (!snapshot) return false;
+
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (entry.isActive && static_cast<int>(entry.type) == type) {
+                if (!entry.isRecall || IsRecallChannelActive(obj)) return true;
+            }
+        }
+        return false;
     }
 
     inline int Count(uintptr_t obj) {
-        const float gameTime = ResolveGameTime();
-        const auto* snap = GetOrBuildFrameBuffSnapshot(obj, gameTime);
-        return snap ? snap->count : 0;
+        const auto* snapshot = GetOrBuildFrameBuffSnapshot(obj, ResolveGameTime());
+        return snapshot ? snapshot->count : 0;
     }
 
 } // namespace CoreBuffs

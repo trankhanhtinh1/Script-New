@@ -282,7 +282,30 @@ namespace NightSharpMenu {
     inline void DrawRuntimeMenuBridge(void* userData) {
         const int index = static_cast<int>(reinterpret_cast<intptr_t>(userData)) - 1;
         if (index < 0 || index >= PluginRegistry::PluginCount) return;
-        if (!PluginRegistry::Plugins[index].Loaded) return;
+
+        const auto& entry = PluginRegistry::Plugins[index];
+
+        // Trước đây các nhánh này chỉ `return` nên panel mở ra hoàn toàn
+        // trống, người dùng không biết plugin chưa load hay đã crash.
+        if (entry.RuntimeMenuCrashed) {
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+                               "Plugin menu crashed and was disabled.");
+            ImGui::TextUnformatted("Check NightSharp log/dump, then re-enable in Plugins.");
+            return;
+        }
+
+        if (!entry.Loaded) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.35f, 1.0f),
+                               "Plugin is not loaded.");
+            ImGui::TextUnformatted("Enable it under Core > Plugins first.");
+            return;
+        }
+
+        if (!entry.RuntimeMenu) {
+            ImGui::TextUnformatted("Plugin has no runtime panel UI.");
+            return;
+        }
+
         PluginRegistry::DrawPluginMenu(index);
     }
 

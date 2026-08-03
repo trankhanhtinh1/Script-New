@@ -12,7 +12,7 @@ inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
         return;
     }
 
-    const float outerRadius = GetRealAutoAttackRange(player) + player.BoundingRadius();
+    const float outerRadius = GetRealAutoAttackRange(player);
     const float fadeWidth = std::min(
         outerRadius,
         static_cast<float>(std::max(1, menu_.AARangeFadeWidth())));

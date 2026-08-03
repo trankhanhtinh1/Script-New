@@ -3016,7 +3016,7 @@
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerVisuals.inl">
       <Filter>Plugins\Core\OrbwalkerKuro</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Core\PlayerBuffDebugPlugin.h">
+    <ClInclude Include="Plugins\Core\BuffInspectorPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h">

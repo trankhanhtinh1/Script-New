@@ -622,14 +622,11 @@ private:
         const uintptr_t heroAddr = player.Address();
         ImGui::Text("AIHeroClient: 0x%llX", static_cast<unsigned long long>(heroAddr));
 
-        const uintptr_t vtable = Globals::Read<uintptr_t>(heroAddr);
-        const uintptr_t getter = Globals::IsValidPtr(vtable)
-            ? Globals::Read<uintptr_t>(
-                vtable + Offset::RuneManagerRuntime::GetRuneManagerVFunc)
-            : 0;
-        ImGui::Text("Getter vfunc @ +0x%X = 0x%llX",
-                    Offset::RuneManagerRuntime::GetRuneManagerVFunc,
-                    static_cast<unsigned long long>(getter));
+        const uintptr_t rawFieldValue = Globals::Read<uintptr_t>(
+            heroAddr + Offset::AIHeroClient::RuneManager);
+        ImGui::Text("Field @ +0x%X = 0x%llX",
+                    Offset::AIHeroClient::RuneManager,
+                    static_cast<unsigned long long>(rawFieldValue));
 
         const uintptr_t resolved = ::CoreRuneManager::Resolve(heroAddr);
         ImGui::Text("Resolve: 0x%llX",

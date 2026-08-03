@@ -2,7 +2,6 @@
 
 #include "CoreCastSpell.h"
 #include "CoreNewCastSpell.h"
-#include "CoreObjectManager.h"
 #include "CoreSpellDataInst.h"
 #include "CoreRuntime.h"
 #include "Globals.h"
@@ -15,19 +14,9 @@ namespace CoreSpellBook {
 
 struct CastInfoRef {
     uintptr_t address = 0;
-    bool outerActiveObject = false;
 
     bool IsValid() const {
         return Globals::IsValidPtr(address);
-    }
-
-    uintptr_t RecordAddress() const {
-        if (!IsValid()) {
-            return 0;
-        }
-        return address + (outerActiveObject
-            ? Offset::ActiveSpellCastLayout::InnerRecord
-            : 0);
     }
 };
 
@@ -40,12 +29,12 @@ inline bool IsValidSlot(std::int32_t slot) {
 }
 
 inline uintptr_t Owner(uintptr_t spellbook) {
-    if (!Globals::IsValidPtr(spellbook) ||
-        spellbook <= Offset::SpellRuntime::SpellBookOffset) {
+    if (!Globals::IsValidPtr(spellbook)) {
         return 0;
     }
 
-    const uintptr_t owner = spellbook - Offset::SpellRuntime::SpellBookOffset;
+    const uintptr_t owner = Globals::Read<uintptr_t>(
+        spellbook + Offset::SpellBookLayout::Owner);
     return Globals::IsValidPtr(owner) ? owner : 0;
 }
 
@@ -54,10 +43,8 @@ inline std::uint32_t CasterNetworkId(uintptr_t spellbook) {
         return 0;
     }
 
-    const uintptr_t owner = Owner(spellbook);
-    return Globals::IsValidPtr(owner)
-        ? Globals::Read<std::uint32_t>(owner + Offset::All::NetId)
-        : 0;
+    return Globals::Read<std::uint32_t>(
+        spellbook + Offset::SpellBookLayout::CasterNetId);
 }
 
 inline std::int32_t ActiveSlot(uintptr_t owner) {
@@ -66,15 +53,8 @@ inline std::int32_t ActiveSlot(uintptr_t owner) {
         return -1;
     }
 
-    const uintptr_t active = Globals::Read<uintptr_t>(
-        spellbook + Offset::SpellRuntime::ActiveSpellCast);
-    if (!Globals::IsValidPtr(active)) {
-        return -1;
-    }
-
-    const std::int32_t slot = Globals::Read<std::int32_t>(
-        active + Offset::ActiveSpellCastLayout::SpellSlot);
-    return IsValidSlot(slot) ? slot : -1;
+    return Globals::Read<std::int32_t>(
+        spellbook + Offset::SpellBookLayout::ActiveSlot);
 }
 
 inline CoreSpellDataInst::SpellSlotRef GetSpell(uintptr_t owner,
@@ -121,7 +101,6 @@ inline CastInfoRef ActiveSpell(uintptr_t owner) {
 
     ref.address = Globals::Read<uintptr_t>(
         spellbook + Offset::SpellRuntime::ActiveSpellCast);
-    ref.outerActiveObject = Globals::IsValidPtr(ref.address);
     return ref;
 }
 
@@ -150,67 +129,50 @@ inline CastInfoRef GetSpellCastInfo(uintptr_t owner, std::int32_t slot) {
 }
 
 inline float CastStartTime(CastInfoRef ref) {
-    (void)ref;
-    return 0.0f;
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::StartTime)
+        : 0.0f;
 }
 
 inline float CastEndTime(CastInfoRef ref) {
-    return ref.IsValid() && ref.outerActiveObject
-        ? Globals::Read<float>(
-            ref.address + Offset::ActiveSpellCastLayout::CastExpireTime)
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::EndTime)
         : 0.0f;
 }
 
 inline float ChannelStartTime(CastInfoRef ref) {
-    (void)ref;
-    return 0.0f;
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::ChannelStart)
+        : 0.0f;
 }
 
 inline float ChannelEndTime(CastInfoRef ref) {
-    (void)ref;
-    return 0.0f;
+    return ref.IsValid()
+        ? Globals::Read<float>(ref.address + Offset::SpellCastInfoLayout::ChannelEnd)
+        : 0.0f;
 }
 
 inline std::int32_t CastSlot(CastInfoRef ref) {
-    const uintptr_t record = ref.RecordAddress();
-    return record
-        ? Globals::Read<std::int32_t>(record + Offset::SpellCastInfoLayout::SpellSlot)
+    return ref.IsValid()
+        ? Globals::Read<std::int32_t>(ref.address + Offset::SpellCastInfoLayout::SpellSlot)
         : -1;
 }
 
 inline std::uint32_t TargetNetworkId(CastInfoRef ref) {
-    const uintptr_t record = ref.RecordAddress();
-    if (!record) {
-        return 0;
-    }
-
-    const uintptr_t entries = Globals::Read<uintptr_t>(
-        record + Offset::SpellCastInfoLayout::TargetArrayPtr);
-    const std::uint32_t count = Globals::Read<std::uint32_t>(
-        record + Offset::SpellCastInfoLayout::TargetArrayCount);
-    if (!Globals::IsValidPtr(entries) || count == 0 || count > 64) {
-        return 0;
-    }
-
-    const std::uint32_t objectIndex = Globals::Read<std::uint32_t>(
-        entries + Offset::SpellCastInfoLayout::TargetArrayEntryIndex);
-    const uintptr_t target = ::Core::ObjectManager::FindByIndex(objectIndex);
-    return Globals::IsValidPtr(target)
-        ? Globals::Read<std::uint32_t>(target + Offset::All::NetId)
+    return ref.IsValid()
+        ? Globals::Read<std::uint32_t>(ref.address + Offset::SpellCastInfoLayout::TargetNetId)
         : 0;
 }
 
 inline Vec3 StartPosition(CastInfoRef ref) {
-    const uintptr_t record = ref.RecordAddress();
-    return record
-        ? Globals::Read<Vec3>(record + Offset::SpellCastInfoLayout::StartPosition)
+    return ref.IsValid()
+        ? Globals::Read<Vec3>(ref.address + Offset::SpellCastInfoLayout::StartPosition)
         : Vec3{};
 }
 
 inline Vec3 EndPosition(CastInfoRef ref) {
-    const uintptr_t record = ref.RecordAddress();
-    return record
-        ? Globals::Read<Vec3>(record + Offset::SpellCastInfoLayout::EndPosition)
+    return ref.IsValid()
+        ? Globals::Read<Vec3>(ref.address + Offset::SpellCastInfoLayout::EndPosition)
         : Vec3{};
 }
 

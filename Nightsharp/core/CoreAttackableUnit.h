@@ -110,23 +110,6 @@ inline std::uint32_t ActionState2(uintptr_t object) {
     return ReadField<std::uint32_t>(object, Offset::AttackableUnit::ActionState2);
 }
 
-inline bool CanAttack(uintptr_t object) {
-    return (ActionState1(object) & 0x1u) != 0u;
-}
-
-inline bool CanCast(uintptr_t object) {
-    return (ActionState1(object) & 0x2u) != 0u;
-}
-
-inline bool CanMove(uintptr_t object) {
-    const std::uint32_t state = ActionState1(object);
-    return (state & 0x200u) == 0u && (state & 0x4u) != 0u;
-}
-
-inline bool CanWalk(uintptr_t object) {
-    return (ActionState1(object) & 0x8u) != 0u;
-}
-
 inline float TotalShield(uintptr_t object) {
     return AllShield(object) + PhysicalShield(object) + MagicalShield(object);
 }

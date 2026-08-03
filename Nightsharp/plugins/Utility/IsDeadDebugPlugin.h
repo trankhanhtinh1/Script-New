@@ -299,9 +299,7 @@ private:
 
         row.sdkDead = hero.IsDead();
         row.isAliveNative = !::Core::Objects::IsDead(address);
-        row.deadByteRaw = Offset::All::Dead
-            ? ReadU8(address + Offset::All::Dead)
-            : 0;
+        row.deadByteRaw = ReadU8(address + Offset::All::Dead);
         row.zombie = hero.IsZombie();
         row.visible = hero.IsVisible();
         row.targetable = hero.IsTargetable();

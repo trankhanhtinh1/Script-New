@@ -42,3 +42,5 @@ Nightsharp/plugins/Champion/KuroAIO/AI/Research/
 [Tt]ests/
 run_kuro_tests.bat
 Nightsharp/build/
+
+Nightsharp/mybuild.bat

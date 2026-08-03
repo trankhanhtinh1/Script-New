@@ -77,6 +77,14 @@ namespace Plugins {
             if (plugin->m_loaded) return true;
             NightSharpDebug::Logf("[PluginManager] Load begin name=%s id=%s",
                                   plugin->GetName(), plugin->GetInternalId());
+            // Một lần crash trong OnUpdate/OnRender/OnMenu sẽ set m_enabled=false
+            // vĩnh viễn, khiến plugin (và runtime panel) im lặng ngay cả sau khi
+            // load lại. Reset lại ở mỗi lần load.
+            plugin->m_enabled = true;
+            if (plugin->m_registryIndex >= 0 &&
+                plugin->m_registryIndex < PluginRegistry::PluginCount) {
+                PluginRegistry::Plugins[plugin->m_registryIndex].RuntimeMenuCrashed = false;
+            }
             if (!plugin->CanLoad()) {
                 NightSharpDebug::Logf("[PluginManager] Load blocked by CanLoad name=%s",
                                       plugin->GetName());
