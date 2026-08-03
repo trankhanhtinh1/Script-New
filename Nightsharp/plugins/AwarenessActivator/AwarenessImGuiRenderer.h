@@ -4,6 +4,7 @@
 #include "../../imgui/imgui.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -14,15 +15,17 @@ namespace NightSharp::Companion {
 // validation and lookup helpers while preserving the same screen/world API.
 class AwarenessImGuiRenderer final {
 public:
-    bool BeginFrame() noexcept {
+    bool BeginFrame(bool performanceMode = false,
+                    bool needWorldProjection = true) noexcept {
         draw_ = nullptr;
         active_ = false;
         projectionReady_ = false;
-        minimapReady_ = false;
         rendererSize_ = {};
         viewportOrigin_ = {};
         viewProjection_ = {};
-        tacticalMap_ = {};
+        minimapRefreshFrames_ = performanceMode
+            ? kPerformanceMinimapRefreshFrames : 1u;
+        ++frameSerial_;
 
         if (!ImGui::GetCurrentContext()) {
             return false;
@@ -46,9 +49,23 @@ public:
             return false;
         }
 
+        // The tactical-map lookup is substantially more expensive than the
+        // coordinate transform. Preserve it across frames and invalidate it
+        // only when the viewport changes; performance mode also refreshes it
+        // periodically so minimap scale/position changes are still detected.
+        if (!SameViewport(rendererSize_, cachedRendererSize_) ||
+            !SameViewport(viewportOrigin_, cachedViewportOrigin_)) {
+            tacticalMap_ = {};
+            minimapReady_ = false;
+            tacticalMapFrame_ = 0;
+            cachedRendererSize_ = rendererSize_;
+            cachedViewportOrigin_ = viewportOrigin_;
+        }
+
         // Screen/minimap panels can still render when the game camera is not
         // available for a frame. World primitives simply no-op in that case.
-        projectionReady_ = CoreView::ReadViewProjection(viewProjection_);
+        projectionReady_ = needWorldProjection &&
+            CoreView::ReadViewProjection(viewProjection_);
         active_ = true;
         return true;
     }
@@ -60,12 +77,24 @@ public:
             out = {};
             return false;
         }
-        if (!minimapReady_) {
-            tacticalMap_ = CoreMap::GetTacticalMap();
-            minimapReady_ = tacticalMap_.IsValid();
+
+        const std::uint64_t age = frameSerial_ - tacticalMapFrame_;
+        const bool refreshDue = !minimapReady_ ||
+            age >= static_cast<std::uint64_t>(minimapRefreshFrames_);
+        if (refreshDue) {
+            const CoreMap::TacticalMapState next =
+                CoreMap::GetTacticalMap();
+            tacticalMapFrame_ = frameSerial_;
+            if (next.IsValid()) {
+                tacticalMap_ = next;
+                minimapReady_ = true;
+            } else if (!minimapReady_) {
+                out = {};
+                return false;
+            }
         }
-        if (!minimapReady_ ||
-            !tacticalMap_.WorldToMinimap(
+
+        if (!tacticalMap_.WorldToMinimap(
                 world, out, rendererSize_) ||
             !out.IsValid()) {
             out = {};
@@ -302,6 +331,13 @@ public:
 private:
     static constexpr int kMaxCircleSegments = 128;
     static constexpr float kScreenPadding = 128.0f;
+    static constexpr std::uint32_t kPerformanceMinimapRefreshFrames = 10u;
+
+    static bool SameViewport(const Vec2& left,
+                             const Vec2& right) noexcept {
+        return std::fabs(left.x - right.x) <= 0.5f &&
+               std::fabs(left.y - right.y) <= 0.5f;
+    }
 
     static int ClampSegments(int segments) noexcept {
         return (std::max)(8, (std::min)(segments, kMaxCircleSegments));
@@ -367,10 +403,15 @@ private:
     ImDrawList* draw_ = nullptr;
     Vec2 rendererSize_{};
     Vec2 viewportOrigin_{};
+    Vec2 cachedRendererSize_{};
+    Vec2 cachedViewportOrigin_{};
     CoreView::Matrix4x4 viewProjection_{};
     bool active_ = false;
     bool projectionReady_ = false;
+    std::uint64_t frameSerial_ = 0;
+    std::uint32_t minimapRefreshFrames_ = 1;
     mutable CoreMap::TacticalMapState tacticalMap_{};
+    mutable std::uint64_t tacticalMapFrame_ = 0;
     mutable bool minimapReady_ = false;
 };
 

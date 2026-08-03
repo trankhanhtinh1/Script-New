@@ -248,6 +248,7 @@
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorCore.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessDiagnostics.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessIconAssets.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessImGuiRenderer.h" />

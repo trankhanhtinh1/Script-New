@@ -67,40 +67,67 @@ public:
             new SDK::Menu("Awareness", "Awareness overlays"));
         BindBool(awareness, "DrawOverlay", "Draw awareness overlay",
                  settings.drawOverlay);
-        BindBool(awareness, "DrawWorldLayer", "Draw isolated world layer",
-                 settings.drawWorldLayer);
-        BindBool(awareness, "DrawMinimapLayer", "Draw isolated minimap layer",
-                 settings.drawMinimapLayer);
+        BindBool(awareness, "DrawIcons", "Draw icons",
+                 settings.drawIcons);
         BindBool(awareness, "DrawAlertCenter", "Draw prioritized alert center",
                  settings.drawAlertCenter);
         BindBool(awareness, "DrawEnemyHud",
                  "Draw enemy overhead cooldown HUD",
                  settings.drawEnemyHud);
-        BindBool(awareness, "DrawCombatState", "Draw combat awareness state",
-                 settings.drawCombatState);
-        BindBool(awareness, "DrawReachableAreas", "Draw enemy reachable areas",
+
+        SDK::Menu* worldDrawing = awareness->AddSubMenu(
+            new SDK::Menu("WorldDrawing", "World drawing"));
+        BindBool(worldDrawing, "DrawWorldLayer", "Enable world layer",
+                 settings.drawWorldLayer);
+        BindBool(worldDrawing, "DrawWorldChampions", "Draw enemy champions",
+                 settings.drawWorldChampions);
+        BindBool(worldDrawing, "DrawReachableAreas", "Draw enemy reachable areas",
                  settings.drawReachableAreas);
-        BindBool(awareness, "DrawPathTargets",
-                 "Draw observed movement targets on minimap",
-                 settings.drawPathTargets);
-        BindBool(awareness, "DrawThreats", "Draw threat geometry",
+        BindBool(worldDrawing, "DrawThreats", "Draw threat geometry",
                  settings.drawThreats);
-        BindBool(awareness, "DrawWards", "Draw wards and vision",
+        BindBool(worldDrawing, "DrawWards", "Draw wards and vision",
                  settings.drawWards);
-        BindBool(awareness, "DrawJungle", "Draw jungle camp timers and confidence",
+        BindBool(worldDrawing, "DrawJungle", "Draw jungle camp timers and confidence",
                  settings.drawJungle);
-        BindBool(awareness, "DrawObjectives", "Draw objective state and timers",
+        BindBool(worldDrawing, "DrawObjectives", "Draw objective state and timers",
                  settings.drawObjectives);
-        BindBool(awareness, "DrawInsights", "Draw advanced insights",
+        BindBool(worldDrawing, "DrawCombatState", "Draw combat awareness state",
+                 settings.drawCombatState);
+        BindBool(worldDrawing, "DrawInsights", "Draw advanced insights",
                  settings.drawInsights);
-        BindBool(awareness, "DrawWave", "Draw wave state",
+        BindBool(worldDrawing, "DrawWave", "Draw wave state",
                  settings.drawWave);
-        BindBool(awareness, "DrawActivityHeatmap", "Draw replay activity heatmap",
+        BindBool(worldDrawing, "DrawActivityHeatmap", "Draw replay activity heatmap",
                  settings.drawActivityHeatmap);
-        BindBool(awareness, "DrawVisionHeatmap", "Draw vision coverage heatmap",
+        BindBool(worldDrawing, "DrawVisionHeatmap", "Draw vision coverage heatmap",
                  settings.drawVisionHeatmap);
+        BindFloat(worldDrawing, "WorldDrawDistance",
+                  "World draw distance",
+                  settings.worldDrawDistance, 1800.0f, 9000.0f);
+        BindFloat(worldDrawing, "ReachableAreaMaxRadius",
+                  "Reachable area radius cap",
+                  settings.reachableAreaMaxRadius, 800.0f, 6000.0f);
+
+        SDK::Menu* minimapDrawing = awareness->AddSubMenu(
+            new SDK::Menu("MinimapDrawing", "Minimap drawing"));
+        BindBool(minimapDrawing, "DrawMinimapLayer", "Enable minimap layer",
+                 settings.drawMinimapLayer);
+        BindBool(minimapDrawing, "DrawMinimapChampions", "Draw enemy champions",
+                 settings.drawMinimapChampions);
+        BindBool(minimapDrawing, "DrawPathTargets",
+                 "Draw observed movement targets",
+                 settings.drawPathTargets);
+        BindBool(minimapDrawing, "DrawMinimapWards", "Draw wards",
+                 settings.drawMinimapWards);
+        BindBool(minimapDrawing, "DrawMinimapJungle", "Draw jungle camps",
+                 settings.drawMinimapJungle);
+        BindBool(minimapDrawing, "DrawMinimapObjectives", "Draw objectives",
+                 settings.drawMinimapObjectives);
+        BindBool(minimapDrawing, "DrawMinimapLabels", "Draw minimap text labels",
+                 settings.drawMinimapLabels);
+
         BindBool(awareness, "PerformanceMode",
-                 "Performance mode (bounded world drawing)",
+                 "Performance mode (bounded drawing and cached minimap state)",
                  settings.performanceMode);
         BindBool(awareness, "DiagnosticsEnabled",
                  "Profile Awareness FPS by stage",
@@ -119,12 +146,6 @@ public:
                   "Log slow render frame threshold (ms)",
                   settings.diagnosticsSlowFrameMs,
                   1.0f, 50.0f);
-        BindFloat(awareness, "WorldDrawDistance",
-                  "World draw distance",
-                  settings.worldDrawDistance, 1800.0f, 9000.0f);
-        BindFloat(awareness, "ReachableAreaMaxRadius",
-                  "Reachable area radius cap",
-                  settings.reachableAreaMaxRadius, 800.0f, 6000.0f);
         BindBool(awareness, "AudioOnly", "Audio-only accessibility mode",
                  settings.audioOnly);
         BindBool(awareness, "StreamerMode", "Privacy-preserving streamer mode",
@@ -445,53 +466,20 @@ private:
             awareness->DisplayName = vi
                 ? "Lớp hiển thị nhận thức" : "Awareness overlays";
             SetLabel(awareness, "DrawOverlay",
-                     vi ? "Hiện lớp nhận thức"
+                     vi ? "Bật toàn bộ lớp vẽ nhận thức"
                         : "Draw awareness overlay");
-            SetLabel(awareness, "DrawWorldLayer",
-                     vi ? "Hiện lớp thế giới độc lập"
-                        : "Draw isolated world layer");
-            SetLabel(awareness, "DrawMinimapLayer",
-                     vi ? "Hiện lớp bản đồ nhỏ độc lập"
-                        : "Draw isolated minimap layer");
+            SetLabel(awareness, "DrawIcons",
+                     vi ? "Hiện biểu tượng"
+                        : "Draw icons");
             SetLabel(awareness, "DrawAlertCenter",
                      vi ? "Hiện trung tâm cảnh báo ưu tiên"
                         : "Draw prioritized alert center");
             SetLabel(awareness, "DrawEnemyHud",
-                     vi ? "Hiện cooldown trên đầu đối thủ"
+                     vi ? "Hiện hồi chiêu trên đầu đối thủ"
                         : "Draw enemy overhead cooldown HUD");
-            SetLabel(awareness, "DrawCombatState",
-                     vi ? "Hiện trạng thái giao tranh"
-                        : "Draw combat awareness state");
-            SetLabel(awareness, "DrawReachableAreas",
-                     vi ? "Hiện vùng đối thủ có thể tới"
-                        : "Draw enemy reachable areas");
-            SetLabel(awareness, "DrawPathTargets",
-                     vi ? "Hiện đích di chuyển đã quan sát trên bản đồ nhỏ"
-                        : "Draw observed movement targets on minimap");
-            SetLabel(awareness, "DrawThreats",
-                     vi ? "Hiện vùng nguy hiểm"
-                        : "Draw threat geometry");
-            SetLabel(awareness, "DrawWards",
-                     vi ? "Hiện mắt và tầm nhìn"
-                        : "Draw wards and vision");
-            SetLabel(awareness, "DrawJungle",
-                     vi ? "Hiện bộ đếm và độ tin cậy bãi rừng"
-                        : "Draw jungle camp timers and confidence");
-            SetLabel(awareness, "DrawObjectives",
-                     vi ? "Hiện mục tiêu và bộ đếm"
-                        : "Draw objective state and timers");
-            SetLabel(awareness, "DrawInsights",
-                     vi ? "Hiện phân tích nâng cao"
-                        : "Draw advanced insights");
-            SetLabel(awareness, "DrawWave",
-                     vi ? "Hiện trạng thái đợt lính"
-                        : "Draw wave state");
-            SetLabel(awareness, "DrawActivityHeatmap",
-                     vi ? "Bản đồ nhiệt hoạt động phát lại"
-                        : "Draw replay activity heatmap");
-            SetLabel(awareness, "DrawVisionHeatmap",
-                     vi ? "Bản đồ nhiệt tầm nhìn"
-                        : "Draw vision coverage heatmap");
+            SetLabel(awareness, "PerformanceMode",
+                     vi ? "Chế độ hiệu năng (giới hạn vẽ và cache minimap)"
+                        : "Performance mode (bounded drawing and cached minimap state)");
             SetLabel(awareness, "DiagnosticsEnabled",
                      vi ? "Đo FPS Awareness theo từng stage"
                         : "Profile Awareness FPS by stage");
@@ -513,6 +501,75 @@ private:
             SetLabel(awareness, "HudEditor",
                      vi ? "Trình kéo thả bố cục HUD"
                         : "Draggable HUD layout editor");
+
+            if (SDK::Menu* world =
+                    awareness->GetSubMenu("WorldDrawing")) {
+                world->DisplayName = vi
+                    ? "Vẽ trong thế giới" : "World drawing";
+                SetLabel(world, "DrawWorldLayer",
+                         vi ? "Bật lớp vẽ thế giới"
+                            : "Enable world layer");
+                SetLabel(world, "DrawWorldChampions",
+                         vi ? "Hiện tướng địch"
+                            : "Draw enemy champions");
+                SetLabel(world, "DrawReachableAreas",
+                         vi ? "Hiện vùng đối thủ có thể tới"
+                            : "Draw enemy reachable areas");
+                SetLabel(world, "DrawThreats",
+                         vi ? "Hiện vùng nguy hiểm"
+                            : "Draw threat geometry");
+                SetLabel(world, "DrawWards",
+                         vi ? "Hiện mắt và tầm nhìn"
+                            : "Draw wards and vision");
+                SetLabel(world, "DrawJungle",
+                         vi ? "Hiện bộ đếm và độ tin cậy bãi rừng"
+                            : "Draw jungle camp timers and confidence");
+                SetLabel(world, "DrawObjectives",
+                         vi ? "Hiện mục tiêu và bộ đếm"
+                            : "Draw objective state and timers");
+                SetLabel(world, "DrawCombatState",
+                         vi ? "Hiện trạng thái giao tranh"
+                            : "Draw combat awareness state");
+                SetLabel(world, "DrawInsights",
+                         vi ? "Hiện phân tích nâng cao"
+                            : "Draw advanced insights");
+                SetLabel(world, "DrawWave",
+                         vi ? "Hiện trạng thái đợt lính"
+                            : "Draw wave state");
+                SetLabel(world, "DrawActivityHeatmap",
+                         vi ? "Bản đồ nhiệt hoạt động phát lại"
+                            : "Draw replay activity heatmap");
+                SetLabel(world, "DrawVisionHeatmap",
+                         vi ? "Bản đồ nhiệt tầm nhìn"
+                            : "Draw vision coverage heatmap");
+            }
+
+            if (SDK::Menu* minimap =
+                    awareness->GetSubMenu("MinimapDrawing")) {
+                minimap->DisplayName = vi
+                    ? "Vẽ trên bản đồ nhỏ" : "Minimap drawing";
+                SetLabel(minimap, "DrawMinimapLayer",
+                         vi ? "Bật lớp bản đồ nhỏ"
+                            : "Enable minimap layer");
+                SetLabel(minimap, "DrawMinimapChampions",
+                         vi ? "Hiện tướng địch"
+                            : "Draw enemy champions");
+                SetLabel(minimap, "DrawPathTargets",
+                         vi ? "Hiện đích di chuyển đã quan sát"
+                            : "Draw observed movement targets");
+                SetLabel(minimap, "DrawMinimapWards",
+                         vi ? "Hiện mắt"
+                            : "Draw wards");
+                SetLabel(minimap, "DrawMinimapJungle",
+                         vi ? "Hiện bãi rừng"
+                            : "Draw jungle camps");
+                SetLabel(minimap, "DrawMinimapObjectives",
+                         vi ? "Hiện mục tiêu lớn"
+                            : "Draw objectives");
+                SetLabel(minimap, "DrawMinimapLabels",
+                         vi ? "Hiện nhãn chữ trên bản đồ nhỏ"
+                            : "Draw minimap text labels");
+            }
         }
         if (activator) {
             activator->DisplayName = vi ? "Kích hoạt" : "Activator";
@@ -598,8 +655,11 @@ private:
         settings.drawEnemyHud = profile.enemyHud;
         settings.drawCombatState = profile.combat;
         settings.drawWards = profile.wards;
+        settings.drawMinimapWards = profile.wards;
         settings.drawJungle = profile.jungle;
+        settings.drawMinimapJungle = profile.jungle;
         settings.drawObjectives = profile.objectives;
+        settings.drawMinimapObjectives = profile.objectives;
         settings.drawActivityHeatmap = profile.heatmaps;
         settings.defensiveHorizon = profile.defensiveHorizon;
     }
@@ -642,7 +702,7 @@ private:
     ActivatorSettings* settings_ = nullptr;
     SDK::MenuKeyBind* confirmationKey_ = nullptr;
     SDK::MenuList* rolePreset_ = nullptr;
-    std::array<BoolBinding, 40> boolBindings_{};
+    std::array<BoolBinding, 64> boolBindings_{};
     std::array<FloatBinding, 16> floatBindings_{};
     std::array<ModeBinding, 40> modeBindings_{};
     std::size_t boolBindingCount_ = 0;

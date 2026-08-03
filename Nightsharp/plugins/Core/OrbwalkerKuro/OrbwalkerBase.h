@@ -198,8 +198,7 @@ inline float GetRealAutoAttackRange(const AIBaseClient& sender, const Attackable
     float result = sender.AttackRange() + sender.BoundingRadius();
     if (target.IsValid() && !target.IsDead()) {
         const AIBaseClient targetBase(target.Handle());
-        const SDK::ChampionId senderChampionId =
-            SDK::ChampionIdFromName(sender.CharacterName().c_str());
+        const SDK::ChampionId senderChampionId = SDK::ChampionIdFromName(sender.CharacterName().c_str());
         if (senderChampionId == SDK::ChampionId::Caitlyn &&
             (targetBase.HasBuff("CaitlynWSnare") || targetBase.HasBuff("CaitlynEMissile"))) {
             result = 1300.0f;

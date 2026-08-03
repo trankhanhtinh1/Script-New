@@ -74,21 +74,33 @@ public:
     bool barrierLethalOnly = false;
     bool drawOverlay = true;
     bool drawIcons = true;
+
+    // World-space drawing can be controlled independently from the minimap.
     bool drawWorldLayer = true;
-    bool drawMinimapLayer = true;
-    bool drawAlertCenter = true;
-    bool drawEnemyHud = true;
+    bool drawWorldChampions = true;
     bool drawCombatState = true;
     bool drawReachableAreas = true;
-    // Draws only path destinations that were observed while the champion was
-    // visible. The observation expires after the expected travel window.
-    bool drawPathTargets = true;
     bool drawThreats = true;
     bool drawWards = true;
     bool drawJungle = true;
     bool drawObjectives = true;
     bool drawInsights = true;
     bool drawWave = true;
+
+    // Minimap drawing has its own feature gates so disabling one category
+    // avoids both its iteration and its draw/icon work.
+    bool drawMinimapLayer = true;
+    bool drawMinimapChampions = true;
+    bool drawMinimapWards = true;
+    bool drawMinimapJungle = true;
+    bool drawMinimapObjectives = true;
+    bool drawMinimapLabels = true;
+    // Draws only path destinations that were observed while the champion was
+    // visible. The observation expires after the expected travel window.
+    bool drawPathTargets = true;
+
+    bool drawAlertCenter = true;
+    bool drawEnemyHud = true;
     bool drawActivityHeatmap = false;
     bool drawVisionHeatmap = false;
     // Keeps expensive world-space drawing and decision scans bounded on

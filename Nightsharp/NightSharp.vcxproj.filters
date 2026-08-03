@@ -1057,6 +1057,9 @@
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessDiagnostics.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessEngine.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>

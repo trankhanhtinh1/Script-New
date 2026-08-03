@@ -162,7 +162,22 @@ public:
 
     void OnRender() override {
         NS_PROFILE("AwarenessActivator.OnRender");
-        if (!loaded_ || SDK::Drawing::IsAllDrawingHidden()) return;
+        if (!loaded_ || SDK::Drawing::IsAllDrawingHidden() ||
+            !settings_.drawOverlay || settings_.audioOnly) {
+            return;
+        }
+
+        const bool worldEnabled =
+            settings_.drawWorldLayer && HasWorldDrawWork();
+        const bool minimapEnabled =
+            settings_.drawMinimapLayer && HasMinimapDrawWork();
+        const bool enemyHudEnabled = settings_.drawEnemyHud;
+        const bool alertCenterEnabled = settings_.drawAlertCenter;
+        if (!worldEnabled && !minimapEnabled &&
+            !enemyHudEnabled && !alertCenterEnabled) {
+            return;
+        }
+
         ConfigureDiagnostics();
         ++renderFrame_;
         diagnostics_.BeginFrame(true, renderFrame_);
@@ -170,7 +185,9 @@ public:
         {
             auto scope = diagnostics_.Begin(
                 AwarenessDiagnostics::Stage::RenderBegin);
-            rendererReady = renderer_.BeginFrame();
+            rendererReady = renderer_.BeginFrame(
+                settings_.performanceMode,
+                worldEnabled || enemyHudEnabled);
             scope.SetCounts(1, rendererReady ? 1u : 0u,
                             rendererReady ? 0u : 1u, 1);
         }
@@ -178,24 +195,29 @@ public:
             diagnostics_.EndFrame(true);
             return;
         }
-        {
+
+        if (NeedsLiveChampionPositions(
+                worldEnabled, minimapEnabled, enemyHudEnabled)) {
             auto scope = diagnostics_.Begin(
                 AwarenessDiagnostics::Stage::RenderLivePositions);
             const std::size_t count = bridge_.RefreshRenderPositions();
             scope.SetCounts(count, 0, 0, count);
         }
-        EnsureAwarenessIcons();
+
+        if (settings_.drawIcons) {
+            EnsureAwarenessIcons();
+        }
         RenderLayer(
-            LayerWorld, settings_.drawWorldLayer,
+            LayerWorld, worldEnabled,
             &AwarenessActivatorPlugin::DrawWorldLayer);
         RenderLayer(
-            LayerMinimap, settings_.drawMinimapLayer,
+            LayerMinimap, minimapEnabled,
             &AwarenessActivatorPlugin::DrawMinimapLayer);
         RenderLayer(
-            LayerEnemyHud, settings_.drawEnemyHud,
+            LayerEnemyHud, enemyHudEnabled,
             &AwarenessActivatorPlugin::DrawEnemyHud);
         RenderLayer(
-            LayerAlertCenter, settings_.drawAlertCenter,
+            LayerAlertCenter, alertCenterEnabled,
             &AwarenessActivatorPlugin::DrawPanel);
         diagnostics_.EndFrame(true);
     }
@@ -209,30 +231,53 @@ public:
         ImGui::Checkbox("Enabled", &settings_.enabled);
         ImGui::Checkbox("Draw awareness overlay", &settings_.drawOverlay);
         ImGui::Checkbox("Draw icons", &settings_.drawIcons);
-        ImGui::Checkbox("Draw isolated world layer",
-                        &settings_.drawWorldLayer);
-        ImGui::Checkbox("Draw isolated minimap layer",
-                        &settings_.drawMinimapLayer);
         ImGui::Checkbox("Draw prioritized alert center",
                         &settings_.drawAlertCenter);
         ImGui::Checkbox("Draw enemy overhead cooldown HUD",
                         &settings_.drawEnemyHud);
-        ImGui::Checkbox("Draw path targets on minimap", &settings_.drawPathTargets);
-        ImGui::Checkbox("Draw threat geometry", &settings_.drawThreats);
-        ImGui::Checkbox("Draw wards", &settings_.drawWards);
-        ImGui::Checkbox("Draw objectives", &settings_.drawObjectives);
-        ImGui::Checkbox("Draw jungle timers and confidence", &settings_.drawJungle);
-        ImGui::Checkbox("Draw combat state", &settings_.drawCombatState);
-        ImGui::Checkbox(
-            settings_.vietnamese ? "Hien thong tin nang cao" : "Draw advanced insights",
-            &settings_.drawInsights);
-        ImGui::Checkbox(
-            settings_.vietnamese ? "Hien trang thai linh" : "Draw wave state",
-            &settings_.drawWave);
-        ImGui::Checkbox("Replay activity heatmap",
-                        &settings_.drawActivityHeatmap);
-        ImGui::Checkbox("Vision coverage heatmap",
-                        &settings_.drawVisionHeatmap);
+
+        if (ImGui::TreeNode("World drawing")) {
+            ImGui::Checkbox("Enable world layer",
+                            &settings_.drawWorldLayer);
+            ImGui::Checkbox("Enemy champions",
+                            &settings_.drawWorldChampions);
+            ImGui::Checkbox("Enemy reachable areas",
+                            &settings_.drawReachableAreas);
+            ImGui::Checkbox("Threat geometry", &settings_.drawThreats);
+            ImGui::Checkbox("Wards and vision", &settings_.drawWards);
+            ImGui::Checkbox("Objectives", &settings_.drawObjectives);
+            ImGui::Checkbox("Jungle timers", &settings_.drawJungle);
+            ImGui::Checkbox("Combat state", &settings_.drawCombatState);
+            ImGui::Checkbox(
+                settings_.vietnamese ? "Thong tin nang cao" : "Advanced insights",
+                &settings_.drawInsights);
+            ImGui::Checkbox(
+                settings_.vietnamese ? "Trang thai linh" : "Wave state",
+                &settings_.drawWave);
+            ImGui::Checkbox("Replay activity heatmap",
+                            &settings_.drawActivityHeatmap);
+            ImGui::Checkbox("Vision coverage heatmap",
+                            &settings_.drawVisionHeatmap);
+            ImGui::TreePop();
+        }
+
+        if (ImGui::TreeNode("Minimap drawing")) {
+            ImGui::Checkbox("Enable minimap layer",
+                            &settings_.drawMinimapLayer);
+            ImGui::Checkbox("Enemy champions##minimap",
+                            &settings_.drawMinimapChampions);
+            ImGui::Checkbox("Observed path targets",
+                            &settings_.drawPathTargets);
+            ImGui::Checkbox("Wards##minimap",
+                            &settings_.drawMinimapWards);
+            ImGui::Checkbox("Objectives##minimap",
+                            &settings_.drawMinimapObjectives);
+            ImGui::Checkbox("Jungle camps##minimap",
+                            &settings_.drawMinimapJungle);
+            ImGui::Checkbox("Text labels##minimap",
+                            &settings_.drawMinimapLabels);
+            ImGui::TreePop();
+        }
         ImGui::Checkbox("Performance mode", &settings_.performanceMode);
         ImGui::Checkbox(
             "Profile Awareness FPS by stage",
@@ -422,6 +467,40 @@ private:
         std::size_t visionMarkers = 128;
     };
 
+    bool HasWorldDrawWork() const noexcept {
+        return settings_.drawWorldChampions ||
+               settings_.drawReachableAreas ||
+               settings_.drawWards ||
+               settings_.drawObjectives ||
+               settings_.drawJungle ||
+               settings_.drawThreats ||
+               settings_.drawCombatState ||
+               settings_.drawInsights ||
+               settings_.drawActivityHeatmap ||
+               settings_.drawVisionHeatmap;
+    }
+
+    bool HasMinimapDrawWork() const noexcept {
+        return settings_.drawMinimapChampions ||
+               settings_.drawPathTargets ||
+               settings_.drawMinimapWards ||
+               settings_.drawMinimapObjectives ||
+               settings_.drawMinimapJungle;
+    }
+
+    bool NeedsLiveChampionPositions(bool worldEnabled,
+                                    bool minimapEnabled,
+                                    bool enemyHudEnabled) const noexcept {
+        return enemyHudEnabled ||
+               (worldEnabled &&
+                (settings_.drawWorldChampions ||
+                 settings_.drawReachableAreas ||
+                 settings_.drawCombatState)) ||
+               (minimapEnabled &&
+                (settings_.drawMinimapChampions ||
+                 settings_.drawPathTargets));
+    }
+
     RenderLimits CurrentRenderLimits() const noexcept {
         if (!settings_.performanceMode) return {};
         RenderLimits limits{};
@@ -447,6 +526,7 @@ private:
     void RenderLayer(std::uint32_t layer,
                      bool enabled,
                      LayerDraw draw) noexcept {
+        if (!enabled || !draw) return;
         const bool wasFaulted = layerGuard_.IsFaulted(layer);
         AwarenessDiagnostics::Stage stage =
             AwarenessDiagnostics::Stage::RenderPanel;
@@ -467,8 +547,7 @@ private:
         layerGuard_.Run(layer, enabled, [&]() {
             (this->*draw)();
         });
-        scope.SetCounts(enabled ? 1u : 0u, enabled ? 1u : 0u,
-                        enabled ? 0u : 1u, enabled ? 1u : 0u);
+        scope.SetCounts(1u, 1u, 0u, 1u);
         if (!wasFaulted && layerGuard_.IsFaulted(layer)) {
             NightSharpDebug::Logf(
                 "[AwarenessActivator] presentation layer faulted: %u",
@@ -1058,8 +1137,10 @@ private:
     }
 
     void DrawWorldStage(AwarenessDiagnostics::Stage stage,
+                        bool enabled,
                         LayerDraw draw,
                         std::size_t objects) const {
+        if (!enabled || !draw) return;
         auto scope = diagnostics_.Begin(stage);
         (this->*draw)();
         scope.SetCounts(objects, 0, 0, objects);
@@ -1068,35 +1149,43 @@ private:
     void DrawWorldLayer() const {
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldHeatmaps,
+            settings_.drawActivityHeatmap || settings_.drawVisionHeatmap,
             &AwarenessActivatorPlugin::DrawHeatmaps,
             awareness_.Insights().activity.Size() +
                 awareness_.Store().Wards().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldChampions,
+            settings_.drawWorldChampions || settings_.drawReachableAreas,
             &AwarenessActivatorPlugin::DrawChampions,
             awareness_.Store().ChampionCount());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldWards,
+            settings_.drawWards,
             &AwarenessActivatorPlugin::DrawWards,
             awareness_.Store().Wards().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldObjectives,
+            settings_.drawObjectives,
             &AwarenessActivatorPlugin::DrawObjectives,
             awareness_.Store().Objectives().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldJungle,
+            settings_.drawJungle,
             &AwarenessActivatorPlugin::DrawJungle,
             awareness_.Store().Jungles().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldThreats,
+            settings_.drawThreats,
             &AwarenessActivatorPlugin::DrawThreats,
             awareness_.Store().Threats().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldCombat,
+            settings_.drawCombatState,
             &AwarenessActivatorPlugin::DrawCombatState,
             awareness_.Store().ChampionCount());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldInsights,
+            settings_.drawInsights,
             &AwarenessActivatorPlugin::DrawInsights,
             awareness_.Insights().objectiveSetups.Size() + 1u);
     }
@@ -1104,42 +1193,47 @@ private:
     void DrawMinimapLayer() const {
         const RenderLimits limits = CurrentRenderLimits();
 
-        awareness_.Store().ForEachChampion(
-            [&](const ChampionState& state) {
-                if (!state.enemy || state.local || state.dead ||
-                    state.clone) {
-                    return;
-                }
-                const Point3 point = RenderChampionPosition(state);
-                if (!IsValidPoint(point)) return;
-                Evidence evidence = state.health.evidence;
-                if (!state.visible) {
-                    evidence.provenance = Provenance::LastSeen;
-                    evidence.observedAt = state.lastSeenAt;
-                }
-                if (!VisibilityGuard::CanExposePosition(
-                        evidence, awareness_.Mode(),
-                        state.visible)) {
-                    return;
-                }
-                SDK::Vector2 minimap{};
-                if (!WorldToMinimap(
-                        ToSdkPoint(point), minimap)) {
-                    return;
-                }
-                const EvidenceVisualStyle style =
-                    AwarenessPresentationPolicy::StyleFor(
-                        evidence);
-                DrawCircle(
-                    minimap, 6.0f, style.thickness,
-                    style.color, 18);
-                DrawIcon(minimap, IconForChampion(state), 12.0f);
-            });
+        if (settings_.drawMinimapChampions) {
+            awareness_.Store().ForEachChampion(
+                [&](const ChampionState& state) {
+                    if (!state.enemy || state.local || state.dead ||
+                        state.clone) {
+                        return;
+                    }
+                    const Point3 point = RenderChampionPosition(state);
+                    if (!IsValidPoint(point)) return;
+                    Evidence evidence = state.health.evidence;
+                    if (!state.visible) {
+                        evidence.provenance = Provenance::LastSeen;
+                        evidence.observedAt = state.lastSeenAt;
+                    }
+                    if (!VisibilityGuard::CanExposePosition(
+                            evidence, awareness_.Mode(),
+                            state.visible)) {
+                        return;
+                    }
+                    SDK::Vector2 minimap{};
+                    if (!WorldToMinimap(
+                            ToSdkPoint(point), minimap)) {
+                        return;
+                    }
+                    const EvidenceVisualStyle style =
+                        AwarenessPresentationPolicy::StyleFor(
+                            evidence);
+                    DrawCircle(
+                        minimap, 6.0f, style.thickness,
+                        style.color, 18);
+                    if (settings_.drawIcons) {
+                        DrawIcon(
+                            minimap, IconForChampion(state), 12.0f);
+                    }
+                });
+        }
 
         DrawPathTargetsOnMinimap(limits);
         DrawJungleOnMinimap(limits);
 
-        if (settings_.drawWards) {
+        if (settings_.drawMinimapWards) {
             const auto& wards = awareness_.Store().Wards();
             std::size_t wardMarkers = 0;
             std::size_t wardLabels = 0;
@@ -1167,10 +1261,13 @@ private:
                 DrawCircle(
                     minimap, 3.5f, style.thickness,
                     style.color, 12);
-                DrawIcon(minimap, IconForWard(ward.enemy), 9.0f);
+                if (settings_.drawIcons) {
+                    DrawIcon(minimap, IconForWard(ward.enemy), 9.0f);
+                }
                 ++wardMarkers;
                 const bool importantLabel = ward.enemy || ward.faelight;
-                if (wardLabels < limits.minimapWardLabels &&
+                if (settings_.drawMinimapLabels &&
+                    wardLabels < limits.minimapWardLabels &&
                     (!settings_.performanceMode || importantLabel)) {
                     char label[128] = {};
                     std::snprintf(
@@ -1186,7 +1283,7 @@ private:
             }
         }
 
-        if (settings_.drawObjectives) {
+        if (settings_.drawMinimapObjectives) {
             const auto& objectives =
                 awareness_.Store().Objectives();
             for (std::size_t i = 0;
@@ -1213,13 +1310,17 @@ private:
                 DrawCircle(
                     minimap, 5.0f, style.thickness,
                     style.color, 16);
-                DrawIcon(minimap, IconForObjective(objective.kind), 11.0f);
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        minimap, IconForObjective(objective.kind), 11.0f);
+                }
                 // Objective count is small, so labels remain available. In
                 // performance mode hide stale non-visible labels.
-                if (!settings_.performanceMode || objective.visible ||
+                if (settings_.drawMinimapLabels &&
+                    (!settings_.performanceMode || objective.visible ||
                     objective.status == ObjectiveStatus::SpawningSoon ||
                     objective.status == ObjectiveStatus::Respawning ||
-                    objective.status == ObjectiveStatus::InCombatVisible) {
+                    objective.status == ObjectiveStatus::InCombatVisible)) {
                     char label[128] = {};
                     std::snprintf(
                         label, sizeof(label), "%c %s%s [%s/%s]",
@@ -1278,35 +1379,40 @@ private:
                 DrawCircle(
                     targetMap, 2.2f, 1.0f,
                     style.color, 10);
-                DrawIcon(targetMap, IconForChampion(state), 12.0f);
-
-                const float eta = std::max(
-                    0.0f, state.pathExpectedArrivalAt - now);
-                char label[96] = {};
-                if (eta > 0.05f) {
-                    std::snprintf(
-                        label, sizeof(label), "%s target %.1fs",
-                        settings_.streamerMode
-                            ? "enemy"
-                            : (state.name[0] ? state.name : "enemy"),
-                        eta);
-                } else {
-                    std::snprintf(
-                        label, sizeof(label), "%s target",
-                        settings_.streamerMode
-                            ? "enemy"
-                            : (state.name[0] ? state.name : "enemy"));
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        targetMap, IconForChampion(state), 12.0f);
                 }
-                DrawText(
-                    targetMap.x + 8.0f, targetMap.y - 7.0f,
-                    style.color, label);
+
+                if (settings_.drawMinimapLabels) {
+                    const float eta = std::max(
+                        0.0f, state.pathExpectedArrivalAt - now);
+                    char label[96] = {};
+                    if (eta > 0.05f) {
+                        std::snprintf(
+                            label, sizeof(label), "%s target %.1fs",
+                            settings_.streamerMode
+                                ? "enemy"
+                                : (state.name[0] ? state.name : "enemy"),
+                            eta);
+                    } else {
+                        std::snprintf(
+                            label, sizeof(label), "%s target",
+                            settings_.streamerMode
+                                ? "enemy"
+                                : (state.name[0] ? state.name : "enemy"));
+                    }
+                    DrawText(
+                        targetMap.x + 8.0f, targetMap.y - 7.0f,
+                        style.color, label);
+                }
                 ++drawn;
             });
     }
 
     void DrawJungleOnMinimap(
         const RenderLimits& limits) const {
-        if (!settings_.drawJungle) return;
+        if (!settings_.drawMinimapJungle) return;
         const float now = awareness_.Now();
         const auto& camps = awareness_.Store().Jungles();
         std::size_t markers = 0;
@@ -1333,10 +1439,13 @@ private:
             DrawCircle(
                 minimap, 4.5f, style.thickness,
                 style.color, 14);
-            DrawIcon(minimap, IconForCamp(camp.campId), 10.0f);
+            if (settings_.drawIcons) {
+                DrawIcon(minimap, IconForCamp(camp.campId), 10.0f);
+            }
             ++markers;
 
-            if (labels >= limits.minimapJungleLabels) continue;
+            if (!settings_.drawMinimapLabels ||
+                labels >= limits.minimapJungleLabels) continue;
             char status[24] = {};
             FormatJungleStatus(camp, now, status, sizeof(status));
             char label[96] = {};
@@ -1441,12 +1550,16 @@ private:
                 style = { 0xFFFFAA44u, 2.0f, 'C' };
             }
             const Point3 renderPosition = RenderChampionPosition(state);
-            if (state.visible && IsValidPoint(renderPosition) &&
+            if (settings_.drawWorldChampions && state.visible &&
+                IsValidPoint(renderPosition) &&
                 ShouldDrawWorld(renderPosition, 125.0f)) {
                 DrawCircle(
                     ToSdkPoint(renderPosition), 125.0f,
                     style.color, style.thickness);
-                DrawIcon(renderPosition, IconForChampion(state), 30.0f);
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        renderPosition, IconForChampion(state), 30.0f);
+                }
             } else if (settings_.drawReachableAreas &&
                        reachableDrawn < limits.reachableAreas &&
                        evidence.provenance ==
@@ -1461,16 +1574,18 @@ private:
                     ToSdkPoint(state.lastSeenPosition),
                     ReachableDrawRadius(state.reachableRadius),
                     style.color, style.thickness);
-                DrawIcon(
-                    state.lastSeenPosition,
-                    IconForChampion(state), 24.0f, 0xAAFFFFFFu);
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        state.lastSeenPosition,
+                        IconForChampion(state), 24.0f, 0xAAFFFFFFu);
+                }
                 ++reachableDrawn;
             }
         });
     }
 
     void DrawEnemyHud() const {
-        if (!settings_.drawEnemyHud || !settings_.drawIcons) return;
+        if (!settings_.drawEnemyHud) return;
 
         constexpr float kPortraitCell = 24.0f;
         constexpr float kSpellCell = 22.0f;
@@ -1517,7 +1632,8 @@ private:
                     cooldowns[slot] = cooldownStorage[slot];
                 }
 
-                const ImTextureID portrait = IconForChampion(state);
+                const ImTextureID portrait = settings_.drawIcons
+                    ? IconForChampion(state) : nullptr;
                 const bool hasPortrait = IsRealIcon(portrait);
                 const float portraitWidth = hasPortrait
                     ? kPortraitCell + kGap : 0.0f;
@@ -1566,7 +1682,7 @@ private:
                         cellLeft + kSpellCell * 0.5f,
                         top + kRowHeight * 0.5f);
                     bool hasIcon = false;
-                    if (slots[slot]) {
+                    if (settings_.drawIcons && slots[slot]) {
                         hasIcon = DrawIcon(
                             center,
                             IconForSpell(state, *slots[slot]),
@@ -1635,7 +1751,10 @@ private:
             const float radius = std::max(35.0f, ward.radius);
             DrawCircle(
                 ToSdkPoint(ward.position), radius, color, 1.5f);
-            DrawIcon(ward.position, IconForWard(ward.enemy), 18.0f);
+            if (settings_.drawIcons) {
+                DrawIcon(
+                    ward.position, IconForWard(ward.enemy), 18.0f);
+            }
             ++markers;
             const float now = awareness_.Now();
             const float bonusRemaining = ward.bonusVisionUntil > 0.0f
@@ -1736,7 +1855,11 @@ private:
                 DrawCircle(
                     ToSdkPoint(objective.position), 220.0f,
                     color, objective.visible ? 2.0f : style.thickness);
-                DrawIcon(objective.position, IconForObjective(objective.kind), 32.0f);
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        objective.position,
+                        IconForObjective(objective.kind), 32.0f);
+                }
                 ++worldMarkers;
                 if (worldLabels < limits.worldObjectiveLabels &&
                     (!settings_.performanceMode || objective.visible ||
@@ -1771,7 +1894,10 @@ private:
                 : (estimated ? 0xCCFFBB55u : 0xAA88AA88u);
             DrawCircle(
                 ToSdkPoint(camp.position), 135.0f, color, 1.5f);
-            DrawIcon(camp.position, IconForCamp(camp.campId), 24.0f);
+            if (settings_.drawIcons) {
+                DrawIcon(
+                    camp.position, IconForCamp(camp.campId), 24.0f);
+            }
             ++markers;
             if (labels >= limits.worldJungleLabels ||
                 (settings_.performanceMode && !camp.visible && !camp.alive)) {
@@ -2154,7 +2280,7 @@ private:
         std::snprintf(
             line, sizeof(line), "Awareness | %s | t=%.1f",
             RuntimeModeName(awareness_.Mode()), awareness_.Now());
-        const bool headerIcon = DrawIcon(
+        const bool headerIcon = settings_.drawIcons && DrawIcon(
             SDK::Vector2(
                 settings_.alertPanelX + 8.0f, y + 8.0f),
             ResolveIcon("awareness_alert", false), 16.0f);
@@ -2166,7 +2292,7 @@ private:
             std::snprintf(line, sizeof(line), "candidate: %s [%s / %s] %.0f%% - %s",
                           CapabilityName(candidate_.capability), ActionModeName(candidate_.mode),
                           ConfidenceName(candidate_.confidence), static_cast<float>(static_cast<int>(candidate_.confidence)), candidate_.reason);
-            const bool candidateIcon = DrawIcon(
+            const bool candidateIcon = settings_.drawIcons && DrawIcon(
                 SDK::Vector2(
                     settings_.alertPanelX + 8.0f, y + 8.0f),
                 IconForCapability(candidate_.capability), 16.0f);
@@ -2204,7 +2330,7 @@ private:
             const EvidenceVisualStyle style =
                 AwarenessPresentationPolicy::StyleFor(
                     alertEvidence);
-            const bool alertIcon = DrawIcon(
+            const bool alertIcon = settings_.drawIcons && DrawIcon(
                 SDK::Vector2(
                     settings_.alertPanelX + 8.0f, y + 8.0f),
                 ResolveIcon("awareness_alert", false), 15.0f);
@@ -2307,8 +2433,11 @@ private:
         settings_.drawEnemyHud = profile.enemyHud;
         settings_.drawCombatState = profile.combat;
         settings_.drawWards = profile.wards;
+        settings_.drawMinimapWards = profile.wards;
         settings_.drawJungle = profile.jungle;
+        settings_.drawMinimapJungle = profile.jungle;
         settings_.drawObjectives = profile.objectives;
+        settings_.drawMinimapObjectives = profile.objectives;
         settings_.drawActivityHeatmap = profile.heatmaps;
         settings_.defensiveHorizon = profile.defensiveHorizon;
         menu_.SyncMenuFromSettings();
