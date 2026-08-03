@@ -116,7 +116,13 @@ public:
     bool audioOnly = false;
     bool streamerMode = false;
     bool vietnamese = false;
-    bool hudEditor = false;
+    // 0 = vertical cards, 1 = horizontal cards.
+    int hudLayoutIndex = 0;
+    // User multiplier applied after each renderer-defined base icon size.
+    float iconScale = 1.0f;
+    // Compact cooldown strip offset from the projected enemy position.
+    float enemyHudOffsetX = 0.0f;
+    float enemyHudOffsetY = -62.0f;
     int confirmationVirtualKey = VK_MENU;
     float defensiveHorizon = 1.25f;
     float protectionThreshold = 0.32f;
@@ -130,8 +136,13 @@ public:
     float ghostMinimumTimeGain = 0.35f;
     float worldDrawDistance = 4500.0f;
     float reachableAreaMaxRadius = 2500.0f;
-    float alertPanelX = 18.0f;
-    float alertPanelY = 22.0f;
+    // Negative coordinates request a smart viewport-relative default.
+    float alertPanelX = -1.0f;
+    float alertPanelY = -1.0f;
+    float objectivePanelX = -1.0f;
+    float objectivePanelY = -1.0f;
+    float insightPanelX = -1.0f;
+    float insightPanelY = -1.0f;
     int rolePresetIndex = 0;
     std::array<ActionMode, 64> modes_{};
     std::array<CapabilitySafety, 64> safety_{};

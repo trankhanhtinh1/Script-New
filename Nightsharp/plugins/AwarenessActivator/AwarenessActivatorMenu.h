@@ -47,6 +47,12 @@ public:
                       patchVersion && patchVersion[0] ? patchVersion : "embedded defaults");
         root_->Add(new SDK::MenuSeparator("PatchRegistry", patchLabel));
 
+        // Language is intentionally placed before every functional submenu so
+        // users can localize the complete tree before configuring anything.
+        language_ = root_->Add(new SDK::MenuList(
+            "Language", "Language", { "English", "Vietnamese" },
+            settings.vietnamese ? 1 : 0));
+
         SDK::Menu* general = root_->AddSubMenu(
             new SDK::Menu("General", "General and safety"));
         BindBool(general, "Enabled", "Enabled", settings.enabled);
@@ -67,13 +73,6 @@ public:
             new SDK::Menu("Awareness", "Awareness overlays"));
         BindBool(awareness, "DrawOverlay", "Draw awareness overlay",
                  settings.drawOverlay);
-        BindBool(awareness, "DrawIcons", "Draw icons",
-                 settings.drawIcons);
-        BindBool(awareness, "DrawAlertCenter", "Draw prioritized alert center",
-                 settings.drawAlertCenter);
-        BindBool(awareness, "DrawEnemyHud",
-                 "Draw enemy overhead cooldown HUD",
-                 settings.drawEnemyHud);
 
         SDK::Menu* worldDrawing = awareness->AddSubMenu(
             new SDK::Menu("WorldDrawing", "World drawing"));
@@ -126,41 +125,59 @@ public:
         BindBool(minimapDrawing, "DrawMinimapLabels", "Draw minimap text labels",
                  settings.drawMinimapLabels);
 
-        BindBool(awareness, "PerformanceMode",
+        SDK::Menu* hudDrawing = awareness->AddSubMenu(
+            new SDK::Menu("HudDrawing", "Professional HUD"));
+        BindBool(hudDrawing, "DrawIcons", "Draw icons",
+                 settings.drawIcons);
+        BindBool(hudDrawing, "DrawAlertCenter", "Draw prioritized alert center",
+                 settings.drawAlertCenter);
+        BindBool(hudDrawing, "DrawEnemyHud",
+                 "Draw enemy overhead cooldown HUD",
+                 settings.drawEnemyHud);
+        hudLayout_ = hudDrawing->Add(new SDK::MenuList(
+            "HudLayout", "HUD arrangement",
+            { "Vertical", "Horizontal" },
+            std::clamp(settings.hudLayoutIndex, 0, 1)));
+        BindFloat(hudDrawing, "IconScale", "Icon scale",
+                  settings.iconScale, 0.50f, 2.00f);
+        BindFloat(hudDrawing, "EnemyHudOffsetX",
+                  "Enemy HUD horizontal offset",
+                  settings.enemyHudOffsetX, -240.0f, 240.0f);
+        BindFloat(hudDrawing, "EnemyHudOffsetY",
+                  "Enemy HUD vertical offset",
+                  settings.enemyHudOffsetY, -320.0f, 320.0f);
+        hudDrawing->Add(new SDK::MenuButton(
+            "ResetHudPositions", "Reset smart HUD positions", "Reset",
+            &AwarenessActivatorMenu::OnResetHudPositions, this));
+        hudDrawing->Add(new SDK::MenuSeparator(
+            "HudDragHelp", "Every screen HUD can always be dragged directly"));
+
+        SDK::Menu* advanced = awareness->AddSubMenu(
+            new SDK::Menu("Advanced", "Performance, accessibility and diagnostics"));
+        BindBool(advanced, "PerformanceMode",
                  "Performance mode (bounded drawing and cached minimap state)",
                  settings.performanceMode);
-        BindBool(awareness, "DiagnosticsEnabled",
+        BindBool(advanced, "AudioOnly", "Audio-only accessibility mode",
+                 settings.audioOnly);
+        BindBool(advanced, "StreamerMode", "Privacy-preserving streamer mode",
+                 settings.streamerMode);
+        BindBool(advanced, "DiagnosticsEnabled",
                  "Profile Awareness FPS by stage",
                  settings.diagnosticsEnabled);
-        BindBool(awareness, "DiagnosticsConsoleLog",
+        BindBool(advanced, "DiagnosticsConsoleLog",
                  "Log Awareness FPS to debug console",
                  settings.diagnosticsConsoleLog);
-        BindBool(awareness, "DiagnosticsVerbose",
+        BindBool(advanced, "DiagnosticsVerbose",
                  "Include object counts and complexity",
                  settings.diagnosticsVerbose);
-        BindFloat(awareness, "DiagnosticsReportInterval",
+        BindFloat(advanced, "DiagnosticsReportInterval",
                   "Diagnostics report interval (frames)",
                   settings.diagnosticsReportInterval,
                   15.0f, 600.0f);
-        BindFloat(awareness, "DiagnosticsSlowFrameMs",
+        BindFloat(advanced, "DiagnosticsSlowFrameMs",
                   "Log slow render frame threshold (ms)",
                   settings.diagnosticsSlowFrameMs,
                   1.0f, 50.0f);
-        BindBool(awareness, "AudioOnly", "Audio-only accessibility mode",
-                 settings.audioOnly);
-        BindBool(awareness, "StreamerMode", "Privacy-preserving streamer mode",
-                 settings.streamerMode);
-        BindBool(awareness, "Vietnamese", "Vietnamese UI labels",
-                 settings.vietnamese);
-        BindBool(awareness, "HudEditor", "Draggable HUD layout editor",
-                 settings.hudEditor);
-
-        SDK::Menu* layout = awareness->AddSubMenu(
-            new SDK::Menu("Layout", "HUD layout"));
-        BindFloat(layout, "AlertPanelX", "Alert panel X",
-                  settings.alertPanelX, 0.0f, 3800.0f);
-        BindFloat(layout, "AlertPanelY", "Alert panel Y",
-                  settings.alertPanelY, 0.0f, 2100.0f);
 
         SDK::Menu* presets = awareness->AddSubMenu(
             new SDK::Menu("Presets", "Role and champion presets"));
@@ -298,6 +315,8 @@ public:
         }
         root_ = nullptr;
         settings_ = nullptr;
+        language_ = nullptr;
+        hudLayout_ = nullptr;
         confirmationKey_ = nullptr;
         boolBindingCount_ = 0;
         floatBindingCount_ = 0;
@@ -319,6 +338,14 @@ public:
         }
         for (std::size_t i = 0; i < floatBindingCount_; ++i) {
             *floatBindings_[i].target = floatBindings_[i].item->Value;
+        }
+        if (language_) {
+            settings_->vietnamese =
+                std::clamp(language_->Index, 0, 1) == 1;
+        }
+        if (hudLayout_) {
+            settings_->hudLayoutIndex =
+                std::clamp(hudLayout_->Index, 0, 1);
         }
         if (confirmationKey_ && confirmationKey_->Key > 0) {
             settings_->confirmationVirtualKey = confirmationKey_->Key;
@@ -345,6 +372,12 @@ public:
         for (std::size_t i = 0; i < floatBindingCount_; ++i) {
             floatBindings_[i].item->Set(*floatBindings_[i].target);
         }
+        if (language_) {
+            language_->Set(settings_->vietnamese ? 1 : 0);
+        }
+        if (hudLayout_) {
+            hudLayout_->Set(std::clamp(settings_->hudLayoutIndex, 0, 1));
+        }
         if (confirmationKey_ && settings_->confirmationVirtualKey > 0 &&
             confirmationKey_->Key != settings_->confirmationVirtualKey) {
             confirmationKey_->SetKey(settings_->confirmationVirtualKey);
@@ -356,6 +389,7 @@ public:
             modeBindings_[i].item->Set(static_cast<int>(
                 settings_->ModeFor(modeBindings_[i].capability)));
         }
+        ApplyLocale();
         syncing_ = false;
     }
 
@@ -439,12 +473,17 @@ private:
         if (localeApplied_ == locale) return;
         localeApplied_ = locale;
         const bool vi = locale != 0;
+
         root_->DisplayName = vi
             ? "Nhận thức + Kích hoạt" : "Awareness + Activator";
+        SetLabel(root_, "Language", vi ? "Ngôn ngữ" : "Language");
+
         SDK::Menu* general = root_->GetSubMenu("General");
         SDK::Menu* awareness = root_->GetSubMenu("Awareness");
         SDK::Menu* activator = root_->GetSubMenu("Activator");
+        SDK::Menu* actionModes = root_->GetSubMenu("ActionModes");
         SDK::Menu* diagnostics = root_->GetSubMenu("Diagnostics");
+
         if (general) {
             general->DisplayName = vi
                 ? "Chung và an toàn" : "General and safety";
@@ -462,45 +501,13 @@ private:
                      vi ? "Chỉ cho phép tự động trong Phòng Tập"
                         : "Allow automation in Practice only");
         }
+
         if (awareness) {
             awareness->DisplayName = vi
                 ? "Lớp hiển thị nhận thức" : "Awareness overlays";
             SetLabel(awareness, "DrawOverlay",
-                     vi ? "Bật toàn bộ lớp vẽ nhận thức"
+                     vi ? "Bật toàn bộ lớp hiển thị"
                         : "Draw awareness overlay");
-            SetLabel(awareness, "DrawIcons",
-                     vi ? "Hiện biểu tượng"
-                        : "Draw icons");
-            SetLabel(awareness, "DrawAlertCenter",
-                     vi ? "Hiện trung tâm cảnh báo ưu tiên"
-                        : "Draw prioritized alert center");
-            SetLabel(awareness, "DrawEnemyHud",
-                     vi ? "Hiện hồi chiêu trên đầu đối thủ"
-                        : "Draw enemy overhead cooldown HUD");
-            SetLabel(awareness, "PerformanceMode",
-                     vi ? "Chế độ hiệu năng (giới hạn vẽ và cache minimap)"
-                        : "Performance mode (bounded drawing and cached minimap state)");
-            SetLabel(awareness, "DiagnosticsEnabled",
-                     vi ? "Đo FPS Awareness theo từng stage"
-                        : "Profile Awareness FPS by stage");
-            SetLabel(awareness, "DiagnosticsConsoleLog",
-                     vi ? "Ghi log FPS Awareness ra debug console"
-                        : "Log Awareness FPS to debug console");
-            SetLabel(awareness, "DiagnosticsVerbose",
-                     vi ? "Ghi số đối tượng và độ phức tạp"
-                        : "Include object counts and complexity");
-            SetLabel(awareness, "AudioOnly",
-                     vi ? "Chế độ trợ năng chỉ âm thanh"
-                        : "Audio-only accessibility mode");
-            SetLabel(awareness, "StreamerMode",
-                     vi ? "Chế độ riêng tư khi phát sóng"
-                        : "Privacy-preserving streamer mode");
-            SetLabel(awareness, "Vietnamese",
-                     vi ? "Giao diện tiếng Việt"
-                        : "Vietnamese UI labels");
-            SetLabel(awareness, "HudEditor",
-                     vi ? "Trình kéo thả bố cục HUD"
-                        : "Draggable HUD layout editor");
 
             if (SDK::Menu* world =
                     awareness->GetSubMenu("WorldDrawing")) {
@@ -531,7 +538,7 @@ private:
                          vi ? "Hiện trạng thái giao tranh"
                             : "Draw combat awareness state");
                 SetLabel(world, "DrawInsights",
-                         vi ? "Hiện phân tích nâng cao"
+                         vi ? "Hiện bảng phân tích chiến thuật"
                             : "Draw advanced insights");
                 SetLabel(world, "DrawWave",
                          vi ? "Hiện trạng thái đợt lính"
@@ -542,6 +549,12 @@ private:
                 SetLabel(world, "DrawVisionHeatmap",
                          vi ? "Bản đồ nhiệt tầm nhìn"
                             : "Draw vision coverage heatmap");
+                SetLabel(world, "WorldDrawDistance",
+                         vi ? "Khoảng cách vẽ trong thế giới"
+                            : "World draw distance");
+                SetLabel(world, "ReachableAreaMaxRadius",
+                         vi ? "Giới hạn bán kính vùng có thể tới"
+                            : "Reachable area radius cap");
             }
 
             if (SDK::Menu* minimap =
@@ -558,43 +571,106 @@ private:
                          vi ? "Hiện đích di chuyển đã quan sát"
                             : "Draw observed movement targets");
                 SetLabel(minimap, "DrawMinimapWards",
-                         vi ? "Hiện mắt"
-                            : "Draw wards");
+                         vi ? "Hiện mắt" : "Draw wards");
                 SetLabel(minimap, "DrawMinimapJungle",
-                         vi ? "Hiện bãi rừng"
-                            : "Draw jungle camps");
+                         vi ? "Hiện bãi rừng" : "Draw jungle camps");
                 SetLabel(minimap, "DrawMinimapObjectives",
-                         vi ? "Hiện mục tiêu lớn"
-                            : "Draw objectives");
+                         vi ? "Hiện mục tiêu lớn" : "Draw objectives");
                 SetLabel(minimap, "DrawMinimapLabels",
                          vi ? "Hiện nhãn chữ trên bản đồ nhỏ"
                             : "Draw minimap text labels");
             }
+
+            if (SDK::Menu* hud = awareness->GetSubMenu("HudDrawing")) {
+                hud->DisplayName = vi ? "HUD chuyên nghiệp" : "Professional HUD";
+                SetLabel(hud, "DrawIcons",
+                         vi ? "Hiện biểu tượng" : "Draw icons");
+                SetLabel(hud, "DrawAlertCenter",
+                         vi ? "Hiện trung tâm cảnh báo ưu tiên"
+                            : "Draw prioritized alert center");
+                SetLabel(hud, "DrawEnemyHud",
+                         vi ? "Hiện HUD hồi chiêu trên đầu đối thủ"
+                            : "Draw enemy overhead cooldown HUD");
+                SetLabel(hud, "HudLayout",
+                         vi ? "Kiểu sắp xếp HUD"
+                            : "HUD arrangement");
+                SetLabel(hud, "IconScale",
+                         vi ? "Tỷ lệ biểu tượng" : "Icon scale");
+                SetLabel(hud, "EnemyHudOffsetX",
+                         vi ? "Độ lệch HUD đối thủ theo chiều ngang"
+                            : "Enemy HUD horizontal offset");
+                SetLabel(hud, "EnemyHudOffsetY",
+                         vi ? "Độ lệch HUD đối thủ theo chiều dọc"
+                            : "Enemy HUD vertical offset");
+                SetLabel(hud, "ResetHudPositions",
+                         vi ? "Đặt lại vị trí HUD thông minh"
+                            : "Reset smart HUD positions");
+            }
+
+            if (SDK::Menu* advanced =
+                    awareness->GetSubMenu("Advanced")) {
+                advanced->DisplayName = vi
+                    ? "Hiệu năng, trợ năng và chẩn đoán"
+                    : "Performance, accessibility and diagnostics";
+                SetLabel(advanced, "PerformanceMode",
+                         vi ? "Chế độ hiệu năng"
+                            : "Performance mode (bounded drawing and cached minimap state)");
+                SetLabel(advanced, "AudioOnly",
+                         vi ? "Chế độ trợ năng chỉ âm thanh"
+                            : "Audio-only accessibility mode");
+                SetLabel(advanced, "StreamerMode",
+                         vi ? "Chế độ riêng tư khi phát sóng"
+                            : "Privacy-preserving streamer mode");
+                SetLabel(advanced, "DiagnosticsEnabled",
+                         vi ? "Đo hiệu năng Awareness theo từng giai đoạn"
+                            : "Profile Awareness FPS by stage");
+                SetLabel(advanced, "DiagnosticsConsoleLog",
+                         vi ? "Ghi log hiệu năng ra bảng gỡ lỗi"
+                            : "Log Awareness FPS to debug console");
+                SetLabel(advanced, "DiagnosticsVerbose",
+                         vi ? "Ghi số đối tượng và độ phức tạp"
+                            : "Include object counts and complexity");
+                SetLabel(advanced, "DiagnosticsReportInterval",
+                         vi ? "Chu kỳ báo cáo chẩn đoán (khung hình)"
+                            : "Diagnostics report interval (frames)");
+                SetLabel(advanced, "DiagnosticsSlowFrameMs",
+                         vi ? "Ngưỡng khung hình vẽ chậm (ms)"
+                            : "Log slow render frame threshold (ms)");
+            }
+
+            if (SDK::Menu* presets = awareness->GetSubMenu("Presets")) {
+                presets->DisplayName = vi
+                    ? "Cấu hình theo vai trò và tướng"
+                    : "Role and champion presets";
+                SetLabel(presets, "RolePreset",
+                         vi ? "Cấu hình vai trò" : "Role preset");
+                SetLabel(presets, "ApplyRolePreset",
+                         vi ? "Áp dụng cấu hình vai trò đã chọn"
+                            : "Selected role preset");
+                SetLabel(presets, "ApplyChampionPreset",
+                         vi ? "Áp dụng cấu hình tướng hiện tại"
+                            : "Current champion preset");
+            }
         }
+
         if (activator) {
             activator->DisplayName = vi ? "Kích hoạt" : "Activator";
             if (SDK::Menu* categories =
                     activator->GetSubMenu("Categories")) {
                 categories->DisplayName =
-                    vi ? "Nhóm kích hoạt" : "Categories";
+                    vi ? "Nhóm kích hoạt" : "Capability groups";
                 SetLabel(categories, "Summoners",
-                         vi ? "Phép bổ trợ D/F"
-                            : "Summoner spells D/F");
+                         vi ? "Phép bổ trợ D/F" : "Summoner spells");
                 SetLabel(categories, "DefensiveItems",
-                         vi ? "Trang bị phòng thủ"
-                            : "Defensive items");
+                         vi ? "Trang bị phòng thủ" : "Defensive items");
                 SetLabel(categories, "SupportItems",
-                         vi ? "Trang bị hỗ trợ"
-                            : "Support items");
+                         vi ? "Trang bị hỗ trợ" : "Support items");
                 SetLabel(categories, "MovementItems",
-                         vi ? "Trang bị di chuyển"
-                            : "Movement items");
+                         vi ? "Trang bị di chuyển" : "Movement items");
                 SetLabel(categories, "OffensiveItems",
-                         vi ? "Trang bị tấn công"
-                            : "Offensive items");
+                         vi ? "Trang bị tấn công" : "Offensive items");
                 SetLabel(categories, "VisionItems",
-                         vi ? "Trang bị tầm nhìn"
-                            : "Vision items");
+                         vi ? "Trang bị tầm nhìn" : "Vision items");
                 SetLabel(categories, "Potion",
                          vi ? "Bình máu và vật phẩm tiêu hao"
                             : "Potion and consumables");
@@ -602,10 +678,10 @@ private:
                          vi ? "Tính sát thương theo thời gian"
                             : "Include damage over time");
                 SetLabel(categories, "ReserveSmiteCharge",
-                         vi ? "Giữ một lần Trừng Phạt khỏi Cua"
+                         vi ? "Giữ một lần Trừng Phạt, không dùng cho Cua"
                             : "Reserve one Smite charge from Scuttle");
                 SetLabel(categories, "BarrierLethalOnly",
-                         vi ? "Chỉ dùng Lá Chắn khi chí mạng"
+                         vi ? "Chỉ dùng Lá Chắn khi sát thương có thể kết liễu"
                             : "Barrier only for lethal damage");
             }
             if (SDK::Menu* thresholds =
@@ -616,17 +692,18 @@ private:
                          vi ? "Khoảng dự báo phòng thủ (giây)"
                             : "Defensive horizon (seconds)");
                 SetLabel(thresholds, "ProtectionThreshold",
-                         vi ? "Ngưỡng bảo vệ"
-                            : "Protection threshold");
+                         vi ? "Ngưỡng bảo vệ" : "Protection threshold");
                 SetLabel(thresholds, "AllySaveThreshold",
-                         vi ? "Ngưỡng cứu đồng minh"
-                            : "Ally save threshold");
+                         vi ? "Ngưỡng cứu đồng minh" : "Ally save threshold");
                 SetLabel(thresholds, "OffensiveSafetyMargin",
                          vi ? "Biên an toàn Thiêu Đốt"
                             : "Ignite safety margin");
                 SetLabel(thresholds, "CleanseReactionDelay",
                          vi ? "Độ trễ Thanh Tẩy (giây)"
                             : "Cleanse reaction delay (seconds)");
+                SetLabel(thresholds, "ReactionDebounceSeconds",
+                         vi ? "Chống lặp phản ứng (giây)"
+                            : "Duplicate reaction debounce (seconds)");
                 SetLabel(thresholds, "MinimumShieldEfficiency",
                          vi ? "Hiệu suất Lá Chắn tối thiểu"
                             : "Minimum Barrier shield efficiency");
@@ -634,16 +711,41 @@ private:
                          vi ? "Ngưỡng máu thiếu để Hồi Máu"
                             : "Heal missing-health threshold");
                 SetLabel(thresholds, "ExhaustDamageThreshold",
-                         vi ? "Ngưỡng sát thương Kiệt Sức"
-                            : "Exhaust damage threshold");
+                         vi ? "Ngưỡng sát thương để Kiệt Sức"
+                            : "Exhaust incoming-damage threshold");
                 SetLabel(thresholds, "GhostMinimumTimeGain",
                          vi ? "Lợi thời gian Tăng Tốc tối thiểu"
                             : "Minimum Ghost time gain");
             }
         }
+
+        if (actionModes) {
+            actionModes->DisplayName = vi
+                ? "Chế độ theo từng khả năng"
+                : "Per-capability action modes";
+            if (SDK::Menu* summoners = actionModes->GetSubMenu("Summoners")) {
+                summoners->DisplayName = vi
+                    ? "Phép bổ trợ" : "Summoner spells";
+            }
+            if (SDK::Menu* protection = actionModes->GetSubMenu("Protection")) {
+                protection->DisplayName = vi
+                    ? "Thanh tẩy và bảo vệ"
+                    : "Cleanse and protection items";
+            }
+            if (SDK::Menu* combat = actionModes->GetSubMenu("CombatItems")) {
+                combat->DisplayName = vi
+                    ? "Trang bị giao tranh" : "Combat items";
+            }
+            if (SDK::Menu* utility = actionModes->GetSubMenu("UtilityItems")) {
+                utility->DisplayName = vi
+                    ? "Tầm nhìn và tiện ích"
+                    : "Vision and utility items";
+            }
+        }
+
         if (diagnostics) {
             diagnostics->DisplayName = vi
-                ? "Chẩn đoán và xuất dữ liệu" : "Diagnostics";
+                ? "Xuất dữ liệu" : "Diagnostics";
             SetLabel(diagnostics, "ExportDecisionLog",
                      vi ? "Nhật ký quyết định và dữ liệu cục bộ"
                         : "Decision log and local telemetry");
@@ -667,6 +769,20 @@ private:
     static void OnMenuValueChanged(SDK::MenuValueChangedEventArgs, void* context) {
         auto* self = static_cast<AwarenessActivatorMenu*>(context);
         if (self) self->SyncSettingsFromMenu();
+    }
+
+    static void OnResetHudPositions(SDK::MenuButton*, void* context) {
+        auto* self = static_cast<AwarenessActivatorMenu*>(context);
+        if (!self || !self->settings_) return;
+        self->settings_->alertPanelX = -1.0f;
+        self->settings_->alertPanelY = -1.0f;
+        self->settings_->objectivePanelX = -1.0f;
+        self->settings_->objectivePanelY = -1.0f;
+        self->settings_->insightPanelX = -1.0f;
+        self->settings_->insightPanelY = -1.0f;
+        self->settings_->enemyHudOffsetX = 0.0f;
+        self->settings_->enemyHudOffsetY = -62.0f;
+        self->SyncMenuFromSettings();
     }
 
     static void OnApplyRolePreset(SDK::MenuButton*, void* context) {
@@ -700,10 +816,12 @@ private:
     }
     SDK::Menu* root_ = nullptr;
     ActivatorSettings* settings_ = nullptr;
+    SDK::MenuList* language_ = nullptr;
+    SDK::MenuList* hudLayout_ = nullptr;
     SDK::MenuKeyBind* confirmationKey_ = nullptr;
     SDK::MenuList* rolePreset_ = nullptr;
     std::array<BoolBinding, 64> boolBindings_{};
-    std::array<FloatBinding, 16> floatBindings_{};
+    std::array<FloatBinding, 20> floatBindings_{};
     std::array<ModeBinding, 40> modeBindings_{};
     std::size_t boolBindingCount_ = 0;
     std::size_t floatBindingCount_ = 0;

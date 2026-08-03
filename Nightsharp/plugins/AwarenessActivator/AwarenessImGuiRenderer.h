@@ -94,8 +94,7 @@ public:
             }
         }
 
-        if (!tacticalMap_.WorldToMinimap(
-                world, out, rendererSize_) ||
+        if (!tacticalMap_.WorldToMinimap(world, out) ||
             !out.IsValid()) {
             out = {};
             return false;
@@ -174,25 +173,35 @@ public:
 
         const int count = ClampSegments(segments);
         std::array<ImVec2, kMaxCircleSegments> points{};
-        int visible = 0;
+        std::array<bool, kMaxCircleSegments> projected{};
+        int projectedCount = 0;
         float minX = 0.0f;
         float maxX = 0.0f;
         float minY = 0.0f;
         float maxY = 0.0f;
         const auto& unit = UnitCircle();
+
         for (int i = 0; i < count; ++i) {
+            const std::size_t unitIndex =
+                static_cast<std::size_t>(
+                    (i * kMaxCircleSegments) / count);
             const Vec3 sample{
-                center.x + unit[static_cast<std::size_t>(i)].x * radius,
+                center.x + unit[unitIndex].x * radius,
                 center.y,
-                center.z + unit[static_cast<std::size_t>(i)].y * radius
+                center.z + unit[unitIndex].y * radius
             };
             Vec2 screen = {};
-            if (!CoreView::ProjectWorldToScreen(
-                    sample, viewProjection_, rendererSize_, screen)) {
+            // Use the shared projection path so viewport origin is applied in
+            // exactly the same way as every other world primitive.
+            if (!WorldToScreen(sample, screen)) {
                 continue;
             }
-            points[visible++] = ImVec2(screen.x, screen.y);
-            if (visible == 1) {
+
+            const std::size_t index = static_cast<std::size_t>(i);
+            points[index] = ImVec2(screen.x, screen.y);
+            projected[index] = true;
+            ++projectedCount;
+            if (projectedCount == 1) {
                 minX = maxX = screen.x;
                 minY = maxY = screen.y;
             } else {
@@ -203,13 +212,48 @@ public:
             }
         }
 
-        if (visible < 2 || IsBoundsOutside(minX, maxX, minY, maxY)) {
+        if (projectedCount < 2 ||
+            IsBoundsOutside(minX, maxX, minY, maxY)) {
             return;
         }
-        draw_->AddPolyline(
-            points.data(), visible, ToImColor(color),
-            visible == count ? ImDrawFlags_Closed : ImDrawFlags_None,
-            thickness);
+
+        if (projectedCount == count) {
+            draw_->AddPolyline(
+                points.data(), count, ToImColor(color),
+                ImDrawFlags_Closed, thickness);
+            return;
+        }
+
+        // A point can fail projection when part of the circle crosses behind
+        // the camera. Never connect across that gap; doing so creates the
+        // large diagonal/irregular polygon that the old renderer produced.
+        int firstGap = 0;
+        while (firstGap < count &&
+               projected[static_cast<std::size_t>(firstGap)]) {
+            ++firstGap;
+        }
+        const int start = (firstGap + 1) % count;
+        std::array<ImVec2, kMaxCircleSegments> run{};
+        int runCount = 0;
+        for (int step = 0; step < count; ++step) {
+            const int index = (start + step) % count;
+            if (projected[static_cast<std::size_t>(index)]) {
+                run[static_cast<std::size_t>(runCount++)] =
+                    points[static_cast<std::size_t>(index)];
+                continue;
+            }
+            if (runCount >= 2) {
+                draw_->AddPolyline(
+                    run.data(), runCount, ToImColor(color),
+                    ImDrawFlags_None, thickness);
+            }
+            runCount = 0;
+        }
+        if (runCount >= 2) {
+            draw_->AddPolyline(
+                run.data(), runCount, ToImColor(color),
+                ImDrawFlags_None, thickness);
+        }
     }
 
     void DrawCircleFilled(const Vec2& position,

@@ -60,7 +60,6 @@ struct TacticalMapState {
     Vec2 offset = {};
     Vec2 size = {};
     Vec2 cachedSize = {};
-    Vec2 sourceRendererSize = {};
     Vec2 negWorld = {};
     Vec2 scale = {};
     Vec3 centerWorldPos = {};
@@ -76,10 +75,7 @@ struct TacticalMapState {
                scale.y > 0.000001f;
     }
 
-    bool WorldToMinimap(
-        const Vec3& world,
-        Vec2& out,
-        const Vec2& targetRendererSize = {}) const {
+    bool WorldToMinimap(const Vec3& world, Vec2& out) const {
         out = {};
         if (!IsValid() || !world.IsValid()) {
             return false;
@@ -89,40 +85,19 @@ struct TacticalMapState {
             (world.x + negWorld.x) * scale.x + offset.x,
             (world.z + negWorld.y) * scale.y + offset.y
         };
-        if (sourceRendererSize.x > 0.0f &&
-            sourceRendererSize.y > 0.0f &&
-            targetRendererSize.x > 0.0f &&
-            targetRendererSize.y > 0.0f) {
-            out.x *= targetRendererSize.x / sourceRendererSize.x;
-            out.y *= targetRendererSize.y / sourceRendererSize.y;
-        }
         return out.IsValid();
     }
 
-    bool MinimapToWorld(
-        const Vec2& minimap,
-        Vec3& out,
-        float y = 0.0f,
-        const Vec2& sourceRendererSizeOverride = {}) const {
+    bool MinimapToWorld(const Vec2& minimap, Vec3& out, float y = 0.0f) const {
         out = {};
         if (!IsValid() || !minimap.IsValid()) {
             return false;
         }
 
-        Vec2 sourcePoint = minimap;
-        if (sourceRendererSizeOverride.x > 0.0f &&
-            sourceRendererSizeOverride.y > 0.0f &&
-            sourceRendererSize.x > 0.0f &&
-            sourceRendererSize.y > 0.0f) {
-            sourcePoint.x *= sourceRendererSize.x /
-                            sourceRendererSizeOverride.x;
-            sourcePoint.y *= sourceRendererSize.y /
-                            sourceRendererSizeOverride.y;
-        }
         out = {
-            (sourcePoint.x - offset.x) / scale.x - negWorld.x,
+            (minimap.x - offset.x) / scale.x - negWorld.x,
             y,
-            (sourcePoint.y - offset.y) / scale.y - negWorld.y
+            (minimap.y - offset.y) / scale.y - negWorld.y
         };
         return out.IsValid();
     }
@@ -135,44 +110,28 @@ namespace detail {
         return std::isfinite(value);
     }
 
-    inline bool ReadGameRendererSize(Vec2& out) {
+    inline bool ReadRendererSize(Vec2& out) {
         out = {};
         const auto& ctx = CoreRuntime::GetContext();
-        if (!Globals::IsValidPtr(ctx.renderer)) {
-            return false;
-        }
-        __try {
-            const int width = Globals::Read<int>(
-                ctx.renderer + Offset::D3D::ScreenWidth);
-            const int height = Globals::Read<int>(
-                ctx.renderer + Offset::D3D::ScreenHeight);
-            if (width > 0 && height > 0 &&
-                width < 20000 && height < 20000) {
-                out = {
-                    static_cast<float>(width),
-                    static_cast<float>(height)
-                };
-                return true;
+        if (Globals::IsValidPtr(ctx.renderer)) {
+            __try {
+                const int width = Globals::Read<int>(
+                    ctx.renderer + Offset::D3D::ScreenWidth);
+                const int height = Globals::Read<int>(
+                    ctx.renderer + Offset::D3D::ScreenHeight);
+                if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+                    out = { static_cast<float>(width), static_cast<float>(height) };
+                    return true;
+                }
+            } __except (1) {
+                out = {};
             }
-        } __except (1) {
-            out = {};
         }
-        return false;
-    }
 
-    inline bool ReadRendererSize(Vec2& out) {
-        if (ReadGameRendererSize(out)) {
-            return true;
-        }
-        out = {};
         const int width = GetSystemMetrics(SM_CXSCREEN);
         const int height = GetSystemMetrics(SM_CYSCREEN);
-        if (width > 0 && height > 0 &&
-            width < 20000 && height < 20000) {
-            out = {
-                static_cast<float>(width),
-                static_cast<float>(height)
-            };
+        if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+            out = { static_cast<float>(width), static_cast<float>(height) };
             return true;
         }
         return false;
@@ -216,7 +175,6 @@ namespace detail {
 
         TacticalMapState state = {};
         state.address = address;
-        (void)ReadGameRendererSize(state.sourceRendererSize);
         __try {
             state.negWorld = {
                 Globals::Read<float>(address + Offset::TacticalMapLayout::NegMinimapX),
@@ -270,7 +228,6 @@ namespace detail {
         const float shortest = std::min(renderer.x, renderer.y);
         const float side = std::clamp(shortest * 0.24f, 180.0f, 340.0f);
         TacticalMapState state = {};
-        state.sourceRendererSize = renderer;
         state.offset = { std::max(0.0f, renderer.x - side - 12.0f),
                          std::max(0.0f, renderer.y - side - 12.0f) };
         state.size = { side, side };

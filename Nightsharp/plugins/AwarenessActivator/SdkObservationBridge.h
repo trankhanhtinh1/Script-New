@@ -1034,67 +1034,103 @@ private:
     void ObserveJungleCamps(
         const std::vector<SDK::AIMinionClient>& camps) {
         const float now = awareness_->Now();
+        std::array<std::uint32_t, 64> observedIds{};
+        std::size_t observedCount = 0;
+
         for (const auto& unit : camps) {
             if (!unit.IsValid()) continue;
             const std::string_view name = ObjectName(unit);
-            if (ClassifyObjective(name) != ObjectiveKind::Unknown || !IsKnownCamp(name)) continue;
-            const std::uint32_t networkId = static_cast<std::uint32_t>(unit.NetworkId());
-            if (networkId == 0) continue;
+            if (ClassifyObjective(name) != ObjectiveKind::Unknown ||
+                !IsPrimaryJungleMonster(name)) {
+                continue;
+            }
+
+            const std::uint32_t networkId =
+                static_cast<std::uint32_t>(unit.NetworkId());
+            if (networkId == 0 || networkId == 0xFFFFFFFFu) continue;
+            if (observedCount < observedIds.size()) {
+                observedIds[observedCount++] = networkId;
+            }
+
             const Point3 observedPosition = ToPoint(unit.Position());
-            const std::uint32_t campKey = ResolveCampKey(networkId, name, observedPosition);
+            if (!observedPosition.IsValid() || observedPosition.IsZero()) {
+                continue;
+            }
+            const std::uint32_t campKey =
+                ResolveCampKey(networkId, name, observedPosition);
             const JungleCampState* previous = FindJungleCamp(campKey);
             const bool visible = unit.IsVisible();
 
-            JungleCampState state = previous ? *previous : JungleCampState{};
+            JungleCampState state =
+                previous ? *previous : JungleCampState{};
             state.networkId = networkId;
             state.campKey = campKey;
             CopyText(state.campId, name);
+            state.position = observedPosition;
             state.visible = visible;
-            if (!previous && !visible) {
-                // Camp positions are static map information. Seed a low-
-                // confidence alive estimate so the minimap can show every
-                // known camp without claiming an observed spawn state.
-                state.position = observedPosition;
-                state.alive = true;
-                state.confidence = Confidence::Low;
-                state.evidence = {
-                    Provenance::Estimated, Confidence::Low, now, 0.0f,
-                    HashId("sdk.jungle-seed")
-                };
-            } else if (visible) {
-                state.position = observedPosition;
-                state.alive = !unit.IsDead();
-                state.confidence = Confidence::Confirmed;
-                state.evidence = { Provenance::VisibleNow, Confidence::Confirmed,
-                                   now, 0.0f, HashId("sdk.jungle") };
-                if (state.alive) {
-                    state.lastSeenAliveAt = now;
-                    state.observedDeath = false;
-                    state.estimatedDeathAt = 0.0f;
-                    state.sourceJunglerId = 0;
-                } else if (!previous || previous->alive) {
-                    state.observedDeath = true;
-                    state.confirmedDeathAt = now;
-                    state.respawnAt = now + CampRespawn(name);
-                    state.estimatedDeathAt = 0.0f;
-                    state.sourceJunglerId = 0;
-                }
-            } else if (state.evidence.provenance == Provenance::Estimated) {
-                const float age = std::max(
-                    0.0f, now - state.estimatedDeathAt);
-                state.confidence = age <= 20.0f
-                    ? state.confidence : Confidence::Low;
-                state.evidence.confidence = state.confidence;
-            } else {
-                const float age = std::max(
-                    0.0f, now - state.lastSeenAliveAt);
-                state.confidence = age <= 30.0f
-                    ? Confidence::High : Confidence::Medium;
-                state.evidence.provenance = Provenance::LastSeen;
-                state.evidence.confidence = state.confidence;
-            }
+
+            // GameObjects::JungleLarge only contains live primary monsters.
+            // Therefore object presence itself is enough to restore an
+            // out-of-vision camp after respawn; do not preserve alive=false
+            // from the previous network id.
+            state.alive = true;
+            state.lastSeenAliveAt = now;
+            state.observedDeath = false;
+            state.confirmedDeathAt = 0.0f;
+            state.estimatedDeathAt = 0.0f;
+            state.respawnAt = 0.0f;
+            state.sourceJunglerId = 0;
+            state.confidence = Confidence::Confirmed;
+            state.evidence = {
+                visible ? Provenance::VisibleNow : Provenance::ObservedEvent,
+                Confidence::Confirmed, now, 0.0f,
+                visible ? HashId("sdk.jungle-visible")
+                        : HashId("sdk.jungle-object")
+            };
+
             knownJungleKeys_[networkId] = campKey;
             awareness_->ObserveJungleCamp(state);
+        }
+
+        // Reconcile missed delete callbacks against the authoritative
+        // GameObjects live-id cache. This keeps timers reliable even when the
+        // native delete event is dropped.
+        for (auto it = knownJungleKeys_.begin();
+             it != knownJungleKeys_.end();) {
+            const std::uint32_t networkId = it->first;
+            bool observed = false;
+            for (std::size_t i = 0; i < observedCount; ++i) {
+                if (observedIds[i] == networkId) {
+                    observed = true;
+                    break;
+                }
+            }
+            if (observed ||
+                SDK::GameObjects::IsNetworkIdAlive(networkId)) {
+                ++it;
+                continue;
+            }
+
+            if (const JungleCampState* previous =
+                    FindJungleCamp(it->second)) {
+                JungleCampState state = *previous;
+                if (state.alive) {
+                    state.visible = false;
+                    state.alive = false;
+                    state.observedDeath = true;
+                    state.confirmedDeathAt = now;
+                    state.respawnAt = now + CampRespawn(state.campId);
+                    state.confidence = Confidence::Confirmed;
+                    state.evidence = {
+                        Provenance::ObservedEvent,
+                        Confidence::Confirmed,
+                        now, state.respawnAt,
+                        HashId("sdk.camp-liveid-missing")
+                    };
+                    awareness_->ObserveJungleCamp(state);
+                }
+            }
+            it = knownJungleKeys_.erase(it);
         }
     }
 
@@ -1128,10 +1164,23 @@ private:
     }
 
     static bool IsKnownCamp(std::string_view name) noexcept {
-        return Contains(name, "blue") || Contains(name, "red") || Contains(name, "gromp") ||
-               Contains(name, "krug") || Contains(name, "raptor") || Contains(name, "wolf") ||
-               Contains(name, "murkwolf") || Contains(name, "razorbeak") || Contains(name, "bramble") ||
-               Contains(name, "sentinel");
+        return Contains(name, "blue") || Contains(name, "red") ||
+               Contains(name, "gromp") || Contains(name, "krug") ||
+               Contains(name, "raptor") || Contains(name, "wolf") ||
+               Contains(name, "murkwolf") ||
+               Contains(name, "razorbeak") ||
+               Contains(name, "bramble") || Contains(name, "sentinel");
+    }
+
+    static bool IsPrimaryJungleMonster(
+        std::string_view name) noexcept {
+        if (!IsKnownCamp(name)) return false;
+        // Child monsters use names such as MurkwolfMini,
+        // RazorbeakMini and KrugMini. Never allow them to create a second
+        // marker or restart the camp timer.
+        return !Contains(name, "mini") &&
+               !Contains(name, "small") &&
+               !Contains(name, "lesser");
     }
 
     float CampRespawn(std::string_view name) const noexcept {
@@ -1466,7 +1515,10 @@ private:
         if (objectiveKind != knownObjectiveKinds_.end()) knownObjectiveKinds_.erase(objectiveKind);
 
         const auto jungle = knownJungleKeys_.find(id);
-        if (observable && jungle != knownJungleKeys_.end()) {
+        // JungleLarge is an authoritative global object snapshot. Once a
+        // tracked primary monster is deleted, start its camp timer even when
+        // the object was outside the local camera/vision at deletion time.
+        if (jungle != knownJungleKeys_.end()) {
             if (const JungleCampState* previous = FindJungleCamp(jungle->second)) {
                 JungleCampState camp = *previous;
                 camp.visible = false;
