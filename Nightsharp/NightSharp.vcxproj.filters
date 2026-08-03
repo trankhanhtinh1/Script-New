@@ -1027,6 +1027,7 @@
     </ClInclude>
     <ClInclude Include="ns_sscanf.h" />
     <ClInclude Include="ns_strtod.h" />
+    <ClInclude Include="OffsetCrashLogger.h" />
     <ClInclude Include="overlay\D3D11Hook.h">
       <Filter>overlay</Filter>
     </ClInclude>
@@ -2929,6 +2930,9 @@
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h">
       <Filter>Plugins\Champion\ziblldev9898</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\BuffInspectorPlugin.h">
+      <Filter>Plugins\Core</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
@@ -3015,9 +3019,6 @@
     </ClInclude>
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerVisuals.inl">
       <Filter>Plugins\Core\OrbwalkerKuro</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Core\BuffInspectorPlugin.h">
-      <Filter>Plugins\Core</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\PlayerEventFilterPlugin.h">
       <Filter>Plugins\Core</Filter>
