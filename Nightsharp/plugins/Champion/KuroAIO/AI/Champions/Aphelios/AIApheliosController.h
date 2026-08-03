@@ -220,11 +220,49 @@ inline int CrescendumReturnUntil = 0;
 inline float LastCrescendumAttackDistance = 0.0f;
 inline QCastPlan LastQPlan = {};
 inline UltimatePlan LastRPlan = {};
+inline UltimatePlan CachedUltimatePlan = {};
+inline int CachedUltimatePlanTick = 0;
+inline int CachedUltimatePlanTargetId = 0;
+inline Weapon CachedUltimatePlanMain = Weapon::Unknown;
+inline Weapon CachedUltimatePlanOffhand = Weapon::Unknown;
+inline int CachedUltimatePlanWeaponChangeTick = 0;
+inline int CachedUltimatePlanQCastTick = 0;
+inline int CachedUltimatePlanWCastTick = 0;
+inline std::uint32_t CachedUltimatePlanContextFlags = 0;
 
 inline bool PlayerReloading() {
     const auto player = GameObjects::Player();
     return ReloadUntil > Now() ||
-           (player.IsValid() && player.HasBuff("ApheliosPReload"));
+           (player.IsValid() &&
+            (player.HasBuff("apheliospreload") ||
+             player.HasBuff("ApheliosPReload")));
+}
+
+inline bool LiveAttackBlocked(const AIHeroClient& player) {
+    return player.IsValid() &&
+           (player.HasBuff("apheliospreload") ||
+            player.HasBuff("ApheliosSeverumQ"));
+}
+
+inline int SpellThrottleMs() {
+    return std::clamp(Slider(TacticsMenu, "SpellThrottle", 20), 18, 80);
+}
+
+inline bool ApheliosCastThrottleReady(int index,
+                                      bool fastFollowup = false) {
+    if (!Ready(index)) return false;
+    if (fastFollowup) return true;
+    const int last = Engine::LastActionTick;
+    return last <= 0 || Now() - last >= SpellThrottleMs();
+}
+
+inline bool RecentQCast(int windowMs = 140) {
+    return LastQCastTick > 0 && Now() - LastQCastTick <= windowMs;
+}
+
+inline bool RecentQOrWCast(int windowMs = 140) {
+    return RecentQCast(windowMs) ||
+           (LastWCastTick > 0 && Now() - LastWCastTick <= windowMs);
 }
 
 inline bool IsCalibrumMarkName(const char* name) {
@@ -704,7 +742,7 @@ inline bool CanSpendQ(QPurpose purpose,
             Engine::ResolvedSpecs[0], StepRule::None)) {
         return false;
     }
-    if (!CastThrottleReady(0, reactive)) return false;
+    if (!ApheliosCastThrottleReady(0, reactive)) return false;
     const bool maintenance = purpose == QPurpose::Rotation ||
                              purpose == QPurpose::Waveclear ||
                              purpose == QPurpose::Jungle;
@@ -1096,6 +1134,9 @@ inline QCastPlan BuildCurrentQPlan(const AIHeroClient& target,
                                    QPurpose purpose,
                                    const CombatContext& context,
                                    bool reactive = false) {
+    // Do not build Infernum/Crescendum geometry while Q is unavailable or
+    // an ordinary attack is protected; this function runs every decision tick.
+    if (!CanSpendQ(purpose, context, reactive)) return {};
     switch (State.Main) {
     case Weapon::Calibrum:
         return BuildCalibrumPlan(target, purpose, reactive);
@@ -1252,13 +1293,51 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& target,
         player.Mana() + 0.01f < SpellCost(3)) {
         return best;
     }
+
     int primaryId = Engine::ValidEnemy(target)
         ? static_cast<int>(target.NetworkId()) : 0;
     if (primaryId == 0 && GapcloserExpireTick > Now()) {
         primaryId = GapcloserTargetId;
     }
+
+    const int now = Now();
+    const bool cacheable = !defensive;
+    const std::uint32_t contextFlags =
+        (combat.NeedPeel ? 1u : 0u) |
+        (combat.NeedCatch ? 1u << 1 : 0u) |
+        (combat.EnemyDiving ? 1u << 2 : 0u) |
+        (combat.CanCommitClose ? 1u << 3 : 0u) |
+        (combat.TargetEscaping ? 1u << 4 : 0u) |
+        (combat.ObjectiveActive ? 1u << 5 : 0u);
+    if (cacheable && CachedUltimatePlanTick > 0 &&
+        now - CachedUltimatePlanTick <= 35 &&
+        CachedUltimatePlanTargetId == primaryId &&
+        CachedUltimatePlanMain == State.Main &&
+        CachedUltimatePlanOffhand == State.Offhand &&
+        CachedUltimatePlanWeaponChangeTick == LastWeaponChangeTick &&
+        CachedUltimatePlanQCastTick == LastQCastTick &&
+        CachedUltimatePlanWCastTick == LastWCastTick &&
+        CachedUltimatePlanContextFlags == contextFlags) {
+        return CachedUltimatePlan;
+    }
+
+    const auto cache = [&](const UltimatePlan& plan) {
+        if (cacheable) {
+            CachedUltimatePlan = plan;
+            CachedUltimatePlanTick = now;
+            CachedUltimatePlanTargetId = primaryId;
+            CachedUltimatePlanMain = State.Main;
+            CachedUltimatePlanOffhand = State.Offhand;
+            CachedUltimatePlanWeaponChangeTick = LastWeaponChangeTick;
+            CachedUltimatePlanQCastTick = LastQCastTick;
+            CachedUltimatePlanWCastTick = LastWCastTick;
+            CachedUltimatePlanContextFlags = contextFlags;
+        }
+        return plan;
+    };
+
     const auto units = BuildUltimateUnits(primaryId);
-    if (units.empty()) return best;
+    if (units.empty()) return cache(best);
     std::vector<Vector3> candidates;
     candidates.reserve(units.size() * 2);
     for (const auto& unit : units) candidates.push_back(unit.Position);
@@ -1288,7 +1367,7 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& target,
             if (plan.Score > best.Score) best = plan;
         }
     }
-    if (!best.Valid) return best;
+    if (!best.Valid) return cache(best);
     const int minimumHits = best.Purpose == UltimatePurpose::InfernumTeamfight ||
             best.Purpose == UltimatePurpose::Objective
         ? Slider(UltimateMenu, "InfernumTargets", 2) : 1;
@@ -1299,14 +1378,15 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& target,
     if (best.HitCount < minimumHits || best.Score < threshold) {
         best.Valid = false;
     }
-    return best;
+    return cache(best);
 }
 
 inline bool CastPhaseTo(Weapon desired,
                         Sequence sequence,
                         bool reactive = false) {
     if (!IsWeapon(desired) || desired != State.Offhand || !Ready(1) ||
-        PlayerReloading() || !CastThrottleReady(1, reactive)) {
+        PlayerReloading() ||
+        !ApheliosCastThrottleReady(1, reactive || RecentQCast())) {
         return false;
     }
     if (!reactive && Engine::ShouldPreserveAttack(
@@ -1332,7 +1412,8 @@ inline bool CastUltimateNow(const UltimatePlan& plan,
          ActiveSequence == Sequence::LowAmmoSwap);
     if (!plan.Valid || plan.WeaponUsed != State.Main || !Ready(3) ||
         (PlayerReloading() && !incomingCancel) ||
-        !CastThrottleReady(3, reactive || incomingCancel)) {
+        !ApheliosCastThrottleReady(
+            3, reactive || incomingCancel || RecentQOrWCast())) {
         return false;
     }
     if (!reactive && !incomingCancel && Engine::ShouldPreserveAttack(
@@ -1476,7 +1557,8 @@ inline bool TryPrepareGravitumRoot(const AIHeroClient& target,
                                    const CombatContext& context,
                                    bool reactive = false) {
     if (!Engine::ValidEnemy(target) || !HasGravitumMark(target)) return false;
-    if (State.Main == Weapon::Gravitum) {
+    if (State.Main == Weapon::Gravitum &&
+        CanSpendQ(purpose, context, reactive)) {
         return CommitQPlan(
             BuildGravitumPlan(purpose, target, reactive), context, reactive);
     }
@@ -1539,6 +1621,7 @@ inline bool TryReactiveControl() {
         }
         if (State.Main == Weapon::Severum &&
             Bool(SeverumMenu, "AntiGapcloser", true) &&
+            CanSpendQ(QPurpose::AntiGapcloser, context, true) &&
             CommitQPlan(BuildSeverumPlan(
                 target, QPurpose::AntiGapcloser, context, true),
                 context, true)) {
@@ -1553,6 +1636,7 @@ inline bool TryReactiveControl() {
         }
         if (State.Main == Weapon::Crescendum &&
             Bool(CrescendumMenu, "PeelSentry", true) &&
+            CanSpendQ(QPurpose::Peel, context, true) &&
             CommitQPlan(BuildCrescendumPlan(
                 target, QPurpose::Peel, context, true), context, true)) {
             ActiveSequence = Sequence::SentryArmMoonlight;
@@ -1699,6 +1783,8 @@ inline bool TryCombo(const AIHeroClient& target) {
     // when building two sequential marks. Low-ammo Q is also cast before R so
     // Moonlight Vigil can cancel the Incoming Weapon animation.
     if (State.Main == Weapon::Crescendum && Ready(0) && Ready(3) &&
+        QReadyFor(State.Main) &&
+        CanSpendQ(QPurpose::SentryZone, context) &&
         Bool(CrescendumMenu, "SentryBeforeR", true)) {
         const QCastPlan sentry = BuildCrescendumPlan(
             target, QPurpose::SentryZone, context, false);
@@ -1708,6 +1794,8 @@ inline bool TryCombo(const AIHeroClient& target) {
         }
     }
     if (State.Main == Weapon::Calibrum && Ready(0) && Ready(3) &&
+        QReadyFor(State.Main) &&
+        CanSpendQ(QPurpose::MarkChain, context) &&
         !HasCalibrumMark(target) &&
         Bool(CalibrumMenu, "QBeforeR", true)) {
         const QCastPlan mark = BuildCalibrumPlan(
@@ -1928,6 +2016,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     if (TryPrepareGravitumRoot(
             target, QPurpose::Peel, context, true)) return true;
     if (State.Main == Weapon::Severum &&
+        CanSpendQ(QPurpose::Sustain, context, true) &&
         CommitQPlan(BuildSeverumPlan(
             target, QPurpose::Sustain, context, true), context, true)) {
         return true;
@@ -1937,9 +2026,9 @@ inline bool TryFlee(const AIHeroClient& selected) {
         return true;
     }
     if (State.Main == Weapon::Crescendum &&
+        CanSpendQ(QPurpose::Peel, context, true) &&
         CommitQPlan(BuildCrescendumPlan(
             target, QPurpose::Peel, context, true), context, true)) {
-        return true;
     }
     return TryDefensiveUltimate(target, context);
 }
@@ -2341,7 +2430,8 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
-    if (PlayerReloading()) {
+    const auto player = GameObjects::Player();
+    if (LiveAttackBlocked(player)) {
         args.Process = false;
         return;
     }
@@ -2351,18 +2441,19 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     const AIHeroClient target = HeroByNetworkId(
         static_cast<int>(args.Target.NetworkId()));
     if (!Engine::ValidEnemy(target) || !Ready(1) ||
-        Engine::CurrentMode() == Mode::None) return;
-    const auto player = GameObjects::Player();
+        Engine::CurrentMode() == Mode::None || !player.IsValid()) return;
     const float distance = player.Position().Distance2D(target.Position());
     bool request = false;
     if (State.Main == Weapon::Crescendum && Chakrams == 0 &&
         distance > static_cast<float>(Slider(
             CrescendumMenu, "AvoidZeroStackRange", 590)) &&
         Bool(CrescendumMenu, "ProtectBadAuto", true)) {
-        const CombatContext context = BuildCombatContext(
-            target, Engine::CurrentMode());
+        // This hook runs inside Orbwalker::Attack. Keep it O(1): the full
+        // combat-context scan here delayed every ordinary Aphelios attack.
+        const bool chasingReturn =
+            CursorDirectionAgrees(target.Position(), -0.05f);
         request = !ShouldUseCrescendumAuto(
-            distance, Chakrams, context.PlayerChasingReturn, 1.45f);
+            distance, Chakrams, chasingReturn, 1.45f);
     }
     if (!request && State.Main != Weapon::Severum &&
         State.Offhand == Weapon::Severum &&
@@ -2559,6 +2650,8 @@ inline void BuildMenu(Menu* root) {
         "KillSecure", "conservatively lethal", true));
     TacticsMenu->Add(new MenuSlider(
         "HarassMana", "Min mana weapon harass (%)", 48, 0, 100));
+    TacticsMenu->Add(new MenuSlider(
+        "SpellThrottle", "Minimum Aphelios spell gap (ms)", 20, 18, 80));
     TacticsMenu->Add(new MenuSeparator(
         "Ownership",
         "Movement, ordinary attacks,"));
@@ -2750,6 +2843,12 @@ inline void OnLoad() {
     LastCrescendumAttackDistance = 0.0f;
     LastQPlan = {};
     LastRPlan = {};
+    CachedUltimatePlan = {};
+    CachedUltimatePlanTick = CachedUltimatePlanTargetId = 0;
+    CachedUltimatePlanMain = CachedUltimatePlanOffhand = Weapon::Unknown;
+    CachedUltimatePlanWeaponChangeTick = CachedUltimatePlanQCastTick = 0;
+    CachedUltimatePlanWCastTick = 0;
+    CachedUltimatePlanContextFlags = 0;
     RefreshWeaponState();
 }
 

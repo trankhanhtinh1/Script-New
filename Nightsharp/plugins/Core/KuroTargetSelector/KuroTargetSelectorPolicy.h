@@ -147,10 +147,26 @@ public:
         const TargetProfileWeights weights = Weights(profile);
         const float priority = std::clamp(
             static_cast<float>(configuredPriority), 0.0f, 5.0f);
-        const float maxHealth = std::max(1.0f, facts.MaxHealth);
-        const float healthRatio = std::clamp(facts.EffectiveHealth / maxHealth,
+        const float maxHealth = std::isfinite(facts.MaxHealth)
+            ? std::max(1.0f, facts.MaxHealth) : 1.0f;
+        const float effectiveHealth = std::isfinite(facts.EffectiveHealth)
+            ? std::max(0.0f, facts.EffectiveHealth) : maxHealth;
+        const float healthRatio = std::clamp(effectiveHealth / maxHealth,
                                              0.0f, 2.0f);
         const float missingHealth = std::clamp(1.0f - healthRatio, -1.0f, 1.0f);
+        const bool favorsDamageOpportunity =
+            profile != TargetProfile::FleeThreat &&
+            profile != TargetProfile::Peel &&
+            profile != TargetProfile::Interrupt &&
+            profile != TargetProfile::AntiGapcloser;
+        const float boundedHealthRatio = std::clamp(healthRatio, 0.0f, 1.0f);
+        // A very low-health enemy must be able to break a stale priority/
+        // incumbent choice in offensive modes, but not defensive threat
+        // selection.  The 60% ramp is deliberately gradual; only a target
+        // around 25% or lower can overcome a maximum priority plus stickiness.
+        const float lowHealthUrgency = favorsDamageOpportunity
+            ? std::clamp((0.60f - boundedHealthRatio) / 0.60f, 0.0f, 1.0f)
+            : 0.0f;
         const float distanceScale = request.Range > 0.0f
             ? std::clamp(1.0f - facts.DistanceToSource /
                          std::max(request.Range, 1.0f), -1.0f, 1.0f)
@@ -159,11 +175,11 @@ public:
             (facts.AttackDamage * 0.55f + facts.AbilityPower * 0.35f) /
                 180.0f,
             0.0f, 4.0f);
-        const float damageRatio = facts.EffectiveHealth > 0.0f
+        const float damageRatio = effectiveHealth > 0.0f
             ? std::clamp(
-                facts.AutoAttackDamage *
+                std::max(0.0f, facts.AutoAttackDamage) *
                     std::max(1.0f, request.Damage.ExpectedHits) /
-                    facts.EffectiveHealth,
+                    effectiveHealth,
                 0.0f, 2.0f)
             : 0.0f;
 
@@ -175,6 +191,14 @@ public:
         } else {
             breakdown.Add("health", "effective health",
                           missingHealth * weights.Health, -100.0f, 100.0f);
+        }
+        if (lowHealthUrgency > 0.0f) {
+            breakdown.Add(
+                "low-health-execute",
+                "low-health execute opportunity",
+                lowHealthUrgency * 500.0f,
+                0.0f,
+                500.0f);
         }
         breakdown.Add("distance", "source distance",
                       distanceScale * weights.Distance, -100.0f, 100.0f);

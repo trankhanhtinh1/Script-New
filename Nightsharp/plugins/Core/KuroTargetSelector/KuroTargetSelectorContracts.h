@@ -254,6 +254,7 @@ struct TargetFacts {
     float AttackDamage = 0.0f;
     float AbilityPower = 0.0f;
     float BoundingRadius = 0.0f;
+    // Damage the local player would deal with one ordinary attack.
     float AutoAttackDamage = 0.0f;
 
     bool Valid = false;

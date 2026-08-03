@@ -3,6 +3,7 @@
 #include "../../IPlugin.h"
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
+#include "../../../sdk/Wrappers/Damages/Damage.h"
 
 #include "KuroTargetActionGate.h"
 #include "KuroTargetSelectorDrawing.h"
@@ -167,11 +168,12 @@ public:
         result.reserve(snapshot_.Count);
 
         const int selectedId = menu_ ? menu_->Selected().NetworkId() : 0;
-        const int preferredId = request.PreferredTargetId != 0
+        // A locked target is a soft lease when fallback is allowed.  Only an
+        // explicit preferred/selected target may bypass the score entirely.
+        const int manualPreferredId = request.PreferredTargetId != 0
             ? request.PreferredTargetId
             : (request.RespectManualSelection && menu_ &&
-               menu_->PreferSelectedTarget() ? selectedId
-               : (request.AllowFallback ? request.LockedTargetId : 0));
+               menu_->PreferSelectedTarget() ? selectedId : 0);
         const int requiredId = request.RequiredTargetId != 0
             ? request.RequiredTargetId
             : (!request.AllowFallback ? request.LockedTargetId : 0);
@@ -301,10 +303,22 @@ public:
                 incumbentNetworkId_,
                 decision.Breakdown,
                 activeProfile);
-            if (preferredId != 0 && preferredId == facts.NetworkId) {
+            if (manualPreferredId != 0 &&
+                manualPreferredId == facts.NetworkId) {
                 decision.Breakdown.Add(
                     "manual-preference", "manual target preference",
                     menu_ ? menu_->Stickiness() : 80.0f, 0.0f, 240.0f);
+                decision.Score = decision.Breakdown.Total;
+            }
+            if (request.AllowFallback && request.LockedTargetId != 0 &&
+                request.LockedTargetId == facts.NetworkId &&
+                request.LockedTargetId != manualPreferredId &&
+                request.LockedTargetId != incumbentNetworkId_) {
+                const float softLock = menu_
+                    ? std::clamp(menu_->Stickiness() * 0.35f, 0.0f, 70.0f)
+                    : 40.0f;
+                decision.Breakdown.Add(
+                    "soft-lock", "fallback target lease", softLock, 0.0f, 70.0f);
                 decision.Score = decision.Breakdown.Total;
             }
             for (auto* provider : providerOrder) {
@@ -337,13 +351,13 @@ public:
         }
 
         std::stable_sort(result.begin(), result.end(),
-            [this, preferredId](const TargetDecision& lhs,
+            [this, manualPreferredId](const TargetDecision& lhs,
                                 const TargetDecision& rhs) {
                 if (lhs.Legal != rhs.Legal) return lhs.Legal > rhs.Legal;
-                const bool lhsPreferred = preferredId != 0 &&
-                    lhs.Target.NetworkId() == preferredId;
-                const bool rhsPreferred = preferredId != 0 &&
-                    rhs.Target.NetworkId() == preferredId;
+                const bool lhsPreferred = manualPreferredId != 0 &&
+                    lhs.Target.NetworkId() == manualPreferredId;
+                const bool rhsPreferred = manualPreferredId != 0 &&
+                    rhs.Target.NetworkId() == manualPreferredId;
                 if (lhsPreferred != rhsPreferred) return lhsPreferred;
                 if (std::fabs(lhs.Score - rhs.Score) > 0.0001f) {
                     return lhs.Score > rhs.Score;
@@ -446,7 +460,9 @@ public:
         facts.AttackDamage = target.AD();
         facts.AbilityPower = target.AP();
         facts.BoundingRadius = target.BoundingRadius();
-        facts.AutoAttackDamage = target.AD();
+        facts.AutoAttackDamage = player.IsValid()
+            ? ::SDK::Damage::GetAutoAttackDamage(player, target, true)
+            : 0.0f;
         facts.Valid = target.IsValid();
         facts.Dead = target.IsDead();
         facts.Visible = target.IsVisible();
@@ -584,7 +600,9 @@ private:
             facts.AttackDamage = target.AD();
             facts.AbilityPower = target.AP();
             facts.BoundingRadius = target.BoundingRadius();
-            facts.AutoAttackDamage = target.AD();
+            facts.AutoAttackDamage = player.IsValid()
+                ? ::SDK::Damage::GetAutoAttackDamage(player, target, true)
+                : 0.0f;
             facts.Valid = target.IsValid();
             facts.Dead = target.IsDead();
             facts.Visible = target.IsVisible();
