@@ -47,7 +47,7 @@ inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
                                          const GameObject& soldier) {
     const float soldierRadius = AIBaseClient(soldier.Handle()).BoundingRadius();
     const float playerRadius = player.BoundingRadius();
-    return IsAzirPlayer(player) && soldier.IsValid() && !soldier.IsDead() &&
+    return IsAzirPlayer(player) && soldier.IsValid() && soldier.IsTargetable() &&
            soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
            AzirSoldierRules::IsCommandable(
                PlanarPoint(player.Position()),
@@ -100,7 +100,7 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
                                   const AttackableUnit& target,
                                   float rangeScale = 1.0f) {
     if (!IsAzirPlayer(player) || !target.IsValid() ||
-        (target.IsDead() && !target.IsZombie()) ||
+        !target.IsTargetable() ||
         !AzirSoldierRules::CanUseSoldierAttack(
             GetAzirSoldierTargetKind(target))) {
         return 0;

@@ -201,7 +201,7 @@ inline float GetRealAutoAttackRange(const AIBaseClient& sender, const Attackable
     }
 
     float result = sender.AttackRange() + sender.BoundingRadius();
-    if (target.IsValid() && !target.IsDead()) {
+    if (target.IsValid() && target.IsTargetable()) {
         const AIBaseClient targetBase(target.Handle());
         const SDK::ChampionId senderChampionId = SDK::ChampionIdFromName(sender.CharacterName().c_str());
         if (senderChampionId == SDK::ChampionId::Caitlyn &&

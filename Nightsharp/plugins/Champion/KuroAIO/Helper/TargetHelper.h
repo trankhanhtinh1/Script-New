@@ -83,8 +83,9 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroTargetRequest(
     request.Range = range;
     request.Source = Player().IsValid() ? Player().Position() : SDK::Vector3();
     request.Damage.Type = damageType;
-    request.Damage.ExpectedHits = 1.0f;
-    request.Damage.IncludeShields = false;
+    request.Damage.IncludeShields = true;
+    // Shield channels affect killability; IgnoreShields remains reserved for
+    // the invulnerability gate, not the survivability score.
     request.Damage.IgnoreShields = true;
     request.Route.Kind = RouteKind::NonProjectile;
     request.Route.Start = request.Source;

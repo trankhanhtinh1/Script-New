@@ -24,9 +24,9 @@ struct ActionGateResult {
     RejectReason Rejection = RejectReason::None;
 };
 
-// One gate is shared by ranking and execution.  Ranking may pass through a
-// planning-only stasis/untargetable state for diagnostics, but every
-// execution call uses the same function with DecisionPhase::Execution.
+// One gate is shared by ranking and execution.  Live IsTargetable() is the
+// authoritative availability signal for every phase; state-specific buff
+// checks are used only to improve the rejection diagnostic.
 class KuroTargetActionGate final {
 public:
     static ActionGateResult Evaluate(const TargetRequest& request,
@@ -42,12 +42,17 @@ public:
             result.Rejection = RejectReason::Despawned;
             return result;
         }
-        if (target.IsDead() && !target.IsZombie()) {
-            result.Rejection = RejectReason::Dead;
-            return result;
-        }
         if (player.IsValid() && target.Team() == player.Team()) {
             result.Rejection = RejectReason::WrongTeam;
+            return result;
+        }
+
+        // A target that cannot currently be acted on (including a defeated
+        // champion) is rejected through the SDK's working targetability signal.
+        if (!target.IsTargetable()) {
+            result.Rejection = IsStasis(target)
+                ? RejectReason::Stasis
+                : RejectReason::Untargetable;
             return result;
         }
 
@@ -55,16 +60,6 @@ public:
             request.Route.RequireVisible;
         if (requireVisible && !target.IsVisible()) {
             result.Rejection = RejectReason::NotVisible;
-            return result;
-        }
-
-        // Untargetable/stasis targets are never legal candidates.  Planning
-        // may retain the identity in a caller's own lease, but that identity
-        // must not pass the selector's hard candidate filter.
-        if (!target.IsTargetable()) {
-            result.Rejection = IsStasis(target)
-                ? RejectReason::Stasis
-                : RejectReason::Untargetable;
             return result;
         }
 
@@ -85,8 +80,10 @@ public:
 
         if (request.Range > 0.0f && request.Range < FLT_MAX) {
             const Vector3 source = ResolveSource(request, player);
+            const Vector3 destination = ResolveRangeDestination(request, target);
             if (source.IsValid() && !source.IsZero() &&
-                source.DistanceSqr2D(target.Position()) >
+                destination.IsValid() && !destination.IsZero() &&
+                source.DistanceSqr2D(destination) >
                     request.Range * request.Range) {
                 result.Rejection = RejectReason::OutOfRange;
                 return result;
@@ -94,10 +91,6 @@ public:
         }
 
         if (request.Phase == DecisionPhase::Execution) {
-            if (!request.Route.TargetableAtExecution) {
-                result.Rejection = RejectReason::Untargetable;
-                return result;
-            }
             if (request.Route.SpellShieldAtImpact) {
                 result.Rejection = RejectReason::SpellShield;
                 return result;
@@ -180,7 +173,6 @@ public:
         request.Route.Start = source;
         request.Route.ProjectileWallCheck = true;
         request.Route.RequireLineOfSight = true;
-        request.Route.TargetableAtExecution = true;
         return request;
     }
 
@@ -207,6 +199,23 @@ private:
             return request.Route.Destination;
         }
         return target.Position();
+    }
+
+
+    static Vector3 ResolveRangeDestination(const TargetRequest& request,
+                                           const AIHeroClient& target) {
+        switch (request.Route.Kind) {
+        case RouteKind::SkillshotProjectile:
+        case RouteKind::ChargedProjectile:
+        case RouteKind::Mobility:
+        case RouteKind::Custom:
+            return ResolveDestination(request, target);
+        case RouteKind::AutoAttack:
+        case RouteKind::UnitProjectile:
+        case RouteKind::NonProjectile:
+        default:
+            return target.Position();
+        }
     }
 
     static RejectReason EvaluateRoute(const TargetRequest& request,

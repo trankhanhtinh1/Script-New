@@ -22,7 +22,7 @@ inline std::vector<::SDK::AIMinionClient> GetAzirSandSoldiers(
 
     const ::SDK::GameObjectTeam playerTeam = player.Team();
     for (const auto& minion : ::SDK::GameObjects::AllySpecialMinions()) {
-        if (!minion.IsValid() || minion.IsDead() ||
+        if (!minion.IsValid() || !minion.IsTargetable() ||
             minion.Team() != playerTeam) {
             continue;
         }

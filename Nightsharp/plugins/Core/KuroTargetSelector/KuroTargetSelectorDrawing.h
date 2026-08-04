@@ -86,7 +86,8 @@ private:
     void Render() {
         if (!menu_ || !::SDK::Drawing::IsEnabled()) return;
 
-        if (Enabled("Selected", true) && state_.Selected.IsValid()) {
+        if (Enabled("Selected", true) && state_.Selected.IsValid() &&
+            state_.Selected.IsTargetable()) {
             ::SDK::Drawing::DrawCircle(
                 state_.Selected.Position(),
                 state_.Selected.BoundingRadius() + 28.0f,

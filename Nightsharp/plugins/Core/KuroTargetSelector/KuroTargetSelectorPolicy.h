@@ -1,6 +1,7 @@
 #pragma once
 
 #include "KuroTargetSelectorContracts.h"
+#include <cfloat>
 
 #include <algorithm>
 #include <cmath>
@@ -101,6 +102,129 @@ public:
         return weights;
     }
 
+    static float RawHealthPoolFor(const TargetRequest& request,
+                                  const TargetFacts& facts,
+                                  float health,
+                                  bool includeShields) {
+        const float safeHealth = std::isfinite(health)
+            ? std::max(0.0f, health) : 0.0f;
+        if (request.Damage.IgnoreShields ||
+            !includeShields || !request.Damage.IncludeShields) {
+            return safeHealth;
+        }
+
+        const float allShield = std::isfinite(facts.AllShield)
+            ? std::max(0.0f, facts.AllShield) : 0.0f;
+        const float physicalShield = std::isfinite(facts.PhysicalShield)
+            ? std::max(0.0f, facts.PhysicalShield) : 0.0f;
+        const float magicalShield = std::isfinite(facts.MagicalShield)
+            ? std::max(0.0f, facts.MagicalShield) : 0.0f;
+
+        switch (request.Damage.Type) {
+        case DamageType::Physical:
+            return safeHealth + allShield + physicalShield;
+        case DamageType::Magical:
+            return safeHealth + allShield + magicalShield;
+        case DamageType::Mixed:
+            return safeHealth + allShield +
+                (physicalShield + magicalShield) * 0.5f;
+        case DamageType::True:
+        default:
+            return safeHealth + allShield;
+        }
+    }
+
+    static float StoredEffectiveHealthFor(const TargetRequest& request,
+                                          const TargetFacts& facts) {
+        switch (request.Damage.Type) {
+        case DamageType::Physical:
+            return facts.PhysicalEffectiveHealth;
+        case DamageType::Magical:
+            return facts.MagicalEffectiveHealth;
+        case DamageType::Mixed:
+            return facts.MixedEffectiveHealth;
+        case DamageType::True:
+        default:
+            return facts.TrueEffectiveHealth;
+        }
+    }
+
+    static float MitigationMultiplierFor(const TargetRequest& request,
+                                         const TargetFacts& facts) {
+        // Stored effective-health pools include their applicable shields.  Use
+        // the same reference pool to isolate mitigation, even when the caller
+        // wants the final score to ignore shields.
+        TargetRequest reference = request;
+        reference.Damage.IncludeShields = true;
+        reference.Damage.IgnoreShields = false;
+        const float currentPool = RawHealthPoolFor(
+            reference, facts, facts.Health, true);
+        const float stored = StoredEffectiveHealthFor(request, facts);
+        if (currentPool <= 0.0f || !std::isfinite(stored) || stored <= 0.0f) {
+            return 1.0f;
+        }
+        return std::clamp(stored / currentPool, 0.05f, 20.0f);
+    }
+
+    static float EffectiveHealthFor(const TargetRequest& request,
+                                    const TargetFacts& facts) {
+        const float currentPool = RawHealthPoolFor(
+            request, facts, facts.Health, request.Damage.IncludeShields);
+        if (currentPool <= 0.0f) return 1.0f;
+
+        if (request.Damage.IncludeShields &&
+            !request.Damage.IgnoreShields) {
+            const float stored = StoredEffectiveHealthFor(request, facts);
+            if (std::isfinite(stored) && stored > 0.0f) {
+                return stored;
+            }
+        }
+        return currentPool * MitigationMultiplierFor(request, facts);
+    }
+
+    static float MaxEffectiveHealthFor(const TargetRequest& request,
+                                       const TargetFacts& facts) {
+        const float maxPool = RawHealthPoolFor(
+            request, facts, facts.MaxHealth, request.Damage.IncludeShields);
+        if (maxPool <= 0.0f) {
+            return EffectiveHealthFor(request, facts);
+        }
+        return maxPool * MitigationMultiplierFor(request, facts);
+    }
+
+    static float EstimatedDamageFor(const TargetRequest& request,
+                                    const TargetFacts& facts) {
+        const float expectedHits = std::isfinite(request.Damage.ExpectedHits)
+            ? std::max(1.0f, request.Damage.ExpectedHits) : 1.0f;
+        if (std::isfinite(request.Damage.RawDamage) &&
+            request.Damage.RawDamage > 0.0f) {
+            return request.Damage.RawDamage * expectedHits;
+        }
+
+        switch (request.Damage.Type) {
+        case DamageType::Physical:
+            return std::max(0.0f, facts.AutoAttackDamage) * expectedHits;
+        case DamageType::Magical:
+            return std::max(0.0f, facts.MagicalDamageEstimate) * expectedHits;
+        case DamageType::Mixed:
+            return (std::max(0.0f, facts.AutoAttackDamage) +
+                    std::max(0.0f, facts.MagicalDamageEstimate)) *
+                0.5f * expectedHits;
+        case DamageType::True:
+        default:
+            return 0.0f;
+        }
+    }
+
+    static float DamageRatioFor(const TargetRequest& request,
+                                const TargetFacts& facts) {
+        const float effectiveHealth = EffectiveHealthFor(request, facts);
+        if (effectiveHealth <= 0.0f) return 0.0f;
+        return std::clamp(
+            EstimatedDamageFor(request, facts) / effectiveHealth,
+            0.0f, 2.0f);
+    }
+
     static RejectReason ValidatePurpose(const TargetRequest& request,
                                         const TargetFacts& facts) {
         if (request.Purpose == TargetPurpose::Interrupt) {
@@ -135,7 +259,8 @@ public:
             configuredPriority,
             incumbentNetworkId,
             breakdown,
-            ProfileFor(request.Purpose));
+            ProfileFor(request.Purpose),
+            -1.0f);
     }
 
     static float BuildScoreForProfile(const TargetRequest& request,
@@ -143,22 +268,33 @@ public:
                                       int configuredPriority,
                                       int incumbentNetworkId,
                                       ScoreBreakdown& breakdown,
-                                      TargetProfile profile) {
+                                      TargetProfile profile,
+                                      float stickinessOverride = -1.0f) {
         const TargetProfileWeights weights = Weights(profile);
+        const float stickiness = std::isfinite(stickinessOverride) &&
+                stickinessOverride >= 0.0f
+            ? stickinessOverride
+            : weights.Stickiness;
         const float priority = std::clamp(
             static_cast<float>(configuredPriority), 0.0f, 5.0f);
-        const float maxHealth = std::isfinite(facts.MaxHealth)
-            ? std::max(1.0f, facts.MaxHealth) : 1.0f;
-        const float effectiveHealth = std::isfinite(facts.EffectiveHealth)
-            ? std::max(0.0f, facts.EffectiveHealth) : maxHealth;
-        const float healthRatio = std::clamp(effectiveHealth / maxHealth,
-                                             0.0f, 2.0f);
+        const float effectiveHealth = EffectiveHealthFor(request, facts);
+        const float maxEffectiveHealth = MaxEffectiveHealthFor(request, facts);
+        const float healthRatio = maxEffectiveHealth > 0.0f
+            ? std::clamp(effectiveHealth / maxEffectiveHealth, 0.0f, 2.0f)
+            : 0.0f;
         const float missingHealth = std::clamp(1.0f - healthRatio, -1.0f, 1.0f);
         const bool favorsDamageOpportunity =
             profile != TargetProfile::FleeThreat &&
             profile != TargetProfile::Peel &&
             profile != TargetProfile::Interrupt &&
             profile != TargetProfile::AntiGapcloser;
+        const bool allInProfile =
+            request.Purpose == TargetPurpose::ComboPrimary ||
+            request.Purpose == TargetPurpose::Execute ||
+            profile == TargetProfile::AutoAttack ||
+            profile == TargetProfile::Burst ||
+            profile == TargetProfile::DPS ||
+            profile == TargetProfile::Execute;
         const float boundedHealthRatio = std::clamp(healthRatio, 0.0f, 1.0f);
         // A very low-health enemy must be able to break a stale priority/
         // incumbent choice in offensive modes, but not defensive threat
@@ -175,16 +311,20 @@ public:
             (facts.AttackDamage * 0.55f + facts.AbilityPower * 0.35f) /
                 180.0f,
             0.0f, 4.0f);
-        const float damageRatio = effectiveHealth > 0.0f
-            ? std::clamp(
-                std::max(0.0f, facts.AutoAttackDamage) *
-                    std::max(1.0f, request.Damage.ExpectedHits) /
-                    effectiveHealth,
-                0.0f, 2.0f)
-            : 0.0f;
+        const float projectedDamage = EstimatedDamageFor(request, facts);
+        const float damageRatio = DamageRatioFor(request, facts);
 
         breakdown.Add("priority", "configured priority",
                       priority * weights.Priority, 0.0f, 260.0f);
+        if (incumbentNetworkId > 0 &&
+            facts.NetworkId == incumbentNetworkId) {
+            breakdown.Add(
+                "incumbent-stickiness",
+                "current target stickiness",
+                stickiness,
+                0.0f,
+                240.0f);
+        }
         if (profile == TargetProfile::FleeThreat) {
             breakdown.Add("health", "health safety", -missingHealth * weights.Health,
                           -15.0f, 15.0f);
@@ -209,19 +349,23 @@ public:
                       0.0f, 100.0f);
         breakdown.Add("dash", "dash state",
                       facts.IsDashing ? weights.Dash : 0.0f, 0.0f, 140.0f);
-        breakdown.Add("damage-efficiency", "damage efficiency",
+        breakdown.Add("damage-efficiency", "type-aware damage efficiency",
                       damageRatio * weights.EffectiveDamage, 0.0f, 220.0f);
-        if (incumbentNetworkId != 0 && facts.NetworkId == incumbentNetworkId) {
-            breakdown.Add("stickiness", "incumbent target",
-                          weights.Stickiness, 0.0f, 180.0f);
-        }
-
-        if (request.Purpose == TargetPurpose::Execute &&
-            request.Damage.RawDamage > 0.0f) {
-            const float lethal = request.Damage.RawDamage >= facts.EffectiveHealth
-                ? 80.0f : 0.0f;
-            breakdown.Add("lethal-confidence", "lethal confidence",
-                          lethal, 0.0f, 80.0f);
+        if (allInProfile && projectedDamage > 0.0f) {
+            breakdown.Add(
+                "all-in-feasibility",
+                "all-in damage versus effective health",
+                std::clamp(damageRatio, 0.0f, 1.0f) * 180.0f,
+                0.0f,
+                180.0f);
+            if (damageRatio >= 1.0f) {
+                breakdown.Add(
+                    "lethal-confidence",
+                    "all-in can kill target",
+                    profile == TargetProfile::Execute ? 180.0f : 140.0f,
+                    0.0f,
+                    180.0f);
+            }
         }
         return breakdown.Total;
     }

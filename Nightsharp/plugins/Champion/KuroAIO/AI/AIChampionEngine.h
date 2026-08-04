@@ -14,6 +14,7 @@
 #include "AIChampionController.h"
 #include "../Helper/MenuHelper.h"
 #include "../Helper/TargetHelper.h"
+#include "../../../Core/KuroTargetSelector/KuroTargetSelectorPolicy.h"
 #include "../Helper/OrbwalkerModeHelper.h"
 #include "../../../../Core/KuroCombatCoordinator.h"
 #include "../../../../DebugLog.h"
@@ -651,6 +652,8 @@ inline void SyncFocusLeaseManualOverride(
         manual, manual ? state.SelectedNetworkId : 0);
 }
 
+inline void EnsureAllInTargetProvider();
+
 inline AIHeroClient SelectTarget(float range = -1.0f) {
     if (!ActiveProfile) {
         return {};
@@ -664,6 +667,7 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     static float lastSelectRange = -1.0f;
     static AIHeroClient cachedTarget{};
     auto* kuro = SDK::KuroTargetSelector::ActiveService();
+    EnsureAllInTargetProvider();
 
     // The advanced service owns a per-tick snapshot, but its request still
     // depends on the live selection state and FocusLease.  Do not return the
@@ -803,6 +807,75 @@ inline float EstimatedDamage(const AIHeroClient& target, int excludedSlot = -1) 
         }
     }
     return damage;
+}
+
+inline SDK::KuroTargetSelector::ProviderToken AllInTargetProviderToken = 0;
+inline SDK::KuroTargetSelector::IKuroTargetSelector* AllInTargetProviderService = nullptr;
+inline constexpr std::uint32_t kAllInTargetProviderOwnerId = 0x4B554149u;
+
+inline SDK::KuroTargetSelector::ScoreContribution ScoreAllInTarget(
+    const SDK::KuroTargetSelector::TargetProviderContext& context) {
+    using namespace SDK::KuroTargetSelector;
+    if (!context.Request || !context.Facts ||
+        (context.Request->Purpose != TargetPurpose::ComboPrimary &&
+         context.Request->Purpose != TargetPurpose::Execute)) {
+        return {};
+    }
+
+    const float estimatedDamage = EstimatedDamage(context.Facts->Target);
+    const float effectiveHealth = std::max(
+        1.0f,
+        SDK::KuroTargetSelector::KuroTargetSelectorPolicy::EffectiveHealthFor(
+            *context.Request, *context.Facts));
+    if (!std::isfinite(estimatedDamage) || estimatedDamage <= 0.0f) {
+        return {};
+    }
+
+    const float ratio = std::clamp(
+        estimatedDamage / effectiveHealth, 0.0f, 2.0f);
+    const float feasibility = std::clamp(ratio, 0.0f, 1.0f) * 120.0f;
+    const float lethal = ratio >= 1.0f ? 260.0f : 0.0f;
+    return {
+        "kuroaio-all-in",
+        "ready combo damage versus target pool",
+        feasibility + lethal,
+        0.0f,
+        380.0f,
+    };
+}
+
+inline void UnregisterAllInTargetProvider() {
+    if (AllInTargetProviderService && AllInTargetProviderToken &&
+        SDK::KuroTargetSelector::LiveService() ==
+            AllInTargetProviderService) {
+        (void)AllInTargetProviderService->UnregisterProvider(
+            AllInTargetProviderToken);
+    }
+    AllInTargetProviderToken = 0;
+    AllInTargetProviderService = nullptr;
+}
+
+inline void EnsureAllInTargetProvider() {
+    auto* service = SDK::KuroTargetSelector::ActiveService();
+    if (!service) {
+        UnregisterAllInTargetProvider();
+        return;
+    }
+    if (AllInTargetProviderService != service) {
+        UnregisterAllInTargetProvider();
+        AllInTargetProviderService = service;
+    }
+    if (AllInTargetProviderToken) return;
+
+    const SDK::KuroTargetSelector::TargetRuleProvider provider{
+        kAllInTargetProviderOwnerId,
+        "kuroaio.all_in",
+        SDK::KuroTargetSelector::ProviderPriorityBand::PluginTactics,
+        nullptr,
+        nullptr,
+        &ScoreAllInTarget,
+    };
+    AllInTargetProviderToken = service->RegisterProvider(provider);
 }
 
 inline bool CanAct(bool reactive = false) {
@@ -2411,6 +2484,7 @@ inline void OnUnload() {
     if (!Loaded) {
         return;
     }
+    UnregisterAllInTargetProvider();
     SDK::Events::hook.OnGameUpdate -= &Game_OnUpdate;
     SDK::Events::hook.OnProcessSpell -= &OnProcessSpell;
     SDK::Events::hook.OnDoCast -= &OnDoCast;

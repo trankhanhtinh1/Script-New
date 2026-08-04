@@ -196,7 +196,7 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
 
     bool hasCommandableSoldier = false;
     for (const auto& soldier : OrbwalkingDetail::GetAzirSandSoldiers(player)) {
-        if (!soldier.IsValid() || soldier.IsDead()) {
+        if (!soldier.IsValid() || !soldier.IsTargetable()) {
             continue;
         }
 

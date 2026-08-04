@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace SDK::KuroTargetSelector {
@@ -19,6 +20,7 @@ public:
         TargetRuleProvider Provider = {};
         ProviderToken Token = 0;
         ProviderDiagnostic Diagnostic = {};
+        std::string KeyStorage;
     };
 
     ProviderToken Register(const TargetRuleProvider& provider) {
@@ -28,15 +30,16 @@ public:
             return 0;
         }
 
+        const std::string key(provider.Key);
         for (auto& entry : entries_) {
             if (entry.Provider.OwnerId == provider.OwnerId &&
-                entry.Provider.Key &&
-                _stricmp(entry.Provider.Key, provider.Key) == 0) {
+                _stricmp(entry.KeyStorage.c_str(), key.c_str()) == 0) {
                 entry.Provider = provider;
+                entry.KeyStorage = key;
                 entry.Diagnostic.OwnerId = provider.OwnerId;
-                entry.Diagnostic.Key = provider.Key;
                 entry.Diagnostic.Band = provider.Band;
                 entry.Diagnostic.Registered = true;
+                Rebind(entry);
                 ++revision_;
                 return entry.Token;
             }
@@ -44,16 +47,17 @@ public:
 
         Entry entry{};
         entry.Provider = provider;
+        entry.KeyStorage = key;
         entry.Token = nextToken_++;
         if (entry.Token == 0) entry.Token = nextToken_++;
         entry.Diagnostic.Token = entry.Token;
         entry.Diagnostic.OwnerId = provider.OwnerId;
-        entry.Diagnostic.Key = provider.Key;
         entry.Diagnostic.Band = provider.Band;
         entry.Diagnostic.Registered = true;
-        entries_.push_back(entry);
+        entries_.push_back(std::move(entry));
+        RebindAll();
         ++revision_;
-        return entry.Token;
+        return entries_.back().Token;
     }
 
     bool Unregister(ProviderToken token) {
@@ -63,6 +67,7 @@ public:
         if (it == entries_.end()) return false;
         it->Diagnostic.Registered = false;
         entries_.erase(it);
+        RebindAll();
         ++revision_;
         return true;
     }
@@ -73,7 +78,10 @@ public:
             [ownerId](const Entry& entry) {
                 return entry.Provider.OwnerId == ownerId;
             }), entries_.end());
-        if (entries_.size() != before) ++revision_;
+        if (entries_.size() != before) {
+            RebindAll();
+            ++revision_;
+        }
         return before - entries_.size();
     }
 
@@ -147,6 +155,15 @@ public:
     }
 
 private:
+    static void Rebind(Entry& entry) {
+        entry.Provider.Key = entry.KeyStorage.c_str();
+        entry.Diagnostic.Key = entry.KeyStorage.c_str();
+    }
+
+    void RebindAll() {
+        for (auto& entry : entries_) Rebind(entry);
+    }
+
     static void RecordTime(Entry& entry,
                            const std::chrono::steady_clock::time_point& start) {
         const auto elapsed = std::chrono::steady_clock::now() - start;

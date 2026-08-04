@@ -17,7 +17,7 @@ inline bool IsValidAttackTarget(const AIHeroClient& player,
     if (!player.IsValid() || !target.IsValid()) {
         return false;
     }
-    if ((!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) || (!target.IsZombie() && target.IsDead())) {
+    if (!target.IsEnemy() && target.Team() != GameObjectTeam::Neutral) {
         return false;
     }
     if (!target.IsVisible() || !target.IsTargetable() || target.IsInvulnerable()) {
@@ -718,7 +718,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
 
 inline bool HasEnemyHeroNearAutoAttackRange(const AIHeroClient& player) {
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!enemy.IsValid() || enemy.IsDead()) {
+        if (!enemy.IsValid() || !enemy.IsTargetable()) {
             continue;
         }
 

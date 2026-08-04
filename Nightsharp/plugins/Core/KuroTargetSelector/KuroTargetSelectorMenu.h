@@ -108,6 +108,7 @@ public:
 
     void Resume() {
         if (!suspended_) return;
+        if (Ptr() && Ptr() != this) Ptr()->Suspend();
         Ptr() = this;
         ::SDK::Game::OnWndProc += &OnWndProcHandler;
         if (native_) native_->Visible = true;
@@ -128,12 +129,20 @@ public:
         return static_cast<float>(SliderValue("Stickiness", 80));
     }
 
+    bool AutomaticProfile() const {
+        const auto* item = native_
+            ? native_->Get<::SDK::MenuList>("Profile")
+            : nullptr;
+        return !item || item->Index == 0;
+    }
+
     TargetProfile Profile() const {
         const auto* item = native_
             ? native_->Get<::SDK::MenuList>("Profile")
             : nullptr;
         const int index = item ? item->Index : 0;
         const int max = static_cast<int>(TargetProfile::FleeThreat);
+        if (index == max + 1) return TargetProfile::General;
         return static_cast<TargetProfile>(std::clamp(index, 0, max));
     }
 
@@ -159,9 +168,11 @@ public:
 
     bool IsBlacklisted(int networkId) const {
         if (networkId <= 0) return false;
-        if (blacklisted_.find(networkId) != blacklisted_.end()) return true;
         const auto item = blacklistItems_.find(networkId);
-        return item != blacklistItems_.end() && item->second && item->second->Value;
+        if (item != blacklistItems_.end() && item->second) {
+            return item->second->Value;
+        }
+        return blacklisted_.find(networkId) != blacklisted_.end();
     }
 
     int Priority(int networkId) const {
@@ -190,12 +201,11 @@ public:
     bool ToggleBlacklist(int networkId) {
         if (networkId <= 0) return false;
 
-        const auto it = blacklisted_.find(networkId);
-        const bool enabled = it == blacklisted_.end();
+        const bool enabled = !IsBlacklisted(networkId);
         if (enabled) {
             blacklisted_.insert(networkId);
         } else {
-            blacklisted_.erase(it);
+            blacklisted_.erase(networkId);
         }
 
         const auto item = blacklistItems_.find(networkId);
@@ -217,15 +227,6 @@ public:
             ? native_->Get<::SDK::MenuKeyBind>("ManualOverride")
             : nullptr;
         return item && item->Active;
-    }
-
-    // The diagnostics are retained so the drawing layer and a future menu
-    // panel can consume one coherent snapshot.  Copies are deliberate: the
-    // selector may rebuild its working vectors immediately after this call.
-    void DrawDiagnostics(const TargetSnapshot& snapshot,
-                         const std::vector<TargetDecision>& decisions) {
-        diagnosticSnapshot_ = snapshot;
-        diagnosticDecisions_ = decisions;
     }
 
     ::SDK::Menu* NativeMenu() const { return native_; }
@@ -268,8 +269,8 @@ private:
             "Stickiness", "Stickiness", 80, 0, 200));
         native_->Add(new ::SDK::MenuList(
             "Profile", "Profile",
-            {"General", "AutoAttack", "Burst", "DPS", "Poke", "Execute",
-             "Peel", "Interrupt", "AntiGapcloser", "FleeThreat"},
+            {"Automatic", "AutoAttack", "Burst", "DPS", "Poke", "Execute",
+             "Peel", "Interrupt", "AntiGapcloser", "FleeThreat", "General"},
             0));
         native_->Add(new ::SDK::MenuKeyBind(
             "CycleHotkey", "Cycle Selected Target", ::SDK::Keys::Tab,
@@ -291,7 +292,10 @@ private:
         for (const auto& hero : ::SDK::GameObjects::EnemyHeroes()) {
             if (!hero.IsValid() || hero.NetworkId() <= 0) continue;
             const int networkId = hero.NetworkId();
-            EnsureHeroEntries(hero);
+            if (priorities_.find(networkId) == priorities_.end() ||
+                blacklistItems_.find(networkId) == blacklistItems_.end()) {
+                EnsureHeroEntries(hero);
+            }
             selectedIsLive = selectedIsLive || networkId == selectedNetworkId_;
         }
         if (!selectedIsLive) {
@@ -320,11 +324,14 @@ private:
             priorityMenu_->Add(new ::SDK::MenuSlider(
                 priorityKey.c_str(), label.c_str(), Priority(networkId), 1, 5));
         }
-        if (!blacklistMenu_->Get<::SDK::MenuBool>(blacklistKey.c_str())) {
-            auto* item = blacklistMenu_->Add(new ::SDK::MenuBool(
-                blacklistKey.c_str(), label.c_str(), IsBlacklisted(networkId)));
-            blacklistItems_[networkId] = item;
+        auto* blacklistItem =
+            blacklistMenu_->Get<::SDK::MenuBool>(blacklistKey.c_str());
+        if (!blacklistItem) {
+            blacklistItem = blacklistMenu_->Add(new ::SDK::MenuBool(
+                blacklistKey.c_str(), label.c_str(),
+                blacklisted_.find(networkId) != blacklisted_.end()));
         }
+        blacklistItems_[networkId] = blacklistItem;
     }
 
     bool BoolValue(const char* key, bool fallback) const {
@@ -339,10 +346,14 @@ private:
 
     void SelectClosestToCursor(bool allowBlacklistModifier = true) {
         const ::SDK::Vector3 cursor = ::SDK::Game::CursorPos();
+        const bool blacklistModifier = allowBlacklistModifier &&
+            (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         ::SDK::AIHeroClient closest;
         float closestDistance = 180.0f;
         for (const auto& hero : ::SDK::GameObjects::EnemyHeroes()) {
-            if (!hero.IsValid() || hero.IsDead() || IsBlacklisted(hero.NetworkId())) {
+            if (!hero.IsValid() || !hero.IsVisible() ||
+                !hero.IsTargetable() ||
+                (!blacklistModifier && IsBlacklisted(hero.NetworkId()))) {
                 continue;
             }
             const float distance = hero.Distance(cursor);
@@ -351,8 +362,6 @@ private:
                 closest = hero;
             }
         }
-        const bool blacklistModifier = allowBlacklistModifier &&
-            (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         if (closest.IsValid()) {
             if (blacklistModifier) {
                 ToggleBlacklist(closest.NetworkId());
@@ -370,7 +379,7 @@ private:
     void CycleSelection() {
         std::vector<::SDK::AIHeroClient> heroes;
         for (const auto& hero : ::SDK::GameObjects::EnemyHeroes()) {
-            if (hero.IsValid() && !hero.IsDead() && hero.IsVisible() &&
+            if (hero.IsValid() && hero.IsVisible() &&
                 hero.IsTargetable() && !IsBlacklisted(hero.NetworkId())) {
                 heroes.push_back(hero);
             }
@@ -398,8 +407,6 @@ private:
     std::unordered_set<int> blacklisted_;
     std::unordered_map<int, int> priorities_;
     std::unordered_map<int, ::SDK::MenuBool*> blacklistItems_;
-    TargetSnapshot diagnosticSnapshot_ = {};
-    std::vector<TargetDecision> diagnosticDecisions_;
     bool suspended_ = true;
 };
 

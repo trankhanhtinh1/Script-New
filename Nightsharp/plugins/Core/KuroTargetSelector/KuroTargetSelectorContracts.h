@@ -70,39 +70,40 @@ enum class ProviderPriorityBand : std::uint8_t {
 };
 
 enum class RejectReason : std::uint16_t {
-    None,
-    Invalid,
-    Dead,
-    WrongTeam,
-    Despawned,
-    Untargetable,
-    OutOfRange,
-    NotVisible,
-    Ignored,
-    Blacklisted,
-    Invulnerable,
-    SpellShield,
-    Immunity,
-    RouteIllegal,
-    ProjectileWall,
-    Collision,
-    PredictionLow,
-    Stasis,
-    ClonePolicy,
-    RequiredTargetMissing,
-    RequiredTargetIllegal,
-    SelectedTargetIllegal,
-    PurposeRejected,
-    ProviderRejected,
-    ProviderFailure,
-    NoLegalCandidate,
+    None = 0,
+    Invalid = 1,
+    // Value 2 was a legacy availability-state rejection.  It is intentionally
+    // unused: live IsTargetable() is now the authoritative availability
+    // signal.  Explicit values preserve the remaining diagnostic ABI.
+    WrongTeam = 3,
+    Despawned = 4,
+    Untargetable = 5,
+    OutOfRange = 6,
+    NotVisible = 7,
+    Ignored = 8,
+    Blacklisted = 9,
+    Invulnerable = 10,
+    SpellShield = 11,
+    Immunity = 12,
+    RouteIllegal = 13,
+    ProjectileWall = 14,
+    Collision = 15,
+    PredictionLow = 16,
+    Stasis = 17,
+    ClonePolicy = 18,
+    RequiredTargetMissing = 19,
+    RequiredTargetIllegal = 20,
+    SelectedTargetIllegal = 21,
+    PurposeRejected = 22,
+    ProviderRejected = 23,
+    ProviderFailure = 24,
+    NoLegalCandidate = 25,
 };
 
 inline const char* RejectReasonName(RejectReason reason) {
     switch (reason) {
     case RejectReason::None: return "legal";
     case RejectReason::Invalid: return "invalid";
-    case RejectReason::Dead: return "dead";
     case RejectReason::WrongTeam: return "wrong-team";
     case RejectReason::Despawned: return "despawned";
     case RejectReason::Untargetable: return "untargetable";
@@ -180,6 +181,8 @@ struct RouteDescriptor {
     bool CheckAllSegments = false;
     bool PredictionAvailable = false;
     bool PredictionCollides = false;
+    // Compatibility-only advisory field.  The core gate intentionally does
+    // not trust it; live AIHeroClient::IsTargetable() is authoritative.
     bool TargetableAtExecution = true;
     bool SpellShieldAtImpact = false;
     bool ImmunityAtImpact = false;
@@ -220,7 +223,9 @@ struct TargetRequest {
 
     bool IsIgnoredTarget(int networkId) const {
         if (networkId <= 0) return false;
-        for (std::size_t i = 0; i < IgnoredTargetCount; ++i) {
+        const std::size_t count =
+            std::min(IgnoredTargetCount, IgnoredTargetIds.size());
+        for (std::size_t i = 0; i < count; ++i) {
             if (IgnoredTargetIds[i] == networkId) return true;
         }
         return false;
@@ -246,7 +251,18 @@ struct TargetFacts {
     float Health = 0.0f;
     float MaxHealth = 0.0f;
     float AllShield = 0.0f;
+    // Generic shield applies to every damage type; type-specific shields only
+    // absorb their matching route.
+    float PhysicalShield = 0.0f;
+    float MagicalShield = 0.0f;
     float EffectiveHealth = 0.0f;
+    // Effective health is expressed in post-mitigation damage for each route.
+    // The generic EffectiveHealth field remains the unmitigated total pool for
+    // providers that do not have a damage-type-specific request.
+    float PhysicalEffectiveHealth = 0.0f;
+    float MagicalEffectiveHealth = 0.0f;
+    float MixedEffectiveHealth = 0.0f;
+    float TrueEffectiveHealth = 0.0f;
     float HealthRegen = 0.0f;
     float Distance = 0.0f;
     float DistanceToSource = 0.0f;
@@ -256,9 +272,11 @@ struct TargetFacts {
     float BoundingRadius = 0.0f;
     // Damage the local player would deal with one ordinary attack.
     float AutoAttackDamage = 0.0f;
+    // A lightweight magic-route estimate used when a request has no concrete
+    // spell damage yet (planning).  Execution requests provide RawDamage.
+    float MagicalDamageEstimate = 0.0f;
 
     bool Valid = false;
-    bool Dead = false;
     bool Visible = false;
     bool Targetable = false;
     bool Invulnerable = false;
@@ -276,14 +294,28 @@ struct TargetFacts {
     std::size_t ProviderFactCount = 0;
 
     void AddProviderFact(const char* key, float value) {
-        if (!key || !key[0] || ProviderFactCount >= ProviderFacts.size()) return;
-        ProviderFacts[ProviderFactCount++] = { key, value };
+        if (!key || !key[0]) return;
+        const std::size_t count =
+            std::min(ProviderFactCount, ProviderFacts.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            if (ProviderFacts[i].Key &&
+                _stricmp(ProviderFacts[i].Key, key) == 0) {
+                ProviderFacts[i] = { key, value };
+                return;
+            }
+        }
+        if (count >= ProviderFacts.size()) return;
+        ProviderFacts[count] = { key, value };
+        ProviderFactCount = count + 1;
     }
 
     float ProviderFactValue(const char* key, float fallback = 0.0f) const {
         if (!key || !key[0]) return fallback;
-        for (std::size_t i = 0; i < ProviderFactCount; ++i) {
-            if (ProviderFacts[i].Key && _stricmp(ProviderFacts[i].Key, key) == 0) {
+        const std::size_t count =
+            std::min(ProviderFactCount, ProviderFacts.size());
+        for (std::size_t i = 0; i < count; ++i) {
+            if (ProviderFacts[i].Key &&
+                _stricmp(ProviderFacts[i].Key, key) == 0) {
                 return ProviderFacts[i].Value;
             }
         }
@@ -320,13 +352,18 @@ struct ScoreBreakdown {
              float value,
              float minValue = -1000.0f,
              float maxValue = 1000.0f) {
+        float safeMin = std::isfinite(minValue) ? minValue : -1000.0f;
+        float safeMax = std::isfinite(maxValue) ? maxValue : 1000.0f;
+        if (safeMax < safeMin) std::swap(safeMin, safeMax);
+
         const float bounded = std::isfinite(value)
-            ? std::clamp(value, minValue, maxValue)
+            ? std::clamp(value, safeMin, safeMax)
             : 0.0f;
-        Total += bounded;
+        const float nextTotal = Total + bounded;
+        Total = std::isfinite(nextTotal) ? nextTotal : Total;
         if (Count < Contributions.size()) {
             Contributions[Count++] = {
-                reasonCode, name, bounded, minValue, maxValue
+                reasonCode, name, bounded, safeMin, safeMax
             };
         }
     }

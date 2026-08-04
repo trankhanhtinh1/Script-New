@@ -15,6 +15,7 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -26,7 +27,8 @@ class KuroTargetSelectorService final : public ::SDK::ITargetSelector,
 public:
     explicit KuroTargetSelectorService(
         ::SDK::Menu* parent, bool parentIsRoot = false)
-        : menu_(new Menu(parent, parentIsRoot)), drawing_(new Drawing(menu_)) {
+        : menu_(std::make_unique<Menu>(parent, parentIsRoot)),
+          drawing_(std::make_unique<Drawing>(menu_.get())) {
         // Construction registers the menu/drawing objects, but the registry
         // owns activation.  Start suspended so a merely loaded plugin cannot
         // duplicate SDK/Impulse callbacks before it becomes current.
@@ -41,14 +43,8 @@ public:
         if (::SDK::KuroTargetSelector::ActiveService() == this) {
             ::SDK::KuroTargetSelector::SetActiveService(nullptr);
         }
-        if (drawing_) {
-            delete drawing_;
-            drawing_ = nullptr;
-        }
-        if (menu_) {
-            delete menu_;
-            menu_ = nullptr;
-        }
+        drawing_.reset();
+        menu_.reset();
     }
 
     ::SDK::AIHeroClient GetSelectedTarget() const override {
@@ -160,8 +156,8 @@ public:
         // the selector to rank again must fail closed for that nested call,
         // while the outer request continues with the provider's neutral
         // result.
-        if (evaluating_) return {};
-        evaluating_ = true;
+        EvaluationGuard evaluation(evaluating_);
+        if (!evaluation.Acquired()) return {};
 
         BuildSnapshot(request);
         std::vector<TargetDecision> result;
@@ -178,6 +174,8 @@ public:
             ? request.RequiredTargetId
             : (!request.AllowFallback ? request.LockedTargetId : 0);
         const bool onlySelected = menu_ && menu_->OnlySelectedTarget();
+        const auto providerOrder = BuildProviderOrder();
+        const auto player = ::SDK::GameObjects::Player();
 
         for (std::size_t i = 0; i < snapshot_.Count; ++i) {
             const TargetFacts& facts = snapshot_.Enemies[i];
@@ -225,11 +223,8 @@ public:
             }
 
             TargetFacts workingFacts = facts;
-            const ::SDK::Vector3 source = request.Route.Start.IsValid() &&
-                    !request.Route.Start.IsZero()
-                ? request.Route.Start
-                : (request.Source.IsValid() && !request.Source.IsZero()
-                    ? request.Source : snapshot_.PlayerPosition);
+            const ::SDK::Vector3 source = ResolveRequestSource(
+                request, player);
             workingFacts.DistanceToSource = source.IsValid() && !source.IsZero()
                 ? source.Distance(workingFacts.Target.Position())
                 : workingFacts.DistanceToSource;
@@ -240,25 +235,12 @@ public:
             context.Facts = &workingFacts;
             context.Snapshot = &snapshot_;
 
-            std::vector<ProviderRegistry::Entry*> providerOrder;
-            for (auto& entry : providersRegistry_.MutableEntries()) {
-                // BaseSafety is reserved for the core action gate.  Plugin
-                // providers can add facts, constraints, and score terms but
-                // cannot replace that hard safety boundary.
-                if (entry.Provider.Band != ProviderPriorityBand::BaseSafety) {
-                    providerOrder.push_back(&entry);
-                }
-            }
-            std::stable_sort(providerOrder.begin(), providerOrder.end(),
-                [](const auto* lhs, const auto* rhs) {
-                    return static_cast<int>(lhs->Provider.Band) <
-                           static_cast<int>(rhs->Provider.Band);
-                });
-
             bool providerRejected = false;
             for (auto* provider : providerOrder) {
-                if (!providersRegistry_.BuildFacts(
-                        *provider, request, workingFacts.Target, workingFacts)) {
+                const bool accepted = providersRegistry_.BuildFacts(
+                    *provider, request, workingFacts.Target, workingFacts);
+                RestoreCoreFacts(workingFacts, facts);
+                if (!accepted) {
                     providerRejected = true;
                     break;
                 }
@@ -268,7 +250,6 @@ public:
                 result.push_back(decision);
                 continue;
             }
-
             const auto purpose = KuroTargetSelectorPolicy::ValidatePurpose(
                 request, workingFacts);
             if (purpose != RejectReason::None) {
@@ -293,8 +274,8 @@ public:
                 KuroTargetSelectorPolicy::ProfileFor(request.Purpose);
             const TargetProfile menuProfile = menu_
                 ? menu_->Profile() : TargetProfile::General;
-            const TargetProfile activeProfile = menuProfile !=
-                    TargetProfile::General
+            const TargetProfile activeProfile = menu_ &&
+                    !menu_->AutomaticProfile()
                 ? menuProfile : requestedProfile;
             decision.Score = KuroTargetSelectorPolicy::BuildScoreForProfile(
                 request,
@@ -302,7 +283,8 @@ public:
                 menu_ ? menu_->Priority(facts.NetworkId) : 1,
                 incumbentNetworkId_,
                 decision.Breakdown,
-                activeProfile);
+                activeProfile,
+                menu_ ? menu_->Stickiness() : -1.0f);
             if (manualPreferredId != 0 &&
                 manualPreferredId == facts.NetworkId) {
                 decision.Breakdown.Add(
@@ -331,6 +313,21 @@ public:
                     contribution.MinValue,
                     contribution.MaxValue);
             }
+
+            // Targetability can change during provider evaluation.  Recheck the
+            // live gate immediately before publishing a legal candidate.
+            const auto finalGate = KuroTargetActionGate::Evaluate(
+                request, workingFacts.Target);
+            if (!finalGate.Legal) {
+                decision.Rejection = requiredId == facts.NetworkId
+                    ? RejectReason::RequiredTargetIllegal
+                    : ((onlySelected && selectedId == facts.NetworkId)
+                        ? RejectReason::SelectedTargetIllegal
+                        : finalGate.Rejection);
+                result.push_back(decision);
+                continue;
+            }
+
             decision.Score = decision.Breakdown.Total;
             decision.Legal = true;
             result.push_back(decision);
@@ -373,8 +370,6 @@ public:
             });
 
         lastDecisions_ = result;
-        if (menu_) menu_->DrawDiagnostics(snapshot_, lastDecisions_);
-        evaluating_ = false;
         return result;
     }
 
@@ -394,6 +389,7 @@ public:
 
     ::SDK::KuroTargetSelector::ProviderToken RegisterProvider(
         const ::SDK::KuroTargetSelector::TargetRuleProvider& provider) override {
+        if (evaluating_) return 0;
         const ::SDK::KuroTargetSelector::ProviderToken token =
             providersRegistry_.Register(provider);
         if (token) ++revision_;
@@ -402,6 +398,7 @@ public:
 
     bool UnregisterProvider(
         ::SDK::KuroTargetSelector::ProviderToken token) override {
+        if (evaluating_) return false;
         const bool removed = providersRegistry_.Unregister(token);
         if (removed) ++revision_;
         return removed;
@@ -425,78 +422,62 @@ public:
     bool ValidateExecution(
         const ::SDK::KuroTargetSelector::TargetRequest& request,
         const ::SDK::AIHeroClient& target) override {
+        using namespace ::SDK::KuroTargetSelector;
+
+        if (suspended_) return false;
+        EvaluationGuard evaluation(evaluating_);
+        if (!evaluation.Acquired()) return false;
+
         auto execution = request;
-        execution.Phase = ::SDK::KuroTargetSelector::DecisionPhase::Execution;
-        const auto gate = ::SDK::KuroTargetSelector::KuroTargetActionGate::Evaluate(
-            execution, target);
+        execution.Phase = DecisionPhase::Execution;
+        const int targetId = target.NetworkId();
+        if (targetId <= 0 || request.IsIgnoredTarget(targetId)) return false;
+        if (request.RequiredTargetId != 0 &&
+            request.RequiredTargetId != targetId) {
+            return false;
+        }
+        if (!request.AllowFallback && request.LockedTargetId != 0 &&
+            request.LockedTargetId != targetId) {
+            return false;
+        }
+        if (menu_ && menu_->OnlySelectedTarget()) {
+            const int selectedId = menu_->Selected().NetworkId();
+            if (selectedId <= 0 || selectedId != targetId) return false;
+        }
+
+        const auto gate = KuroTargetActionGate::Evaluate(execution, target);
         if (!gate.Legal || target.IsClone() ||
-            (menu_ && menu_->IsBlacklisted(target.NetworkId()))) {
+            (menu_ && menu_->IsBlacklisted(targetId))) {
             return false;
         }
 
-        // Execution is the second half of the selector/provider contract.
-        // A champion provider may observe a buff changing after planning
-        // (Kindred R is the important example) and must be able to reject the
-        // live action without making callers re-rank the whole target list.
-        using namespace ::SDK::KuroTargetSelector;
+        // Keep provider snapshot context current even when execution validation
+        // is called without a preceding Rank() in this tick.
+        BuildSnapshot(execution);
+
         TargetFacts facts{};
         const auto player = ::SDK::GameObjects::Player();
-        facts.Target = target;
-        facts.SnapshotId = static_cast<std::uint32_t>(snapshot_.Id);
-        facts.NetworkId = target.NetworkId();
-        facts.Level = target.Level();
-        facts.Position = target.Position();
-        facts.ServerPosition = target.ServerPosition();
-        facts.Direction = target.Direction();
-        facts.Health = target.Health();
-        facts.MaxHealth = target.MaxHealth();
-        facts.AllShield = target.AllShield();
-        facts.EffectiveHealth = facts.Health + facts.AllShield;
-        facts.HealthRegen = target.HealthRegenRate();
-        facts.DistanceToSource = player.IsValid()
-            ? player.Position().Distance(target.Position()) : 0.0f;
-        facts.Distance = facts.DistanceToSource;
-        facts.MoveSpeed = target.MoveSpeed();
-        facts.AttackDamage = target.AD();
-        facts.AbilityPower = target.AP();
-        facts.BoundingRadius = target.BoundingRadius();
-        facts.AutoAttackDamage = player.IsValid()
-            ? ::SDK::Damage::GetAutoAttackDamage(player, target, true)
-            : 0.0f;
-        facts.Valid = target.IsValid();
-        facts.Dead = target.IsDead();
-        facts.Visible = target.IsVisible();
-        facts.Targetable = target.IsTargetable();
-        facts.Invulnerable = target.IsInvulnerable();
-        facts.IsZombie = target.IsZombie();
-        facts.IsClone = target.IsClone();
-        facts.IsDashing = target.IsDashing();
-        facts.IsMoving = target.IsMoving();
-        facts.IsChanneling = target.Spellbook().IsChanneling();
-        facts.IsCrowdControlled = target.HasBuff("stun") ||
-            target.HasBuff("root") || target.HasBuff("snare") ||
-            target.HasBuff("charm") || target.HasBuff("fear") ||
-            target.HasBuff("taunt") || target.HasBuff("silence");
-        facts.IsFacingSource = player.IsValid() &&
-            ::SDK::Extensions::IsFacing(target, player);
-        facts.IsStasis = target.HasBuff("bardrstasis") ||
-            target.HasBuff("zhonyasringshield") ||
-            target.HasBuff("lissandrarself") ||
-            target.HasBuff("vladimirsanguinepool") ||
-            target.HasBuff("fizztrickslippery");
+        PopulateTargetFacts(
+            facts,
+            target,
+            player,
+            static_cast<std::uint32_t>(snapshot_.Id),
+            ResolveRequestSource(execution, player));
+        facts.Priority = menu_ ? menu_->Priority(facts.NetworkId) : 1;
+        const TargetFacts coreFacts = facts;
 
-        std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>
-            providerOrder;
-        for (auto& entry : providersRegistry_.MutableEntries()) {
-            if (entry.Provider.Band != ProviderPriorityBand::BaseSafety) {
-                providerOrder.push_back(&entry);
-            }
+        const auto providerOrder = BuildProviderOrder();
+        for (auto* provider : providerOrder) {
+            const bool accepted = providersRegistry_.BuildFacts(
+                *provider, execution, target, facts);
+            RestoreCoreFacts(facts, coreFacts);
+            if (!accepted) return false;
         }
-        std::stable_sort(providerOrder.begin(), providerOrder.end(),
-            [](const auto* lhs, const auto* rhs) {
-                return static_cast<int>(lhs->Provider.Band) <
-                    static_cast<int>(rhs->Provider.Band);
-            });
+
+        if (KuroTargetSelectorPolicy::ValidatePurpose(execution, facts) !=
+                RejectReason::None) {
+            return false;
+        }
 
         TargetProviderContext context{};
         context.Request = &execution;
@@ -504,16 +485,15 @@ public:
         context.Facts = &facts;
         context.Snapshot = &snapshot_;
         for (auto* provider : providerOrder) {
-            if (!providersRegistry_.BuildFacts(
-                    *provider, execution, target, facts)) {
-                return false;
-            }
             if (providersRegistry_.Validate(*provider, context) !=
                     RejectReason::None) {
                 return false;
             }
         }
-        return true;
+
+        // The final live targetability check is authoritative.  This closes
+        // the race where the target changes state during provider callbacks.
+        return KuroTargetActionGate::Evaluate(execution, target).Legal;
     }
 
     std::vector<::SDK::KuroTargetSelector::ProviderDiagnostic>
@@ -526,6 +506,74 @@ public:
     }
 
 private:
+    class EvaluationGuard final {
+    public:
+        explicit EvaluationGuard(bool& flag)
+            : flag_(flag), acquired_(!flag) {
+            if (acquired_) flag_ = true;
+        }
+
+        ~EvaluationGuard() {
+            if (acquired_) flag_ = false;
+        }
+
+        EvaluationGuard(const EvaluationGuard&) = delete;
+        EvaluationGuard& operator=(const EvaluationGuard&) = delete;
+
+        bool Acquired() const { return acquired_; }
+
+    private:
+        bool& flag_;
+        bool acquired_ = false;
+    };
+
+    std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>
+    BuildProviderOrder() {
+        using namespace ::SDK::KuroTargetSelector;
+        std::vector<ProviderRegistry::Entry*> order;
+        order.reserve(providersRegistry_.MutableEntries().size());
+        for (auto& entry : providersRegistry_.MutableEntries()) {
+            // BaseSafety is reserved for the live core action gate.
+            if (entry.Provider.Band != ProviderPriorityBand::BaseSafety) {
+                order.push_back(&entry);
+            }
+        }
+        std::stable_sort(order.begin(), order.end(),
+            [](const auto* lhs, const auto* rhs) {
+                return static_cast<int>(lhs->Provider.Band) <
+                    static_cast<int>(rhs->Provider.Band);
+            });
+        return order;
+    }
+
+    static void RestoreCoreFacts(
+        ::SDK::KuroTargetSelector::TargetFacts& facts,
+        const ::SDK::KuroTargetSelector::TargetFacts& core) {
+        facts.Target = core.Target;
+        facts.SnapshotId = core.SnapshotId;
+        facts.NetworkId = core.NetworkId;
+        facts.Priority = core.Priority;
+        facts.Valid = core.Valid;
+        facts.Visible = core.Visible;
+        facts.Targetable = core.Targetable;
+        facts.Invulnerable = core.Invulnerable;
+        facts.IsZombie = core.IsZombie;
+        facts.IsClone = core.IsClone;
+        facts.IsStasis = core.IsStasis;
+    }
+
+    static ::SDK::Vector3 ResolveRequestSource(
+        const ::SDK::KuroTargetSelector::TargetRequest& request,
+        const ::SDK::AIHeroClient& player) {
+        if (request.Route.Start.IsValid() && !request.Route.Start.IsZero()) {
+            return request.Route.Start;
+        }
+        if (request.Source.IsValid() && !request.Source.IsZero()) {
+            return request.Source;
+        }
+        return player.IsValid() ? player.Position() : ::SDK::Vector3();
+    }
+
     static ::SDK::KuroTargetSelector::TargetRequest LegacyRequest(
         float range,
         ::SDK::DamageType damageType,
@@ -540,9 +588,9 @@ private:
         request.Range = range;
         request.Damage.Type = damageType;
         request.Damage.IgnoreShields = ignoreShields;
+        request.Damage.IncludeShields = !ignoreShields;
         request.Route.Kind = RouteKind::NonProjectile;
         request.Route.Start = from;
-        request.Route.TargetableAtExecution = true;
         request.RespectManualSelection = true;
         if (ignoreChampions) {
             for (const auto& ignored : *ignoreChampions) {
@@ -559,6 +607,130 @@ private:
             if (item.Compare(target)) return true;
         }
         return false;
+    }
+
+    static float SafeNonNegative(float value) {
+        return std::isfinite(value) ? std::max(0.0f, value) : 0.0f;
+    }
+
+    static float DamageMultiplier(const ::SDK::AIHeroClient& player,
+                                  const ::SDK::AIHeroClient& target,
+                                  ::SDK::DamageType type) {
+        if (!player.IsValid() || !target.IsValid()) return 1.0f;
+        constexpr float sampleDamage = 1000.0f;
+        const float dealt = ::SDK::Damage::CalculateDamage(
+            player, target, type, sampleDamage);
+        if (!std::isfinite(dealt)) return 1.0f;
+        return std::clamp(dealt / sampleDamage, 0.0f, 20.0f);
+    }
+
+    static float EffectiveHealthFromPool(float pool, float multiplier) {
+        if (pool <= 0.0f) return 0.0f;
+        if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
+            return FLT_MAX;
+        }
+        return pool / multiplier;
+    }
+
+    static void PopulateTargetFacts(
+        ::SDK::KuroTargetSelector::TargetFacts& facts,
+        const ::SDK::AIHeroClient& target,
+        const ::SDK::AIHeroClient& player,
+        std::uint32_t snapshotId,
+        const ::SDK::Vector3& source) {
+        facts = {};
+        facts.Target = target;
+        facts.SnapshotId = snapshotId;
+        facts.Valid = target.IsValid();
+        if (!facts.Valid) return;
+
+        facts.NetworkId = target.NetworkId();
+        facts.Targetable = target.IsTargetable();
+        facts.Visible = target.IsVisible();
+        facts.Invulnerable = target.IsInvulnerable();
+        facts.IsZombie = target.IsZombie();
+        facts.IsClone = target.IsClone();
+
+        facts.Level = target.Level();
+        facts.Position = target.Position();
+        facts.ServerPosition = target.ServerPosition();
+        facts.Direction = target.Direction();
+        facts.Health = SafeNonNegative(target.Health());
+        facts.MaxHealth = SafeNonNegative(target.MaxHealth());
+        facts.AllShield = SafeNonNegative(target.AllShield());
+        facts.PhysicalShield = SafeNonNegative(target.PhysicalShield());
+        facts.MagicalShield = SafeNonNegative(target.MagicalShield());
+
+        // Rejected untargetable identities are retained for diagnostics, but
+        // avoid expensive damage simulations that can also return misleading
+        // values for an unavailable game object.
+        const bool canEvaluateDamage = facts.Targetable && player.IsValid();
+        const float physicalMultiplier = canEvaluateDamage
+            ? DamageMultiplier(player, target, ::SDK::DamageType::Physical)
+            : 1.0f;
+        const float magicalMultiplier = canEvaluateDamage
+            ? DamageMultiplier(player, target, ::SDK::DamageType::Magical)
+            : 1.0f;
+        const float mixedMultiplier =
+            physicalMultiplier > 0.0f && magicalMultiplier > 0.0f
+            ? (physicalMultiplier + magicalMultiplier) * 0.5f
+            : std::max(physicalMultiplier, magicalMultiplier);
+        const float health = facts.Health;
+        const float allShield = facts.AllShield;
+        const float physicalPool =
+            health + allShield + facts.PhysicalShield;
+        const float magicalPool =
+            health + allShield + facts.MagicalShield;
+        const float mixedPool = health + allShield +
+            (facts.PhysicalShield + facts.MagicalShield) * 0.5f;
+        const float truePool = health + allShield;
+
+        facts.EffectiveHealth = health + allShield +
+            facts.PhysicalShield + facts.MagicalShield;
+        facts.PhysicalEffectiveHealth = EffectiveHealthFromPool(
+            physicalPool, physicalMultiplier);
+        facts.MagicalEffectiveHealth = EffectiveHealthFromPool(
+            magicalPool, magicalMultiplier);
+        facts.MixedEffectiveHealth = EffectiveHealthFromPool(
+            mixedPool, mixedMultiplier);
+        facts.TrueEffectiveHealth = truePool;
+
+        facts.HealthRegen = SafeNonNegative(target.HealthRegenRate());
+        facts.DistanceToSource = source.IsValid() && !source.IsZero()
+            ? source.Distance(facts.Position)
+            : (player.IsValid() ? player.Distance(facts.Position) : 0.0f);
+        facts.Distance = facts.DistanceToSource;
+        facts.MoveSpeed = SafeNonNegative(target.MoveSpeed());
+        facts.AttackDamage = SafeNonNegative(target.AD());
+        facts.AbilityPower = SafeNonNegative(target.AP());
+        facts.BoundingRadius = SafeNonNegative(target.BoundingRadius());
+        facts.AutoAttackDamage = canEvaluateDamage
+            ? SafeNonNegative(::SDK::Damage::GetAutoAttackDamage(
+                player, target, true))
+            : 0.0f;
+        facts.MagicalDamageEstimate =
+            canEvaluateDamage && player.AP() > 0.0f
+            ? SafeNonNegative(::SDK::Damage::CalculateDamage(
+                player, target, ::SDK::DamageType::Magical, player.AP()))
+            : 0.0f;
+
+        if (facts.Targetable) {
+            facts.IsDashing = target.IsDashing();
+            facts.IsMoving = target.IsMoving();
+            facts.IsChanneling = target.Spellbook().IsChanneling();
+            facts.IsCrowdControlled = target.HasBuff("stun") ||
+                target.HasBuff("root") || target.HasBuff("snare") ||
+                target.HasBuff("charm") || target.HasBuff("fear") ||
+                target.HasBuff("taunt") || target.HasBuff("silence");
+            facts.IsFacingSource = player.IsValid() &&
+                ::SDK::Extensions::IsFacing(target, player);
+        }
+        facts.IsStasis = !facts.Targetable && (
+            target.HasBuff("bardrstasis") ||
+            target.HasBuff("zhonyasringshield") ||
+            target.HasBuff("lissandrarself") ||
+            target.HasBuff("vladimirsanguinepool") ||
+            target.HasBuff("fizztrickslippery"));
     }
 
     void BuildSnapshot(
@@ -578,57 +750,20 @@ private:
 
         for (const auto& target : ::SDK::GameObjects::EnemyHeroes()) {
             if (snapshot_.Count >= snapshot_.Enemies.size()) break;
+            if (!target.IsValid() || target.NetworkId() <= 0) continue;
             auto& facts = snapshot_.Enemies[snapshot_.Count++];
-            facts.Target = target;
-            facts.SnapshotId = static_cast<std::uint32_t>(snapshot_.Id);
-            facts.NetworkId = target.NetworkId();
+            PopulateTargetFacts(
+                facts,
+                target,
+                player,
+                static_cast<std::uint32_t>(snapshot_.Id),
+                source);
             facts.Priority = menu_ ? menu_->Priority(facts.NetworkId) : 1;
-            facts.Level = target.Level();
-            facts.Position = target.Position();
-            facts.ServerPosition = target.ServerPosition();
-            facts.Direction = target.Direction();
-            facts.Health = target.Health();
-            facts.MaxHealth = target.MaxHealth();
-            facts.AllShield = target.AllShield();
-            facts.EffectiveHealth = facts.Health + facts.AllShield;
-            facts.HealthRegen = target.HealthRegenRate();
-            facts.DistanceToSource = source.IsValid() && !source.IsZero()
-                ? source.Distance(target.Position())
-                : (player.IsValid() ? player.Distance(target.Position()) : 0.0f);
-            facts.Distance = facts.DistanceToSource;
-            facts.MoveSpeed = target.MoveSpeed();
-            facts.AttackDamage = target.AD();
-            facts.AbilityPower = target.AP();
-            facts.BoundingRadius = target.BoundingRadius();
-            facts.AutoAttackDamage = player.IsValid()
-                ? ::SDK::Damage::GetAutoAttackDamage(player, target, true)
-                : 0.0f;
-            facts.Valid = target.IsValid();
-            facts.Dead = target.IsDead();
-            facts.Visible = target.IsVisible();
-            facts.Targetable = target.IsTargetable();
-            facts.Invulnerable = target.IsInvulnerable();
-            facts.IsZombie = target.IsZombie();
-            facts.IsClone = target.IsClone();
-            facts.IsDashing = target.IsDashing();
-            facts.IsMoving = target.IsMoving();
-            facts.IsChanneling = target.Spellbook().IsChanneling();
-            facts.IsCrowdControlled = target.HasBuff("stun") ||
-                target.HasBuff("root") || target.HasBuff("snare") ||
-                target.HasBuff("charm") || target.HasBuff("fear") ||
-                target.HasBuff("taunt") || target.HasBuff("silence");
-            facts.IsFacingSource = player.IsValid() &&
-                ::SDK::Extensions::IsFacing(target, player);
-            facts.IsStasis = target.HasBuff("bardrstasis") ||
-                target.HasBuff("zhonyasringshield") ||
-                target.HasBuff("lissandrarself") ||
-                target.HasBuff("vladimirsanguinepool") ||
-                target.HasBuff("fizztrickslippery");
         }
     }
 
-    Menu* menu_ = nullptr;
-    Drawing* drawing_ = nullptr;
+    std::unique_ptr<Menu> menu_;
+    std::unique_ptr<Drawing> drawing_;
     ::SDK::KuroTargetSelector::ProviderRegistry providersRegistry_;
     ::SDK::KuroTargetSelector::TargetSnapshot snapshot_ = {};
     std::vector<::SDK::KuroTargetSelector::TargetDecision> lastDecisions_;
