@@ -294,7 +294,7 @@ inline bool TryCorrectQWithE() {
     }
     auto target = Engine::EnemyByNetworkId(PlannedQTargetId);
     if (!Engine::ValidEnemy(target, 1200.0f)) {
-        target = ControllerHelpers::NearestEnemyToPlayer(1000.0f);
+        target = ControllerHelpers::NearestEnemyToPlayer({}, 1000.0f);
     }
     if (!Engine::ValidEnemy(target, 1200.0f)) {
         return false;
