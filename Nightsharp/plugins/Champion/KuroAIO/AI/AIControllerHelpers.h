@@ -347,12 +347,25 @@ inline bool AnyTextContains(
     return false;
 }
 
+#include "../../../../core/CoreBuffs.h"
+
 inline bool HasAnyBuff(
     const AIBaseClient& unit,
     std::initializer_list<const char*> names) {
     if (!unit.IsValid()) return false;
+    const auto* snapshot = ::CoreBuffs::GetOrBuildFrameBuffSnapshot(
+        unit.Address(), ::CoreBuffs::ResolveGameTime());
+    if (!snapshot || snapshot->count <= 0) return false;
+
     for (const char* name : names) {
-        if (name && name[0] && unit.HasBuff(name)) return true;
+        if (!name || !name[0]) continue;
+        const std::uint32_t nameHash = ::SDK::Utils::HashName(name);
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (entry.isActive && ::CoreBuffs::IsMatchingEntry(entry, nameHash)) {
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -364,10 +377,19 @@ inline int MaximumBuffCount(
     const AIBaseClient& unit,
     std::initializer_list<const char*> names) {
     if (!unit.IsValid()) return 0;
+    const auto* snapshot = ::CoreBuffs::GetOrBuildFrameBuffSnapshot(
+        unit.Address(), ::CoreBuffs::ResolveGameTime());
+    if (!snapshot || snapshot->count <= 0) return 0;
+
     int maximum = 0;
     for (const char* name : names) {
-        if (name && name[0]) {
-            maximum = std::max(maximum, unit.GetBuffCount(name));
+        if (!name || !name[0]) continue;
+        const std::uint32_t nameHash = ::SDK::Utils::HashName(name);
+        for (int i = 0; i < snapshot->count; ++i) {
+            const auto& entry = snapshot->entries[i];
+            if (entry.isActive && ::CoreBuffs::IsMatchingEntry(entry, nameHash)) {
+                maximum = std::max(maximum, static_cast<int>(entry.stacks));
+            }
         }
     }
     return maximum;
