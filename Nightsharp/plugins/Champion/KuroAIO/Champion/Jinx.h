@@ -299,13 +299,15 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         }
     }
 
-    // Auto Q back to Minigun when no orbwalking mode active
-    if (Orbwalker::ActiveMode() == OrbwalkingMode::None) {
-        if (IsQActive() && Bool(ComboMenu, "AutoQ", true)) {
+    // Auto Q back to Minigun when no orbwalking mode active or no enemy heroes in range to save mana
+    if (IsQActive() && Bool(ComboMenu, "AutoQ", true)) {
+        if (Orbwalker::ActiveMode() == OrbwalkingMode::None || !ValidHeroTarget(GetPhysicalTarget(1300.0f))) {
             Q.Cast();
             return;
         }
+    }
 
+    if (Orbwalker::ActiveMode() == OrbwalkingMode::None) {
         if (E.IsReady() && Bool(ESettingsMenu, "AutoE", true)) {
             for (const auto& enemy : GameObjects::EnemyHeroes()) {
                 if (ValidHeroTarget(enemy, E.Range) && SDK::Extensions::IsDashing(enemy)) {

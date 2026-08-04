@@ -364,7 +364,11 @@ inline bool TryCombo(const AIHeroClient& target, Mode mode) {
     const bool committed = IsImmobile(target) || target.IsDashing() ||
         (IsEscaping(target) && InAutoAttackRange(target, 125.0f));
     if (CastTrap(target, mode, committed)) return true;
-    if (CastNet(target, mode, false)) return true;
+    if (CastNet(target, mode, false)) {
+        // E-Q Animation Cancel: Cast Q immediately during E recoil animation
+        (void)CastQ(target, mode);
+        return true;
+    }
     if (CastQ(target, mode)) return true;
     return false;
 }
