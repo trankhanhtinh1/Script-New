@@ -1013,6 +1013,12 @@ struct ChampionState {
     Evidence specialStateEvidence{};
     float visibilityAge = 0.0f, lastSeenAt = 0.0f, moveSpeed = 0.0f, abilityHaste = 0.0f;
     Point3 position{}, lastSeenPosition{}, lastDirection{};
+    // Recent cast/missile position used for event association. The renderer
+    // uses the enemy's live memory position while the short evidence window
+    // is active, instead of drawing this cast point.
+    Point3 observedEventPosition{};
+    float observedEventAt = 0.0f, observedEventUntil = 0.0f;
+    Evidence observedEventEvidence{};
     // Path destination is observed event data, not the champion's last seen
     // position. Keeping these separate prevents a movement command from
     // teleporting the last-seen marker to the end of the path.
@@ -1061,6 +1067,7 @@ struct ObjectiveState {
     Point3 position{};
     float health = 0.0f, maxHealth = 0.0f, spawnAt = 0.0f, deathAt = 0.0f, respawnAt = 0.0f;
     bool visible = false, inCombat = false, soulClaimed = false;
+    float combatObservedAt = 0.0f, combatObservedUntil = 0.0f;
     Evidence evidence{};
 };
 

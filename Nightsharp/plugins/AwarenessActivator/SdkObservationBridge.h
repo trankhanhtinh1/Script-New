@@ -297,8 +297,7 @@ public:
             position.networkId = networkId;
             position.visible = hero.IsVisible() || hero.IsMe();
             position.dead = hero.IsDead();
-            position.position = position.visible
-                ? ToPoint(hero.Position()) : Point3{};
+            position.position = ToPoint(hero.Position());
         }
         renderReadIndex_.store(
             writeIndex, std::memory_order_release);
@@ -346,6 +345,7 @@ private:
 
     static Point3 ToPoint(const Vec3& value) noexcept { return { value.x, value.y, value.z }; }
     static Vec3 ToVec3(const Point3& value) noexcept { return { value.x, value.y, value.z }; }
+
 
     static bool IsDue(float now, float& lastAt, float interval) noexcept {
         if (!std::isfinite(now)) return false;
@@ -941,6 +941,7 @@ private:
         if (!visible) {
             ObjectiveState state = *previous;
             state.visible = false;
+            state.inCombat = previous && previous->combatObservedUntil > now;
             if (state.status == ObjectiveStatus::AliveVisible ||
                 state.status == ObjectiveStatus::InCombatVisible) {
                 state.status = ObjectiveStatus::AliveUnknown;
@@ -963,11 +964,22 @@ private:
         state.maxHealth = std::max(0.0f, unit.MaxHealth());
         if (unit.IsDead()) {
             state.status = ObjectiveStatus::Dead;
+            state.inCombat = false;
+            state.combatObservedAt = 0.0f;
+            state.combatObservedUntil = 0.0f;
         } else if (state.maxHealth > 0.0f &&
                    state.health + 0.5f < state.maxHealth) {
             state.status = ObjectiveStatus::InCombatVisible;
+            state.inCombat = true;
+            state.combatObservedAt = now;
+            state.combatObservedUntil = now + 8.0f;
         } else {
             state.status = ObjectiveStatus::AliveVisible;
+            state.inCombat = previous && previous->combatObservedUntil > now;
+            if (!state.inCombat) {
+                state.combatObservedAt = 0.0f;
+                state.combatObservedUntil = 0.0f;
+            }
         }
         if (const auto* definition =
                 awareness_->Registry().FindObjective(kind)) {
@@ -1222,6 +1234,10 @@ private:
         event.startPosition = ToPoint(args.StartPosition);
         event.endPosition = ToPoint(args.EndPosition);
         event.position = ToPoint(args.CastPosition);
+        if (!event.startPosition.IsValid() ||
+            event.startPosition.IsZero()) {
+            event.startPosition = ToPoint(args.Sender.Position);
+        }
         const char* name = args.SpellName[0] ? args.SpellName : (args.ScriptName[0] ? args.ScriptName : args.PayloadSpellName);
         CopyText(event.name, name);
         CopyText(event.secondaryName, args.MissileName[0] ? args.MissileName : args.PayloadMissileName);
@@ -1235,7 +1251,6 @@ private:
     void HandleSpell(const ::Core::Events::ProcessSpellEventArgs& args, EventType type) {
         if (!awareness_ || args.Sender.NetworkId == 0) return;
         GameEvent event = SpellEvent(args, type, awareness_->Now());
-        if (!event.visibleAtEvent && event.enemy) return;
         if (type == EventType::SpellCastStarted) {
             recentCasts_[event.sourceId] = event;
         }
@@ -1248,7 +1263,16 @@ private:
         const bool sourceObservable = args.Source.IsValid()
             ? IsObservable(args.Source, localTeam_)
             : IsObservable(args.Sender, localTeam_);
-        if (!sourceObservable && IsEnemyObject(args.Source, localTeam_)) return;
+        // A projectile can be legitimately visible even when its caster is
+        // still hidden in brush/fog. Treat either observation as an event;
+        // the renderer uses the source hero's memory position for its window.
+        const bool missileObservable =
+            IsObservable(args.Sender, localTeam_);
+        const bool eventObservable =
+            sourceObservable || missileObservable;
+        const bool enemySource = args.Source.IsValid()
+            ? IsEnemyObject(args.Source, localTeam_)
+            : IsEnemyObject(args.Sender, localTeam_);
         ThreatState threat{};
         threat.id = args.MissileNetworkId != 0 ? args.MissileNetworkId : args.Sender.NetworkId;
         threat.sourceId = args.SourceNetworkId != 0 ? args.SourceNetworkId : args.Source.NetworkId;
@@ -1305,7 +1329,9 @@ private:
         event.startPosition = threat.start;
         event.endPosition = threat.end;
         event.valueFloat = threat.damage;
-        event.visibleAtEvent = true;
+        event.visibleAtEvent = eventObservable;
+        event.enemy = enemySource;
+        event.ally = !enemySource;
         CopyText(event.name, spellName);
         Publish(event);
     }

@@ -182,7 +182,8 @@ public:
         // timers are rendered only inside their short warning windows.
         const bool enemyHudEnabled = false;
         const bool screenHudEnabled = settings_.drawAlertCenter &&
-            (settings_.drawEnemyHud || settings_.drawObjectives);
+            (settings_.drawEnemyHud || settings_.drawObjectives ||
+             settings_.drawObjectiveAttackNotifications);
         if (!worldEnabled && !minimapEnabled && !screenHudEnabled) {
             return;
         }
@@ -300,6 +301,12 @@ public:
             ImGui::Checkbox(
                 "Enemy Flash ready-soon notifications",
                 &settings_.drawEnemyHud);
+            ImGui::Checkbox(
+                "Epic objective under-attack notifications",
+                &settings_.drawObjectiveAttackNotifications);
+            ImGui::Checkbox(
+                "Draw enemy cast-reveal world icons",
+                &settings_.drawObservedEnemyWorldIcons);
             ImGui::SliderFloat(
                 "Icon scale", &settings_.iconScale,
                 0.50f, 2.00f, "%.2fx");
@@ -506,6 +513,7 @@ private:
 
     bool HasWorldDrawWork() const noexcept {
         return settings_.drawWorldChampions ||
+               settings_.drawObservedEnemyWorldIcons ||
                settings_.drawReachableAreas ||
                settings_.drawWards ||
                settings_.drawObjectives ||
@@ -1331,7 +1339,9 @@ private:
                 awareness_.Store().Wards().Size());
         DrawWorldStage(
             AwarenessDiagnostics::Stage::RenderWorldChampions,
-            settings_.drawWorldChampions || settings_.drawReachableAreas,
+            settings_.drawWorldChampions ||
+                settings_.drawObservedEnemyWorldIcons ||
+                settings_.drawReachableAreas,
             &AwarenessActivatorPlugin::DrawChampions,
             awareness_.Store().ChampionCount());
         DrawWorldStage(
@@ -1700,13 +1710,70 @@ private:
     }
 
     Point3 RenderChampionPosition(const ChampionState& state) const noexcept {
-        if (!state.visible) return state.lastSeenPosition;
         SdkObservationBridge::RenderPosition live{};
-        if (bridge_.ReadRenderPosition(state.networkId, live)) {
-            return live.visible && !live.dead && IsValidPoint(live.position)
-                ? live.position : Point3{};
+        if (state.visible) {
+            if (bridge_.ReadRenderPosition(state.networkId, live)) {
+                return live.visible && !live.dead && IsValidPoint(live.position)
+                    ? live.position : state.position;
+            }
+            return state.position;
         }
-        return state.position;
+        if (state.enemy && state.observedEventUntil > awareness_.Now() &&
+            bridge_.ReadRenderPosition(state.networkId, live) &&
+            !live.dead && IsValidPoint(live.position)) {
+            return live.position;
+        }
+        return state.lastSeenPosition;
+    }
+
+    bool HasRecentObservedEnemyEvent(const ChampionState& state,
+                                     float now) const noexcept {
+        return !state.visible && state.enemy && !state.dead &&
+               state.observedEventUntil > now &&
+               state.observedEventEvidence.IsKnown() &&
+               VisibilityGuard::CanExposePosition(
+                   state.observedEventEvidence, awareness_.Mode(), false);
+    }
+
+    bool HasObservedEnemyReveal(const ChampionState& state,
+                                float now) const noexcept {
+        return settings_.drawObservedEnemyWorldIcons &&
+               HasRecentObservedEnemyEvent(state, now);
+    }
+
+    bool ObjectiveLikelyUnderAttack(const ObjectiveState& objective,
+                                    float now,
+                                    float& remaining) const noexcept {
+        remaining = 0.0f;
+        if (!settings_.drawObjectiveAttackNotifications ||
+            objective.kind == ObjectiveKind::Unknown ||
+            objective.kind == ObjectiveKind::Scuttle) {
+            return false;
+        }
+
+        if (objective.inCombat && objective.combatObservedUntil > now) {
+            remaining = objective.combatObservedUntil - now;
+            return remaining > 0.0f;
+        }
+        if (!IsValidPoint(objective.position)) return false;
+
+        const float radius =
+            (objective.kind == ObjectiveKind::Baron ||
+             objective.kind == ObjectiveKind::ElderDragon ||
+             objective.kind == ObjectiveKind::ElementalDragon ||
+             objective.kind == ObjectiveKind::DragonSoul)
+                ? 1500.0f : 1200.0f;
+
+        bool found = false;
+        awareness_.Store().ForEachChampion([&](const ChampionState& state) {
+            if (found || !HasRecentObservedEnemyEvent(state, now) ||
+                !IsValidPoint(state.observedEventPosition)) {
+                return;
+            }
+            remaining = state.observedEventUntil - now;
+            found = remaining > 0.0f;
+        });
+        return found;
     }
 
     void DrawChampions() const {
@@ -1735,6 +1802,14 @@ private:
                 if (settings_.drawIcons) {
                     DrawIcon(
                         renderPosition, IconForChampion(state), 30.0f);
+                }
+            } else if (HasObservedEnemyReveal(state, awareness_.Now()) &&
+                       IsValidPoint(renderPosition) &&
+                       ShouldDrawWorld(renderPosition, 80.0f)) {
+                if (settings_.drawIcons) {
+                    DrawIcon(
+                        renderPosition,
+                        IconForChampion(state), 26.0f, 0xEEFFFFFFu);
                 }
             } else if (settings_.drawReachableAreas &&
                        reachableDrawn < limits.reachableAreas &&
@@ -2275,10 +2350,16 @@ private:
                 });
         }
 
-        if (settings_.drawObjectives) {
+        if (settings_.drawObjectives ||
+            settings_.drawObjectiveAttackNotifications) {
             const float now = awareness_.Now();
             const ImTextureID timerIcon =
                 ResolveIcon("awareness_alert", false);
+            ImTextureID attackIcon =
+                IconForCapability(Capability::Smite);
+            if (!IsRealIcon(attackIcon)) {
+                attackIcon = ResolveIcon("awareness_alert", false);
+            }
             const auto& objectives = awareness_.Store().Objectives();
             for (std::size_t i = 0;
                  i < objectives.Size(); ++i) {
@@ -2292,6 +2373,15 @@ private:
                         objective.evidence, awareness_.Mode(),
                         objective.visible, false);
                 if (!exposure.allowed) continue;
+
+                float attackRemaining = 0.0f;
+                if (ObjectiveLikelyUnderAttack(
+                        objective, now, attackRemaining)) {
+                    push(IconForObjective(objective.kind), attackIcon,
+                         attackRemaining, 300);
+                }
+
+                if (!settings_.drawObjectives) continue;
 
                 float remaining = 0.0f;
                 if ((objective.status == ObjectiveStatus::NotSpawned ||

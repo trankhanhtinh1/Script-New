@@ -135,6 +135,12 @@ public:
         BindBool(hudDrawing, "DrawEnemyHud",
                  "Enemy Flash ready-soon notifications",
                  settings.drawEnemyHud);
+        BindBool(hudDrawing, "DrawObjectiveAttackNotifications",
+                 "Epic objective under-attack notifications",
+                 settings.drawObjectiveAttackNotifications);
+        BindBool(hudDrawing, "DrawObservedEnemyWorldIcons",
+                 "Draw enemy cast-reveal world icons",
+                 settings.drawObservedEnemyWorldIcons);
         BindFloat(hudDrawing, "IconScale", "Icon scale",
                   settings.iconScale, 0.50f, 2.00f);
         hudDrawing->Add(new SDK::MenuSeparator(
@@ -579,6 +585,12 @@ private:
                 SetLabel(hud, "DrawEnemyHud",
                          vi ? "Báo Tốc Biến địch sắp hồi"
                             : "Enemy Flash ready-soon notifications");
+                SetLabel(hud, "DrawObjectiveAttackNotifications",
+                         vi ? "Báo mục tiêu lớn đang bị ăn"
+                            : "Epic objective under-attack notifications");
+                SetLabel(hud, "DrawObservedEnemyWorldIcons",
+                         vi ? "Hiện icon địch ẩn khi hệ thống bắt được vị trí"
+                            : "Draw enemy cast-reveal world icons");
                 SetLabel(hud, "IconScale",
                          vi ? "Tỷ lệ biểu tượng" : "Icon scale");
                 SetLabel(hud, "NotificationFormat",

@@ -99,10 +99,14 @@ public:
     // visible. The observation expires after the expected travel window.
     bool drawPathTargets = true;
 
-    // Compact notification layer. Nothing is drawn outside short warning
-    // windows; enemy HUD now means enemy Flash ready-soon notifications.
     bool drawAlertCenter = true;
     bool drawEnemyHud = true;
+    // Compact notifications for contested epic objectives (dragon/baron/etc.).
+    bool drawObjectiveAttackNotifications = true;
+    // Draw short-lived enemy world icons from observed casts/missiles.
+    // Hidden memory events are accepted in every runtime mode; while the
+    // evidence window is active, rendering uses the enemy's live position.
+    bool drawObservedEnemyWorldIcons = true;
     bool drawActivityHeatmap = false;
     bool drawVisionHeatmap = false;
     // Keeps expensive world-space drawing and decision scans bounded on
@@ -118,8 +122,7 @@ public:
     bool audioOnly = false;
     bool streamerMode = false;
     bool vietnamese = false;
-    // Legacy fields retained for existing configuration compatibility.
-    // Compact notifications use a fixed clean anchor and are not draggable.
+    // 0 = vertical cards, 1 = horizontal cards.
     int hudLayoutIndex = 0;
     // User multiplier applied after each renderer-defined base icon size.
     float iconScale = 1.0f;

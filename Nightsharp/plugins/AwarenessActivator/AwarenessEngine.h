@@ -147,6 +147,10 @@ public:
         state.visibilityAge = 0.0f;
         state.lastSeenAt = lastNow_;
         state.position = observation.position;
+        state.observedEventPosition = {};
+        state.observedEventAt = 0.0f;
+        state.observedEventUntil = 0.0f;
+        state.observedEventEvidence = {};
         state.lastSeenPosition = observation.position;
         state.lastDirection = Normalize2D(observation.direction);
         state.lastSeenSpeed = observation.moveSpeed;
@@ -371,13 +375,20 @@ public:
     void ApplyEvent(const GameEvent& event) {
         if (event.at > 0.0f) lastNow_ = std::max(lastNow_, event.at);
         ChampionState* subject = store_.FindChampion(event.objectId);
+        const bool hiddenEnemyEventAllowed =
+            event.enemy && !event.visibleAtEvent;
+        const bool observedEventAllowed =
+            event.visibleAtEvent || hiddenEnemyEventAllowed;
         switch (event.type) {
         case EventType::SpellCastStarted:
-            if (subject && event.visibleAtEvent) ApplySpellEvent(*subject, event);
+            if (subject && observedEventAllowed) {
+                ApplySpellEvent(*subject, event);
+                ApplyObservedEventReveal(*subject, event);
+            }
             break;
         case EventType::SpellCastCompleted:
         case EventType::SpellCastCancelled:
-            if (subject && event.visibleAtEvent) {
+            if (subject && observedEventAllowed) {
                 subject->channeling = false;
                 subject->recalling = false;
                 subject->teleporting = false;
@@ -393,6 +404,13 @@ public:
         case EventType::VisibilityChanged:
             if (subject) subject->visible = event.value != 0;
             break;
+        case EventType::ThreatCreated: {
+            ChampionState* source = store_.FindChampion(event.sourceId);
+            if (source && observedEventAllowed) {
+                ApplyObservedEventReveal(*source, event);
+            }
+            break;
+        }
         case EventType::PathChanged:
             if (subject && event.visibleAtEvent) {
                 const Point3 start = IsValidPathPoint(event.startPosition)
@@ -1589,6 +1607,27 @@ private:
         auto& result = state.spells[state.spellCount++];
         result.slot = slot; result.idHash = hash;
         return &result;
+    }
+
+    void ApplyObservedEventReveal(ChampionState& state,
+                                  const GameEvent& event) {
+        Point3 reveal = event.startPosition;
+        if (!reveal.IsValid() || reveal.IsZero()) reveal = event.position;
+        if (!reveal.IsValid() || reveal.IsZero()) reveal = event.endPosition;
+        const bool hasReveal = reveal.IsValid() && !reveal.IsZero();
+        state.observedEventPosition = hasReveal ? reveal : Point3{};
+        state.observedEventAt = event.at;
+        state.observedEventUntil = event.at + 2.5f;
+        const bool hiddenMemoryEvent = !event.visibleAtEvent && event.enemy;
+        state.observedEventEvidence = {
+            Provenance::ObservedEvent,
+            (event.visibleAtEvent || hiddenMemoryEvent)
+                ? Confidence::Confirmed : Confidence::High,
+            event.at, event.at + 2.5f,
+            HashId(hiddenMemoryEvent
+                       ? "event.memory-cast-reveal"
+                       : "event.cast-reveal")
+        };
     }
 
     void ApplySpellEvent(ChampionState& state, const GameEvent& event) {

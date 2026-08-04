@@ -5,12 +5,73 @@
 
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/UI/UI.h"
+#include <array>
+#include <cstring>
 
 #include <algorithm>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+// Copied from TargetSelectorImpulse so Kuro keeps the same champion
+// priority defaults without depending on the Impulse selector header.
+namespace Plugins::KuroTargetSelectorPriorityData {
+
+inline constexpr std::array<const char*, 63> PriorityFive{{
+    "Ahri", "Akshan", "Anivia", "Annie", "Aphelios", "Ashe",
+    "AurelionSol", "Aurora", "Azir", "Brand", "Caitlyn", "Cassiopeia",
+    "Corki", "Draven", "Ezreal", "Graves", "Hwei", "Jhin", "Jinx",
+    "Kaisa", "Kalista", "Karma", "Karthus", "Katarina", "Kennen",
+    "Kindred", "KogMaw", "Leblanc", "Lucian", "Lux", "Malzahar",
+    "MasterYi", "Mel", "MissFortune", "Neeko", "Orianna", "Qiyana",
+    "Quinn", "Samira", "Sivir", "Smolder", "Soraka", "Sylas", "Syndra",
+    "Taliyah", "Talon", "Teemo", "Tristana", "TwistedFate", "Twitch",
+    "Varus", "Vayne", "Veigar", "Velkoz", "Vex", "Viktor", "Xayah",
+    "Xerath", "Yunara", "Zed", "Zeri", "Ziggs", "Zoe"
+}};
+
+inline constexpr std::array<const char*, 30> PriorityFour{{
+    "Akali", "Belveth", "Briar", "Camille", "Diana", "Ekko",
+    "FiddleSticks", "Fiora", "Fizz", "Gwen", "Heimerdinger", "Jayce",
+    "Kassadin", "Kayle", "Kayn", "KhaZix", "Lissandra", "Locke",
+    "Mordekaiser", "Naafiri", "Nidalee", "Nilah", "Riven", "Senna",
+    "Shaco", "Viego", "Vladimir", "Yasuo", "Yone", "Zilean"
+}};
+
+inline constexpr std::array<const char*, 33> PriorityThree{{
+    "Aatrox", "Ambessa", "Darius", "Elise", "Evelynn", "Galio",
+    "Gangplank", "Gragas", "Illaoi", "Irelia", "Jax", "Kled", "LeeSin",
+    "Lillia", "Maokai", "Morgana", "Nocturne", "Pantheon", "Poppy",
+    "Pyke", "RekSai", "Rengar", "Rumble", "Ryze", "Sett", "Swain",
+    "Trundle", "Tryndamere", "Udyr", "Urgot", "Vi", "XinZhao", "Zaahen"
+}};
+
+inline constexpr std::array<const char*, 47> PriorityTwo{{
+    "Alistar", "Amumu", "Bard", "Blitzcrank", "Braum", "Chogath",
+    "DrMundo", "Garen", "Gnar", "Hecarim", "Ivern", "Janna", "JarvanIV",
+    "KSante", "Leona", "Lulu", "Malphite", "Milio", "MonkeyKing", "Nami",
+    "Nasus", "Nautilus", "Nunu", "Olaf", "Ornn", "Rakan", "Rammus",
+    "Rell", "Renata", "Renekton", "Sejuani", "Seraphine", "Shen",
+    "Shyvana", "Singed", "Sion", "Skarner", "Sona", "TahmKench", "Taric",
+    "Thresh", "Volibear", "Warwick", "Yorick", "Yuumi", "Zac", "Zyra"
+}};
+
+inline int GetDefaultPriority(const std::string& alias) {
+    const auto matches = [&alias](const auto& names) {
+        for (const char* name : names) {
+            if (_stricmp(name, alias.c_str()) == 0) return true;
+        }
+        return false;
+    };
+    if (matches(PriorityFive)) return 5;
+    if (matches(PriorityFour)) return 4;
+    if (matches(PriorityThree)) return 3;
+    if (matches(PriorityTwo)) return 2;
+    return 1;
+}
+
+} // namespace Plugins::KuroTargetSelectorPriorityData
+
 
 namespace Plugins::KuroTargetSelector {
 
@@ -111,7 +172,19 @@ public:
             }
         }
         const auto it = priorities_.find(networkId);
-        return it == priorities_.end() ? 1 : std::clamp(it->second, 1, 5);
+        if (it != priorities_.end()) {
+            return std::clamp(it->second, 1, 5);
+        }
+        if (networkId > 0) {
+            const auto target =
+                ::SDK::GameObjects::GetUnitByNetworkId<::SDK::AIHeroClient>(
+                    networkId);
+            if (target.IsValid()) {
+                return ::Plugins::KuroTargetSelectorPriorityData::GetDefaultPriority(
+                    target.CharacterName());
+            }
+        }
+        return 1;
     }
 
     bool ToggleBlacklist(int networkId) {
@@ -168,6 +241,11 @@ private:
     static void OnWndProcHandler(::SDK::Game::WndEventArgs& args) {
         auto* self = Ptr();
         if (!self || self->suspended_) return;
+
+        if (args.Msg == WM_LBUTTONDBLCLK) {
+            self->SelectClosestToCursor(false);
+            return;
+        }
 
         if (args.Msg == WM_LBUTTONDOWN && self->ManualOverrideActive()) {
             self->SelectClosestToCursor();
@@ -233,7 +311,10 @@ private:
             : hero.CharacterName() + " (" + suffix + ")";
 
         if (priorities_.find(networkId) == priorities_.end()) {
-            priorities_.emplace(networkId, 1);
+            priorities_.emplace(
+                networkId,
+                ::Plugins::KuroTargetSelectorPriorityData::GetDefaultPriority(
+                    hero.CharacterName()));
         }
         if (!priorityMenu_->Get<::SDK::MenuSlider>(priorityKey.c_str())) {
             priorityMenu_->Add(new ::SDK::MenuSlider(
@@ -256,7 +337,7 @@ private:
         return item ? item->Value : fallback;
     }
 
-    void SelectClosestToCursor() {
+    void SelectClosestToCursor(bool allowBlacklistModifier = true) {
         const ::SDK::Vector3 cursor = ::SDK::Game::CursorPos();
         ::SDK::AIHeroClient closest;
         float closestDistance = 180.0f;
@@ -270,7 +351,7 @@ private:
                 closest = hero;
             }
         }
-        const bool blacklistModifier =
+        const bool blacklistModifier = allowBlacklistModifier &&
             (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         if (closest.IsValid()) {
             if (blacklistModifier) {
