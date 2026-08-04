@@ -44,9 +44,8 @@ inline Vec2 ToVec2(const Vector3& value) {
 
 inline int BoltStacks(const AIBaseClient& target) {
     if (!target.IsValid()) return 0;
-    const int primary = target.GetBuffCount("VayneSilveredBolts");
-    const int alternate = target.GetBuffCount("vaynesilveredbolts");
-    return SilverBoltStacks(std::max(primary, alternate));
+    return SilverBoltStacks(ControllerHelpers::MaximumBuffCount(
+        target, { "VayneSilveredBolts", "vaynesilveredbolts" }));
 }
 
 inline void RefreshBoltObservation(const AIHeroClient& target) {
@@ -62,8 +61,8 @@ inline void RefreshBoltObservation(const AIHeroClient& target) {
 inline bool FinalHourActive() {
     const auto player = GameObjects::Player();
     return RPosture || (player.IsValid() &&
-        (player.HasBuff("VayneInquisition") ||
-         player.HasBuff("vayneinquisition")));
+        ControllerHelpers::HasAnyBuff(
+            player, { "VayneInquisition", "vayneinquisition" }));
 }
 
 inline bool PreserveAttack(bool reactive = false) {
