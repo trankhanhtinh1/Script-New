@@ -4,6 +4,7 @@
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Wrappers/Damages/Damage.h"
+#include "../../../core/CoreBuffs.h"
 
 #include "KuroTargetActionGate.h"
 #include "KuroTargetSelectorDrawing.h"
@@ -664,10 +665,14 @@ private:
         facts.PhysicalShield = SafeNonNegative(target.PhysicalShield());
         facts.MagicalShield = SafeNonNegative(target.MagicalShield());
 
-        // Rejected untargetable identities are retained for diagnostics, but
-        // avoid expensive damage simulations that can also return misleading
-        // values for an unavailable game object.
-        const bool canEvaluateDamage = facts.Targetable && player.IsValid();
+        facts.DistanceToSource = source.IsValid() && !source.IsZero()
+            ? source.Distance(facts.Position)
+            : (player.IsValid() ? player.Distance(facts.Position) : 0.0f);
+        facts.Distance = facts.DistanceToSource;
+
+        // Rejected untargetable or distant identities skip expensive damage simulations
+        // (GetAutoAttackDamage / CalculateDamage) to avoid FPS drops.
+        const bool canEvaluateDamage = facts.Targetable && player.IsValid() && facts.DistanceToSource <= 2500.0f;
         const float physicalMultiplier = canEvaluateDamage
             ? DamageMultiplier(player, target, ::SDK::DamageType::Physical)
             : 1.0f;
@@ -699,10 +704,6 @@ private:
         facts.TrueEffectiveHealth = truePool;
 
         facts.HealthRegen = SafeNonNegative(target.HealthRegenRate());
-        facts.DistanceToSource = source.IsValid() && !source.IsZero()
-            ? source.Distance(facts.Position)
-            : (player.IsValid() ? player.Distance(facts.Position) : 0.0f);
-        facts.Distance = facts.DistanceToSource;
         facts.MoveSpeed = SafeNonNegative(target.MoveSpeed());
         facts.AttackDamage = SafeNonNegative(target.AD());
         facts.AbilityPower = SafeNonNegative(target.AP());
@@ -717,23 +718,50 @@ private:
                 player, target, ::SDK::DamageType::Magical, player.AP()))
             : 0.0f;
 
+        static constexpr std::uint32_t kStunHash = ::SDK::Utils::HashName("stun");
+        static constexpr std::uint32_t kRootHash = ::SDK::Utils::HashName("root");
+        static constexpr std::uint32_t kSnareHash = ::SDK::Utils::HashName("snare");
+        static constexpr std::uint32_t kCharmHash = ::SDK::Utils::HashName("charm");
+        static constexpr std::uint32_t kFearHash = ::SDK::Utils::HashName("fear");
+        static constexpr std::uint32_t kTauntHash = ::SDK::Utils::HashName("taunt");
+        static constexpr std::uint32_t kSilenceHash = ::SDK::Utils::HashName("silence");
+
+        static constexpr std::uint32_t kBardStasisHash = ::SDK::Utils::HashName("bardrstasis");
+        static constexpr std::uint32_t kZhonyasHash = ::SDK::Utils::HashName("zhonyasringshield");
+        static constexpr std::uint32_t kLissandraHash = ::SDK::Utils::HashName("lissandrarself");
+        static constexpr std::uint32_t kVladPoolHash = ::SDK::Utils::HashName("vladimirsanguinepool");
+        static constexpr std::uint32_t kFizzEHash = ::SDK::Utils::HashName("fizztrickslippery");
+
+        const auto* buffSnapshot = ::CoreBuffs::GetOrBuildFrameBuffSnapshot(
+            target.Address(), ::CoreBuffs::ResolveGameTime());
+        if (buffSnapshot) {
+            bool cc = false;
+            bool stasis = false;
+            for (int i = 0; i < buffSnapshot->count; ++i) {
+                const auto& entry = buffSnapshot->entries[i];
+                if (!entry.isActive) continue;
+                const std::uint32_t h = entry.hash;
+                if (!cc && (h == kStunHash || h == kRootHash || h == kSnareHash ||
+                            h == kCharmHash || h == kFearHash || h == kTauntHash ||
+                            h == kSilenceHash)) {
+                    cc = true;
+                }
+                if (!stasis && (h == kBardStasisHash || h == kZhonyasHash ||
+                                h == kLissandraHash || h == kVladPoolHash ||
+                                h == kFizzEHash)) {
+                    stasis = true;
+                }
+            }
+            if (facts.Targetable) facts.IsCrowdControlled = cc;
+            if (!facts.Targetable) facts.IsStasis = stasis;
+        }
         if (facts.Targetable) {
             facts.IsDashing = target.IsDashing();
             facts.IsMoving = target.IsMoving();
             facts.IsChanneling = target.Spellbook().IsChanneling();
-            facts.IsCrowdControlled = target.HasBuff("stun") ||
-                target.HasBuff("root") || target.HasBuff("snare") ||
-                target.HasBuff("charm") || target.HasBuff("fear") ||
-                target.HasBuff("taunt") || target.HasBuff("silence");
             facts.IsFacingSource = player.IsValid() &&
                 ::SDK::Extensions::IsFacing(target, player);
         }
-        facts.IsStasis = !facts.Targetable && (
-            target.HasBuff("bardrstasis") ||
-            target.HasBuff("zhonyasringshield") ||
-            target.HasBuff("lissandrarself") ||
-            target.HasBuff("vladimirsanguinepool") ||
-            target.HasBuff("fizztrickslippery"));
     }
 
     void BuildSnapshot(
@@ -745,7 +773,7 @@ private:
         snapshot_ = {};
         snapshot_.Id = ++snapshotSequence_;
         snapshot_.Tick = tick;
-        if (menu_) menu_->Refresh();
+        if (menu_ && (snapshot_.Id % 30 == 1)) menu_->Refresh();
         const auto player = ::SDK::GameObjects::Player();
         snapshot_.PlayerPosition = player.IsValid() ? player.Position() : ::SDK::Vector3();
         (void)request;

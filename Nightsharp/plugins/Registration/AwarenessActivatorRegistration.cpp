@@ -6,7 +6,7 @@
 namespace Plugins::Registration {
 
 void RegisterAwarenessActivator(PluginManager& manager) {
-    manager.Register<NightSharp::Companion::AwarenessActivatorPlugin>();
+    // Disabled: manager.Register<NightSharp::Companion::AwarenessActivatorPlugin>();
 }
 
 } // namespace Plugins::Registration

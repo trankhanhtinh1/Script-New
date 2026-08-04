@@ -129,7 +129,7 @@ void EnsureRegistered() {
 
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
-    Registration::RegisterAwarenessActivator(PluginManager::Get());
+    // Registration::RegisterAwarenessActivator(PluginManager::Get());
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
     Registration::RegisterOrbwalker7UP(PluginManager::Get());
     Registration::RegisterKuroTargetSelector(PluginManager::Get());

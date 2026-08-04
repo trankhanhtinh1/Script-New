@@ -482,6 +482,9 @@ namespace detail {
         if (!object.IsValid()) return;
         Lock lk(g_mutex);
 
+        const int tick = static_cast<int>(::GetTickCount());
+        PruneInvalidObjectsForFrame(tick);
+
         PopulateStatic(object);
 
         const int netId = object.NetworkId();
