@@ -24,13 +24,29 @@ struct ActionGateResult {
     RejectReason Rejection = RejectReason::None;
 };
 
-// One gate is shared by ranking and execution.  Live IsTargetable() is the
-// authoritative availability signal for every phase; state-specific buff
-// checks are used only to improve the rejection diagnostic.
+// One gate is shared by ranking and execution.  Ranking can consume the
+// targetability sample captured in the current snapshot; execution keeps a
+// live recheck for race safety.  IsDead remains the cheap first filter.
 class KuroTargetActionGate final {
 public:
-    static ActionGateResult Evaluate(const TargetRequest& request,
-                                     const AIHeroClient& target) {
+    static ActionGateResult Evaluate(
+        const TargetRequest& request,
+        const AIHeroClient& target) {
+        if (!target.IsValid() || target.NetworkId() <= 0) {
+            return Evaluate(request, target, false);
+        }
+        if (target.IsDead() && !target.IsZombie()) {
+            ActionGateResult result{};
+            result.Rejection = RejectReason::Dead;
+            return result;
+        }
+        return Evaluate(request, target, target.IsTargetable());
+    }
+
+    static ActionGateResult Evaluate(
+        const TargetRequest& request,
+        const AIHeroClient& target,
+        bool targetable) {
         ActionGateResult result{};
         const auto player = GameObjects::Player();
 
@@ -42,14 +58,18 @@ public:
             result.Rejection = RejectReason::Despawned;
             return result;
         }
+        if (target.IsDead() && !target.IsZombie()) {
+            result.Rejection = RejectReason::Dead;
+            return result;
+        }
         if (player.IsValid() && target.Team() == player.Team()) {
             result.Rejection = RejectReason::WrongTeam;
             return result;
         }
 
-        // A target that cannot currently be acted on (including a defeated
-        // champion) is rejected through the SDK's working targetability signal.
-        if (!target.IsTargetable()) {
+        // A target that cannot currently be acted on is rejected from the
+        // snapshot sample; stasis is retained as a diagnostic detail.
+        if (!targetable) {
             result.Rejection = IsStasis(target)
                 ? RejectReason::Stasis
                 : RejectReason::Untargetable;

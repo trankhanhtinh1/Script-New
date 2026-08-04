@@ -758,7 +758,7 @@ inline void OrbwalkerBase::OnDraw() {
 
     if (menu_.DrawAARangeEnemy()) {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (!enemy.IsValid() || !enemy.IsTargetable() || !enemy.IsVisible()) {
+            if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) {
                 continue;
             }
             Drawing::DrawCircle(

@@ -21,13 +21,66 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::ObjectEventIsAllied;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::RuntimeNameContains;
 
 inline Menu* TacticsMenu = nullptr;
 inline Menu* FeatherMenu = nullptr;
 inline Menu* PostureMenu = nullptr;
 
 inline std::array<Feather, kMaximumTrackedFeathers> Feathers{};
+inline int FeatherRevision = 1;
+inline int CachedFeatherHitTargetId = 0;
+inline int CachedFeatherHitTick = 0;
+inline int CachedFeatherHitRevision = 0;
+inline int CachedFeatherHitCount = 0;
+
+inline void InvalidateFeatherHitCache() {
+    ++FeatherRevision;
+    CachedFeatherHitTargetId = 0;
+    CachedFeatherHitTick = 0;
+}
+
+inline bool HasActiveFeathers() {
+    for (const auto& feather : Feathers) {
+        if (feather.Active) return true;
+    }
+    return false;
+}
+
+inline void ClearFeathers() {
+    Feathers = {};
+    InvalidateFeatherHitCache();
+}
+
+inline void ResetFeatherHitCache() {
+    CachedFeatherHitTargetId = 0;
+    CachedFeatherHitTick = 0;
+    CachedFeatherHitRevision = FeatherRevision;
+    CachedFeatherHitCount = 0;
+}
+
+inline int TargetNetworkId(const AIHeroClient& target) {
+    return target.IsValid() ? static_cast<int>(target.NetworkId()) : 0;
+}
+
+inline void CacheFeatherHits(int targetId, int now, int count) {
+    if (targetId == 0) return;
+    CachedFeatherHitTargetId = targetId;
+    CachedFeatherHitTick = now;
+    CachedFeatherHitRevision = FeatherRevision;
+    CachedFeatherHitCount = count;
+}
+
+inline bool CachedFeatherHits(int targetId, int now, int& count) {
+    if (targetId == 0 ||
+        CachedFeatherHitTargetId != targetId ||
+        CachedFeatherHitTick != now ||
+        CachedFeatherHitRevision != FeatherRevision) {
+        return false;
+    }
+    count = CachedFeatherHitCount;
+    return true;
+}
+
 inline int NextFeatherId = 1;
 inline int LastQCastTick = 0;
 inline int LastWCastTick = 0;
@@ -52,12 +105,6 @@ inline bool FeatherObject(const SDK::Events::ObjectEventArgs& args) {
                {"feather"});
 }
 
-inline bool LiveFeatherName(const char* value) {
-    return value && value[0] &&
-        (Engine::TextContains(value, "xayah") &&
-         Engine::TextContains(value, "feather"));
-}
-
 inline int FindFeatherById(int id) {
     if (id == 0) return -1;
     for (std::size_t index = 0; index < Feathers.size(); ++index) {
@@ -75,8 +122,10 @@ inline void RecordFeather(const Vector3& position, int networkId = 0,
     if (networkId != 0) {
         const int existing = FindFeatherById(networkId);
         if (existing >= 0) {
-            Feathers[static_cast<std::size_t>(existing)].Position = position;
-            Feathers[static_cast<std::size_t>(existing)].SpawnTick = now;
+            auto& feather = Feathers[static_cast<std::size_t>(existing)];
+            feather.Position = position;
+            feather.SpawnTick = now;
+            InvalidateFeatherHitCache();
             return;
         }
     }
@@ -85,6 +134,7 @@ inline void RecordFeather(const Vector3& position, int networkId = 0,
             if (networkId != 0) feather.NetworkId = networkId;
             feather.Position = position;
             feather.SpawnTick = now;
+            InvalidateFeatherHitCache();
             return;
         }
     }
@@ -92,6 +142,7 @@ inline void RecordFeather(const Vector3& position, int networkId = 0,
         if (!feather.Active || now - feather.SpawnTick > kFeatherLifetimeMs) {
             feather = {position, networkId != 0 ? networkId : NextFeatherId++,
                        now, true};
+            InvalidateFeatherHitCache();
             return;
         }
     }
@@ -99,30 +150,48 @@ inline void RecordFeather(const Vector3& position, int networkId = 0,
 
 inline void RemoveFeather(int networkId) {
     const int index = FindFeatherById(networkId);
-    if (index >= 0) Feathers[static_cast<std::size_t>(index)] = {};
+    if (index < 0) return;
+    Feathers[static_cast<std::size_t>(index)] = {};
+    InvalidateFeatherHitCache();
 }
 
 inline void ReconcileFeathers() {
     const int now = Now();
+    bool changed = false;
     for (auto& feather : Feathers) {
         if (!feather.Active || !feather.Position.IsValid() ||
             feather.Position.IsZero() || feather.SpawnTick <= 0 ||
             now - feather.SpawnTick > kFeatherLifetimeMs) {
+            if (feather.Active) changed = true;
             feather = {};
         }
     }
+    if (changed) InvalidateFeatherHitCache();
 }
 
 inline int FeatherHits(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0;
-    return CountFeathersThrough(Feathers, player.Position(),
-                                PredictPosition(target, 0.18f),
-                                65.0f, Now());
+
+    const int now = Now();
+    const int targetId = TargetNetworkId(target);
+    int cachedCount = 0;
+    if (CachedFeatherHits(targetId, now, cachedCount)) {
+        return cachedCount;
+    }
+
+    int count = 0;
+    if (HasActiveFeathers()) {
+        count = CountFeathersThrough(
+            Feathers, player.Position(),
+            PredictPosition(target, 0.18f), 65.0f, now);
+    }
+    CacheFeatherHits(targetId, now, count);
+    return count;
 }
 
-inline bool RootReady(const AIHeroClient& target) {
-    return RootAvailable(FeatherHits(target),
+inline bool RootReady(int featherHits) {
+    return RootAvailable(featherHits,
                          Slider(FeatherMenu, "RootThreshold", kRootThreshold));
 }
 
@@ -137,6 +206,11 @@ inline bool TargetUsable(const AIHeroClient& target) {
            !ControllerHelpers::HasSpellShieldOrImmunity(target) &&
            !ControllerHelpers::IsCommonUntargetableOrImmune(target);
 }
+inline bool TargetWithinRange(const AIHeroClient& target, float range) {
+    const auto player = GameObjects::Player();
+    return player.IsValid() && TargetUsable(target) &&
+        player.Position().DistanceSqr2D(target.Position()) <= range * range;
+}
 
 inline bool TurretSafe(bool urgent, bool defensive = false) {
     const auto player = GameObjects::Player();
@@ -144,13 +218,18 @@ inline bool TurretSafe(bool urgent, bool defensive = false) {
                                 urgent || defensive);
 }
 
-inline float BladecallerDamage(const AIHeroClient& target) {
+inline float BladecallerDamage(const AIHeroClient& target,
+                               int featherHits) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !target.IsValid()) return 0.0f;
-    const int count = FeatherHits(target);
     const float raw = BladecallerRawDamage(
-        ControllerHelpers::SpellRank(2), player.BonusAttackDamage(), count);
+        ControllerHelpers::SpellRank(2), player.BonusAttackDamage(),
+        featherHits);
     return player.CalculatePhysicalDamage(target, raw);
+}
+
+inline float BladecallerDamage(const AIHeroClient& target) {
+    return BladecallerDamage(target, FeatherHits(target));
 }
 
 inline bool AttackRoute(const AIHeroClient& target) {
@@ -188,12 +267,14 @@ inline BladecallerContext BuildEContext(const AIHeroClient& target,
     BladecallerContext context{};
     context.Ready = CanUse(2, mode, reactive);
     context.TargetValid = TargetUsable(target);
-    context.PredictionAccepted = context.TargetValid && FeatherHits(target) > 0;
-    context.FeatherHits = FeatherHits(target);
+    const int featherHits = context.TargetValid ? FeatherHits(target) : 0;
+    context.PredictionAccepted = context.TargetValid && featherHits > 0;
+    context.FeatherHits = featherHits;
     context.MinimumFeathers = Slider(FeatherMenu, "MinimumFeathers", 2);
-    context.RootReady = RootReady(target);
-    context.Lethal = context.TargetValid && BladecallerDamage(target) >=
-        target.Health() + target.AllShield();
+    context.RootReady = RootReady(featherHits);
+    context.Lethal = context.TargetValid &&
+        BladecallerDamage(target, featherHits) >=
+            target.Health() + target.AllShield();
     context.AttackWindingUp = Orbwalker::IsWindingUp();
     context.TurretUnsafe = !TurretSafe(context.Lethal, reactive);
     context.ManualCast = PlayerOverrideUntil >= Now();
@@ -207,7 +288,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode,
     const auto context = BuildEContext(target, mode, reactive);
     if (!ShouldBladecaller(context) || !Engine::ControllerCastSelf(2)) return false;
     LastECastTick = Now();
-    for (auto& feather : Feathers) feather = {};
+    ClearFeathers();
     return true;
 }
 
@@ -236,9 +317,11 @@ inline bool CastW(const AIHeroClient& target, Mode mode) {
     return true;
 }
 
-inline RPostureContext BuildRContext(const AIHeroClient& target,
-                                     bool defensive,
-                                     bool manual = false) {
+inline RPostureContext BuildRContext(
+    const AIHeroClient& target,
+    bool defensive,
+    bool manual = false,
+    SDK::PredictionOutput* predictionOutput = nullptr) {
     RPostureContext context{};
     const auto player = GameObjects::Player();
     context.Ready = Engine::RuntimeSpells[3] && Engine::RuntimeSpells[3]->IsReady();
@@ -250,8 +333,9 @@ inline RPostureContext BuildRContext(const AIHeroClient& target,
         PredictionProjectileWall(3, prediction, 42.0f);
     context.PlayerLow = player.IsValid() && player.HealthPercent() <=
         Slider(PostureMenu, "UltimateHealth", 32);
-    context.MultiTarget = target.IsValid() &&
-        Engine::CountEnemiesAt(target.Position(), 260.0f) >= 2;
+    const int nearbyEnemies = target.IsValid()
+        ? Engine::CountEnemiesAt(target.Position(), 260.0f) : 0;
+    context.MultiTarget = nearbyEnemies >= 2;
     context.Lethal = context.TargetValid &&
         SpellDamage(3, target) + AutoDamage(target) >=
             target.Health() + target.AllShield();
@@ -259,9 +343,9 @@ inline RPostureContext BuildRContext(const AIHeroClient& target,
     context.TurretUnsafe = player.IsValid() &&
         Engine::UnderEnemyTurret(player.Position()) &&
         !context.Defensive && !context.Lethal;
-    context.ChampionHits = context.MultiTarget ?
-        Engine::CountEnemiesAt(target.Position(), 260.0f) : 1;
+    context.ChampionHits = context.MultiTarget ? nearbyEnemies : 1;
     context.MinimumHits = Slider(PostureMenu, "MinimumRTargets", 2);
+    if (predictionOutput) *predictionOutput = prediction;
     return context;
 }
 
@@ -270,10 +354,12 @@ inline bool CastR(const AIHeroClient& target, Mode mode,
     if (!TargetUsable(target) || !CanUse(3, mode, true) ||
         !CastThrottlePassed(LastRCastTick, 110)) return false;
     SDK::PredictionOutput prediction{};
-    const auto context = BuildRContext(target, defensive, manual);
+    const auto context = BuildRContext(
+        target, defensive, manual, &prediction);
     if (!ShouldFeatherstorm(context) ||
-        !PredictionHits(3, target, SDK::HitChance::High, false, &prediction) ||
-        !Engine::ControllerCastPosition(3, prediction.GetCastPosition())) return false;
+        !Engine::ControllerCastPosition(3, prediction.GetCastPosition())) {
+        return false;
+    }
     LastRCastTick = Now();
     const auto player = GameObjects::Player();
     if (player.IsValid()) {
@@ -290,38 +376,23 @@ inline bool CastR(const AIHeroClient& target, Mode mode,
     return true;
 }
 
-inline MarksmanTargeting::TargetContext TargetFacts(
-    const AIHeroClient& target, Mode mode) {
-    const bool attack = AttackRoute(target);
-    SDK::PredictionOutput qPrediction{};
-    const bool q = TargetUsable(target) && CanUse(0, mode, false) &&
-        PredictionHits(0, target, SDK::HitChance::High, true, &qPrediction) &&
-        !PredictionProjectileWall(0, qPrediction, 36.0f);
-    const int hits = FeatherHits(target);
-    const bool e = TargetUsable(target) && CanUse(2, mode, true) && hits > 0;
-    const bool w = TargetUsable(target) && CanUse(1, mode, false) && attack;
-    const bool r = TargetUsable(target) && CanUse(3, mode, true) &&
-        PredictionHits(3, target, SDK::HitChance::High, false);
-    const std::array<bool, 4> reachable{q, w, e, r};
-    auto context = BaseTargetContext(target, EstimatedDamage(
-        target, reachable, attack ? 2 : 0));
-    context.AutoReachable = attack;
-    context.DirectSpellReachable = q || e;
-    context.SetupReachable = w || r;
-    context.ExecuteReachable = e &&
-        BladecallerDamage(target) >= target.Health() + target.AllShield();
-    context.ProjectileBlocked = !attack && !e &&
-        (OrbwalkerAttackProjectileBlocked(target) ||
-         (q && PredictionProjectileWall(0, qPrediction, 36.0f)));
-    context.Priority += static_cast<float>(hits) * 42.0f;
-    if (RootReady(target)) context.Priority += 125.0f;
-    return context;
-}
+inline AIHeroClient SelectTarget(const AIHeroClient& preferred) {
+    constexpr float kTargetRange = kQRange + 75.0f;
+    if (TargetWithinRange(preferred, kTargetRange)) {
+        LastSmartTarget = preferred;
+        return LastSmartTarget;
+    }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& preferred, Mode mode) {
-    LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
-        preferred, kQRange + 75.0f,
-        [mode](const AIHeroClient& enemy) { return TargetFacts(enemy, mode); });
+    const auto orbTarget =
+        ControllerHelpers::OrbwalkerHeroTarget(kTargetRange);
+    if (TargetWithinRange(orbTarget, kTargetRange)) {
+        LastSmartTarget = orbTarget;
+        return LastSmartTarget;
+    }
+
+    const auto fallback = Engine::SelectTarget(kTargetRange);
+    LastSmartTarget = TargetWithinRange(fallback, kTargetRange)
+        ? fallback : AIHeroClient{};
     return LastSmartTarget;
 }
 
@@ -333,9 +404,8 @@ inline bool TryAntiGapcloser() {
          CastE(target, Mode::Automatic, true));
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure(const AIHeroClient& target) {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectTarget(preferred, Mode::Automatic);
     if (!TargetUsable(target)) return false;
     if (BladecallerDamage(target) >= target.Health() + target.AllShield()) {
         return CastE(target, Mode::Automatic, true);
@@ -372,11 +442,14 @@ inline bool TryFarm(Mode mode) {
 inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     LastMode = mode;
     ReconcileFeathers();
-    if (PlayerOverrideUntil >= Now() && mode != Mode::Automatic) return false;
+    const int now = Now();
+    if (PlayerOverrideUntil >= now && mode != Mode::Automatic) return false;
     if (TryAntiGapcloser()) return true;
-    if (TryKillSecure(preferred)) return true;
+
+    const auto target = SelectTarget(preferred);
+    if (TryKillSecure(target)) return true;
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        return TryCombat(SelectTarget(preferred, mode), mode);
+        return TryCombat(target, mode);
     }
     if (mode == Mode::Flee) return TryFlee(preferred);
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
@@ -416,7 +489,7 @@ inline void ObserveLocalSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                ControllerHelpers::SpellEventNameContainsAny(
                    args, {"xayahe", "bladecaller"})) {
         LastECastTick = now;
-        for (auto& feather : Feathers) feather = {};
+        ClearFeathers();
     } else if (args.Slot == static_cast<int>(SDK::SpellSlot::R) ||
                ControllerHelpers::SpellEventNameContainsAny(
                    args, {"xayahr", "featherstorm"})) {
@@ -490,20 +563,22 @@ inline void BuildMenu(Menu* root) {
 }
 
 inline void OnLoad() {
-    Feathers = {};
+    ClearFeathers();
     NextFeatherId = 1;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     LastAfterAttackTick = LastAfterAttackTargetId = 0;
     GapcloserTargetId = GapcloserExpireTick = PlayerOverrideUntil = 0;
     LastMode = Mode::None;
     LastSmartTarget = {};
+    ResetFeatherHitCache();
 }
 
 inline void OnUnload() {
-    Feathers = {};
+    ClearFeathers();
     TacticsMenu = FeatherMenu = PostureMenu = nullptr;
     LastMode = Mode::None;
     LastSmartTarget = {};
+    ResetFeatherHitCache();
 }
 
 inline constexpr const char* Scenarios[] = {

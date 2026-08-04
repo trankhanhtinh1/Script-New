@@ -86,13 +86,14 @@ inline float FeatherDamagePerHit(int rank, float bonusAttackDamage,
 inline float BladecallerRawDamage(int rank, float bonusAttackDamage,
                                   int featherCount) {
     const int count = std::clamp(featherCount, 0, kMaximumTrackedFeathers);
+    static constexpr std::array<float, 6> base{
+        0.0f, 55.0f, 65.0f, 75.0f, 85.0f, 95.0f};
+    const float perHit = RankValue(base, rank) +
+        std::max(0.0f, bonusAttackDamage) * 0.6f;
     float total = 0.0f;
     for (int index = 0; index < count; ++index) {
-        const float base = RankValue(
-            std::array<float, 6>{0.0f, 55.0f, 65.0f, 75.0f, 85.0f, 95.0f},
-            rank);
-        total += (base + std::max(0.0f, bonusAttackDamage) * 0.6f) *
-                 std::pow(0.95f, static_cast<float>(index));
+        total += perHit * std::pow(
+            0.95f, static_cast<float>(index));
     }
     return total;
 }

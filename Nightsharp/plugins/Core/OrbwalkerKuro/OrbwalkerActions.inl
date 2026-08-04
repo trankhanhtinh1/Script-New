@@ -243,7 +243,7 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
                     context_.isAkshanSecondShotPending = false;
                 } else {
                     const auto target = context_.lastTarget;
-                    if (target.IsValid() && !target.IsTargetable()) {
+                    if (target.IsValid() && target.IsDead()) {
                         context_.isAkshanSecondShotPending = false;
                     } else {
                         return false; // Hold movement unconditionally until 2nd shot fires!
@@ -456,7 +456,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
 
     if (context_.pendingAttackTargetNetworkId != 0) {
         const auto target = GameObjects::GetUnitByNetworkId<AttackableUnit>(context_.pendingAttackTargetNetworkId);
-        if (!target.IsValid() || !target.IsTargetable()) {
+        if (!target.IsValid() || target.IsDead() || !target.IsTargetable()) {
             shouldExpire = true;
         }
     }

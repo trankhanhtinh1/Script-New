@@ -185,7 +185,7 @@ public:
             decision.SnapshotId = snapshot_.Id;
 
             const auto gate = KuroTargetActionGate::Evaluate(
-                request, facts.Target);
+                request, facts.Target, facts.Targetable);
             if (!gate.Legal) {
                 decision.Rejection = requiredId == facts.NetworkId
                     ? RejectReason::RequiredTargetIllegal
@@ -314,10 +314,10 @@ public:
                     contribution.MaxValue);
             }
 
-            // Targetability can change during provider evaluation.  Recheck the
-            // live gate immediately before publishing a legal candidate.
+            // Planning reuses the targetability sample captured in the
+            // snapshot.  ValidateExecution keeps the live race-safety gate.
             const auto finalGate = KuroTargetActionGate::Evaluate(
-                request, workingFacts.Target);
+                request, workingFacts.Target, facts.Targetable);
             if (!finalGate.Legal) {
                 decision.Rejection = requiredId == facts.NetworkId
                     ? RejectReason::RequiredTargetIllegal
@@ -554,6 +554,7 @@ private:
         facts.NetworkId = core.NetworkId;
         facts.Priority = core.Priority;
         facts.Valid = core.Valid;
+        facts.Dead = core.Dead;
         facts.Visible = core.Visible;
         facts.Targetable = core.Targetable;
         facts.Invulnerable = core.Invulnerable;
@@ -645,10 +646,12 @@ private:
         if (!facts.Valid) return;
 
         facts.NetworkId = target.NetworkId();
-        facts.Targetable = target.IsTargetable();
+        facts.IsZombie = target.IsZombie();
+        facts.Dead = target.IsDead();
+        facts.Targetable = (!facts.Dead || facts.IsZombie) &&
+            target.IsTargetable();
         facts.Visible = target.IsVisible();
         facts.Invulnerable = target.IsInvulnerable();
-        facts.IsZombie = target.IsZombie();
         facts.IsClone = target.IsClone();
 
         facts.Level = target.Level();

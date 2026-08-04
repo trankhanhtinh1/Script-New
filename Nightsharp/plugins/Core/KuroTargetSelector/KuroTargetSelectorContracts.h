@@ -72,9 +72,9 @@ enum class ProviderPriorityBand : std::uint8_t {
 enum class RejectReason : std::uint16_t {
     None = 0,
     Invalid = 1,
-    // Value 2 was a legacy availability-state rejection.  It is intentionally
-    // unused: live IsTargetable() is now the authoritative availability
-    // signal.  Explicit values preserve the remaining diagnostic ABI.
+    // Preserve the explicit diagnostic ABI values while restoring the cheap
+    // dead-unit rejection before any targetability query.
+    Dead = 2,
     WrongTeam = 3,
     Despawned = 4,
     Untargetable = 5,
@@ -104,6 +104,7 @@ inline const char* RejectReasonName(RejectReason reason) {
     switch (reason) {
     case RejectReason::None: return "legal";
     case RejectReason::Invalid: return "invalid";
+    case RejectReason::Dead: return "dead";
     case RejectReason::WrongTeam: return "wrong-team";
     case RejectReason::Despawned: return "despawned";
     case RejectReason::Untargetable: return "untargetable";
@@ -181,8 +182,8 @@ struct RouteDescriptor {
     bool CheckAllSegments = false;
     bool PredictionAvailable = false;
     bool PredictionCollides = false;
-    // Compatibility-only advisory field.  The core gate intentionally does
-    // not trust it; live AIHeroClient::IsTargetable() is authoritative.
+    // Compatibility-only advisory field.  Planning may use the snapshot
+    // sample; execution revalidates the live target state.
     bool TargetableAtExecution = true;
     bool SpellShieldAtImpact = false;
     bool ImmunityAtImpact = false;
@@ -277,6 +278,7 @@ struct TargetFacts {
     float MagicalDamageEstimate = 0.0f;
 
     bool Valid = false;
+    bool Dead = false;
     bool Visible = false;
     bool Targetable = false;
     bool Invulnerable = false;
