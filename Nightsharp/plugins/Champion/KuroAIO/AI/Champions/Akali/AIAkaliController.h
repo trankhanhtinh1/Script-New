@@ -177,9 +177,8 @@ inline float ECost() { return SpellCost(2); }
 
 inline bool HasPassiveWeapon() {
     const auto player = GameObjects::Player();
-    return player.IsValid() &&
-           (player.HasBuff("AkaliPWeapon") || player.HasBuff("akalipweapon") ||
-            PassiveWeaponReady);
+    return ControllerHelpers::HasAnyBuff(
+        player, { "AkaliPWeapon", "akalipweapon" }) || PassiveWeaponReady;
 }
 
 inline bool HasPassiveRingBuff() {
@@ -190,19 +189,17 @@ inline bool HasPassiveRingBuff() {
 
 inline bool HasStealthShroudBuff() {
     const auto player = GameObjects::Player();
-    return player.IsValid() &&
-           (player.HasBuff("AkaliW") || player.HasBuff("AkaliWStealthTracker") ||
-            player.HasBuff("akaliw") || player.HasBuff("akaliwstealthtracker"));
+    return ControllerHelpers::HasAnyBuff(
+        player, { "AkaliW", "AkaliWStealthTracker", "akaliw", "akaliwstealthtracker" });
 }
 
 inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
     return !Engine::ValidEnemy(target) || target.IsInvulnerable() ||
-           target.HasBuff("SivirE") || target.HasBuff("NocturneShroudofDarkness") ||
-           target.HasBuff("MorganaE") || target.HasBuff("BlackShield") ||
-           target.HasBuff("BansheesVeil") || target.HasBuff("EdgeOfNight") ||
-           target.HasBuff("FioraW") || target.HasBuff("VladimirSanguinePool") ||
-           target.HasBuff("FizzEIcon") || target.HasBuff("KayleR") ||
-           target.HasBuff("kindredrnodeathbuff") || target.HasBuff("ChronoShift");
+           ControllerHelpers::HasAnyBuff(
+               target,
+               { "SivirE", "NocturneShroudofDarkness", "MorganaE", "BlackShield",
+                 "BansheesVeil", "EdgeOfNight", "FioraW", "VladimirSanguinePool",
+                 "FizzEIcon", "KayleR", "kindredrnodeathbuff", "ChronoShift" });
 }
 
 // Do not put Akali's last escape (W/R2) into a point-click suppress/stun zone

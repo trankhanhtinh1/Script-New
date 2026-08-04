@@ -33,17 +33,17 @@ inline Vector3 LastRPosition = {};
 using ControllerHelpers::Now;
 using ControllerHelpers::Ready;
 inline bool Poisoned(const AIHeroClient &target) {
-  return Engine::ValidEnemy(target) && (target.HasBuff("CassiopeiaQPoison") ||
-                                        target.HasBuff("CassiopeiaWPoison") ||
-                                        target.HasBuff("cassiopeiaqpoison") ||
-                                        target.HasBuff("cassiopeiawpoison"));
+  return Engine::ValidEnemy(target) &&
+         ControllerHelpers::HasAnyBuff(
+             target, { "CassiopeiaQPoison", "CassiopeiaWPoison",
+                       "cassiopeiaqpoison", "cassiopeiawpoison", "poison" });
 }
 inline bool TargetCannotBeDamaged(const AIHeroClient &t) {
-  return !Engine::ValidEnemy(t) || t.IsInvulnerable() || t.HasBuff("SivirE") ||
-         t.HasBuff("NocturneShroudofDarkness") || t.HasBuff("MorganaE") ||
-         t.HasBuff("BlackShield") || t.HasBuff("BansheesVeil") ||
-         t.HasBuff("EdgeOfNight") || t.HasBuff("VladimirSanguinePool") ||
-         t.HasBuff("KayleR");
+  return !Engine::ValidEnemy(t) || t.IsInvulnerable() ||
+         ControllerHelpers::HasAnyBuff(
+             t, { "SivirE", "NocturneShroudofDarkness", "MorganaE",
+                  "BlackShield", "BansheesVeil", "EdgeOfNight",
+                  "VladimirSanguinePool", "KayleR" });
 }
 using ControllerHelpers::AP;
 inline float QDamage(const AIHeroClient &t) {
