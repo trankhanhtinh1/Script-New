@@ -247,6 +247,7 @@
     <ClInclude Include="overlay\VmtHook.h" />
     <ClInclude Include="Plugins\AwarenessActivator\ActivatorEngine.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorCore.h" />
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessVision.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorPlugin.h" />
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessDiagnostics.h" />

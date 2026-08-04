@@ -8,6 +8,8 @@
 #include "../../DebugLog.h"
 #include "ActivatorEngine.h"
 #include "AwarenessIconAssets.h"
+#include "AwarenessVision.h"
+
 #include "AwarenessImGuiRenderer.h"
 #include "SdkObservationBridge.h"
 #include "PatchOverrides.h"
@@ -18,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <limits>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -59,6 +62,8 @@ public:
         iconLoadAttempted_ = false;
         iconCache_ = {};
         iconCacheCount_ = 0;
+        visionCache_ = {};
+
         LoadPatchOverrides();
         ConfigureDiagnostics();
         bridge_.Attach(awareness_);
@@ -88,6 +93,8 @@ public:
         hasRenderForecast_ = false;
         iconLoadAttempted_ = false;
         iconCache_ = {};
+        visionCache_ = {};
+
         iconCacheCount_ = 0;
         diagnostics_.Configure(false, false, true, 60u, 8.0f);
         bridge_.SetDiagnostics(nullptr);
@@ -171,11 +178,12 @@ public:
             settings_.drawWorldLayer && HasWorldDrawWork();
         const bool minimapEnabled =
             settings_.drawMinimapLayer && HasMinimapDrawWork();
-        const bool enemyHudEnabled = settings_.drawEnemyHud;
-        const bool screenHudEnabled = settings_.drawAlertCenter ||
-            settings_.drawObjectives || settings_.drawInsights;
-        if (!worldEnabled && !minimapEnabled &&
-            !enemyHudEnabled && !screenHudEnabled) {
+        // Screen HUD is notification-only. Enemy cooldowns and objective
+        // timers are rendered only inside their short warning windows.
+        const bool enemyHudEnabled = false;
+        const bool screenHudEnabled = settings_.drawAlertCenter &&
+            (settings_.drawEnemyHud || settings_.drawObjectives);
+        if (!worldEnabled && !minimapEnabled && !screenHudEnabled) {
             return;
         }
 
@@ -187,8 +195,7 @@ public:
             auto scope = diagnostics_.Begin(
                 AwarenessDiagnostics::Stage::RenderBegin);
             rendererReady = renderer_.BeginFrame(
-                settings_.performanceMode,
-                worldEnabled || enemyHudEnabled);
+                settings_.performanceMode, worldEnabled);
             scope.SetCounts(1, rendererReady ? 1u : 0u,
                             rendererReady ? 0u : 1u, 1);
         }
@@ -214,9 +221,6 @@ public:
         RenderLayer(
             LayerMinimap, minimapEnabled,
             &AwarenessActivatorPlugin::DrawMinimapLayer);
-        RenderLayer(
-            LayerEnemyHud, enemyHudEnabled,
-            &AwarenessActivatorPlugin::DrawEnemyHud);
         RenderLayer(
             LayerAlertCenter, screenHudEnabled,
             &AwarenessActivatorPlugin::DrawPanel);
@@ -288,30 +292,17 @@ public:
                             &settings_.drawMinimapLabels);
             ImGui::TreePop();
         }
-        if (ImGui::TreeNode("Professional HUD")) {
+        if (ImGui::TreeNode("Compact notifications")) {
             ImGui::Checkbox("Draw icons", &settings_.drawIcons);
             ImGui::Checkbox(
-                "Draw prioritized alert center",
+                "Enable compact notifications",
                 &settings_.drawAlertCenter);
             ImGui::Checkbox(
-                "Draw enemy overhead cooldown HUD",
+                "Enemy Flash ready-soon notifications",
                 &settings_.drawEnemyHud);
-            ImGui::Combo(
-                "HUD arrangement", &settings_.hudLayoutIndex,
-                "Vertical\0Horizontal\0\0");
             ImGui::SliderFloat(
                 "Icon scale", &settings_.iconScale,
                 0.50f, 2.00f, "%.2fx");
-            if (ImGui::Button("Reset smart HUD positions")) {
-                settings_.alertPanelX = -1.0f;
-                settings_.alertPanelY = -1.0f;
-                settings_.objectivePanelX = -1.0f;
-                settings_.objectivePanelY = -1.0f;
-                settings_.insightPanelX = -1.0f;
-                settings_.insightPanelY = -1.0f;
-            }
-            ImGui::TextDisabled(
-                "Every screen HUD can always be dragged directly.");
             ImGui::TreePop();
         }
 
@@ -500,6 +491,17 @@ private:
         std::size_t reachableAreas = 32;
         std::size_t activityMarkers = 512;
         std::size_t visionMarkers = 128;
+    };
+
+    struct VisionCacheEntry final {
+        std::uint32_t networkId = 0;
+        Point3 origin{};
+        float radius = 0.0f;
+        float builtAt = -1000.0f;
+        float cellSize = 0.0f;
+        bool gridAvailable = false;
+        bool originInBrush = false;
+        AwarenessVision::Coverage coverage{};
     };
 
     bool HasWorldDrawWork() const noexcept {
@@ -722,6 +724,30 @@ private:
                     float thickness = 1.5f,
                     int segments = 32) const noexcept {
         renderer_.DrawCircle(center, radius, color, thickness, segments);
+    }
+
+    bool DrawVisionCoverage(
+        const Point3& center,
+        const AwarenessVision::Coverage& coverage,
+        std::uint32_t fillColor,
+        std::uint32_t outlineColor,
+        float thickness = 1.0f) const noexcept {
+        if (!coverage.IsValid() ||
+            coverage.count > AwarenessVision::kMaxRays ||
+            !IsValidPoint(center)) {
+            return false;
+        }
+
+        std::array<SDK::Vector3, AwarenessVision::kMaxRays> boundary{};
+        for (std::size_t i = 0; i < coverage.count; ++i) {
+            const AwarenessVision::Point& point =
+                coverage.boundary[i];
+            boundary[i] = SDK::Vector3(
+                point.x, center.y, point.z);
+        }
+        return renderer_.DrawVisionFan(
+            ToSdkPoint(center), boundary.data(), coverage.count,
+            fillColor, outlineColor, thickness);
     }
 
     void DrawText(float x,
@@ -992,6 +1018,116 @@ private:
             std::max(500.0f, settings_.worldDrawDistance) + extra;
         return point.DistanceSquared(localPosition_) <=
                distance * distance;
+    }
+
+    static AwarenessVision::CellSample ProbeVisionCell(
+        const CoreNavGrid::GridRef& grid,
+        const Point3& point) noexcept {
+        const Vec3 world{ point.x, point.y, point.z };
+        if (!grid.IsInsideWorld(world)) {
+            return { false, false, false };
+        }
+        const std::uint16_t rawFlags =
+            grid.GetRawCellFlags(world);
+        if (rawFlags == CoreNavGrid::kInvalidRawFlags) {
+            return { false, false, false };
+        }
+        const bool wall =
+            CoreNavGrid::RawHasWall(rawFlags) ||
+            CoreNavGrid::RawHasBuilding(rawFlags) ||
+            CoreNavGrid::RawHasProp(rawFlags);
+        return {
+            true,
+            wall,
+            CoreNavGrid::RawHasBrush(rawFlags),
+        };
+    }
+
+    VisionCacheEntry& GetWardVision(
+        const WardState& ward) const noexcept {
+        const float now = awareness_.Now();
+        const float radius = std::max(100.0f, ward.radius);
+        const CoreNavGrid::GridRef grid = CoreNavGrid::Get();
+        const bool gridAvailable = grid.IsValid();
+        const AwarenessVision::CellSample source =
+            gridAvailable
+                ? ProbeVisionCell(grid, ward.position)
+                : AwarenessVision::CellSample{ false, false, false };
+        const bool originInBrush =
+            gridAvailable && source.known && source.brush;
+        const std::size_t rayCount = settings_.performanceMode
+            ? 64u : AwarenessVision::kDefaultRayCount;
+
+        std::size_t slot = 0;
+        float oldest = (std::numeric_limits<float>::max)();
+        for (std::size_t i = 0; i < visionCache_.size(); ++i) {
+            const VisionCacheEntry& entry = visionCache_[i];
+            if (entry.networkId == ward.networkId) {
+                slot = i;
+                oldest = -1.0f;
+                break;
+            }
+            if (entry.networkId == 0) {
+                slot = i;
+                oldest = -1.0f;
+                break;
+            }
+            if (entry.builtAt < oldest) {
+                oldest = entry.builtAt;
+                slot = i;
+            }
+        }
+
+        VisionCacheEntry& entry = visionCache_[slot];
+        const float refreshInterval = settings_.performanceMode
+            ? 0.20f : 0.10f;
+        const bool refreshDue =
+            !std::isfinite(entry.builtAt) ||
+            now < entry.builtAt ||
+            now - entry.builtAt >= refreshInterval;
+        const bool changed =
+            entry.networkId != ward.networkId ||
+            entry.origin.DistanceSquared(ward.position) > 16.0f ||
+            std::fabs(entry.radius - radius) > 1.0f ||
+            entry.gridAvailable != gridAvailable ||
+            entry.originInBrush != originInBrush ||
+            std::fabs(entry.cellSize - grid.cellSize) > 0.01f ||
+            entry.coverage.count != rayCount;
+        if (!refreshDue && !changed) {
+            return entry;
+        }
+
+        entry = {};
+        entry.networkId = ward.networkId;
+        entry.origin = ward.position;
+        entry.radius = radius;
+        entry.builtAt = now;
+        entry.cellSize = grid.cellSize;
+        entry.gridAvailable = gridAvailable;
+        entry.originInBrush = originInBrush;
+
+        const AwarenessVision::Point origin{
+            ward.position.x, ward.position.z
+        };
+        if (!gridAvailable) {
+            entry.coverage =
+                AwarenessVision::BuildUnoccludedCoverage(
+                    origin, radius, rayCount);
+            return entry;
+        }
+
+        const float sampleStep = std::clamp(
+            grid.cellSize > 0.0f ? grid.cellSize * 0.5f : 20.0f,
+            8.0f, 28.0f);
+        const auto query = [&grid, y = ward.position.y](
+                               AwarenessVision::Point point) noexcept {
+            return ProbeVisionCell(
+                grid, Point3{ point.x, y, point.z });
+        };
+        entry.coverage = AwarenessVision::BuildCoverage(
+            origin, radius, sampleStep, query, rayCount);
+        entry.originInBrush = entry.coverage.originInBrush;
+        return entry;
     }
 
     float ReachableDrawRadius(float radius) const noexcept {
@@ -1625,130 +1761,9 @@ private:
     }
 
     void DrawEnemyHud() {
-        if (!settings_.drawEnemyHud) return;
-
-        // One compact row: Q W E R | D F. There is no champion portrait,
-        // title, health bar, large panel, or separate cooldown text row.
-        // The user scale is applied exactly once to the whole strip.
-        const float scale = EffectiveIconScale();
-        const float cellSize = 20.0f * scale;
-        const float iconSize = 17.0f * scale;
-        const float gap = std::max(2.0f, 2.0f * scale);
-        const float groupGap = std::max(5.0f, 5.0f * scale);
-        constexpr char kSlotLetters[] = { 'Q', 'W', 'E', 'R', 'D', 'F' };
-        const float totalWidth = cellSize * 6.0f + gap * 4.0f + groupGap;
-        std::size_t shown = 0;
-
-        awareness_.Store().ForEachChampion(
-            [&](const ChampionState& state) {
-                if (shown >= 8 || state.local || !state.enemy ||
-                    state.clone || state.dead || !state.visible) {
-                    return;
-                }
-                const Point3 renderPosition = RenderChampionPosition(state);
-                if (!IsValidPoint(renderPosition) ||
-                    !ShouldDrawWorld(renderPosition, 125.0f)) {
-                    return;
-                }
-
-                SDK::Vector2 screen{};
-                if (!WorldToScreen(ToSdkPoint(renderPosition), screen)) {
-                    return;
-                }
-
-                const ObservedSpell* slots[6] = {};
-                for (std::size_t i = 0; i < state.spellCount; ++i) {
-                    const ObservedSpell& spell = state.spells[i];
-                    if (spell.slot >= 0 && spell.slot < 6) {
-                        slots[spell.slot] = &spell;
-                    }
-                }
-
-                float centerX = screen.x + settings_.enemyHudOffsetX;
-                float centerY = screen.y + settings_.enemyHudOffsetY;
-                const float halfCell = cellSize * 0.5f;
-                if (centerY - halfCell < 4.0f &&
-                    settings_.enemyHudOffsetY < 0.0f) {
-                    centerY = screen.y +
-                        std::max(28.0f, -settings_.enemyHudOffsetY);
-                }
-                const float left = centerX - totalWidth * 0.5f;
-
-                float cursor = left;
-                for (int slot = 0; slot < 6; ++slot) {
-                    if (slot == 4) cursor += groupGap;
-
-                    const ObservedSpell* spell = slots[slot];
-                    const bool known = spell && spell->evidence.IsKnown();
-                    const bool ready = known && spell->ready;
-                    float remaining = 0.0f;
-                    if (known && !ready) {
-                        remaining = std::max(
-                            spell->cooldownRemaining,
-                            spell->cooldownKind ==
-                                    CooldownKind::RangeEstimated
-                                ? spell->cooldownMax
-                                : 0.0f);
-                    }
-
-                    const SDK::Vector2 cellMin(
-                        cursor, centerY - halfCell);
-                    const SDK::Vector2 cellMax(
-                        cursor + cellSize, centerY + halfCell);
-                    const std::uint32_t borderColor = ready
-                        ? (slot == 3 ? 0xFFD6A84Bu : 0xFF62D69Au)
-                        : 0xC03A4652u;
-                    DrawRectFilled(cellMin, cellMax, borderColor, 3.0f * scale);
-                    DrawRectFilled(
-                        SDK::Vector2(cellMin.x + 1.0f, cellMin.y + 1.0f),
-                        SDK::Vector2(cellMax.x - 1.0f, cellMax.y - 1.0f),
-                        ready ? 0xC0182630u : 0xE00A1017u,
-                        std::max(1.0f, 2.0f * scale));
-
-                    const SDK::Vector2 center(
-                        cursor + halfCell, centerY);
-                    bool hasIcon = false;
-                    if (settings_.drawIcons && spell) {
-                        const ImTextureID texture = IconForSpell(state, *spell);
-                        if (IsRealIcon(texture)) {
-                            hasIcon = renderer_.DrawIcon(
-                                center, texture, iconSize,
-                                ready ? 0xFFFFFFFFu : 0x78FFFFFFu);
-                        }
-                    }
-
-                    if (!ready) {
-                        DrawRectFilled(
-                            SDK::Vector2(cellMin.x + 1.0f, cellMin.y + 1.0f),
-                            SDK::Vector2(cellMax.x - 1.0f, cellMax.y - 1.0f),
-                            0x65000000u,
-                            std::max(1.0f, 2.0f * scale));
-
-                        char cooldown[8] = {};
-                        if (remaining > 0.01f) {
-                            const int seconds = std::clamp(
-                                static_cast<int>(std::ceil(remaining)),
-                                1, 999);
-                            std::snprintf(
-                                cooldown, sizeof(cooldown), "%d", seconds);
-                        } else {
-                            std::snprintf(cooldown, sizeof(cooldown), "?");
-                        }
-                        DrawTextSmall(
-                            center, cooldown, 0xFFFFFFFFu, true,
-                            std::clamp(9.0f * scale, 8.0f, 13.0f));
-                    } else if (!hasIcon) {
-                        char letter[2] = { kSlotLetters[slot], '\0' };
-                        DrawTextSmall(
-                            center, letter, 0xFFFFFFFFu, true,
-                            std::clamp(10.0f * scale, 9.0f, 14.0f));
-                    }
-
-                    cursor += cellSize;
-                    if (slot != 3 && slot != 5) cursor += gap;
-                }
-                ++shown;
-            });
+        // Deliberately empty. The old always-on overhead spell row was noisy
+        // and duplicated information already visible in-game. Enemy Flash is
+        // now surfaced only as a compact ready-soon notification.
     }
 
     void DrawWards() const {
@@ -1771,9 +1786,14 @@ private:
             const std::uint32_t color = ward.enemy
                 ? 0xFFFF7799u
                 : (ward.visible ? 0xFF66FF99u : 0x9988AA99u);
+            const VisionCacheEntry& vision = GetWardVision(ward);
             const float radius = std::max(35.0f, ward.radius);
-            DrawCircle(
-                ToSdkPoint(ward.position), radius, color, 1.5f);
+            const bool drewVision = DrawVisionCoverage(
+                ward.position, vision.coverage, 0u, color, 1.5f);
+            if (!drewVision) {
+                DrawCircle(
+                    ToSdkPoint(ward.position), radius, color, 1.5f);
+            }
             if (settings_.drawIcons) {
                 DrawIcon(
                     ward.position, IconForWard(ward.enemy), 18.0f);
@@ -1785,9 +1805,13 @@ private:
             if (ward.visible && ward.faelight &&
                 ward.bonusVisionObserved && bonusRemaining > 0.0f &&
                 (!settings_.performanceMode || ward.enemy)) {
-                DrawCircle(
-                    ToSdkPoint(ward.position), radius,
-                    0x7799DDFFu, 2.0f);
+                if (!DrawVisionCoverage(
+                        ward.position, vision.coverage, 0u,
+                        0x7799DDFFu, 2.0f)) {
+                    DrawCircle(
+                        ToSdkPoint(ward.position), radius,
+                        0x7799DDFFu, 2.0f);
+                }
             }
             const bool importantLabel = ward.enemy || ward.faelight;
             if (labels >= limits.worldWardLabels ||
@@ -2122,15 +2146,22 @@ private:
                     !ShouldDrawWorld(ward.position, ward.radius)) {
                     continue;
                 }
-                DrawCircle(
-                    ToSdkPoint(ward.position),
-                    std::max(100.0f, ward.radius),
-                    ward.faelight ? 0x4455FFAAu : 0x3344CC88u,
-                    ward.faelight ? 2.0f : 1.0f);
+                const VisionCacheEntry& vision = GetWardVision(ward);
+                const std::uint32_t fillColor =
+                    ward.faelight ? 0x4455FFAAu : 0x3344CC88u;
+                if (!DrawVisionCoverage(
+                        ward.position, vision.coverage, fillColor, 0u,
+                        ward.faelight ? 2.0f : 1.0f)) {
+                    DrawCircle(
+                        ToSdkPoint(ward.position),
+                        std::max(100.0f, ward.radius),
+                        fillColor,
+                        ward.faelight ? 2.0f : 1.0f);
+                }
                 ++markers;
             }
+            }
         }
-    }
 
     void DrawInsights() const {
         if (!settings_.drawInsights || !settings_.drawWave) return;
@@ -2154,335 +2185,8 @@ private:
             0xCC99DDAAu, true);
     }
 
-    struct HudCardEntry final {
-        ImTextureID icon = nullptr;
-        std::uint32_t accent = 0xFF66CCFFu;
-        char title[80] = {};
-        char detail[192] = {};
-        char badge[40] = {};
-    };
-
-    enum class HudDefaultAnchor : std::uint8_t {
-        TopLeft = 0,
-        TopRight,
-        BottomLeft,
-        BottomCenter,
-    };
-
-    static void TruncateHudText(const char* source,
-                                char* out,
-                                std::size_t outSize,
-                                std::size_t maxCharacters) noexcept {
-        if (!out || outSize == 0) return;
-        out[0] = '\0';
-        if (!source || !source[0] || maxCharacters == 0) return;
-        const std::size_t length = std::strlen(source);
-        const std::size_t capacity = outSize - 1;
-        const std::size_t limit = std::min(maxCharacters, capacity);
-        if (length <= limit) {
-            std::char_traits<char>::copy(out, source, length);
-            out[length] = '\0';
-            return;
-        }
-        if (limit <= 3) {
-            const std::size_t count = std::min(limit, length);
-            std::char_traits<char>::copy(out, source, count);
-            out[count] = '\0';
-            return;
-        }
-        const std::size_t prefix = limit - 3;
-        std::char_traits<char>::copy(out, source, prefix);
-        out[prefix] = '.';
-        out[prefix + 1] = '.';
-        out[prefix + 2] = '.';
-        out[prefix + 3] = '\0';
-    }
-
-    static void SetHudEntry(HudCardEntry& entry,
-                            ImTextureID icon,
-                            std::uint32_t accent,
-                            const char* title,
-                            const char* detail,
-                            const char* badge) noexcept {
-        entry = {};
-        entry.icon = icon;
-        entry.accent = accent;
-        CopyText(entry.title, title ? title : "");
-        CopyText(entry.detail, detail ? detail : "");
-        CopyText(entry.badge, badge ? badge : "");
-    }
-
-    static const char* ObjectiveDisplayName(ObjectiveKind kind,
-                                            bool vietnamese) noexcept {
-        if (!vietnamese) return ObjectiveName(kind);
-        switch (kind) {
-        case ObjectiveKind::ElementalDragon: return "Rồng Nguyên Tố";
-        case ObjectiveKind::DragonSoul: return "Linh Hồn Rồng";
-        case ObjectiveKind::ElderDragon: return "Rồng Ngàn Tuổi";
-        case ObjectiveKind::RiftHerald: return "Sứ Giả Khe Nứt";
-        case ObjectiveKind::VoidGrubs: return "Sâu Hư Không";
-        case ObjectiveKind::Baron: return "Baron Nashor";
-        case ObjectiveKind::Scuttle: return "Cua Kỳ Cục";
-        default: return "Mục tiêu lớn";
-        }
-    }
-
     float EffectiveIconScale() const noexcept {
         return std::clamp(settings_.iconScale, 0.50f, 2.00f);
-    }
-
-    void DrawScreenHud(const char* windowId,
-                       const char* title,
-                       const char* subtitle,
-                       ImTextureID headerIcon,
-                       std::uint32_t headerAccent,
-                       const HudCardEntry* entries,
-                       std::size_t entryCount,
-                       float& storedX,
-                       float& storedY,
-                       HudDefaultAnchor defaultAnchor) {
-        if (!windowId || !title || !entries || entryCount == 0 ||
-            !ImGui::GetCurrentContext()) {
-            return;
-        }
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        if (!viewport || viewport->Size.x <= 0.0f ||
-            viewport->Size.y <= 0.0f) {
-            return;
-        }
-
-        const bool horizontal = settings_.hudLayoutIndex == 1;
-        const float scale = EffectiveIconScale();
-        const float margin = 10.0f;
-        const float headerHeight = 38.0f;
-        const float gap = 7.0f;
-        const float verticalWidth = std::max(360.0f, 338.0f + 22.0f * scale);
-        const float verticalRowHeight = std::max(54.0f, 40.0f * scale + 14.0f);
-        const float tileWidth = std::max(178.0f, 158.0f + 20.0f * scale);
-        const float tileHeight = std::max(78.0f, 55.0f + 23.0f * scale);
-
-        std::size_t columns = 1;
-        std::size_t rows = entryCount;
-        float panelWidth = verticalWidth;
-        float panelHeight = headerHeight + margin +
-            verticalRowHeight * static_cast<float>(entryCount) +
-            gap * static_cast<float>(entryCount > 0 ? entryCount - 1 : 0) +
-            margin;
-        if (horizontal) {
-            const float available = std::max(200.0f, viewport->Size.x - 48.0f);
-            const std::size_t maximumColumns = std::max<std::size_t>(
-                1, static_cast<std::size_t>(
-                    std::floor((available + gap) / (tileWidth + gap))));
-            columns = std::min(entryCount, maximumColumns);
-            rows = (entryCount + columns - 1) / columns;
-            panelWidth = margin * 2.0f +
-                tileWidth * static_cast<float>(columns) +
-                gap * static_cast<float>(columns > 0 ? columns - 1 : 0);
-            panelHeight = headerHeight + margin +
-                tileHeight * static_cast<float>(rows) +
-                gap * static_cast<float>(rows > 0 ? rows - 1 : 0) +
-                margin;
-        }
-
-        const float viewLeft = viewport->Pos.x;
-        const float viewTop = viewport->Pos.y;
-        const float viewRight = viewLeft + viewport->Size.x;
-        const float viewBottom = viewTop + viewport->Size.y;
-        if (!std::isfinite(storedX) || !std::isfinite(storedY) ||
-            storedX < viewLeft || storedY < viewTop) {
-            switch (defaultAnchor) {
-            case HudDefaultAnchor::TopRight:
-                storedX = viewRight - panelWidth - 24.0f;
-                storedY = viewTop + 72.0f;
-                break;
-            case HudDefaultAnchor::BottomLeft:
-                storedX = viewLeft + 24.0f;
-                storedY = viewBottom - panelHeight - 96.0f;
-                break;
-            case HudDefaultAnchor::BottomCenter:
-                storedX = viewLeft +
-                    (viewport->Size.x - panelWidth) * 0.5f;
-                storedY = viewBottom - panelHeight - 72.0f;
-                break;
-            default:
-                storedX = viewLeft + 24.0f;
-                storedY = viewTop + 120.0f;
-                break;
-            }
-        }
-        storedX = std::clamp(
-            storedX, viewLeft + 6.0f,
-            std::max(viewLeft + 6.0f, viewRight - panelWidth - 6.0f));
-        storedY = std::clamp(
-            storedY, viewTop + 6.0f,
-            std::max(viewTop + 6.0f, viewBottom - panelHeight - 6.0f));
-
-        ImGui::SetNextWindowPos(ImVec2(storedX, storedY), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(
-            ImVec2(panelWidth, panelHeight), ImGuiCond_Always);
-        const ImGuiWindowFlags flags =
-            ImGuiWindowFlags_NoTitleBar |
-            ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_NoScrollWithMouse |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoBackground |
-            ImGuiWindowFlags_NoNav;
-        ImVec2 panelPosition(storedX, storedY);
-        bool hovered = false;
-        bool active = false;
-        if (ImGui::Begin(windowId, nullptr, flags)) {
-            panelPosition = ImGui::GetWindowPos();
-            ImGui::SetCursorPos(ImVec2(0.0f, 0.0f));
-            ImGui::InvisibleButton(
-                "##HudDragSurface", ImVec2(panelWidth, panelHeight));
-            hovered = ImGui::IsItemHovered();
-            active = ImGui::IsItemActive();
-            if (active && ImGui::IsMouseDragging(0, 0.0f)) {
-                const ImVec2 delta = ImGui::GetIO().MouseDelta;
-                storedX += delta.x;
-                storedY += delta.y;
-                storedX = std::clamp(
-                    storedX, viewLeft + 6.0f,
-                    std::max(viewLeft + 6.0f,
-                             viewRight - panelWidth - 6.0f));
-                storedY = std::clamp(
-                    storedY, viewTop + 6.0f,
-                    std::max(viewTop + 6.0f,
-                             viewBottom - panelHeight - 6.0f));
-            }
-            if (hovered || active) {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-            }
-        }
-        ImGui::End();
-
-        const SDK::Vector2 panelMin(panelPosition.x, panelPosition.y);
-        const SDK::Vector2 panelMax(
-            panelPosition.x + panelWidth,
-            panelPosition.y + panelHeight);
-        DrawRectFilled(
-            SDK::Vector2(panelMin.x + 4.0f, panelMin.y + 5.0f),
-            SDK::Vector2(panelMax.x + 4.0f, panelMax.y + 5.0f),
-            0x66000000u, 10.0f);
-        DrawRectFilled(panelMin, panelMax, 0xED0C141Fu, 9.0f);
-        DrawRectFilled(
-            panelMin,
-            SDK::Vector2(panelMax.x, panelMin.y + headerHeight),
-            0xF21A2735u, 9.0f);
-        DrawRectFilled(
-            panelMin,
-            SDK::Vector2(panelMin.x + 4.0f, panelMax.y),
-            headerAccent, 9.0f);
-
-        const float headerBaseIcon = 20.0f;
-        const float headerIconWidth = headerBaseIcon * scale;
-        const SDK::Vector2 headerCenter(
-            panelMin.x + margin + headerIconWidth * 0.5f,
-            panelMin.y + headerHeight * 0.5f);
-        const bool hasHeaderIcon = DrawIcon(
-            headerCenter, headerIcon, headerBaseIcon);
-        const float headerTextX = panelMin.x + margin +
-            (hasHeaderIcon ? headerIconWidth + 8.0f : 0.0f);
-        DrawTextSmall(
-            SDK::Vector2(headerTextX, panelMin.y + 9.0f),
-            title, 0xFFF2F7FFu, false, 14.0f);
-        if (subtitle && subtitle[0]) {
-            DrawTextSmall(
-                SDK::Vector2(headerTextX, panelMin.y + 24.0f),
-                subtitle, 0xFF8EA4B8u, false, 9.0f);
-        }
-        DrawTextSmall(
-            SDK::Vector2(panelMax.x - 12.0f, panelMin.y + 13.0f),
-            settings_.vietnamese ? "KÉO" : "DRAG",
-            hovered || active ? 0xFFFFFFFFu : 0xFF6F8294u,
-            true, 9.0f);
-
-        const float contentX = panelMin.x + margin;
-        const float contentY = panelMin.y + headerHeight + margin;
-        for (std::size_t index = 0; index < entryCount; ++index) {
-            float cardX = contentX;
-            float cardY = contentY;
-            float cardWidth = verticalWidth - margin * 2.0f;
-            float cardHeight = verticalRowHeight;
-            if (horizontal) {
-                const std::size_t column = index % columns;
-                const std::size_t row = index / columns;
-                cardX += static_cast<float>(column) * (tileWidth + gap);
-                cardY += static_cast<float>(row) * (tileHeight + gap);
-                cardWidth = tileWidth;
-                cardHeight = tileHeight;
-            } else {
-                cardY += static_cast<float>(index) *
-                    (verticalRowHeight + gap);
-            }
-
-            const HudCardEntry& entry = entries[index];
-            const SDK::Vector2 cardMin(cardX, cardY);
-            const SDK::Vector2 cardMax(
-                cardX + cardWidth, cardY + cardHeight);
-            DrawRectFilled(cardMin, cardMax, 0xE6162230u, 6.0f);
-            DrawRectFilled(
-                cardMin,
-                SDK::Vector2(cardMin.x + 3.0f, cardMax.y),
-                entry.accent, 6.0f);
-
-            const float baseIcon = horizontal ? 27.0f : 29.0f;
-            const float scaledIcon = baseIcon * scale;
-            const SDK::Vector2 iconCenter(
-                cardMin.x + 11.0f + scaledIcon * 0.5f,
-                cardMin.y + cardHeight * 0.5f);
-            const bool hasIcon = DrawIcon(
-                iconCenter, entry.icon, baseIcon);
-            if (!hasIcon) {
-                DrawRectFilled(
-                    SDK::Vector2(
-                        iconCenter.x - scaledIcon * 0.5f,
-                        iconCenter.y - scaledIcon * 0.5f),
-                    SDK::Vector2(
-                        iconCenter.x + scaledIcon * 0.5f,
-                        iconCenter.y + scaledIcon * 0.5f),
-                    0xFF26384Au, 5.0f);
-                DrawTextSmall(
-                    iconCenter, "!", entry.accent, true, 13.0f);
-            }
-
-            const float textX = cardMin.x + 18.0f + scaledIcon;
-            const std::size_t titleLimit = horizontal ? 19u : 42u;
-            const std::size_t detailLimit = horizontal ? 26u : 58u;
-            char titleText[96] = {};
-            char detailText[128] = {};
-            TruncateHudText(
-                entry.title, titleText, sizeof(titleText), titleLimit);
-            TruncateHudText(
-                entry.detail, detailText, sizeof(detailText), detailLimit);
-            DrawTextSmall(
-                SDK::Vector2(textX, cardMin.y + 10.0f),
-                titleText, 0xFFF0F5FAu, false, 12.0f);
-            DrawTextSmall(
-                SDK::Vector2(textX, cardMin.y + 27.0f),
-                detailText, 0xFF9EB0C0u, false, 9.0f);
-
-            if (entry.badge[0]) {
-                const float badgeWidth = std::clamp(
-                    14.0f + static_cast<float>(std::strlen(entry.badge)) * 5.5f,
-                    34.0f, horizontal ? 76.0f : 98.0f);
-                const SDK::Vector2 badgeMin(
-                    cardMax.x - badgeWidth - 8.0f,
-                    cardMax.y - 19.0f);
-                const SDK::Vector2 badgeMax(
-                    cardMax.x - 8.0f,
-                    cardMax.y - 6.0f);
-                DrawRectFilled(badgeMin, badgeMax, 0xCC243445u, 5.0f);
-                DrawTextSmall(
-                    SDK::Vector2(
-                        (badgeMin.x + badgeMax.x) * 0.5f,
-                        badgeMin.y + 2.0f),
-                    entry.badge, entry.accent, true, 8.0f);
-            }
-        }
     }
 
     void HandleAudioAlerts() {
@@ -2509,315 +2213,157 @@ private:
     }
 
     void DrawPanel() {
-        const bool vi = settings_.vietnamese;
-        const ImTextureID alertIcon =
-            ResolveIcon("awareness_alert", false);
+        if (!settings_.drawAlertCenter || !settings_.drawIcons ||
+            !ImGui::GetCurrentContext()) {
+            return;
+        }
 
-        if (settings_.drawAlertCenter) {
-            std::array<HudCardEntry, 8> entries{};
-            std::size_t count = 0;
-            if (hasCandidate_ && count < entries.size()) {
-                char title[96] = {};
-                char detail[192] = {};
-                char badge[40] = {};
-                std::snprintf(
-                    title, sizeof(title), "%s: %s",
-                    vi ? "Đề xuất" : "Candidate",
-                    CapabilityName(candidate_.capability));
-                std::snprintf(
-                    detail, sizeof(detail), "%s - %s",
-                    ActionModeName(candidate_.mode), candidate_.reason);
-                std::snprintf(
-                    badge, sizeof(badge), "%s %d%%",
-                    ConfidenceName(candidate_.confidence),
-                    static_cast<int>(candidate_.confidence));
-                SetHudEntry(
-                    entries[count++],
-                    IconForCapability(candidate_.capability),
-                    0xFF55D9F4u, title, detail, badge);
-            }
+        // A notification is intentionally limited to exactly two icons and
+        // one short countdown. No title, name, description, badge, panel,
+        // card, border, background, drag surface, or persistent status row.
+        struct CompactNotification final {
+            ImTextureID contextIcon = nullptr;
+            ImTextureID eventIcon = nullptr;
+            float seconds = 0.0f;
+            int priority = 0;
+        };
 
-            const auto& alerts = awareness_.Store().Alerts();
-            std::array<const AlertState*, 64> prioritized{};
-            const std::size_t alertCount =
-                AwarenessPresentationPolicy::PrioritizeAlerts(
-                    alerts, awareness_.Now(), prioritized);
-            const std::size_t shown = std::min<std::size_t>(
-                5, std::min(alertCount, entries.size() - count));
-            for (std::size_t i = 0; i < shown; ++i) {
-                const AlertState& alert = *prioritized[i];
-                const Evidence evidence{
-                    Provenance::ObservedEvent,
-                    alert.confidence, alert.at,
-                    alert.expiresAt, alert.id
-                };
-                const EvidenceVisualStyle style =
-                    AwarenessPresentationPolicy::StyleFor(evidence);
-                char badge[40] = {};
-                std::snprintf(
-                    badge, sizeof(badge), "%s",
-                    ConfidenceName(alert.confidence));
-                SetHudEntry(
-                    entries[count++], alertIcon,
-                    alert.priority >= 70
-                        ? 0xFFFF5263u : style.color,
-                    alert.title,
-                    settings_.streamerMode ? "" : alert.detail,
-                    badge);
+        constexpr float kEnemyFlashWindow = 10.0f;
+        constexpr float kObjectiveWindow = 30.0f;
+        constexpr std::size_t kMaxVisible = 4;
+        std::array<CompactNotification, 16> notifications{};
+        std::size_t count = 0;
+
+        const auto push = [&](ImTextureID contextIcon,
+                              ImTextureID eventIcon,
+                              float seconds,
+                              int priority) {
+            if (count >= notifications.size() ||
+                !IsRealIcon(contextIcon) || !IsRealIcon(eventIcon) ||
+                !std::isfinite(seconds) || seconds <= 0.0f) {
+                return;
             }
-            if (count == 0) {
-                SetHudEntry(
-                    entries[count++], alertIcon, 0xFF58C98Bu,
-                    vi ? "Không có cảnh báo" : "No active alerts",
-                    vi ? "Tình huống hiện tại đang ổn định"
-                       : "The current situation is stable",
-                    vi ? "AN TOÀN" : "CLEAR");
-            }
-            char subtitle[96] = {};
-            std::snprintf(
-                subtitle, sizeof(subtitle), "%s · %.1fs",
-                RuntimeModeName(awareness_.Mode()), awareness_.Now());
-            DrawScreenHud(
-                "##AwarenessAlertHud",
-                vi ? "Trung tâm cảnh báo" : "Alert Center",
-                subtitle, alertIcon, 0xFF55D9F4u,
-                entries.data(), count,
-                settings_.alertPanelX, settings_.alertPanelY,
-                HudDefaultAnchor::TopRight);
+            notifications[count++] = {
+                contextIcon, eventIcon, seconds, priority
+            };
+        };
+
+        if (settings_.drawEnemyHud) {
+            const ImTextureID flashIcon =
+                IconForCapability(Capability::Flash);
+            awareness_.Store().ForEachChampion(
+                [&](const ChampionState& state) {
+                    if (state.local || !state.enemy || state.clone ||
+                        state.dead) {
+                        return;
+                    }
+                    for (std::size_t i = 0; i < state.spellCount; ++i) {
+                        const ObservedSpell& spell = state.spells[i];
+                        if (spell.capability != Capability::Flash ||
+                            !spell.evidence.IsKnown() || spell.ready ||
+                            spell.cooldownKind == CooldownKind::Unknown) {
+                            continue;
+                        }
+                        const float remaining = spell.cooldownRemaining;
+                        if (remaining > 0.0f &&
+                            remaining <= kEnemyFlashWindow) {
+                            push(IconForChampion(state), flashIcon,
+                                 remaining, 100);
+                        }
+                        break;
+                    }
+                });
         }
 
         if (settings_.drawObjectives) {
-            std::array<HudCardEntry, 12> entries{};
-            std::size_t count = 0;
+            const float now = awareness_.Now();
+            const ImTextureID timerIcon =
+                ResolveIcon("awareness_alert", false);
             const auto& objectives = awareness_.Store().Objectives();
             for (std::size_t i = 0;
-                 i < objectives.Size() && count < entries.size(); ++i) {
+                 i < objectives.Size(); ++i) {
                 const ObjectiveState& objective = objectives.At(i);
-                const ExposureDecision exposure = VisibilityGuard::CanExpose(
-                    objective.evidence, awareness_.Mode(),
-                    objective.visible, false);
+                if (objective.kind == ObjectiveKind::Unknown ||
+                    objective.kind == ObjectiveKind::Scuttle) {
+                    continue;
+                }
+                const ExposureDecision exposure =
+                    VisibilityGuard::CanExpose(
+                        objective.evidence, awareness_.Mode(),
+                        objective.visible, false);
                 if (!exposure.allowed) continue;
 
-                const float now = awareness_.Now();
-                char detail[128] = {};
+                float remaining = 0.0f;
                 if ((objective.status == ObjectiveStatus::NotSpawned ||
                      objective.status == ObjectiveStatus::SpawningSoon) &&
                     objective.spawnAt > now) {
-                    std::snprintf(
-                        detail, sizeof(detail),
-                        vi ? "Xuất hiện sau %.0f giây"
-                           : "Spawns in %.0f seconds",
-                        objective.spawnAt - now);
+                    remaining = objective.spawnAt - now;
                 } else if ((objective.status == ObjectiveStatus::Dead ||
                             objective.status == ObjectiveStatus::Respawning) &&
                            objective.respawnAt > now) {
-                    std::snprintf(
-                        detail, sizeof(detail),
-                        vi ? "Hồi sinh sau %.0f giây"
-                           : "Respawns in %.0f seconds",
-                        objective.respawnAt - now);
-                } else if (objective.status == ObjectiveStatus::AliveVisible ||
-                           objective.status == ObjectiveStatus::InCombatVisible) {
-                    const float healthPercent = objective.maxHealth > 0.0f
-                        ? 100.0f * objective.health / objective.maxHealth
-                        : 0.0f;
-                    std::snprintf(
-                        detail, sizeof(detail),
-                        objective.status == ObjectiveStatus::InCombatVisible
-                            ? (vi ? "Đang giao tranh · %.0f%% máu"
-                                  : "In combat · %.0f%% health")
-                            : (vi ? "Đang sống · %.0f%% máu"
-                                  : "Alive · %.0f%% health"),
-                        healthPercent);
-                } else {
-                    CopyText(
-                        detail,
-                        vi ? "Trạng thái đang được ước tính"
-                           : "State is currently estimated");
+                    remaining = objective.respawnAt - now;
                 }
-                char badge[40] = {};
-                std::snprintf(
-                    badge, sizeof(badge), "%s",
-                    ConfidenceName(objective.evidence.confidence));
-                const std::uint32_t accent =
-                    objective.status == ObjectiveStatus::Dead ||
-                    objective.status == ObjectiveStatus::Respawning
-                        ? 0xFF8290A0u
-                        : (objective.status == ObjectiveStatus::InCombatVisible
-                               ? 0xFFFF6D57u : 0xFFFFC857u);
-                SetHudEntry(
-                    entries[count++], IconForObjective(objective.kind),
-                    accent,
-                    ObjectiveDisplayName(objective.kind, vi),
-                    detail, badge);
+                if (remaining > 0.0f && remaining <= kObjectiveWindow) {
+                    push(IconForObjective(objective.kind), timerIcon,
+                         remaining, 200);
+                }
             }
-            if (count == 0) {
-                SetHudEntry(
-                    entries[count++], alertIcon, 0xFF8290A0u,
-                    vi ? "Chưa có dữ liệu mục tiêu"
-                       : "No objective data",
-                    vi ? "Đang chờ quan sát hợp lệ"
-                       : "Waiting for a valid observation",
-                    vi ? "CHỜ" : "WAIT");
-            }
-            DrawScreenHud(
-                "##AwarenessObjectiveHud",
-                vi ? "Theo dõi mục tiêu lớn" : "Objective Tracker",
-                vi ? "Thời gian và trạng thái quan sát"
-                   : "Observed timers and states",
-                IconForObjective(ObjectiveKind::Baron),
-                0xFFFFC857u,
-                entries.data(), count,
-                settings_.objectivePanelX, settings_.objectivePanelY,
-                HudDefaultAnchor::TopLeft);
         }
 
-        if (settings_.drawInsights) {
-            std::array<HudCardEntry, 12> entries{};
-            std::size_t count = 0;
-            const WaveState& wave = awareness_.Store().Wave();
-            if (settings_.drawWave && wave.evidence.IsKnown() &&
-                count < entries.size()) {
-                char detail[160] = {};
-                char badge[40] = {};
-                std::snprintf(
-                    detail, sizeof(detail), "%s · %d-%d · lệch %.0f",
-                    wave.classification, wave.allyMinions,
-                    wave.enemyMinions, wave.laneBias);
-                if (!vi) {
-                    std::snprintf(
-                        detail, sizeof(detail), "%s · %d-%d · bias %.0f",
-                        wave.classification, wave.allyMinions,
-                        wave.enemyMinions, wave.laneBias);
+        if (count == 0) return;
+        std::sort(
+            notifications.begin(), notifications.begin() + count,
+            [](const CompactNotification& left,
+               const CompactNotification& right) {
+                if (std::fabs(left.seconds - right.seconds) > 0.01f) {
+                    return left.seconds < right.seconds;
                 }
-                std::snprintf(
-                    badge, sizeof(badge), "%s",
-                    ConfidenceName(wave.evidence.confidence));
-                SetHudEntry(
-                    entries[count++], alertIcon, 0xFF77D6A6u,
-                    vi ? "Trạng thái đợt lính" : "Wave state",
-                    detail, badge);
-            }
+                return left.priority > right.priority;
+            });
 
-            const RecallAdvice& recall = awareness_.Insights().recall;
-            if (recall.evidence.IsKnown() && count < entries.size()) {
-                char badge[40] = {};
-                std::snprintf(badge, sizeof(badge), "%d/100", recall.score);
-                SetHudEntry(
-                    entries[count++], alertIcon,
-                    recall.recommended ? 0xFF55D98Au : 0xFFD8B85Au,
-                    vi ? "Thời điểm Biến Về" : "Recall timing",
-                    recall.reason, badge);
-            }
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        if (!viewport || viewport->Size.x <= 0.0f ||
+            viewport->Size.y <= 0.0f) {
+            return;
+        }
 
-            const WardEfficiencySummary& wards =
-                awareness_.Insights().wardEfficiency;
-            if (wards.evidence.IsKnown() && count < entries.size()) {
-                char detail[128] = {};
-                char badge[40] = {};
-                std::snprintf(
-                    detail, sizeof(detail),
-                    vi ? "%d mắt hoạt động · %d gần mục tiêu"
-                       : "%d active wards · %d near objectives",
-                    wards.active, wards.objectiveCoverage);
-                std::snprintf(badge, sizeof(badge), "%d/100", wards.score);
-                SetHudEntry(
-                    entries[count++], IconForWard(false), 0xFF59CFA2u,
-                    vi ? "Hiệu quả tầm nhìn" : "Vision efficiency",
-                    detail, badge);
-            }
+        const float scale = EffectiveIconScale();
+        const float baseIconSize = 25.0f;
+        const float iconSize = baseIconSize * scale;
+        const float iconGap = std::max(4.0f, 5.0f * scale);
+        const float rowGap = std::max(7.0f, 9.0f * scale);
+        const float rowHeight = iconSize + rowGap;
+        const float right = viewport->Pos.x + viewport->Size.x - 28.0f;
+        const float top = viewport->Pos.y + 92.0f;
+        const float timerCenterX = right - 18.0f;
+        const float eventCenterX = timerCenterX - 34.0f;
+        const float contextCenterX = eventCenterX - iconSize - iconGap;
+        const float fontSize = std::clamp(
+            13.0f * scale, 11.0f, 18.0f);
+        const std::size_t visible =
+            std::min<std::size_t>(count, kMaxVisible);
 
-            const auto& setups = awareness_.Insights().objectiveSetups;
-            for (std::size_t i = 0;
-                 i < setups.Size() && i < 3 && count < entries.size(); ++i) {
-                const ObjectiveSetupAssessment& setup = setups.At(i);
-                char detail[160] = {};
-                char badge[40] = {};
-                std::snprintf(
-                    detail, sizeof(detail),
-                    vi ? "Đồng minh %d · Địch %d · Tầm nhìn %d"
-                       : "Allies %d · Enemies %d · Vision %d",
-                    setup.nearbyAllies, setup.nearbyEnemies,
-                    setup.alliedVision);
-                std::snprintf(badge, sizeof(badge), "%d/100", setup.score);
-                SetHudEntry(
-                    entries[count++], IconForObjective(setup.kind),
-                    setup.score >= 70 ? 0xFF55D98Au
-                                      : (setup.score >= 45
-                                             ? 0xFFFFC857u
-                                             : 0xFFFF6D57u),
-                    ObjectiveDisplayName(setup.kind, vi),
-                    detail, badge);
-            }
+        for (std::size_t i = 0; i < visible; ++i) {
+            const CompactNotification& notification = notifications[i];
+            const float centerY = top +
+                static_cast<float>(i) * rowHeight + iconSize * 0.5f;
+            DrawIcon(
+                SDK::Vector2(contextCenterX, centerY),
+                notification.contextIcon, baseIconSize);
+            DrawIcon(
+                SDK::Vector2(eventCenterX, centerY),
+                notification.eventIcon, baseIconSize);
 
-            awareness_.Store().ForEachChampion(
-                [&](const ChampionState& ally) {
-                    if (count >= entries.size() ||
-                        (!ally.ally && !ally.local) || ally.dead) {
-                        return;
-                    }
-                    const ObservedSpell* ultimate = nullptr;
-                    for (std::size_t i = 0; i < ally.spellCount; ++i) {
-                        if (ally.spells[i].slot == 3) {
-                            ultimate = &ally.spells[i];
-                            break;
-                        }
-                    }
-                    if (!ultimate || !ultimate->evidence.IsKnown()) return;
-                    char cooldown[32] = {};
-                    FormatCooldown(
-                        ultimate, ally.visible || ally.ally,
-                        cooldown, sizeof(cooldown));
-                    const char* name = settings_.streamerMode
-                        ? (vi ? "Đồng minh" : "Ally")
-                        : (ally.name[0] ? ally.name
-                                        : (vi ? "Đồng minh" : "Ally"));
-                    char title[96] = {};
-                    std::snprintf(
-                        title, sizeof(title),
-                        vi ? "Chiêu cuối của %s" : "%s ultimate", name);
-                    SetHudEntry(
-                        entries[count++], IconForSpell(ally, *ultimate),
-                        0xFF72AFFFu, title,
-                        vi ? "Trạng thái hồi chiêu đã quan sát"
-                           : "Observed cooldown state",
-                        cooldown);
-                });
-
-            const DeathRecapSummary& recap =
-                awareness_.Insights().deathRecap;
-            if (recap.evidence.IsKnown() && count < entries.size()) {
-                char detail[160] = {};
-                std::snprintf(
-                    detail, sizeof(detail),
-                    vi ? "%.0f sát thương · %d nguồn · %.1f giây"
-                       : "%.0f damage · %d sources · %.1f seconds",
-                    recap.totalDamage, recap.sourceCount,
-                    std::max(0.0f, recap.deathAt - recap.firstDamageAt));
-                SetHudEntry(
-                    entries[count++], alertIcon, 0xFFFF6F83u,
-                    vi ? "Tóm tắt lần hạ gục" : "Death recap",
-                    detail, ConfidenceName(recap.evidence.confidence));
-            }
-
-            if (count == 0) {
-                SetHudEntry(
-                    entries[count++], alertIcon, 0xFF8290A0u,
-                    vi ? "Chưa có phân tích chiến thuật"
-                       : "No tactical insights",
-                    vi ? "Đang chờ đủ dữ liệu quan sát"
-                       : "Waiting for enough observed data",
-                    vi ? "CHỜ" : "WAIT");
-            }
-            DrawScreenHud(
-                "##AwarenessInsightHud",
-                vi ? "Phân tích chiến thuật" : "Tactical Insights",
-                vi ? "Ưu tiên thông tin có thể hành động"
-                   : "Actionable observed information",
-                alertIcon, 0xFF77D6A6u,
-                entries.data(), count,
-                settings_.insightPanelX, settings_.insightPanelY,
-                HudDefaultAnchor::BottomCenter);
+            char countdown[12] = {};
+            const int seconds = std::max(
+                1, static_cast<int>(std::ceil(notification.seconds)));
+            std::snprintf(countdown, sizeof(countdown), "%ds", seconds);
+            const std::uint32_t color = seconds <= 5
+                ? 0xFFFF6B6Bu
+                : (seconds <= 10 ? 0xFFFFD166u : 0xFFFFFFFFu);
+            DrawTextSmall(
+                SDK::Vector2(timerCenterX, centerY - fontSize * 0.45f),
+                countdown, color, true, fontSize);
         }
     }
 
@@ -2980,6 +2526,7 @@ private:
     AwarenessImGuiRenderer renderer_{};
     mutable std::array<IconCacheEntry, 128> iconCache_{};
     mutable std::size_t iconCacheCount_ = 0;
+    mutable std::array<VisionCacheEntry, 128> visionCache_{};
     bool iconLoadAttempted_ = false;
     PresentationLayerGuard layerGuard_{};
     ActionRequest candidate_{};

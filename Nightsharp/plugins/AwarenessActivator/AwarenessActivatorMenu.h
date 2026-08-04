@@ -126,31 +126,19 @@ public:
                  settings.drawMinimapLabels);
 
         SDK::Menu* hudDrawing = awareness->AddSubMenu(
-            new SDK::Menu("HudDrawing", "Professional HUD"));
+            new SDK::Menu("HudDrawing", "Compact notifications"));
         BindBool(hudDrawing, "DrawIcons", "Draw icons",
                  settings.drawIcons);
-        BindBool(hudDrawing, "DrawAlertCenter", "Draw prioritized alert center",
+        BindBool(hudDrawing, "DrawAlertCenter",
+                 "Enable compact notifications",
                  settings.drawAlertCenter);
         BindBool(hudDrawing, "DrawEnemyHud",
-                 "Draw enemy overhead cooldown HUD",
+                 "Enemy Flash ready-soon notifications",
                  settings.drawEnemyHud);
-        hudLayout_ = hudDrawing->Add(new SDK::MenuList(
-            "HudLayout", "HUD arrangement",
-            { "Vertical", "Horizontal" },
-            std::clamp(settings.hudLayoutIndex, 0, 1)));
         BindFloat(hudDrawing, "IconScale", "Icon scale",
                   settings.iconScale, 0.50f, 2.00f);
-        BindFloat(hudDrawing, "EnemyHudOffsetX",
-                  "Enemy HUD horizontal offset",
-                  settings.enemyHudOffsetX, -240.0f, 240.0f);
-        BindFloat(hudDrawing, "EnemyHudOffsetY",
-                  "Enemy HUD vertical offset",
-                  settings.enemyHudOffsetY, -320.0f, 320.0f);
-        hudDrawing->Add(new SDK::MenuButton(
-            "ResetHudPositions", "Reset smart HUD positions", "Reset",
-            &AwarenessActivatorMenu::OnResetHudPositions, this));
         hudDrawing->Add(new SDK::MenuSeparator(
-            "HudDragHelp", "Every screen HUD can always be dragged directly"));
+            "NotificationFormat", "Two icons and countdown only"));
 
         SDK::Menu* advanced = awareness->AddSubMenu(
             new SDK::Menu("Advanced", "Performance, accessibility and diagnostics"));
@@ -582,29 +570,20 @@ private:
             }
 
             if (SDK::Menu* hud = awareness->GetSubMenu("HudDrawing")) {
-                hud->DisplayName = vi ? "HUD chuyên nghiệp" : "Professional HUD";
+                hud->DisplayName = vi ? "Thông báo gọn" : "Compact notifications";
                 SetLabel(hud, "DrawIcons",
                          vi ? "Hiện biểu tượng" : "Draw icons");
                 SetLabel(hud, "DrawAlertCenter",
-                         vi ? "Hiện trung tâm cảnh báo ưu tiên"
-                            : "Draw prioritized alert center");
+                         vi ? "Bật thông báo gọn"
+                            : "Enable compact notifications");
                 SetLabel(hud, "DrawEnemyHud",
-                         vi ? "Hiện HUD hồi chiêu trên đầu đối thủ"
-                            : "Draw enemy overhead cooldown HUD");
-                SetLabel(hud, "HudLayout",
-                         vi ? "Kiểu sắp xếp HUD"
-                            : "HUD arrangement");
+                         vi ? "Báo Tốc Biến địch sắp hồi"
+                            : "Enemy Flash ready-soon notifications");
                 SetLabel(hud, "IconScale",
                          vi ? "Tỷ lệ biểu tượng" : "Icon scale");
-                SetLabel(hud, "EnemyHudOffsetX",
-                         vi ? "Độ lệch HUD đối thủ theo chiều ngang"
-                            : "Enemy HUD horizontal offset");
-                SetLabel(hud, "EnemyHudOffsetY",
-                         vi ? "Độ lệch HUD đối thủ theo chiều dọc"
-                            : "Enemy HUD vertical offset");
-                SetLabel(hud, "ResetHudPositions",
-                         vi ? "Đặt lại vị trí HUD thông minh"
-                            : "Reset smart HUD positions");
+                SetLabel(hud, "NotificationFormat",
+                         vi ? "Chỉ hai biểu tượng và thời gian"
+                            : "Two icons and countdown only");
             }
 
             if (SDK::Menu* advanced =
@@ -782,7 +761,6 @@ private:
         self->settings_->insightPanelY = -1.0f;
         self->settings_->enemyHudOffsetX = 0.0f;
         self->settings_->enemyHudOffsetY = -62.0f;
-        self->SyncMenuFromSettings();
     }
 
     static void OnApplyRolePreset(SDK::MenuButton*, void* context) {
@@ -821,7 +799,7 @@ private:
     SDK::MenuKeyBind* confirmationKey_ = nullptr;
     SDK::MenuList* rolePreset_ = nullptr;
     std::array<BoolBinding, 64> boolBindings_{};
-    std::array<FloatBinding, 20> floatBindings_{};
+    std::array<FloatBinding, 18> floatBindings_{};
     std::array<ModeBinding, 40> modeBindings_{};
     std::size_t boolBindingCount_ = 0;
     std::size_t floatBindingCount_ = 0;

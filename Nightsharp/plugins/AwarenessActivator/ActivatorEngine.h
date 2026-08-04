@@ -99,6 +99,8 @@ public:
     // visible. The observation expires after the expected travel window.
     bool drawPathTargets = true;
 
+    // Compact notification layer. Nothing is drawn outside short warning
+    // windows; enemy HUD now means enemy Flash ready-soon notifications.
     bool drawAlertCenter = true;
     bool drawEnemyHud = true;
     bool drawActivityHeatmap = false;
@@ -116,13 +118,11 @@ public:
     bool audioOnly = false;
     bool streamerMode = false;
     bool vietnamese = false;
-    // 0 = vertical cards, 1 = horizontal cards.
+    // Legacy fields retained for existing configuration compatibility.
+    // Compact notifications use a fixed clean anchor and are not draggable.
     int hudLayoutIndex = 0;
     // User multiplier applied after each renderer-defined base icon size.
     float iconScale = 1.0f;
-    // Compact cooldown strip offset from the projected enemy position.
-    float enemyHudOffsetX = 0.0f;
-    float enemyHudOffsetY = -62.0f;
     int confirmationVirtualKey = VK_MENU;
     float defensiveHorizon = 1.25f;
     float protectionThreshold = 0.32f;
@@ -143,6 +143,9 @@ public:
     float objectivePanelY = -1.0f;
     float insightPanelX = -1.0f;
     float insightPanelY = -1.0f;
+    // Screen-space offset for the minimal enemy-ready icon row.
+    float enemyHudOffsetX = 0.0f;
+    float enemyHudOffsetY = -62.0f;
     int rolePresetIndex = 0;
     std::array<ActionMode, 64> modes_{};
     std::array<CapabilitySafety, 64> safety_{};

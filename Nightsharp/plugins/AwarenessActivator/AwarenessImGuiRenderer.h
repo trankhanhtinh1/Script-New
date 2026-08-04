@@ -8,6 +8,8 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <cstddef>
+
 namespace NightSharp::Companion {
 
 // Awareness uses one foreground draw list and one cached view-projection per
@@ -255,6 +257,54 @@ public:
                 ImDrawFlags_None, thickness);
         }
     }
+
+    bool DrawVisionFan(const Vec3& center,
+                       const Vec3* boundary,
+                       std::size_t count,
+                       std::uint32_t fillColor,
+                       std::uint32_t outlineColor,
+                       float thickness = 1.0f) const noexcept {
+        if (!IsActive() || !projectionReady_ || !boundary ||
+            !center.IsValid() || count < 3 ||
+            count > static_cast<std::size_t>(kMaxCircleSegments) ||
+            !std::isfinite(thickness) || thickness <= 0.0f) {
+            return false;
+        }
+
+        Vec2 centerScreen = {};
+        if (!WorldToScreen(center, centerScreen)) {
+            return false;
+        }
+
+        std::array<ImVec2, kMaxCircleSegments> points{};
+        for (std::size_t i = 0; i < count; ++i) {
+            if (!boundary[i].IsValid()) {
+                return false;
+            }
+            Vec2 screen = {};
+            if (!WorldToScreen(boundary[i], screen)) {
+                return false;
+            }
+            points[i] = ImVec2(screen.x, screen.y);
+        }
+
+        const ImVec2 centerPoint(centerScreen.x, centerScreen.y);
+        if ((fillColor >> 24) != 0u) {
+            const ImU32 fill = ToImColor(fillColor);
+            for (std::size_t i = 0; i < count; ++i) {
+                const std::size_t next = (i + 1) % count;
+                draw_->AddTriangleFilled(
+                    centerPoint, points[i], points[next], fill);
+            }
+        }
+        if ((outlineColor >> 24) != 0u) {
+            draw_->AddPolyline(
+                points.data(), static_cast<int>(count),
+                ToImColor(outlineColor), ImDrawFlags_Closed, thickness);
+        }
+        return true;
+    }
+
 
     void DrawCircleFilled(const Vec2& position,
                           float radius,
