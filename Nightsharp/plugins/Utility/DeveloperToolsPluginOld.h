@@ -17,6 +17,7 @@ namespace SDK::GameObjects::detail {
 
 #include "../../DebugLog.h"
 #include "../../imgui/imgui.h"
+#include "../../Core/CoreItem.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -417,6 +418,39 @@ public:
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), fTxt, textColor, false, true);
                     currentY += stepY;
 
+                    // Inventory items (slot 0-5 -> Item 1-6, slot 6 -> Trinket)
+                    SDK::Drawing::DrawText(Vec2(screen.x, currentY), "Items:", textColor, false, true);
+                    currentY += stepY;
+
+                    static const char* itemLabels[] = {
+                        "Item1", "Item2", "Item3", "Item4", "Item5", "Item6", "Trinket"
+                    };
+                    for (int invIdx = CoreItem::kItemSlotStart;
+                         invIdx <= CoreItem::kTrinketSlot; ++invIdx) {
+                        const CoreItem::ItemSlot item = CoreItem::ReadSlot(obj.Address(), invIdx);
+                        char itemTxt[256];
+                        if (item.hasItem && item.id > 0) {
+                            const auto* entry = SDK::Data::GameData::GetItemDataById(CoreItem::NormalizeItemId(item.id));
+                            std::string displayName;
+                            if (entry && !entry->Name.empty()) {
+                                displayName.assign(entry->Name.data(), entry->Name.size());
+                            } else if (item.idText[0]) {
+                                displayName = item.idText;
+                            } else {
+                                displayName = "?";
+                            }
+                            std::snprintf(itemTxt, sizeof(itemTxt), "%s: %s (id=%d)",
+                                          itemLabels[invIdx],
+                                          displayName.c_str(),
+                                          item.id);
+                        } else {
+                            std::snprintf(itemTxt, sizeof(itemTxt), "%s: Empty",
+                                          itemLabels[invIdx]);
+                        }
+                        SDK::Drawing::DrawText(Vec2(screen.x, currentY), itemTxt, textColor, false, true);
+                        currentY += stepY;
+                    }
+
                     // Enumerate Buffs
                     uintptr_t buffs[256] = {};
                     const int count = ::CoreBuffs::Enumerate(obj.Address(), buffs, 256);
@@ -534,6 +568,8 @@ public:
         if (ImGui::Checkbox("Filter Clutter (FX, Grass, Emitters, MoveTo)", &filterClutter_)) {
             if (menuFilterClutter_) menuFilterClutter_->SetValue(filterClutter_);
         }
+
+        DrawPlayerInventorySection();
 
         DrawEventLoggerSection();
 
@@ -655,6 +691,76 @@ public:
                 if (ImGui::Button(btnId)) {
                     NightSharpDebug::Logf("[Dev] Name: %s | CharName: %s | NetId: %u | Team: %s | Status: %s | Age: %.1fs",
                                                name.c_str(), charName.c_str(), netId, teamStr, statusBuf, age);
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    void DrawPlayerInventorySection() {
+        ImGui::Separator();
+        if (!ImGui::CollapsingHeader("Player Inventory (Items)", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+
+        const auto player = SDK::ObjectManager::Player();
+        if (!player.IsValid()) {
+            ImGui::TextDisabled("Player not available.");
+            return;
+        }
+
+        static const char* itemLabels[] = {
+            "Item1", "Item2", "Item3", "Item4", "Item5", "Item6", "Trinket"
+        };
+
+        if (ImGui::BeginTable("OldPlayerItemsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Slot");
+            ImGui::TableSetupColumn("Display Name");
+            ImGui::TableSetupColumn("ID Text");
+            ImGui::TableSetupColumn("Item ID");
+            ImGui::TableSetupColumn("Ready");
+            ImGui::TableHeadersRow();
+
+            for (int invIdx = CoreItem::kItemSlotStart;
+                 invIdx <= CoreItem::kTrinketSlot; ++invIdx) {
+                const CoreItem::ItemSlot item = CoreItem::ReadSlot(player.Address(), invIdx);
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(itemLabels[invIdx]);
+
+                ImGui::TableNextColumn();
+                if (item.hasItem && item.id > 0) {
+                    const auto* entry = SDK::Data::GameData::GetItemDataById(CoreItem::NormalizeItemId(item.id));
+                    if (entry && !entry->Name.empty()) {
+                        ImGui::TextUnformatted(entry->Name.data(), entry->Name.data() + entry->Name.size());
+                    } else {
+                        ImGui::TextUnformatted("?");
+                    }
+                } else {
+                    ImGui::TextDisabled("Empty");
+                }
+
+                ImGui::TableNextColumn();
+                if (item.hasItem && item.id > 0) {
+                    ImGui::TextUnformatted(item.idText[0] ? item.idText : "-");
+                } else {
+                    ImGui::TextUnformatted("-");
+                }
+
+                ImGui::TableNextColumn();
+                if (item.hasItem && item.id > 0) {
+                    ImGui::Text("%d", item.id);
+                } else {
+                    ImGui::TextUnformatted("-");
+                }
+
+                ImGui::TableNextColumn();
+                if (item.hasItem && item.id > 0) {
+                    const bool ready = SDK::CanUseItem(player, item.id);
+                    ImGui::TextUnformatted(ready ? "Ready" : "CD");
+                } else {
+                    ImGui::TextUnformatted("-");
                 }
             }
             ImGui::EndTable();

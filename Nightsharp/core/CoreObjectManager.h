@@ -460,21 +460,26 @@ inline bool Resolve(ObjectHandle& handle) {
         return false;
     }
 
+    if (handle.HasAddress()) {
+        return true;
+    }
+
     uintptr_t object = FindByIndex(handle.index);
-    if (Globals::IsValidPtr(object) &&
-        (!handle.HasIdentity() || Core::Objects::ReadNetworkId(object) == handle.networkId)) {
+    if (Globals::IsValidPtr(object)) {
         handle.address = object;
         handle.index = Core::Objects::ReadIndex(object);
         handle.networkId = Core::Objects::ReadNetworkId(object);
         return handle.IsValid();
     }
 
-    object = FindByNetworkId(handle.networkId);
-    if (Globals::IsValidPtr(object)) {
-        handle.address = object;
-        handle.index = Core::Objects::ReadIndex(object);
-        handle.networkId = Core::Objects::ReadNetworkId(object);
-        return handle.IsValid();
+    if (handle.networkId != 0 && handle.networkId != 0xFFFFFFFFu) {
+        object = FindByNetworkId(handle.networkId);
+        if (Globals::IsValidPtr(object)) {
+            handle.address = object;
+            handle.index = Core::Objects::ReadIndex(object);
+            handle.networkId = Core::Objects::ReadNetworkId(object);
+            return handle.IsValid();
+        }
     }
 
     handle.address = 0;

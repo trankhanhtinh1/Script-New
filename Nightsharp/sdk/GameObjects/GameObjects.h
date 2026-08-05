@@ -92,7 +92,6 @@ namespace detail {
     inline std::unordered_set<std::uint32_t> LiveObjectIndexes;
     inline bool Initialized = false;
     inline bool NativeUpdateHooked = false;
-    inline int LastPruneTick = -1;
 
     // ------------------------- string helpers ------------------------------
     inline std::string ToLower(std::string value) {
@@ -407,18 +406,6 @@ namespace detail {
         CleanInvalid(AllyPetsList);
         CleanInvalid(EnemyPetsList);
 
-        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-        // CleanInvalid(TurretsList);
-        // CleanInvalid(AllyTurretsList);
-        // CleanInvalid(EnemyTurretsList);
-        //
-        // CleanInvalid(InhibitorsList);
-        // CleanInvalid(AllyInhibitorsList);
-        // CleanInvalid(EnemyInhibitorsList);
-        // CleanInvalid(NexusList);
-        // if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
-        // if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
-
         CleanInvalid(ShopsList);
         CleanInvalid(AllyShopsList);
         CleanInvalid(EnemyShopsList);
@@ -463,11 +450,7 @@ namespace detail {
         return !LiveNetworkIds.empty() || !LiveObjectIndexes.empty();
     }
 
-    inline void PruneInvalidObjectsForFrame(int tick) {
-        if (LastPruneTick == tick) {
-            return;
-        }
-        LastPruneTick = tick;
+    inline void PruneInvalidObjects() {
         if (RefreshLiveNetworkIds()) {
             CleanInvalidObjects();
         }
@@ -478,12 +461,12 @@ namespace detail {
                networkId != 0xFFFFFFFFu &&
                LiveNetworkIds.find(networkId) != LiveNetworkIds.end();
     }
+
     inline void OnObjectAdd(const GameObject& object) {
         if (!object.IsValid()) return;
         Lock lk(g_mutex);
 
-        const int tick = static_cast<int>(::GetTickCount());
-        PruneInvalidObjectsForFrame(tick);
+        PruneInvalidObjects();
 
         PopulateStatic(object);
 
@@ -849,16 +832,8 @@ namespace detail {
                 const auto perfStart = NightSharpPerf::Now();
                 handler(object);
                 const double ms = NightSharpPerf::MsSince(perfStart);
-                NightSharpPerf::AddEventHandlerTiming(
-                    eventName, static_cast<int>(i), reinterpret_cast<const void*>(handler), ms);
             }
         }
-    }
-
-    inline void OnNativeGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
-        const int tick = static_cast<int>(::GetTickCount());
-        Lock lk(g_mutex);
-        PruneInvalidObjectsForFrame(tick);
     }
 
     inline void OnNativeObjectCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -882,9 +857,6 @@ namespace detail {
         DispatchLifecycle("GameObjects::OnDelete", DeleteHandlers, args);
     }
 
-    // Subscribe our forwarders to native lifecycle events exactly once.  The
-    // create/delete callbacks are only hints; frame reconciliation is
-    // authoritative because native delete delivery can be missed.
     inline void EnsureNativeLifecycleHooked() {
         {
             Lock lk(g_mutex);
@@ -893,9 +865,7 @@ namespace detail {
             }
             NativeLifecycleHooked = true;
             NativeUpdateHooked = true;
-            LastPruneTick = -1;
         }
-        SDK::Events::AddOnGameUpdate(&OnNativeGameUpdate);
         SDK::Events::AddOnCreateObject(&OnNativeObjectCreate);
         SDK::Events::AddOnDeleteObject(&OnNativeObjectDelete);
         SeedAllGameObjects();
@@ -903,21 +873,15 @@ namespace detail {
 
     inline void ReleaseNativeLifecycleHook() {
         bool wasHooked = false;
-        bool wasUpdateHooked = false;
         {
             Lock lk(g_mutex);
             wasHooked = NativeLifecycleHooked;
-            wasUpdateHooked = NativeUpdateHooked;
             NativeLifecycleHooked = false;
             NativeUpdateHooked = false;
-            LastPruneTick = -1;
             LiveNetworkIds.clear();
             LiveObjectIndexes.clear();
             CreateHandlers.clear();
             DeleteHandlers.clear();
-        }
-        if (wasUpdateHooked) {
-            SDK::Events::RemoveOnGameUpdate(&OnNativeGameUpdate);
         }
         if (wasHooked) {
             SDK::Events::RemoveOnCreateObject(&OnNativeObjectCreate);
@@ -1024,8 +988,6 @@ inline bool IsNetworkIdAlive(std::uint32_t networkId) {
     }
     EnsureInitialized();
     detail::Lock lk(detail::g_mutex);
-    detail::PruneInvalidObjectsForFrame(
-        static_cast<int>(::GetTickCount()));
     return detail::IsNetworkIdLive(networkId);
 }
 

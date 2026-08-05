@@ -209,6 +209,7 @@ private:
             "apheliosinfernumq",
             "hextechrocketbelt","itemhextechrocketbelt","rocketbelt",
             "itemtitanichydracleave",
+            "3748active",
             nullptr
         };
         return values;
@@ -221,7 +222,7 @@ private:
             "apheliosgravitumattackmis","apheliosinfernumattackmis",
             "apheliosseverumattackmis",
             "caitlynheadshotmissile","caitlynpassivemissile",
-            "itemtitanichydracleave","itemtiamatcleave",
+            "itemtiamatcleave",
             "kennenmegaproc","masteryidoublestrike",
             "quinnwenhanced","renektonexecute","renektonsuperexecute",
             "rengarqattack","rengarqempattack","rengarqbase",

@@ -211,9 +211,21 @@ private:
                 break;
             }
         }
-        if (!ccActive) return;
+        if (!ccActive) {
+            if (ccSinceTick_ != 0) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                    "cc present but all toggles off");
+            }
+            return;
+        }
         // Không phí QSS khi có SpellShield (tương đương C# HaveSpellShield).
-        if (buffPresent_[static_cast<int>(SDK::BuffType::SpellShield)]) return;
+        if (buffPresent_[static_cast<int>(SDK::BuffType::SpellShield)]) {
+            NightSharpDebug::Logf(
+                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                "skip: SpellShield active");
+            return;
+        }
         if (now - lastCastTick_ < kReuseMs) return;
 
         const int elapsed = ccSinceTick_ > 0 ? now - ccSinceTick_ : 0;
@@ -222,10 +234,17 @@ private:
 
         // Dùng item theo thứ tự; UseItem chỉ cast khi item đang ready.
         for (SDK::ItemId item : kItems) {
-            if (SDK::Items::UseItem(player, item)) {
+            const bool ready = SDK::CanUseItem(player, item);
+            const bool cast = SDK::Items::UseItem(player, item);
+            NightSharpDebug::Logf(
+                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                "item id=%d slot=%d ready=%d cast=%d",
+                SDK::ItemIdValue(item),
+                static_cast<int>(SDK::GetItemSlot(player, SDK::ItemIdValue(item))),
+                ready ? 1 : 0,
+                cast ? 1 : 0);
+            if (cast) {
                 lastCastTick_ = now;
-                NightSharpDebug::Logf("[KuroActivator][QSS] item id=%d",
-                                      SDK::ItemIdValue(item));
                 return;
             }
         }
@@ -235,17 +254,33 @@ private:
                 cleanseRefreshedAt_ = now;
                 cleanseSlot_ = FindSummonerSlot(player, "boost");
             }
-            if (cleanseSlot_ != -1) {
-                const auto spell = player.Spellbook().GetSpell(
-                    static_cast<SDK::SpellSlot>(cleanseSlot_));
-                if (spell.IsValid() &&
-                    spell.State(SDK::Game::Time()) ==
-                        SDK::CoreSpellBook::State_Ready &&
-                    player.Spellbook().CastSpell(
-                        static_cast<SDK::SpellSlot>(cleanseSlot_))) {
-                    lastCastTick_ = now;
-                    NightSharpDebug::Logf("[KuroActivator][QSS] Cleanse cast");
-                }
+            if (cleanseSlot_ == -1) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                    "cleanse: summoner 'boost' not found");
+                return;
+            }
+            const auto spell = player.Spellbook().GetSpell(
+                static_cast<SDK::SpellSlot>(cleanseSlot_));
+            const bool ready = spell.IsValid() &&
+                spell.State(SDK::Game::Time()) ==
+                    SDK::CoreSpellBook::State_Ready;
+            if (!ready) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                    "cleanse slot=%d not ready", cleanseSlot_);
+                return;
+            }
+            if (player.Spellbook().CastSpell(
+                    static_cast<SDK::SpellSlot>(cleanseSlot_))) {
+                lastCastTick_ = now;
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                    "Cleanse cast slot=%d", cleanseSlot_);
+            } else {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>QSS</b-yellow>] "
+                    "Cleanse cast FAILED slot=%d", cleanseSlot_);
             }
         }
     }

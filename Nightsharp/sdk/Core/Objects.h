@@ -703,7 +703,7 @@ public:
     }
 
     bool IsValid() const {
-        return Address() != 0;
+        return handle_.HasAddress();
     }
 
     int NetworkId() const {

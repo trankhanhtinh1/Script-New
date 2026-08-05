@@ -240,16 +240,7 @@ bool MonitorSession::RunOnce() {
             HandleProcessExit();
             running = false;
         } else if (wait == WAIT_TIMEOUT) {
-            nscrash::SharedState snapshot{};
-            if (Snapshot(snapshot)) {
-                std::printf(
-                    "\r[alive] pid=%lu phase=%s stage=%s heartbeat=%llu   ",
-                    static_cast<unsigned long>(pid_),
-                    snapshot.phase,
-                    snapshot.lastStage,
-                    static_cast<unsigned long long>(snapshot.heartbeatTick));
-                std::fflush(stdout);
-            }
+            // Heartbeat output disabled per user request
         } else {
             running = false;
         }
@@ -470,6 +461,8 @@ DWORD WINAPI MonitorSession::PipeReaderEntry(LPVOID parameter) {
 static inline void WriteUnicodeLog(const char* text, std::size_t length) {
     if (!text || length == 0) return;
 
+    const bool needsNewline = (text[length - 1] != '\n');
+
     HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD mode = 0;
     const bool isConsole = (hStdOut != INVALID_HANDLE_VALUE && hStdOut != nullptr && GetConsoleMode(hStdOut, &mode));
@@ -479,6 +472,9 @@ static inline void WriteUnicodeLog(const char* text, std::size_t length) {
         if (wideLen > 0) {
             std::wstring wideStr(wideLen, L'\0');
             MultiByteToWideChar(CP_UTF8, 0, text, static_cast<int>(length), &wideStr[0], wideLen);
+            if (needsNewline) {
+                wideStr.push_back(L'\n');
+            }
             DWORD written = 0;
             WriteConsoleW(hStdOut, wideStr.c_str(), static_cast<DWORD>(wideStr.size()), &written, nullptr);
             return;
@@ -486,6 +482,9 @@ static inline void WriteUnicodeLog(const char* text, std::size_t length) {
     }
 
     std::fwrite(text, 1, length, stdout);
+    if (needsNewline) {
+        std::fwrite("\n", 1, 1, stdout);
+    }
     std::fflush(stdout);
 }
 
@@ -510,7 +509,13 @@ DWORD MonitorSession::PipeReaderLoop() {
         if (liveLogs_.size() == 512) {
             liveLogs_.erase(liveLogs_.begin());
         }
-        liveLogs_.emplace_back(packet.text, length);
+        if (length > 0 && packet.text[length - 1] != '\n') {
+            std::string line(packet.text, length);
+            line.push_back('\n');
+            liveLogs_.push_back(std::move(line));
+        } else {
+            liveLogs_.emplace_back(packet.text, length);
+        }
     }
     return 0;
 }

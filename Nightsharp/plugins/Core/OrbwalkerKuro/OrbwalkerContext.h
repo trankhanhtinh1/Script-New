@@ -79,6 +79,7 @@ struct OrbwalkerRuntimeContext {
 
     UI::Icons::LoadedTexture fakeCursorTexture = {};
     std::string fakeCursorTexturePath;
+    std::string lastAttackSpellName;
     FarmLogic::CritSequenceTracker critSequence = {};
 };
 

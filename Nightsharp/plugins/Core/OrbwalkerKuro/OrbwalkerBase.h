@@ -140,6 +140,8 @@ private:
     void OnDraw();
     void OnPlayAnimation(const Events::PlayAnimationEventArgs& args);
     void OnDash(const Events::Dash::DashArgs& args);
+    void LogAfterAttackDebug(const AttackableUnit& target,
+                             const std::string* spellNameOverride = nullptr);
     bool IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const;
     AutoAttackResetMatch GetLocalAutoAttackResetMatch(
         const Events::ProcessSpellEventArgs& args) const;

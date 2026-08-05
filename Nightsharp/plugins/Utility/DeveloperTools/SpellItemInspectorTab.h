@@ -1,6 +1,7 @@
 #pragma once
 #include "IDeveloperTab.h"
 #include "../DeveloperToolsPlugin.h"
+#include "../../../Core/CoreItem.h"
 #include <mutex>
 #include <vector>
 #include <string>
@@ -21,6 +22,7 @@ private:
         int ammo = 0;
         int maxAmmo = 0;
         float manaCost = 0.0f;
+        int itemId = 0; // Inventory item id (only for item slots 6-12)
         bool isValid = false;
     };
 
@@ -119,6 +121,21 @@ public:
                             info.ammo = spell.Ammo();
                             info.maxAmmo = spell.MaxAmmo();
                             info.manaCost = spell.ManaCost();
+                        }
+                        // Slot item (6-11) -> inventory index (0-5); Trinket (12) -> 6.
+                        const int spellIdx = static_cast<int>(slot);
+                        if (spellIdx >= static_cast<int>(SDK::SpellSlot::Item1) &&
+                            spellIdx <= static_cast<int>(SDK::SpellSlot::Trinket)) {
+                            const int invIdx = spellIdx == static_cast<int>(SDK::SpellSlot::Trinket)
+                                ? CoreItem::kTrinketSlot
+                                : spellIdx - static_cast<int>(SDK::SpellSlot::Item1);
+                            const CoreItem::ItemSlot item = CoreItem::ReadSlot(player.Address(), invIdx);
+                            if (item.hasItem) {
+                                info.itemId = item.id;
+                                if (info.name.empty() || info.name == "Unknown") {
+                                    info.name = item.idText;
+                                }
+                            }
                         }
                         targetInfo.spells.push_back(std::move(info));
                     }
@@ -323,9 +340,10 @@ public:
 
         // 2. Active Items Table
         ImGui::Text("Inventory Active Items (Slot 6-12):");
-        if (ImGui::BeginTable("PlayerItemsTable", 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        if (ImGui::BeginTable("PlayerItemsTable", 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Slot");
             ImGui::TableSetupColumn("Item Name");
+            ImGui::TableSetupColumn("Item ID");
             ImGui::TableSetupColumn("State");
             ImGui::TableSetupColumn("CD (Rem/Total)");
             ImGui::TableSetupColumn("Level");
@@ -353,6 +371,7 @@ public:
                 int ammo = 0;
                 int maxAmmo = 0;
                 float manaCost = 0.0f;
+                int itemId = 0;
                 bool hasSpell = false;
 
                 if (inspectMode_ == 0) {
@@ -368,6 +387,7 @@ public:
                         ammo = it->ammo;
                         maxAmmo = it->maxAmmo;
                         manaCost = it->manaCost;
+                        itemId = it->itemId;
                         hasSpell = true;
                     }
                 } else {
@@ -383,7 +403,15 @@ public:
                         ammo = it->ammo;
                         maxAmmo = it->maxAmmo;
                         manaCost = it->manaCost;
+                        itemId = it->itemId;
                         hasSpell = true;
+                    }
+                }
+
+                if (itemId > 0) {
+                    const auto* entry = SDK::Data::GameData::GetItemDataById(CoreItem::NormalizeItemId(itemId));
+                    if (entry && !entry->Name.empty()) {
+                        itemName.assign(entry->Name.data(), entry->Name.size());
                     }
                 }
 
@@ -392,6 +420,12 @@ public:
                 ImGui::TextUnformatted(label);
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(itemName.c_str());
+                ImGui::TableNextColumn();
+                if (itemId > 0) {
+                    ImGui::Text("%d", itemId);
+                } else {
+                    ImGui::TextUnformatted("-");
+                }
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(StateToString(state));
                 ImGui::TableNextColumn();
@@ -467,8 +501,9 @@ public:
 
                 char line[256];
                 std::snprintf(line, sizeof(line),
-                              "Slot: %s | Name: %s | State: %s | CD: %.2f/%.2f | Level: %d | Ammo: %d/%d | Cost: %.0f\n",
-                              label, it->name.c_str(), StateToString(static_cast<CoreSpellBook::State>(it->state)),
+                              "Slot: %s | Name: %s | ItemID: %d | State: %s | CD: %.2f/%.2f | Level: %d | Ammo: %d/%d | Cost: %.0f\n",
+                              label, it->name.c_str(), it->itemId,
+                              StateToString(static_cast<CoreSpellBook::State>(it->state)),
                               it->remainingCD, it->totalCD,
                               it->level, it->ammo, it->maxAmmo, it->manaCost);
                 dump += line;
@@ -488,8 +523,9 @@ public:
                 std::snprintf(slotLabel, sizeof(slotLabel), "Slot %d", static_cast<int>(s.slot));
                 char line[256];
                 std::snprintf(line, sizeof(line),
-                              "Slot: %s | Name: %s | State: %s | CD: %.2f/%.2f | Level: %d | Ammo: %d/%d | Cost: %.0f\n",
-                              slotLabel, s.name, StateToString(static_cast<CoreSpellBook::State>(s.state)),
+                              "Slot: %s | Name: %s | ItemID: %d | State: %s | CD: %.2f/%.2f | Level: %d | Ammo: %d/%d | Cost: %.0f\n",
+                              slotLabel, s.name, s.itemId,
+                              StateToString(static_cast<CoreSpellBook::State>(s.state)),
                               s.remainingCooldown, s.cooldown,
                               s.level, s.ammo, s.maxAmmo, s.manaCost);
                 dump += line;

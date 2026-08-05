@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreAIHeroClient.h"
 #include "CoreAttackableUnit.h"
@@ -98,7 +98,7 @@ struct ObjectHandle {
     }
 
     bool IsValid() const {
-        return HasAddress() && HasIdentity();
+        return HasAddress();
     }
 };
 

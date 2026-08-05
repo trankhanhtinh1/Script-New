@@ -302,6 +302,17 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     const bool isAttack = IsLocalAutoAttack(args);
     const AutoAttackResetMatch resetMatch = GetLocalAutoAttackResetMatch(args);
 
+    if (menu_.DebugLogSpellNames()) {
+        NightSharpDebug::Logf(
+            "[<b-cyan>OrbwalkerKuro</b-cyan>][<b-yellow>Spell</b-yellow>] "
+            "spell=<magenta>%s</magenta> missile=<cyan>%s</cyan> slot=%d isAttack=%d isReset=%d",
+            args.SpellName ? args.SpellName : "",
+            args.MissileName ? args.MissileName : "",
+            args.Slot,
+            isAttack ? 1 : 0,
+            resetMatch != AutoAttackResetMatch::None ? 1 : 0);
+    }
+
     if (resetMatch != AutoAttackResetMatch::None && !isAttack) {
         const auto player = GameObjects::Player();
         const std::string championName = player.IsValid()
@@ -342,6 +353,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         : SDK::ChampionId::Unknown;
     std::string spellNameStr = args.SpellName ? args.SpellName : "";
     for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+    context_.lastAttackSpellName = spellNameStr;
 
     // Crit sequence tracking intentionally lives on OnProcessSpell and is not
     // gated by the orbwalker's pending/timer recovery state. At this point the
@@ -426,6 +438,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     if (isSpecialAfterAA) {
         if (context_.lastAfterAttackStartTick != context_.lastAutoAttackTick) {
             context_.lastAfterAttackStartTick = context_.lastAutoAttackTick;
+            LogAfterAttackDebug(eventTarget);
             OrbwalkingActionArgs afterArgs(
                 OrbwalkingType::AfterAttack,
                 eventTarget,
@@ -442,8 +455,12 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         if (delayMs < 0) {
             delayMs = 0;
         }
-        SDK::Utils::DelayAction::Add(delayMs, [eventTarget]() {
+        const std::string debugAfterAttackSpellName = context_.lastAttackSpellName;
+        SDK::Utils::DelayAction::Add(delayMs, [this, eventTarget, debugAfterAttackSpellName]() {
             if (eventTarget.IsValid()) {
+                if (menu_.DebugLogAfterAttack()) {
+                    LogAfterAttackDebug(eventTarget, &debugAfterAttackSpellName);
+                }
                 OrbwalkingActionArgs afterArgs(
                     OrbwalkingType::AfterAttack,
                     eventTarget,
@@ -874,8 +891,10 @@ inline void OrbwalkerBase::OnDash(const Events::Dash::DashArgs& args) {
         context_.lastAutoAttackTick = static_cast<int>(now - OneWayPingMs() * 0.5f + flightDelayMs);
 
         const AttackableUnit eventTarget = context_.lastTarget.IsValid() ? context_.lastTarget : AttackableUnit();
-        SDK::Utils::DelayAction::Add(flightDelayMs, [eventTarget]() {
+        const std::string debugAfterAttackSpellName = context_.lastAttackSpellName;
+        SDK::Utils::DelayAction::Add(flightDelayMs, [this, eventTarget, debugAfterAttackSpellName]() {
             if (eventTarget.IsValid()) {
+                LogAfterAttackDebug(eventTarget, &debugAfterAttackSpellName);
                 OrbwalkingActionArgs afterArgs(
                     OrbwalkingType::AfterAttack,
                     eventTarget,

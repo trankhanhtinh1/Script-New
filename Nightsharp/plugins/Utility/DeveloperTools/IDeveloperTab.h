@@ -31,6 +31,7 @@ struct SnapshotSpell {
     float remainingCooldown = 0.0f;
     float manaCost = 0.0f;
     std::uint32_t state = 0;
+    int itemId = 0; // Inventory item id (only for item slots 6-12)
 };
 
 struct EventLogEntry {

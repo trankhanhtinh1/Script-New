@@ -115,6 +115,26 @@ inline void OrbwalkerBase::ResetAutoAttackTimerWithReason(
     context_.attackCastComplete = false;
 }
 
+inline void OrbwalkerBase::LogAfterAttackDebug(
+    const AttackableUnit& target,
+    const std::string* spellNameOverride) {
+    if (!menu_.DebugLogAfterAttack()) {
+        return;
+    }
+    if (!target.IsValid()) {
+        return;
+    }
+
+    const std::string& spellName =
+        spellNameOverride ? *spellNameOverride : context_.lastAttackSpellName;
+    NightSharpDebug::Logf(
+        "[<b-cyan>OrbwalkerKuro</b-cyan>][<b-yellow>AfterAttack</b-yellow>] "
+        "spell=<magenta>%s</magenta> target=<cyan>%s</cyan> net=%u",
+        spellName.c_str(),
+        target.CharacterName().c_str(),
+        target.NetworkId());
+}
+
 inline void OrbwalkerBase::Dispose() {
     if (context_.disposed) {
         return;
