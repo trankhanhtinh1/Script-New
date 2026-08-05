@@ -580,6 +580,9 @@
     <Filter Include="Plugins\EzEvade\Spells">
       <UniqueIdentifier>{64659F90-9001-12B5-369A-CFA30FD75670}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\KuroActivator">
+      <UniqueIdentifier>{2C75296D-7D75-FA58-A3D4-528D2F578ED3}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\KuroEvade">
       <UniqueIdentifier>{A82A7D67-6215-3F63-95C9-449C4BD4C61B}</UniqueIdentifier>
     </Filter>
@@ -800,6 +803,9 @@
       <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp">
+      <Filter>Plugins\Registration</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugins\Registration\KuroActivatorRegistration.cpp">
       <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp">
@@ -1052,9 +1058,6 @@
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorCore.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\AwarenessActivator\AwarenessVision.h">
-      <Filter>Plugins\AwarenessActivator</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessActivatorMenu.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
@@ -1074,6 +1077,9 @@
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\AwarenessInsights.h">
+      <Filter>Plugins\AwarenessActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\AwarenessActivator\AwarenessVision.h">
       <Filter>Plugins\AwarenessActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\AwarenessActivator\PatchOverrides.h">
@@ -3052,6 +3058,21 @@
     </ClInclude>
     <ClInclude Include="Plugins\IPlugin.h">
       <Filter>Plugins</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroActivatorComponent.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroActivatorPlugin.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroAfterAttackActivator.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroQssActivator.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroSmiteActivator.h">
+      <Filter>Plugins\KuroActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroEvade\KuroEvadePlugin.h">
       <Filter>Plugins\KuroEvade</Filter>

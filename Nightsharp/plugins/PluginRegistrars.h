@@ -7,6 +7,7 @@ class PluginManager;
 namespace Registration {
 
 void RegisterAwarenessActivator(PluginManager& manager);
+void RegisterKuroActivator(PluginManager& manager);
 void RegisterEzrealCastSpell(PluginManager& manager);
 void RegisterJaxCastSpell(PluginManager& manager);
 void RegisterXerathSemiNewCastSpell(PluginManager& manager);

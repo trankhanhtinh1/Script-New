@@ -164,6 +164,7 @@ void EnsureRegistered() {
     Registration::RegisterEzEvade(PluginManager::Get());
     Registration::RegisterKuroEvade(PluginManager::Get());
     Registration::RegisterZDEvade(PluginManager::Get());
+    Registration::RegisterKuroActivator(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");
 
 #else
