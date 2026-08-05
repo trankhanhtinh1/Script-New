@@ -245,18 +245,6 @@ inline bool CastQ(const AIHeroClient& target, Mode mode) {
     if (!ShouldCastGrenade(context)) return false;
     if (Engine::ControllerCastUnit(0, target)) {
         LastQCastTick = Now();
-        NightSharpDebug::Logf(
-            "[KuroAIO][JhinQ] now=%d windup=%d avail=%d afterAtk=%d "
-            "reload=%d lethal=%d aaTick=%d aaReady=%d aaCdRemain=%d",
-            Now(),
-            context.AttackWindingUp ? 1 : 0,
-            context.AttackAvailable ? 1 : 0,
-            context.AfterAttack ? 1 : 0,
-            context.Reloading ? 1 : 0,
-            context.Lethal ? 1 : 0,
-            Orbwalker::LastAutoAttackTick(),
-            Orbwalker::NextAttackReadyTick(),
-            Orbwalker::AttackCooldownRemaining());
         return true;
     }
     return false;

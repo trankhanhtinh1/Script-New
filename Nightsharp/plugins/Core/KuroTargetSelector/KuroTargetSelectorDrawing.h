@@ -86,14 +86,34 @@ private:
     void Render() {
         if (!menu_ || !::SDK::Drawing::IsEnabled()) return;
 
-        if (Enabled("Selected", true) && state_.Selected.IsValid() &&
-            !state_.Selected.IsDead()) {
-            ::SDK::Drawing::DrawCircle(
-                state_.Selected.Position(),
-                state_.Selected.BoundingRadius() + 28.0f,
-                0xFFFF3B30u,
-                3.0f,
-                48);
+        if (Enabled("Selected", true)) {
+            ::SDK::AIHeroClient targetToDraw = state_.Selected;
+            if (!targetToDraw.IsValid() || targetToDraw.IsDead() || !targetToDraw.IsVisible()) {
+                for (const auto& decision : decisions_) {
+                    if (decision.Legal && decision.Target.IsValid() &&
+                        decision.Target.IsVisible() && !decision.Target.IsDead()) {
+                        targetToDraw = decision.Target;
+                        break;
+                    }
+                }
+            }
+
+            if (targetToDraw.IsValid()) {
+                const auto liveTarget = ::SDK::GameObjects::GetUnitByNetworkId<::SDK::AIHeroClient>(targetToDraw.NetworkId());
+                if (liveTarget.IsValid()) targetToDraw = liveTarget;
+            }
+
+            if (targetToDraw.IsValid() && targetToDraw.IsVisible() && !targetToDraw.IsDead()) {
+                const auto pos = targetToDraw.Position();
+                if (pos.x != 0.0f || pos.y != 0.0f || pos.z != 0.0f) {
+                    ::SDK::Drawing::DrawCircle(
+                        pos,
+                        targetToDraw.BoundingRadius() + 28.0f,
+                        0xFFFF3B30u,
+                        3.0f,
+                        48);
+                }
+            }
         }
 
         if (Enabled("LegalTargets", false)) {
@@ -101,9 +121,16 @@ private:
             int drawn = 0;
             for (const auto& decision : decisions_) {
                 if (!decision.Legal || !decision.Target.IsValid()) continue;
+                const auto liveTarget = ::SDK::GameObjects::GetUnitByNetworkId<::SDK::AIHeroClient>(decision.Target.NetworkId());
+                const auto target = liveTarget.IsValid() ? liveTarget : decision.Target;
+                if (!target.IsValid() || !target.IsVisible() || target.IsDead()) continue;
+
+                const auto pos = target.Position();
+                if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f) continue;
+
                 ::SDK::Drawing::DrawCircle(
-                    decision.Target.Position(),
-                    decision.Target.BoundingRadius() + 12.0f,
+                    pos,
+                    target.BoundingRadius() + 12.0f,
                     0xFF39D353u,
                     1.5f,
                     32);
@@ -111,20 +138,28 @@ private:
             }
         }
 
-        if (!Enabled("Diagnostics", false)) return;
-        for (const auto& decision : decisions_) {
-            if (!decision.Target.IsValid()) continue;
-            char text[96] = {};
-            if (decision.Legal) {
-                std::snprintf(text, sizeof(text), "%.1f", decision.Score);
-            } else {
-                std::snprintf(text, sizeof(text), "%s",
-                              RejectReasonName(decision.Rejection));
+        if (Enabled("Diagnostics", false)) {
+            for (const auto& decision : decisions_) {
+                if (!decision.Target.IsValid()) continue;
+                const auto liveTarget = ::SDK::GameObjects::GetUnitByNetworkId<::SDK::AIHeroClient>(decision.Target.NetworkId());
+                const auto target = liveTarget.IsValid() ? liveTarget : decision.Target;
+                if (!target.IsValid() || !target.IsVisible() || target.IsDead()) continue;
+
+                const auto pos = target.Position();
+                if (pos.x == 0.0f && pos.y == 0.0f && pos.z == 0.0f) continue;
+
+                char text[96] = {};
+                if (decision.Legal) {
+                    std::snprintf(text, sizeof(text), "%.1f", decision.Score);
+                } else {
+                    std::snprintf(text, sizeof(text), "%s",
+                                  RejectReasonName(decision.Rejection));
+                }
+                ::SDK::Drawing::DrawText(
+                    pos, text,
+                    decision.Legal ? 0xFFFFFFFFu : 0xFFFFA07Au,
+                    true);
             }
-            ::SDK::Drawing::DrawText(
-                decision.Target.Position(), text,
-                decision.Legal ? 0xFFFFFFFFu : 0xFFFFA07Au,
-                true);
         }
     }
 

@@ -298,8 +298,11 @@ private:
             }
             selectedIsLive = selectedIsLive || networkId == selectedNetworkId_;
         }
-        if (!selectedIsLive) {
-            selectedNetworkId_ = 0;
+        if (!selectedIsLive && selectedNetworkId_ > 0) {
+            const auto selUnit = ::SDK::GameObjects::GetUnitByNetworkId<::SDK::AIHeroClient>(selectedNetworkId_);
+            if (!selUnit.IsValid() || selUnit.IsDead()) {
+                selectedNetworkId_ = 0;
+            }
         }
     }
 

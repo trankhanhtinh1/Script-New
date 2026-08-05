@@ -311,6 +311,15 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         return false;
     }
 
+    // The game drops an attack order issued while a non-attack spell is still
+    // animating (reproduced with Jhin's Q), which strands the pending attack
+    // until its timeout and delays the next auto-attack by one retry cycle.
+    // Wait out the cast here instead of issuing an order the game will ignore.
+    if (player.IsValid() && player.Spellbook().IsCastingSpell() &&
+        !player.Spellbook().IsAutoAttack()) {
+        return false;
+    }
+
     const int now = Tick();
     OrbwalkingActionArgs beforeArgs(OrbwalkingType::BeforeAttack, target, target.Position(), "Kuro");
     OrbwalkingDetail::FireBeforeAttack(beforeArgs);
