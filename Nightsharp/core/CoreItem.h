@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace CoreItem {
@@ -135,7 +136,26 @@ inline int ParseItemId(const char* text) {
     return value;
 }
 
+inline bool IsSaneItemId(int value) {
+    return value > 0 && value <= 999999;
+}
+
+inline int ReadItemIdValue(uintptr_t info) {
+    if (!Globals::IsValidPtr(info)) {
+        return 0;
+    }
+
+    const int value = Globals::Read<int>(
+        info + Offset::ItemRuntime::DataItemId);
+    return IsSaneItemId(value) ? value : 0;
+}
+
 inline int GetItemIdFromInfo(uintptr_t info) {
+    const int value = ReadItemIdValue(info);
+    if (value > 0) {
+        return value;
+    }
+
     char text[16] = {};
     return ReadItemIdText(info, text, static_cast<int>(sizeof(text)))
         ? ParseItemId(text)
@@ -212,8 +232,13 @@ inline ItemSlot ReadSlot(uintptr_t object, int slotIndex) {
 
     out.infoPtr = GetItemInfo(object, slotIndex);
     if (out.infoPtr) {
-        ReadItemIdText(out.infoPtr, out.idText, static_cast<int>(sizeof(out.idText)));
-        out.id = ParseItemId(out.idText);
+        out.id = ReadItemIdValue(out.infoPtr);
+        if (out.id > 0) {
+            std::snprintf(out.idText, sizeof(out.idText), "%d", out.id);
+        } else {
+            ReadItemIdText(out.infoPtr, out.idText, static_cast<int>(sizeof(out.idText)));
+            out.id = ParseItemId(out.idText);
+        }
     }
     return out;
 }

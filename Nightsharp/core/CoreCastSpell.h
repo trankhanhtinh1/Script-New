@@ -22,6 +22,8 @@ namespace CoreCastSpell {
     inline constexpr std::uint8_t SlotR = 3;
     inline constexpr std::uint8_t SlotSummonerD = 4;
     inline constexpr std::uint8_t SlotSummonerF = 5;
+    inline constexpr std::uint8_t SlotItem1 = 6;
+    inline constexpr std::uint8_t SlotItem6 = 11;
     inline constexpr std::uint8_t SlotTrinket = 12;
 
     enum class CastKind : std::uint8_t {
@@ -31,6 +33,9 @@ namespace CoreCastSpell {
         Vector,
         ChargeBegin,
         ChargeRelease,
+        Item,
+        ItemPosition,
+        ItemTarget,
     };
 
     enum class CastFailure : std::uint8_t {
@@ -133,6 +138,9 @@ namespace CoreCastSpell {
         case CastKind::Vector: return "vector";
         case CastKind::ChargeBegin: return "charge-begin";
         case CastKind::ChargeRelease: return "charge-release";
+        case CastKind::Item: return "item";
+        case CastKind::ItemPosition: return "item-position";
+        case CastKind::ItemTarget: return "item-target";
         default: return "unknown";
         }
     }
@@ -303,6 +311,16 @@ namespace CoreCastSpell {
             g_lastTrace.failure = failure;
             g_lastTrace.success = false;
             CoreValidation::MarkCastResult(false);
+        }
+
+        inline bool Reject(CastKind kind,
+            std::uint8_t slot,
+            CastFailure failure) {
+            g_lastTrace = {};
+            g_lastTrace.kind = kind;
+            g_lastTrace.slot = slot;
+            Fail(failure);
+            return false;
         }
 
         inline uintptr_t ResolveSpellSlot(uintptr_t spellbook, std::uint8_t slot) {
@@ -612,8 +630,11 @@ namespace CoreCastSpell {
             return true;
         }
 
-        inline bool DispatchItemPosition(std::uint8_t slot, const Vec3& position) {
-            if (!ResolveCommon(CastKind::Position, slot)) {
+        inline bool DispatchItem(CastKind kind,
+            std::uint8_t slot,
+            const Vec3* position,
+            uintptr_t target) {
+            if (!ResolveCommon(kind, slot)) {
                 return false;
             }
 
@@ -622,11 +643,35 @@ namespace CoreCastSpell {
                 return false;
             }
 
-            if (!position.IsValid()) {
-                Fail(CastFailure::InvalidPosition);
+            const Vec3* cursorPosition = position;
+            Vec3 targetPosition = {};
+            if (target) {
+                if (!Globals::IsValidPtr(target)) {
+                    Fail(CastFailure::InvalidTarget);
+                    return false;
+                }
+                targetPosition = Globals::Read<Vec3>(target + Offset::All::Position);
+                if (!targetPosition.IsValid()) {
+                    Fail(CastFailure::InvalidTarget);
+                    return false;
+                }
+                cursorPosition = &targetPosition;
+                g_lastTrace.endPosition = targetPosition;
+            } else if (position) {
+                if (!position->IsValid()) {
+                    Fail(CastFailure::InvalidPosition);
+                    return false;
+                }
+                g_lastTrace.endPosition = *position;
+            } else {
+                g_lastTrace.endPosition = g_lastTrace.startPosition;
+            }
+
+            if (!Globals::IsValidPtr(g_lastTrace.castContext)) {
+                Fail(CastFailure::MissingCastContext);
                 return false;
             }
-            g_lastTrace.endPosition = position;
+
             g_lastTrace.castSpellSafe =
                 CoreRuntime::ResolveRva(Offset::ControlRuntime::HudSpellHandler);
             if (!Globals::IsValidPtr(g_lastTrace.castSpellSafe)) {
@@ -637,7 +682,7 @@ namespace CoreCastSpell {
             bool nativeException = false;
             bool bypassTouched = false;
             ScopedVirtualCursor virtualCursor;
-            if (!virtualCursor.Apply(position)) {
+            if (cursorPosition && !virtualCursor.Apply(*cursorPosition)) {
                 return false;
             }
 
@@ -674,21 +719,57 @@ namespace CoreCastSpell {
 
     } // namespace detail
 
+    inline bool IsSpellCastSlot(std::uint8_t slot) {
+        return slot <= SlotSummonerF;
+    }
+
+    inline bool IsItemCastSlot(std::uint8_t slot) {
+        return slot >= SlotItem1 && slot <= SlotTrinket;
+    }
+
     // Position casts call native CastSpellVector with verbatim world coordinates (bypasses HUD).
     inline bool CastPositionSpell(std::uint8_t slot, const Vec3& position) {
-        return slot > SlotSummonerF
-        ? detail::DispatchItemPosition(slot, position)
-        : detail::DispatchVector(slot, {}, position);
+        if (!IsSpellCastSlot(slot)) {
+            return detail::Reject(CastKind::Position, slot, CastFailure::InvalidSlot);
+        }
+        return detail::DispatchVector(slot, {}, position);
     }
 
     inline bool CastVectorSpell(std::uint8_t slot,
         const Vec3& startPosition,
         const Vec3& endPosition) {
+        if (!IsSpellCastSlot(slot)) {
+            return detail::Reject(CastKind::Vector, slot, CastFailure::InvalidSlot);
+        }
         return detail::DispatchVector(slot, startPosition, endPosition);
     }
 
     inline bool CastSelfSpell(std::uint8_t slot) {
+        if (!IsSpellCastSlot(slot)) {
+            return detail::Reject(CastKind::Self, slot, CastFailure::InvalidSlot);
+        }
         return detail::CastValidated(CastKind::Self, slot, {});
+    }
+
+    inline bool CastItem(std::uint8_t slot) {
+        if (!IsItemCastSlot(slot)) {
+            return detail::Reject(CastKind::Item, slot, CastFailure::InvalidSlot);
+        }
+        return detail::DispatchItem(CastKind::Item, slot, nullptr, 0);
+    }
+
+    inline bool CastItemPosition(std::uint8_t slot, const Vec3& position) {
+        if (!IsItemCastSlot(slot)) {
+            return detail::Reject(CastKind::ItemPosition, slot, CastFailure::InvalidSlot);
+        }
+        return detail::DispatchItem(CastKind::ItemPosition, slot, &position, 0);
+    }
+
+    inline bool CastItemOnTarget(std::uint8_t slot, uintptr_t target) {
+        if (!IsItemCastSlot(slot)) {
+            return detail::Reject(CastKind::ItemTarget, slot, CastFailure::InvalidSlot);
+        }
+        return detail::DispatchItem(CastKind::ItemTarget, slot, nullptr, target);
     }
 
 } // namespace CoreCastSpell

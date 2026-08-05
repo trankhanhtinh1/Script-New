@@ -158,9 +158,9 @@ inline bool UseItem(const AIHeroClient& source, const char* name,
         }
 
         if (!target.IsValid()) {
-            return player.Spellbook().CastSpell(slot.GetSpellSlot());
+            return player.Spellbook().CastItem(slot.GetSpellSlot());
         }
-        return player.Spellbook().CastSpell(slot.GetSpellSlot(), target);
+        return player.Spellbook().CastItem(slot.GetSpellSlot(), target.Address());
     }
     return false;
 }

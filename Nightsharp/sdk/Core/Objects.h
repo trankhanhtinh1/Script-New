@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <fstream>
 
@@ -340,6 +341,42 @@ public:
     bool CastSpell(SpellSlot slot,
                    const GameObject& target,
                    bool triggerEvent = true) const;
+
+    bool CastItem(SpellSlot slot, bool triggerEvent = true) const {
+        (void)triggerEvent;
+        return ::CoreSpellBook::CastItem(owner_, static_cast<std::int32_t>(slot));
+    }
+
+    bool CastItem(SpellSlot slot,
+                  const Vector3& position,
+                  bool triggerEvent = true) const {
+        (void)triggerEvent;
+        return ::CoreSpellBook::CastItem(
+            owner_,
+            static_cast<std::int32_t>(slot),
+            position);
+    }
+
+    template <typename T>
+    bool CastItem(SpellSlot slot,
+                  const T& target,
+                  bool triggerEvent = true) const {
+        (void)triggerEvent;
+        uintptr_t addr = 0;
+        if constexpr (std::is_integral_v<std::decay_t<T>> || std::is_pointer_v<std::decay_t<T>>) {
+            addr = static_cast<uintptr_t>(target);
+        } else {
+            addr = target.Address();
+        }
+        return ::CoreSpellBook::CastItemOnTarget(
+            owner_,
+            static_cast<std::int32_t>(slot),
+            addr);
+    }
+
+    bool CastItem(SpellSlot slot,
+                  const GameObject& target,
+                  bool triggerEvent = true) const;
 
     bool UpdateChargedSpell(SpellSlot slot,
                             const Vector3& position,
@@ -1079,6 +1116,12 @@ inline bool SpellBookClient::CastSpell(SpellSlot slot,
                                        const GameObject& target,
                                        bool triggerEvent) const {
     return CastSpell(slot, target.Address(), triggerEvent);
+}
+
+inline bool SpellBookClient::CastItem(SpellSlot slot,
+                                      const GameObject& target,
+                                      bool triggerEvent) const {
+    return CastItem(slot, target.Address(), triggerEvent);
 }
 
 class AttackableUnit : public GameObject {
