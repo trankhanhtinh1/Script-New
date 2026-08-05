@@ -263,10 +263,20 @@ namespace detail {
         return Globals::IsValidPtr(owner) &&
                owner == CoreRuntime::GetContext().localPlayer;
     }
+
+    inline bool IsSpellCastSlot(std::int32_t slot) {
+        return slot >= 0 &&
+               slot <= static_cast<std::int32_t>(CoreCastSpell::SlotSummonerF);
+    }
+
+    inline bool IsItemCastSlot(std::int32_t slot) {
+        return slot >= static_cast<std::int32_t>(CoreCastSpell::SlotItem1) &&
+               slot <= static_cast<std::int32_t>(CoreCastSpell::SlotTrinket);
+    }
 } // namespace detail
 
 inline bool CastSpell(uintptr_t owner, std::int32_t slot) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsSpellCastSlot(slot)) {
         return false;
     }
 
@@ -275,7 +285,7 @@ inline bool CastSpell(uintptr_t owner, std::int32_t slot) {
 }
 
 inline bool CastSpell(uintptr_t owner, std::int32_t slot, const Vec3& position) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotTrinket) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsSpellCastSlot(slot)) {
         return false;
     }
 
@@ -287,7 +297,7 @@ inline bool CastSpell(uintptr_t owner,
                       std::int32_t slot,
                       const Vec3& startPosition,
                       const Vec3& endPosition) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsSpellCastSlot(slot)) {
         return false;
     }
 
@@ -303,8 +313,7 @@ inline bool CastSpellOnTarget(uintptr_t owner,
                               uintptr_t target) {
     if (!detail::IsLocalOwner(owner) ||
         !Globals::IsValidPtr(target) ||
-        slot < 0 ||
-        slot > CoreCastSpell::SlotSummonerF) {
+        !detail::IsSpellCastSlot(slot)) {
         return false;
     }
 
@@ -312,11 +321,42 @@ inline bool CastSpellOnTarget(uintptr_t owner,
     return CoreNewCastSpell::CastTargetSpellMethod2(slot, target);
 }
 
+inline bool CastItem(uintptr_t owner, std::int32_t slot) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsItemCastSlot(slot)) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastItem(static_cast<std::uint8_t>(slot));
+}
+
+inline bool CastItem(uintptr_t owner, std::int32_t slot, const Vec3& position) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsItemCastSlot(slot)) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastItemPosition(static_cast<std::uint8_t>(slot), position);
+}
+
+inline bool CastItemOnTarget(uintptr_t owner,
+                             std::int32_t slot,
+                             uintptr_t target) {
+    if (!detail::IsLocalOwner(owner) ||
+        !Globals::IsValidPtr(target) ||
+        !detail::IsItemCastSlot(slot)) {
+        return false;
+    }
+
+    detail::ScopedWritePhase writePhase;
+    return CoreCastSpell::CastItemOnTarget(static_cast<std::uint8_t>(slot), target);
+}
+
 inline bool UpdateChargedSpell(uintptr_t owner,
                                std::int32_t slot,
                                const Vec3& position,
                                bool releaseCast) {
-    if (!detail::IsLocalOwner(owner) || slot < 0 || slot > CoreCastSpell::SlotSummonerF) {
+    if (!detail::IsLocalOwner(owner) || !detail::IsSpellCastSlot(slot)) {
         return false;
     }
 

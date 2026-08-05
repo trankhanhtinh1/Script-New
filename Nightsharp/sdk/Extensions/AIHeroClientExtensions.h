@@ -43,7 +43,7 @@ inline bool UseItem(const AIHeroClient& source, int itemId) {
     const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
     if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
-    return source.Spellbook().CastSpell(spellSlot);
+    return source.Spellbook().CastItem(spellSlot);
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, const AIBaseClient& target) {
@@ -51,7 +51,7 @@ inline bool UseItem(const AIHeroClient& source, int itemId, const AIBaseClient& 
     const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
     if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
-    return source.Spellbook().CastSpell(spellSlot, target.Address());
+    return source.Spellbook().CastItem(spellSlot, target.Address());
 }
 
 inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
@@ -59,7 +59,7 @@ inline bool UseItem(const AIHeroClient& source, int itemId, Vector3 position) {
     const ::SDK::SpellSlot spellSlot = GetItemSlot(source, itemId);
     if (spellSlot == ::SDK::SpellSlot::Unknown) return false;
 
-    return source.Spellbook().CastSpell(spellSlot, position);
+    return source.Spellbook().CastItem(spellSlot, position);
 }
 
 } // namespace SDK
