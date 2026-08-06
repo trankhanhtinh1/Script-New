@@ -23,17 +23,19 @@ namespace SDK::DamageMod {
     // CommunityDragon latest (16.13.7906961) SpellDataValue arrays keep
     // index 0 as the unlearned rank for most spells; runtime SpellLevel is
     // therefore used directly and clamped to the learned rank range.
-    static constexpr float AlistarRDamageReduction[]     = { 0.45f, 0.55f, 0.65f, 0.75f };
-    static constexpr float AmumuEFlatReduction[]         = { 0.0f, 5.0f, 7.0f, 9.0f, 11.0f, 13.0f };
-    static constexpr float BraumEDamageReduction[]       = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
-    static constexpr float GalioWBaseReduction[]         = { 0.20f, 0.25f, 0.30f, 0.35f, 0.40f, 0.45f };
-    static constexpr float GarenWReduction[]             = { 0.21f, 0.25f, 0.29f, 0.33f, 0.37f, 0.41f };
-    static constexpr float GragasWBaseReductionPercent[] = { 6.0f, 10.0f, 14.0f, 18.0f, 22.0f, 26.0f };
-    static constexpr float LeonaWFlatReduction[]         = { 4.0f, 8.0f, 12.0f, 16.0f, 20.0f, 24.0f };
-    static constexpr float MasterYiWReduction[]          = { 0.425f, 0.45f, 0.475f, 0.50f, 0.525f, 0.55f };
-    static constexpr float MasterYiWInitialExtra[]       = { 0.275f, 0.25f, 0.225f, 0.20f, 0.175f, 0.15f };
-    static constexpr float WarwickEReduction[]           = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
-    static constexpr float BelvethEReduction[]           = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f };
+    static constexpr float AlistarRDamageReduction[]     = { 0.45f, 0.55f, 0.65f, 0.75f, 0.85f, 0.95f, 1.05f };
+    static constexpr float AmumuEFlatReduction[]         = { 0.0f, 5.0f, 7.0f, 9.0f, 11.0f, 13.0f, 15.0f };
+    static constexpr float AnnieEFlatReduction[]         = { 9.0f, 13.0f, 17.0f, 21.0f, 25.0f, 29.0f, 33.0f };
+    static constexpr float BraumEDamageReduction[]       = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f, 0.60f };
+    static constexpr float GalioWBaseReduction[]         = { 0.20f, 0.25f, 0.30f, 0.35f, 0.40f, 0.45f, 0.50f };
+    static constexpr float GarenWReduction[]             = { 0.21f, 0.25f, 0.29f, 0.33f, 0.37f, 0.41f, 0.45f };
+    static constexpr float GragasWBaseReductionPercent[] = { 6.0f, 10.0f, 14.0f, 18.0f, 22.0f, 26.0f, 30.0f };
+    static constexpr float IreliaWPhysicalDR[]           = { 0.0f, 50.0f, 50.0f, 50.0f, 50.0f, 50.0f, 50.0f };
+    static constexpr float LeonaWFlatReduction[]         = { 4.0f, 8.0f, 12.0f, 16.0f, 20.0f, 24.0f, 28.0f };
+    static constexpr float MasterYiWReduction[]          = { 0.425f, 0.45f, 0.475f, 0.50f, 0.525f, 0.55f, 0.575f };
+    static constexpr float MasterYiWInitialExtra[]       = { 0.275f, 0.25f, 0.225f, 0.20f, 0.175f, 0.15f, 0.125f };
+    static constexpr float WarwickEReduction[]           = { 0.30f, 0.35f, 0.40f, 0.45f, 0.50f, 0.55f, 0.60f };
+    static constexpr float BelvethEReduction[]           = { 0.10f, 0.20f, 0.30f, 0.40f, 0.50f, 0.60f, 0.70f };
 
     template <std::size_t N>
     inline float SpellRankValue(const float (&values)[N], int spellLevel) {
@@ -188,11 +190,12 @@ namespace SDK::DamageMod {
 
             if (targetName == "Amumu" && heroTarget.HasBuff("Tantrum") &&
                 damageType == DamageType::Physical) {
+                // CDragon: BaseDamageReduction + 0.03*BonusAD + 0.03*MaxHealth%
                 const float reduction = SpellRankValue(
                     AmumuEFlatReduction,
                     GetSpellLevel(heroTarget, SpellSlot::E)) +
-                    0.03f * heroTarget.BonusArmor() +
-                    0.03f * heroTarget.BonusSpellBlock();
+                    0.03f * heroTarget.BonusAttackDamage() +
+                    0.03f * heroTarget.MaxHealth();
                 ApplyFlatReduction(amount, reduction);
             }
 
@@ -241,15 +244,16 @@ namespace SDK::DamageMod {
             if (targetName == "Irelia" &&
                 (heroTarget.HasBuff("IreliaWDefense") ||
                  heroTarget.HasBuff("ireliawdefense"))) {
+                // CDragon: BasePhysicalDR flat (50 at all ranks),
+                // magic damage reduction = 50% of physical (MRReductionAmount=0.5).
                 const float physicalReduction =
-                    0.40f +
-                    (0.30f / 17.0f) * static_cast<float>(championLevel - 1) +
-                    0.0007f * heroTarget.TotalMagicalDamage();
+                    SpellRankValue(IreliaWPhysicalDR,
+                                   GetSpellLevel(heroTarget, SpellSlot::W));
 
                 if (damageType == DamageType::Physical) {
-                    amount *= PercentToMultiplier(physicalReduction);
+                    ApplyFlatReduction(amount, physicalReduction);
                 } else if (damageType == DamageType::Magical) {
-                    amount *= PercentToMultiplier(physicalReduction * 0.5f);
+                    ApplyFlatReduction(amount, physicalReduction * 0.5f);
                 }
             }
 
@@ -260,9 +264,11 @@ namespace SDK::DamageMod {
             if (targetName == "Leona" &&
                 (heroTarget.HasBuff("LeonaSolarBarrier") ||
                  heroTarget.HasBuff("leonasolarbarrier"))) {
+                // CDragon: FlatDamageReduction + 0.40*AP
                 const float reduction = SpellRankValue(
                     LeonaWFlatReduction,
-                    GetSpellLevel(heroTarget, SpellSlot::W));
+                    GetSpellLevel(heroTarget, SpellSlot::W)) +
+                    0.40f * heroTarget.TotalMagicalDamage();
                 ApplyFlatReduction(amount, reduction);
             }
 
@@ -335,6 +341,42 @@ namespace SDK::DamageMod {
 
             if (targetName == "Zaahen" && heroTarget.HasBuff("ZaahenR")) {
                 amount *= PercentToMultiplier(0.50f);
+            }
+
+            // ── New: 4 champions with damage reduction from CDragon audit ──
+            if (targetName == "Annie" &&
+                (heroTarget.HasBuff("AnnieE") ||
+                 heroTarget.HasBuff("AnnieEBuff"))) {
+                // CDragon: DamageReduction = [9,13,17,21,25,29,33] flat
+                const float reduction = SpellRankValue(
+                    AnnieEFlatReduction,
+                    GetSpellLevel(heroTarget, SpellSlot::E));
+                ApplyFlatReduction(amount, reduction);
+            }
+
+            if (targetName == "Jax" &&
+                (heroTarget.HasBuff("JaxECounterStrike") ||
+                 heroTarget.HasBuff("JaxE") ||
+                 heroTarget.HasBuff("jaxecounterstrike"))) {
+                // CDragon: AoEDamageReduction = 25% (applied to all damage
+                // while Counter Strike is active)
+                amount *= PercentToMultiplier(0.25f);
+            }
+
+            if (targetName == "Urgot" &&
+                (heroTarget.HasBuff("UrgotW") ||
+                 heroTarget.HasBuff("UrgotWBuff"))) {
+                // CDragon: OnHitDamageReduction = 50%
+                amount *= PercentToMultiplier(0.50f);
+            }
+
+            if (targetName == "Pantheon" &&
+                (heroTarget.HasBuff("PantheonE") ||
+                 heroTarget.HasBuff("PantheonEShield"))) {
+                // CDragon: MinionDamageReduction = 50% (only vs minions)
+                if (sourceIsMinion) {
+                    amount *= PercentToMultiplier(0.50f);
+                }
             }
         }
 

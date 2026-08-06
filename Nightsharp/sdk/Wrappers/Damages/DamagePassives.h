@@ -299,12 +299,12 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
         case "Aatrox"_h:
             if (source.HasBuff("aatroxpassiveready")) {
                 const float cap = (target.IsMinion() && !target.IsEnemy()) ? 400.0f : 999999.0f;
-                out.Physical += std::min(cap, target.MaxHealth() * (0.04f + 0.08f * static_cast<float>(level) / 18.0f));
+                out.Physical += std::min(cap, target.MaxHealth() * Lerp18(0.04f, 0.10f, source));
             }
             break;
         case "Akali"_h:
             if (source.HasBuff("akalipweapon")) {
-                constexpr float dmg[18] = {35,38,41,44,47,50,53,56,65,74,83,92,101,116,131,146,162,182};
+                constexpr float dmg[18] = {35,38,41,44,47,50,53,62,71,80,89,98,107,122,137,152,167,182};
                 out.Magical += dmg[idx] + 0.60f * source.BonusAttackDamage() + 0.55f * source.AP();
             }
             break;
@@ -327,7 +327,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Diana"_h:
             if (source.HasBuff("dianaarcready")) {
-                constexpr float dmg[18] = {20,25,30,35,40,50,60,70,80,90,105,120,135,155,175,200,225,250};
+                constexpr float dmg[18] = {20,25,30,35,40,45,55,65,75,85,95,110,125,140,155,170,195,220};
                 out.Magical += dmg[idx] + 0.50f * source.AP();
             }
             break;
@@ -337,7 +337,8 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Ekko"_h:
             if (target.GetBuffCount("ekkostacks") == 2) {
-                out.Magical += Lerp18(30.0f, 140.0f, source) + 0.8f * source.AP();
+                constexpr float dmg[18] = {30,40,50,60,70,80,85,90,95,100,105,110,115,120,125,130,135,140};
+                out.Magical += dmg[idx] + 0.8f * source.AP();
             }
             break;
         case "Fiora"_h:
@@ -348,7 +349,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Gangplank"_h:
             if (source.HasBuff("gangplankpassiveattack")) {
-                out.True_ += 55.0f + 10.0f * idx + source.BonusAttackDamage();
+                out.True_ += Lerp18(50.0f, 250.0f, source) + source.BonusAttackDamage();
             }
             break;
         case "Gnar"_h:
@@ -383,8 +384,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Magical += source.GetSpellDamage(target, SpellSlot::E);
             break;
         case "Khazix"_h:
-            if (source.HasBuff("KhazixPDamage") && target.IsHero())
-                out.Magical += Lerp18(14.0f, 150.0f, source) + 0.4f * source.BonusAttackDamage();
+            if (source.HasBuff("KhazixPDamage") && target.IsHero()) {
+                constexpr float dmg[18] = {10,17,24,31,38,45,52,59,66,73,80,87,94,101,108,115,122,129};
+                out.Magical += dmg[idx] + 0.4f * source.BonusAttackDamage();
+            }
             break;
         case "KSante"_h:
             if (target.HasBuff("ksantepassivemark"))
@@ -428,7 +431,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Quinn"_h:
             if (target.HasBuff("QuinnW"))
-                out.Physical += 10.0f + 5.0f * idx + (0.16f + 0.02f * idx) * source.AD();
+                out.Physical += Lerp18(15.0f, 120.0f, source) + (0.16f + 0.02f * idx) * source.AD();
             break;
         case "Rammus"_h:
             out.Magical += std::min(20.0f, 8.0f + idx) + 0.1f * source.Armor();
@@ -462,7 +465,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Talon"_h:
             if (target.GetBuffCount("TalonPassiveStack") >= 3)
-                out.Physical += 75.0f + 10.0f * idx + 2.0f * source.BonusAttackDamage();
+                out.Physical += Lerp18(80.0f, 280.0f, source) + 2.0f * source.BonusAttackDamage();
             break;
         case "Teemo"_h:
             out.Magical += source.GetSpellDamage(target, SpellSlot::E);
@@ -499,10 +502,13 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             out.Physical += 0.02f * target.Health();
             break;
         case "Warwick"_h:
-            out.Magical += 10.0f + 2.0f * idx;
+            out.Magical += Lerp18(6.0f, 55.0f, source) + source.BonusAttackDamage() + 0.4f * source.AP();
             break;
         case "XinZhao"_h:
-            if (source.GetBuffCount("XinZhaoPTracker") >= 3) out.Physical += Lerp18(0.15f, 0.45f, source) * source.AD();
+            if (source.GetBuffCount("XinZhaoPTracker") >= 3) {
+                constexpr float ratio[18] = {0.40f,0.40f,0.40f,0.40f,0.40f,0.50f,0.50f,0.50f,0.50f,0.50f,0.70f,0.70f,0.70f,0.70f,0.70f,0.70f,0.70f,0.70f};
+                out.Physical += ratio[idx] * source.AD();
+            }
             if (source.HasBuff("XinZhaoQ")) out.Physical += source.GetSpellDamage(target, SpellSlot::Q);
             break;
         case "Yasuo"_h:
@@ -516,16 +522,28 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             }
             break;
         case "Zed"_h:
-            if (target.HealthPercent() < 50.0f && !target.HasBuff("zedpassivecd")) out.Magical += Lerp18(0.06f, 0.10f, source) * target.MaxHealth();
+            if (target.HealthPercent() < 50.0f && !target.HasBuff("zedpassivecd")) {
+                constexpr float ratio[18] = {0.05f,0.05f,0.05f,0.05f,0.05f,0.05f,0.08f,0.08f,0.08f,0.08f,0.08f,0.08f,0.08f,0.08f,0.08f,0.08f,0.10f,0.10f};
+                out.Magical += ratio[idx] * target.MaxHealth();
+            }
             break;
         case "Zeri"_h:
-            out.Magical += Lerp18(90.0f, 200.0f, source);
+            {
+                constexpr float ratio[18] = {0.20f,0.20f,0.20f,0.20f,0.20f,0.25f,0.25f,0.25f,0.25f,0.25f,0.30f,0.30f,0.30f,0.30f,0.30f,0.30f,0.30f,0.30f};
+                out.Magical += ratio[idx] * source.AD();
+            }
             break;
         case "Ziggs"_h:
-            if (source.HasBuff("ZiggsShortFuse")) out.Magical += Lerp18(20.0f, 160.0f, source) + 0.4f * source.AP();
+            if (source.HasBuff("ZiggsShortFuse")) {
+                constexpr float dmg[18] = {20,24,28,32,36,40,48,56,64,72,80,88,100,112,124,136,148,160};
+                out.Magical += dmg[idx] + 0.4f * source.AP();
+            }
             break;
         case "Zoe"_h:
-            if (source.HasBuff("zoepassivesheenbuff")) out.Magical += Lerp18(10.0f, 124.0f, source) + 0.2f * source.AP();
+            if (source.HasBuff("zoepassivesheenbuff")) {
+                constexpr float dmg[18] = {16,20,24,28,32,36,42,48,54,60,66,74,82,90,100,110,120,130};
+                out.Magical += dmg[idx] + 0.2f * source.AP();
+            }
             break;
 
         // ── Restored from old source (CDragon audit 2026-04-25) ──────────
@@ -545,8 +563,10 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
                 out.Physical += source.GetSpellDamage(target, SpellSlot::E);
             break;
         case "Braum"_h:
-            if (target.GetBuffCount("BraumMark") == 3)
-                out.Magical += 26.0f + 10.0f * idx;
+            if (target.GetBuffCount("BraumMark") == 3) {
+                constexpr float dmg[18] = {16,26,36,46,56,66,76,86,96,106,116,126,136,146,156,166,176,186};
+                out.Magical += dmg[idx];
+            }
             break;
         case "Camille"_h: {
             const int qLvl = std::max(0, std::min(4, source.GetSpell(SpellSlot::Q).Level() - 1));
@@ -589,7 +609,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             break;
         case "Galio"_h:
             if (source.HasBuff("galiopassivebuff"))
-                out.Magical += 12.0f + 4.0f * idx + source.AD() + 0.5f * source.AP() + 0.4f * source.BonusSpellBlock();
+                out.Magical += Lerp18(15.0f, 115.0f, source) + source.AD() + 0.6f * source.AP() + 0.6f * source.BonusSpellBlock();
             break;
         case "Garen"_h:
             if (source.HasBuff("GarenQ"))
@@ -786,7 +806,7 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             // P "Sundering Sword": every 3rd basic attack OR Q-empowered AA
             // applies "AmbessaPassiveAttackEmpower" -> bonus physical damage.
             if (source.HasBuff("AmbessaPassiveAttackEmpower"))
-                out.Physical += Lerp18(15.0f, 60.0f, source) + 0.6f * source.BonusAttackDamage();
+                out.Physical += Lerp18(5.0f, 30.0f, source) + 0.25f * source.BonusAttackDamage();
             break;
         case "Aurora"_h: {
             // P "Spirit Burst": 6 hits stacked on target via abilities + AAs
@@ -818,6 +838,37 @@ inline PassiveDamageResult GetPassiveDamageDetails(const AIHeroClient& source,
             out.Magical += minDamage + (maxDamage - minDamage) * missingRatio;
             break;
         }
+
+        // ── New: AA on-hit passives from CDragon audit (66 missing champions) ──
+        // 3 champions verified to have actual AA on-hit damage passives.
+        // Buff names + numeric values verified against CDragon JSON + wiki.
+        case "Lulu"_h:
+            // P "Pix, Faerie Companion": AAs fire 3 Pix bolts; each bolt deals
+            // magic damage. CDragon: Interp(5,39) + APRatio per bolt.
+            // Only 1 bolt hits the primary target in on-hit context.
+            if (source.HasBuff("LuluPassiveAutoAttack"))
+                out.Magical += Lerp18(5.0f, 39.0f, source) + 0.05f * source.AP();
+            break;
+        case "Senna"_h:
+            // P "Absolution": AAs deal bonus physical damage = 20% TotalAD
+            // + % target max HP (scales 10%→20% by level).
+            out.Physical += 0.20f * source.AD();
+            {
+                constexpr float hpRatio[18] = {0.10f,0.10f,0.10f,0.10f,0.10f,0.15f,0.15f,0.15f,0.20f,0.20f,0.20f,0.20f,0.20f,0.20f,0.20f,0.20f,0.20f,0.20f};
+                out.Physical += hpRatio[idx] * target.MaxHealth();
+            }
+            break;
+        case "Shaco"_h:
+            // P "Backstab": striking from behind deals bonus physical damage.
+            // CDragon: Calc 0 = TotalAD + APRatio, Calc 1 = Interp(20,35)*AttackBonusADRatio,
+            // Calc 2 = Interp(15,50)*0.1 (AP component).
+            if (source.HasBuff("ShacoPassiveBackstab")) {
+                out.Physical += source.AD()
+                              + Lerp18(20.0f, 35.0f, source)
+                              + Lerp18(15.0f, 50.0f, source) * 0.10f
+                              + 0.15f * source.AP();
+            }
+            break;
     }
 
     return out;
