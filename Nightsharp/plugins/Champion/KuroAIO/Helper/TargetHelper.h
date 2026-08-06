@@ -47,7 +47,7 @@ inline bool ValidHeroTarget(const AIHeroClient& hero, float range = FLT_MAX) {
 
 inline std::vector<AIHeroClient> EnemyHeroes(float range) {
     std::vector<AIHeroClient> result;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (ValidHeroTarget(enemy, range)) {
             result.push_back(enemy);
         }

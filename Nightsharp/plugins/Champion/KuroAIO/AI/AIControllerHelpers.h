@@ -450,7 +450,7 @@ inline AIHeroClient HeroByNetworkId(int networkId) {
 // ally state often need identity after gameplay-valid target selection ends.
 inline AIHeroClient RawEnemyHeroByNetworkId(int networkId) {
     if (networkId == 0) return {};
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (static_cast<int>(enemy.NetworkId()) == networkId) return enemy;
     }
     return {};
@@ -461,7 +461,7 @@ inline AIHeroClient RawAllyHeroByNetworkId(int networkId) {
     const auto player = GameObjects::Player();
     if (player.IsValid() &&
         static_cast<int>(player.NetworkId()) == networkId) return player;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
+    for (const auto& ally : GameObjects::AllyHeroesFrame()) {
         if (static_cast<int>(ally.NetworkId()) == networkId) return ally;
     }
     return {};
@@ -509,7 +509,7 @@ inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
     float bestDistance = best.IsValid()
         ? player.Position().Distance2D(best.Position())
         : FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (!Engine::ValidEnemy(enemy, range)) continue;
         const float distance = player.Position().Distance2D(enemy.Position());
         if (distance < bestDistance) {
@@ -578,7 +578,7 @@ inline AIHeroClient SelectReachableEnemy(
 }
 
 inline bool HasEnemyChampionNear(float range) {
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (Engine::ValidEnemy(enemy, range)) return true;
     }
     return false;
@@ -592,7 +592,7 @@ inline int CountAlliedFollowup(const Vector3& position,
     const float rangeSqr = std::max(0.0f, range) *
                            std::max(0.0f, range);
     int count = 0;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
+    for (const auto& ally : GameObjects::AllyHeroesFrame()) {
         if (!Engine::ValidAlly(ally) ||
             (!includePlayer && ally.NetworkId() == player.NetworkId()) ||
             ally.Position().DistanceSqr2D(position) > rangeSqr) {
@@ -629,7 +629,7 @@ inline AIHeroClient SelectProtectionAlly(
     if (!player.IsValid()) return {};
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
+    for (const auto& ally : GameObjects::AllyHeroesFrame()) {
         if (!Engine::ValidAlly(ally, searchRange) ||
             ally.NetworkId() == player.NetworkId()) {
             continue;
@@ -726,7 +726,7 @@ inline bool ValidHostileUnitInGameplayRange(const AIBaseClient& unit,
 inline bool HasNearbyJungleTarget(float range) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    for (const auto& monster : GameObjects::Jungle()) {
+    for (const auto& monster : GameObjects::JungleFrame()) {
         if (monster.IsValid() && !monster.IsDead() &&
             monster.IsTargetable() &&
             player.Position().Distance2D(monster.Position()) <= range) {
@@ -758,7 +758,7 @@ inline bool IsEpicMonster(const AIBaseClient& unit) {
 inline bool HasNearbyEpicMonster(float range) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    for (const auto& monster : GameObjects::Jungle()) {
+    for (const auto& monster : GameObjects::JungleFrame()) {
         if (monster.IsValid() && !monster.IsDead() &&
             IsEpicMonster(monster) &&
             player.Position().Distance2D(monster.Position()) <= range) {
@@ -786,7 +786,7 @@ inline AIMinionClient SelectJungleTarget(
     AIMinionClient best{};
     if (!player.IsValid()) return best;
     float bestScore = -FLT_MAX;
-    for (const auto& monster : GameObjects::Jungle()) {
+    for (const auto& monster : GameObjects::JungleFrame()) {
         if (!monster.IsValid() || monster.IsDead() ||
             !monster.IsTargetable() ||
             player.Position().Distance2D(monster.Position()) > range) {
@@ -1045,7 +1045,7 @@ inline bool EnemyFlashReady(const AIHeroClient& target) {
 inline bool HasReadyDashHazardAt(const Vector3& position,
                                  float searchRange = 650.0f) {
     if (!position.IsValid() || position.IsZero()) return false;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (!Engine::ValidEnemy(enemy) ||
             enemy.Position().Distance2D(position) > searchRange) {
             continue;

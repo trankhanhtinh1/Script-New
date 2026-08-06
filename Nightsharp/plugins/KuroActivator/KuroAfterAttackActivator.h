@@ -111,8 +111,11 @@ private:
         if (!target.IsEnemy()) return false;
         if (target.IsHero()) return true;
 
-        if (target.CharacterName() == "PracticeTool_TargetDummy") return true;
-
+        static constexpr uint32_t kDummyHash =
+            SDK::Utils::HashName("PracticeTool_TargetDummy");
+        if (SDK::Utils::HashName(target.CharacterName().c_str()) == kDummyHash) {
+            return true;
+        }
         const SDK::AIMinionClient minion(target.Handle());
         if (!minion.IsValid()) return false;
         if (minion.IsJungle()) return true;
@@ -154,7 +157,7 @@ private:
             return;
         }
 
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = SDK::GameObjects::Player();
         if (!player.IsValid() || player.IsDead()) {
             NightSharpDebug::Logf(
                 "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "

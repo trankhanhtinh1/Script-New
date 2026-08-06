@@ -136,9 +136,9 @@ inline void OrbwalkerBase::ReconcileApheliosReturnMissile() {
 
 inline void OrbwalkerBase::ReconcileRetainedObjects() {
     const auto isLive = [](const AttackableUnit& object) {
-        const std::uint32_t networkId = object.CachedNetworkId();
+        const int networkId = static_cast<int>(object.CachedNetworkId());
         return networkId != 0 &&
-               GameObjects::IsNetworkIdAlive(networkId);
+               GameObjects::GetUnitByNetworkId<AttackableUnit>(networkId).IsValid();
     };
 
     if (!isLive(context_.forceTarget)) {
@@ -156,8 +156,8 @@ inline void OrbwalkerBase::ReconcileRetainedObjects() {
         context_.cachedShouldWaitTick = -1;
     }
     if (context_.postFlashTargetNetworkId != 0 &&
-        !GameObjects::IsNetworkIdAlive(
-            static_cast<std::uint32_t>(context_.postFlashTargetNetworkId))) {
+        !GameObjects::GetUnitByNetworkId<AttackableUnit>(
+            context_.postFlashTargetNetworkId).IsValid()) {
         ClearPostFlashAttackGrace();
     }
 }

@@ -635,7 +635,7 @@ private:
             }
         }
 
-        for (const auto& enemy : SDK::GameObjects::EnemyHeroes()) {
+        for (const auto& enemy : SDK::GameObjects::EnemyHeroesFrame()) {
             if (!enemy.IsValid()) {
                 continue;
             }
@@ -653,7 +653,7 @@ private:
             }
         }
 
-        for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
+        for (const auto& ally : SDK::GameObjects::AllyHeroesFrame()) {
             if (!ally.IsValid() || ally.IsMe()) {
                 continue;
             }

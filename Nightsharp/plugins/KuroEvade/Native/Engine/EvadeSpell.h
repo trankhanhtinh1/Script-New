@@ -880,16 +880,16 @@ private:
         for (SpellTargets type : data.ValidTargets) {
             switch (type) {
             case SpellTargets::AllyChampions:
-                for (const auto& unit : SDK::GameObjects::AllyHeroes()) add(SDK::AIBaseClient(unit.Handle()));
+                for (const auto& unit : SDK::GameObjects::AllyHeroesFrame()) add(SDK::AIBaseClient(unit.Handle()));
                 break;
             case SpellTargets::EnemyChampions:
-                for (const auto& unit : SDK::GameObjects::EnemyHeroes()) add(SDK::AIBaseClient(unit.Handle()));
+                for (const auto& unit : SDK::GameObjects::EnemyHeroesFrame()) add(SDK::AIBaseClient(unit.Handle()));
                 break;
             case SpellTargets::AllyMinions:
-                for (const auto& unit : SDK::GameObjects::AllyMinions()) add(SDK::AIBaseClient(unit.Handle()));
+                for (const auto& unit : SDK::GameObjects::AllyMinionsFrame()) add(SDK::AIBaseClient(unit.Handle()));
                 break;
             case SpellTargets::EnemyMinions:
-                for (const auto& unit : SDK::GameObjects::EnemyMinions()) add(SDK::AIBaseClient(unit.Handle()));
+                for (const auto& unit : SDK::GameObjects::EnemyMinionsFrame()) add(SDK::AIBaseClient(unit.Handle()));
                 break;
             case SpellTargets::Targetables:
                 for (const auto& unit : GameObjects::Get<SDK::AIMinionClient>()) {

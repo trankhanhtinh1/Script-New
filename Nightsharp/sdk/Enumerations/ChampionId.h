@@ -3,10 +3,15 @@
 // Generated from CommunityDragon champion-summary.json (playable ids 1..999).
 // Canonical names preserve the runtime CharacterName/profile spelling used by KuroAIO.
 
+#include "../Utils/HashUtils.h"
+
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 namespace SDK {
 
@@ -576,23 +581,62 @@ inline constexpr std::array<ChampionAlias, 8> kChampionAliases = {{
     ChampionAlias{ "Cho'Gath", ChampionId::Chogath },
 }};
 
+inline ChampionId ChampionIdFromHash(std::uint32_t hash) {
+    struct HashEntry {
+        std::uint32_t hash;
+        ChampionId id;
+    };
+    static const std::vector<HashEntry> table = [] {
+        std::vector<HashEntry> entries;
+        entries.reserve(768);
+        auto add = [&entries](const char* name, ChampionId id) {
+            if (name && name[0]) {
+                entries.push_back({ Utils::HashName(name), id });
+            }
+        };
+        for (const auto& champion : kChampions) {
+            add(champion.Name, champion.Id);
+            add(champion.Alias, champion.Id);
+            add(champion.DisplayName, champion.Id);
+        }
+        for (const auto& alias : kChampionAliases) {
+            add(alias.Name, alias.Id);
+        }
+        std::stable_sort(
+            entries.begin(), entries.end(),
+            [](const HashEntry& left, const HashEntry& right) {
+                return left.hash < right.hash;
+            });
+        entries.erase(
+            std::unique(
+                entries.begin(), entries.end(),
+                [](const HashEntry& left, const HashEntry& right) {
+                    return left.hash == right.hash;
+                }),
+            entries.end());
+        return entries;
+    }();
+
+    const auto it = std::lower_bound(
+        table.begin(), table.end(), hash,
+        [](const HashEntry& entry, std::uint32_t value) {
+            return entry.hash < value;
+        });
+    return it != table.end() && it->hash == hash
+        ? it->id
+        : ChampionId::Unknown;
+}
+
+// FNV-1a hash based lookup: the previous implementation did up to three
+// _stricmp against every champion name (≈500 string compares) per call across
+// the per-frame orbwalker/evade/activator hot paths. Hashing the input once
+// and binary-searching a compacted hash table turns that into a uint32 compare
+// against a few entries.
 inline ChampionId ChampionIdFromName(const char* name) {
     if (!name || !name[0]) {
         return ChampionId::Unknown;
     }
-    for (const auto& champion : kChampions) {
-        if (ChampionNameEquals(name, champion.Name) ||
-            ChampionNameEquals(name, champion.Alias) ||
-            ChampionNameEquals(name, champion.DisplayName)) {
-            return champion.Id;
-        }
-    }
-    for (const auto& alias : kChampionAliases) {
-        if (ChampionNameEquals(name, alias.Name)) {
-            return alias.Id;
-        }
-    }
-    return ChampionId::Unknown;
+    return ChampionIdFromHash(Utils::HashName(name));
 }
 
 inline const ChampionInfo* FindChampion(ChampionId id) {

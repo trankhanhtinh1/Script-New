@@ -19,10 +19,15 @@ inline bool IsSpellShielded(const SDK::AIHeroClient& unit) {
         SDK::Variables::TickCount() - static_cast<int>(last.StartTime) >= 300) {
         return false;
     }
-    return _stricmp(last.Name.c_str(), "SivirE") == 0 ||
-           _stricmp(last.Name.c_str(), "BlackShield") == 0 ||
-           _stricmp(last.Name.c_str(), "NocturneShit") == 0 ||
-           _stricmp(last.Name.c_str(), "NocturneW") == 0;
+    static constexpr uint32_t kSivirE = SDK::Utils::HashName("SivirE");
+    static constexpr uint32_t kBlackShield = SDK::Utils::HashName("BlackShield");
+    static constexpr uint32_t kNocturneShit = SDK::Utils::HashName("NocturneShit");
+    static constexpr uint32_t kNocturneW = SDK::Utils::HashName("NocturneW");
+    const uint32_t spellHash = SDK::Utils::HashName(last.Name.c_str());
+    return spellHash == kSivirE ||
+           spellHash == kBlackShield ||
+           spellHash == kNocturneShit ||
+           spellHash == kNocturneW;
 }
 
 } // namespace Plugins::KuroEvade::Helpers

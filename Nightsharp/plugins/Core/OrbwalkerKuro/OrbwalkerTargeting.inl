@@ -11,6 +11,53 @@ namespace OrbwalkerKuro::OrbwalkingDetail {
 inline constexpr float kLaneClearWaitCycles = 2.0f;
 inline constexpr int kLastHitWindowStepMs = 50;
 
+// FNV-1a hashes of the minion names this unit checks against. Hashing once at
+// compile time and comparing hashes avoids a _stricmp syscall per minion per
+// frame in every targeting/validation pass (framework FPS hotspot).
+inline constexpr uint32_t kGangplankBarrelNameHash =
+    SDK::Utils::HashName("gangplankbarrel");
+inline constexpr uint32_t kJarvanIVStandardNameHash =
+    SDK::Utils::HashName("jarvanivstandard");
+inline constexpr uint32_t kAzirSoldierNameHash =
+    SDK::Utils::HashName("azirsolider");
+
+// Reusable per-frame snapshot buffers: the *Into accessors copy under the
+// snapshot lock into a preallocated buffer instead of allocating a fresh
+// vector per accessor call, which the orbwalker hits multiple times per tick.
+template <std::size_t (*Fill)(std::span<AIMinionClient>)>
+inline const std::vector<AIMinionClient>& FrameMinions() {
+    static thread_local std::vector<AIMinionClient> buffer;
+    std::size_t capacity = std::max<std::size_t>(buffer.size(), 16);
+    for (;;) {
+        if (buffer.size() < capacity) {
+            buffer.resize(capacity);
+        }
+        const std::size_t count = Fill(buffer);
+        buffer.resize(count);
+        if (count <= capacity || capacity >= (std::size_t(1) << 24)) {
+            return buffer;
+        }
+        capacity = capacity + std::max<std::size_t>(capacity / 2, 32);
+    }
+}
+
+template <std::size_t (*Fill)(std::span<AIHeroClient>)>
+inline const std::vector<AIHeroClient>& FrameHeroes() {
+    static thread_local std::vector<AIHeroClient> buffer;
+    std::size_t capacity = std::max<std::size_t>(buffer.size(), 4);
+    for (;;) {
+        if (buffer.size() < capacity) {
+            buffer.resize(capacity);
+        }
+        const std::size_t count = Fill(buffer);
+        buffer.resize(count);
+        if (count <= capacity || capacity >= (std::size_t(1) << 24)) {
+            return buffer;
+        }
+        capacity = capacity + std::max<std::size_t>(capacity / 2, 8);
+    }
+}
+
 inline bool IsValidAttackTarget(const AIHeroClient& player,
                                 const AttackableUnit& target,
                                 float range = FLT_MAX) {
@@ -272,7 +319,8 @@ inline bool IsValidCurrentKuroAutoAttackTarget(
 
 
 inline bool IsGangplankBarrel(const AIMinionClient& minion) {
-    return _stricmp(minion.CharacterName().c_str(), "gangplankbarrel") == 0;
+    return SDK::Utils::HashName(minion.CharacterName().c_str()) ==
+           kGangplankBarrelNameHash;
 }
 
 inline bool HasGangplankInGame() {
@@ -293,7 +341,8 @@ inline bool HasGangplankInGame() {
 }
 
 inline bool IsIgnoredMinion(const AIMinionClient& minion) {
-    return _stricmp(minion.CharacterName().c_str(), "jarvanivstandard") == 0;
+    return SDK::Utils::HashName(minion.CharacterName().c_str()) ==
+           kJarvanIVStandardNameHash;
 }
 
 inline bool IsValidMinionTarget(const AIMinionClient& minion, float range = FLT_MAX) {
@@ -387,7 +436,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     std::vector<AIMinionClient> cloneMinions;
 
     if (includeLaneAndJungleAndWard) {
-        const auto& enemyMinions = GameObjects::EnemyMinions();
+        const auto& enemyMinions = FrameMinions<&GameObjects::EnemyMinionsInto>();
         laneMinions.reserve(enemyMinions.size());
         for (const auto& minion : enemyMinions) {
             if (IsValidCurrentMinionTarget(player, minion) &&
@@ -397,7 +446,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         }
         OrderLaneMinions(laneMinions);
 
-        const auto& jungle = GameObjects::Jungle();
+        const auto& jungle = FrameMinions<&GameObjects::JungleInto>();
         jungleMinions.reserve(jungle.size());
         for (const auto& minion : jungle) {
             if (IsValidCurrentMinionTarget(player, minion) &&
@@ -408,7 +457,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         OrderJungleMinions(jungleMinions, menu.PrioritizeSmallJungle());
 
         if (menu.AttackWards()) {
-            const auto& wards = GameObjects::EnemyWards();
+            const auto& wards = FrameMinions<&GameObjects::EnemyWardsInto>();
             wardMinions.reserve(wards.size());
             for (const auto& ward : wards) {
                 if (IsValidCurrentMinionTarget(player, ward)) {
@@ -419,7 +468,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     }
 
     if (menu.AttackSpecialMinions()) {
-        const auto& specials = GameObjects::EnemySpecialMinions();
+        const auto& specials = FrameMinions<&GameObjects::EnemySpecialMinionsInto>();
         specialMinions.reserve(specials.size());
         for (const auto& minion : specials) {
             if (IsValidCurrentMinionTarget(player, minion)) {
@@ -429,7 +478,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     }
 
     if (menu.AttackClones()) {
-        const auto& clones = GameObjects::EnemyClones();
+        const auto& clones = FrameMinions<&GameObjects::EnemyClonesInto>();
         cloneMinions.reserve(clones.size());
         for (const auto& clone : clones) {
             if (IsValidCurrentMinionTarget(player, clone)) {
@@ -476,7 +525,7 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     }
 
     if (menu.AttackBarrels() && HasGangplankInGame()) {
-        for (const auto& minion : GameObjects::Minions()) {
+        for (const auto& minion : FrameMinions<&GameObjects::MinionsInto>()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(
@@ -708,7 +757,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
         }
     }
 
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
+    for (const auto& hero : FrameHeroes<&GameObjects::EnemyHeroesInto>()) {
         const AttackableUnit target(hero.Handle());
         if (canUseForAttack(target)) {
             return target;
@@ -718,7 +767,7 @@ inline AttackableUnit GetHeroTarget(const AIHeroClient& player) {
 }
 
 inline bool HasEnemyHeroNearAutoAttackRange(const AIHeroClient& player) {
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : FrameHeroes<&GameObjects::EnemyHeroesInto>()) {
         if (!enemy.IsValid() || enemy.IsDead()) {
             continue;
         }
@@ -746,14 +795,14 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
                                                 const AIHeroClient& player) {
     if (menu.AttackSpecialMinions()) {
         const AttackableUnit special =
-            FirstValidMinionTarget(player, GameObjects::EnemySpecialMinions());
+            FirstValidMinionTarget(player, FrameMinions<&GameObjects::EnemySpecialMinionsInto>());
         if (special.IsValid()) {
             return special;
         }
     }
 
     if (menu.AttackBarrels() && HasGangplankInGame()) {
-        for (const auto& minion : GameObjects::Minions()) {
+        for (const auto& minion : FrameMinions<&GameObjects::MinionsInto>()) {
             if (IsGangplankBarrel(minion) &&
                 minion.Health() <= 1.0f &&
                 IsValidCurrentAttackTarget(
@@ -764,7 +813,7 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
     }
 
     if (menu.AttackClones()) {
-        return FirstValidMinionTarget(player, GameObjects::EnemyClones());
+        return FirstValidMinionTarget(player, FrameMinions<&GameObjects::EnemyClonesInto>());
     }
 
     return {};
@@ -845,7 +894,7 @@ inline bool HasSoonKillableMinion(const AIHeroClient& player,
                                   int predictionTime) {
     return HasSoonKillableMinion(
         player,
-        GameObjects::EnemyMinions(),
+        FrameMinions<&GameObjects::EnemyMinionsInto>(),
         skip,
         critPrediction,
         farmDelay,

@@ -190,7 +190,7 @@ inline AIHeroClient EnemyByNetworkId(int networkId) {
     if (networkId <= 0) {
         return {};
     }
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (static_cast<int>(enemy.NetworkId()) == networkId && ValidEnemy(enemy)) {
             return enemy;
         }
@@ -201,7 +201,7 @@ inline AIHeroClient EnemyByNetworkId(int networkId) {
 inline int CountEnemiesAt(const Vector3& position, float range) {
     int count = 0;
     const float rangeSqr = range * range;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (ValidEnemy(enemy) && position.DistanceSqr2D(enemy.Position()) <= rangeSqr) {
             ++count;
         }
@@ -212,7 +212,7 @@ inline int CountEnemiesAt(const Vector3& position, float range) {
 inline int CountAlliesAt(const Vector3& position, float range) {
     int count = 0;
     const float rangeSqr = range * range;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
+    for (const auto& ally : GameObjects::AllyHeroesFrame()) {
         if (ValidAlly(ally) && position.DistanceSqr2D(ally.Position()) <= rangeSqr) {
             ++count;
         }
@@ -1664,7 +1664,7 @@ inline bool TryFallbackCombat(Mode mode, const AIHeroClient& target) {
 inline AIHeroClient LowestHealthAlly(float range) {
     AIHeroClient best = {};
     float bestScore = FLT_MAX;
-    for (const auto& ally : GameObjects::AllyHeroes()) {
+    for (const auto& ally : GameObjects::AllyHeroesFrame()) {
         if (!ValidAlly(ally, range)) {
             continue;
         }
@@ -1811,14 +1811,14 @@ inline bool TryKillSecure() {
 inline std::vector<AIBaseClient> ClearUnits(bool jungle) {
     std::vector<AIBaseClient> result;
     if (jungle) {
-        for (const auto& minion : GameObjects::Jungle()) {
+        for (const auto& minion : GameObjects::JungleFrame()) {
             if (minion.IsValid() && !minion.IsDead() && minion.Health() > 0.0f &&
                 minion.IsTargetable()) {
                 result.emplace_back(minion.Handle());
             }
         }
     } else {
-        for (const auto& minion : GameObjects::EnemyLaneMinions()) {
+        for (const auto& minion : GameObjects::EnemyLaneMinionsFrame()) {
             if (minion.IsValid() && !minion.IsDead() && minion.Health() > 0.0f &&
                 minion.IsTargetable()) {
                 result.emplace_back(minion.Handle());
@@ -2036,7 +2036,8 @@ inline void ReconcileTrackedObjects() {
     expired.reserve(TrackedObjects.size());
     const int now = SDK::Variables::TickCount();
     for (auto it = TrackedObjects.begin(); it != TrackedObjects.end();) {
-        if (!SDK::GameObjects::IsNetworkIdAlive(it->first)) {
+        if (!SDK::GameObjects::GetUnitByNetworkId<SDK::GameObject>(
+                static_cast<int>(it->first)).IsValid()) {
             expired.push_back(it->second);
             it = TrackedObjects.erase(it);
         } else {

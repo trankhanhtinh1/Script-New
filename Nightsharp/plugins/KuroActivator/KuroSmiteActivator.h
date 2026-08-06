@@ -73,7 +73,7 @@ public:
 
     void OnUpdate() override {
         if (!IsLoaded()) return;
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = SDK::GameObjects::Player();
         if (!player.IsValid() || player.IsDead()) return;
         const int now = SDK::Variables::TickCount();
 
@@ -81,6 +81,22 @@ public:
     }
 
 private:
+    // Reusable per-frame jungle snapshot (zero-allocation SnapshotInto fill).
+    static const std::vector<SDK::AIMinionClient>& FrameJungle() {
+        static thread_local std::vector<SDK::AIMinionClient> buffer;
+        std::size_t capacity = std::max<std::size_t>(buffer.size(), 8);
+        for (;;) {
+            if (buffer.size() < capacity) {
+                buffer.resize(capacity);
+            }
+            const std::size_t count = SDK::GameObjects::JungleInto(buffer);
+            buffer.resize(count);
+            if (count <= capacity || capacity >= (std::size_t(1) << 24)) {
+                return buffer;
+            }
+            capacity = capacity + std::max<std::size_t>(capacity / 2, 8);
+        }
+    }
     void ResetState() noexcept {
         lastCastTick_ = 0;
         smiteSlot_ = -1;
@@ -133,7 +149,8 @@ private:
 
         SDK::AIMinionClient best{};
         float bestDist = 1e9f;
-        for (const auto& monster : SDK::GameObjects::Jungle()) {
+        const auto& jungle = FrameJungle();
+        for (const auto& monster : jungle) {
             if (!monster.IsValid() || monster.IsDead() || !monster.IsTargetable()) {
                 continue;
             }
@@ -151,7 +168,7 @@ private:
                 "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
                 "no target in range (dmg=%.0f, jungle=%zu)",
                 damage,
-                SDK::GameObjects::Jungle().size());
+                jungle.size());
             return;
         }
 

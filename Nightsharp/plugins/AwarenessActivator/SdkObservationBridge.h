@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -281,7 +282,9 @@ public:
         RenderPositionSnapshot& snapshot =
             renderSnapshots_[writeIndex];
         snapshot.count = 0;
-        SDK::GameObjects::Heroes(renderHeroesSnapshot_);
+        renderHeroesSnapshot_.resize(renderHeroesSnapshot_.capacity());
+        renderHeroesSnapshot_.resize(
+            SDK::GameObjects::HeroesInto(renderHeroesSnapshot_));
 
         for (const auto& hero : renderHeroesSnapshot_) {
             if (!hero.IsValid() ||
@@ -425,7 +428,9 @@ private:
     }
 
     std::size_t ObserveHeroes(const SDK::AIHeroClient& player) {
-        SDK::GameObjects::Heroes(heroesSnapshot_);
+        heroesSnapshot_.resize(heroesSnapshot_.capacity());
+        heroesSnapshot_.resize(
+            SDK::GameObjects::HeroesInto(heroesSnapshot_));
         const auto& heroes = heroesSnapshot_;
         std::array<std::uint32_t, 64> observedIds{};
         std::size_t observedCount = 0;
@@ -710,8 +715,12 @@ private:
         int centerCount = 0;
         observation.allyFront = 100000.0f;
         observation.enemyFront = 100000.0f;
-        SDK::GameObjects::AllyLaneMinions(allyLaneMinionsSnapshot_);
-        SDK::GameObjects::EnemyLaneMinions(enemyLaneMinionsSnapshot_);
+        allyLaneMinionsSnapshot_.resize(allyLaneMinionsSnapshot_.capacity());
+        enemyLaneMinionsSnapshot_.resize(enemyLaneMinionsSnapshot_.capacity());
+        allyLaneMinionsSnapshot_.resize(
+            SDK::GameObjects::AllyLaneMinionsInto(allyLaneMinionsSnapshot_));
+        enemyLaneMinionsSnapshot_.resize(
+            SDK::GameObjects::EnemyLaneMinionsInto(enemyLaneMinionsSnapshot_));
         const auto observe = [&](const auto& units, bool ally) {
             for (const auto& unit : units) {
                 if (!unit.IsValid() || unit.IsDead() ||
@@ -747,7 +756,8 @@ private:
         awareness_->ObserveWave(observation);
     }
     void ObserveWards() {
-        SDK::GameObjects::Wards(wardsSnapshot_);
+        wardsSnapshot_.resize(wardsSnapshot_.capacity());
+        wardsSnapshot_.resize(SDK::GameObjects::WardsInto(wardsSnapshot_));
         const auto& wards = wardsSnapshot_;
         const float now = awareness_->Now();
         for (const auto& ward : wards) {
@@ -1015,11 +1025,15 @@ private:
 
     void ObserveObjectives() {
         objectiveSeen_.fill(false);
-        SDK::GameObjects::JungleLegendary(jungleLegendarySnapshot_);
+        jungleLegendarySnapshot_.resize(jungleLegendarySnapshot_.capacity());
+        jungleLargeSnapshot_.resize(jungleLargeSnapshot_.capacity());
+        jungleLegendarySnapshot_.resize(
+            SDK::GameObjects::JungleLegendaryInto(jungleLegendarySnapshot_));
         for (const auto& unit : jungleLegendarySnapshot_) {
             ObserveObjectiveUnit(unit, objectiveSeen_);
         }
-        SDK::GameObjects::JungleLarge(jungleLargeSnapshot_);
+        jungleLargeSnapshot_.resize(
+            SDK::GameObjects::JungleLargeInto(jungleLargeSnapshot_));
         for (const auto& unit : jungleLargeSnapshot_) {
             ObserveObjectiveUnit(unit, objectiveSeen_);
         }
@@ -1118,7 +1132,8 @@ private:
                 }
             }
             if (observed ||
-                SDK::GameObjects::IsNetworkIdAlive(networkId)) {
+                SDK::GameObjects::GetUnitByNetworkId<SDK::AIMinionClient>(
+                    static_cast<int>(networkId)).IsValid()) {
                 ++it;
                 continue;
             }

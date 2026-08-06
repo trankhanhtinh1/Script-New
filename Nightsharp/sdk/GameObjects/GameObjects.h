@@ -7,17 +7,19 @@
 #include "ObjectManager.h"
 #include "StructureScan.h"
 #include "../Events/Events.h"
+#include "../Enumerations/ChampionId.h"
+#include "../Utils/HashUtils.h"
 #include "../../CrashTrace.h"
-#include <Windows.h>
 
+#include <Windows.h>
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <span>
 #include <string>
 #include <type_traits>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -88,10 +90,10 @@ namespace detail {
     inline std::vector<MissileClient> MissilesList;
 
     inline AIHeroClient PlayerObject;
-    inline std::unordered_set<std::uint32_t> LiveNetworkIds;
-    inline std::unordered_set<std::uint32_t> LiveObjectIndexes;
+    inline ChampionId PlayerChampionIdObject = ChampionId::Unknown;
+    inline bool PlayerChampionIdCached = false;
     inline bool Initialized = false;
-    inline bool NativeUpdateHooked = false;
+
 
     // ------------------------- string helpers ------------------------------
     inline std::string ToLower(std::string value) {
@@ -337,9 +339,7 @@ namespace detail {
     inline bool ContainsByNetworkId(const std::vector<T>& vec, int netId) {
         if (netId == 0 || vec.empty()) return false;
         for (const auto& item : vec) {
-            if (static_cast<int>(item.CachedNetworkId()) == netId) {
-                return true;
-            }
+            if (static_cast<int>(item.CachedNetworkId()) == netId) return true;
         }
         return false;
     }
@@ -365,10 +365,7 @@ namespace detail {
     inline void CleanInvalid(std::vector<T>& vec) {
         if (vec.empty()) return;
         vec.erase(std::remove_if(vec.begin(), vec.end(), [](const T& obj) {
-            const std::uint32_t networkId = obj.CachedNetworkId();
-            const std::uint32_t index = obj.CachedIndex();
-            return (LiveNetworkIds.find(networkId) == LiveNetworkIds.end()) &&
-                   (LiveObjectIndexes.find(index) == LiveObjectIndexes.end());
+            return !obj.IsValid();
         }), vec.end());
     }
 
@@ -406,6 +403,18 @@ namespace detail {
         CleanInvalid(AllyPetsList);
         CleanInvalid(EnemyPetsList);
 
+        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
+        // CleanInvalid(TurretsList);
+        // CleanInvalid(AllyTurretsList);
+        // CleanInvalid(EnemyTurretsList);
+        //
+        // CleanInvalid(InhibitorsList);
+        // CleanInvalid(AllyInhibitorsList);
+        // CleanInvalid(EnemyInhibitorsList);
+        // CleanInvalid(NexusList);
+        // if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
+        // if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
+
         CleanInvalid(ShopsList);
         CleanInvalid(AllyShopsList);
         CleanInvalid(EnemyShopsList);
@@ -416,57 +425,10 @@ namespace detail {
         CleanInvalid(MissilesList);
     }
 
-    inline bool RefreshLiveNetworkIds() {
-        std::uintptr_t objects[16384] = {};
-        const int count = ::Core::ObjectManager::EnumerateAllIncludingStructures(
-            objects, 16384);
-        if (count <= 0) {
-            return false;
-        }
-
-        if (LiveNetworkIds.bucket_count() <
-            static_cast<std::size_t>(count) * 2u) {
-            LiveNetworkIds.reserve(static_cast<std::size_t>(count) * 2u);
-            LiveObjectIndexes.reserve(static_cast<std::size_t>(count) * 2u);
-        }
-        LiveNetworkIds.clear();
-        LiveObjectIndexes.clear();
-        for (int i = 0; i < count; ++i) {
-            const uintptr_t object = objects[i];
-            if (!::Core::ObjectManager::IsLiveEntry(object)) {
-                continue;
-            }
-            const std::uint32_t index =
-                ::Core::Objects::ReadIndex(object);
-            const std::uint32_t networkId =
-                ::Core::Objects::ReadNetworkId(object);
-            if (index != 0 && index != 0xFFFFFFFFu) {
-                LiveObjectIndexes.insert(index);
-            }
-            if (networkId != 0 && networkId != 0xFFFFFFFFu) {
-                LiveNetworkIds.insert(networkId);
-            }
-        }
-        return !LiveNetworkIds.empty() || !LiveObjectIndexes.empty();
-    }
-
-    inline void PruneInvalidObjects() {
-        if (RefreshLiveNetworkIds()) {
-            CleanInvalidObjects();
-        }
-    }
-
-    inline bool IsNetworkIdLive(std::uint32_t networkId) {
-        return networkId != 0 &&
-               networkId != 0xFFFFFFFFu &&
-               LiveNetworkIds.find(networkId) != LiveNetworkIds.end();
-    }
-
     inline void OnObjectAdd(const GameObject& object) {
         if (!object.IsValid()) return;
         Lock lk(g_mutex);
-
-        PruneInvalidObjects();
+        CleanInvalidObjects();
 
         PopulateStatic(object);
 
@@ -571,8 +533,6 @@ namespace detail {
                 }
                 break;
             }
-
-            // Fallback for any unclassified AIMinionClient (e.g. AzirSoldier, custom pets, untargetable minions)
             if (enemy) PushUniqueByNetworkId(EnemySpecialMinionsList, minion);
             else PushUniqueByNetworkId(AllySpecialMinionsList, minion);
             break;
@@ -788,18 +748,21 @@ namespace detail {
         return list;
     }
 
-    // Reuse caller-owned storage so periodic observers do not allocate a
-    // temporary vector every frame.
+    // Zero-allocation copy-out: fills the caller-owned span under the lock and
+    // returns how many elements were written. The caller keeps a preallocated
+    // buffer (e.g. a reserved vector) so steady-state observation incurs no
+    // heap allocation.
     template <typename T>
-    inline void SnapshotInto(const std::vector<T>& list,
-                             std::vector<T>& output) {
+    inline std::size_t SnapshotInto(const std::vector<T>& list, std::span<T> output) {
         Lock lk(g_mutex);
-        output.assign(list.begin(), list.end());
+        const std::size_t count = std::min(list.size(), output.size());
+        std::copy_n(list.begin(), count, output.begin());
+        return count;
     }
 
-    // Object-create/delete delivery is only a fast hint.  The authoritative
-    // cache maintenance runs from OnNativeGameUpdate so a missed delete
-    // cannot leave freed handles in any list.
+    // ------------------- lifecycle events (EnsoulSharp-style) ---------------
+    // Backing for GameObjects::OnCreate / OnDelete. Handlers are plain function
+    // pointers (EnsoulSharp's GameObjectCreate delegate carries the sender).
     using LifecycleHandler = void(*)(const GameObject&);
     inline std::vector<LifecycleHandler> CreateHandlers;
     inline std::vector<LifecycleHandler> DeleteHandlers;
@@ -832,6 +795,8 @@ namespace detail {
                 const auto perfStart = NightSharpPerf::Now();
                 handler(object);
                 const double ms = NightSharpPerf::MsSince(perfStart);
+                NightSharpPerf::AddEventHandlerTiming(
+                    eventName, static_cast<int>(i), reinterpret_cast<const void*>(handler), ms);
             }
         }
     }
@@ -857,6 +822,9 @@ namespace detail {
         DispatchLifecycle("GameObjects::OnDelete", DeleteHandlers, args);
     }
 
+    // Subscribe our forwarders to the (deferred, update-tick) native lifecycle
+    // events exactly once. Kept out from under g_mutex while calling into
+    // SDK::Events so the two subsystems' locks never nest.
     inline void EnsureNativeLifecycleHooked() {
         {
             Lock lk(g_mutex);
@@ -864,7 +832,6 @@ namespace detail {
                 return;
             }
             NativeLifecycleHooked = true;
-            NativeUpdateHooked = true;
         }
         SDK::Events::AddOnCreateObject(&OnNativeObjectCreate);
         SDK::Events::AddOnDeleteObject(&OnNativeObjectDelete);
@@ -877,9 +844,6 @@ namespace detail {
             Lock lk(g_mutex);
             wasHooked = NativeLifecycleHooked;
             NativeLifecycleHooked = false;
-            NativeUpdateHooked = false;
-            LiveNetworkIds.clear();
-            LiveObjectIndexes.clear();
             CreateHandlers.clear();
             DeleteHandlers.clear();
         }
@@ -982,72 +946,187 @@ inline AIHeroClient Player() {
     EnsureInitialized();
     return detail::PlayerObject;
 }
-inline bool IsNetworkIdAlive(std::uint32_t networkId) {
-    if (networkId == 0 || networkId == 0xFFFFFFFFu) {
-        return false;
-    }
-    EnsureInitialized();
-    detail::Lock lk(detail::g_mutex);
-    return detail::IsNetworkIdLive(networkId);
-}
 
+// Champion id of the local player, resolved via FNV-1a hashes of the handle
+// character names and cached once per game. The hot plugins re-ask this every
+// frame (CanAttack/CanMove/evade/activator passes); a straight
+// ChampionIdFromName() call does up to ~500 _stricmp per lookup, so this is a
+// per-frame FPS hotspot that must only pay once.
+inline ChampionId PlayerChampionId() {
+    EnsureInitialized();
+    if (detail::PlayerChampionIdCached) {
+        return detail::PlayerChampionIdObject;
+    }
+    const AIHeroClient player = detail::PlayerObject;
+    if (player.IsValid()) {
+        detail::PlayerChampionIdObject =
+            ChampionIdFromName(player.CharacterName().c_str());
+    }
+    detail::PlayerChampionIdCached = true;
+    return detail::PlayerChampionIdObject;
+}
 
 // ------------------------------- accessors ----------------------------------
 inline std::vector<AIHeroClient> Heroes() {
     return detail::Snapshot(detail::HeroesList);
 }
-inline void Heroes(std::vector<AIHeroClient>& output) {
-    detail::SnapshotInto(detail::HeroesList, output);
+
+inline std::size_t HeroesInto(std::span<AIHeroClient> output) {
+    return detail::SnapshotInto(detail::HeroesList, output);
 }
 
 inline std::vector<AIHeroClient> AllyHeroes() {
     return detail::Snapshot(detail::AllyHeroesList);
 }
 
+inline std::size_t AllyHeroesInto(std::span<AIHeroClient> output) {
+    return detail::SnapshotInto(detail::AllyHeroesList, output);
+}
+
 inline std::vector<AIHeroClient> EnemyHeroes() {
     return detail::Snapshot(detail::EnemyHeroesList);
+}
+
+inline std::size_t EnemyHeroesInto(std::span<AIHeroClient> output) {
+    return detail::SnapshotInto(detail::EnemyHeroesList, output);
 }
 
 inline std::vector<AIMinionClient> Minions() {
     return detail::Snapshot(detail::MinionsList);
 }
 
+inline std::size_t MinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::MinionsList, output);
+}
+
 inline std::vector<AIMinionClient> AllyMinions() {
     return detail::Snapshot(detail::AllyMinionsList);
+}
+
+inline std::size_t AllyMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::AllyMinionsList, output);
 }
 
 inline std::vector<AIMinionClient> EnemyMinions() {
     return detail::Snapshot(detail::EnemyMinionsList);
 }
 
-inline std::vector<AIMinionClient> AllyLaneMinions() { return detail::Snapshot(detail::AllyLaneMinionsList); }
-inline void AllyLaneMinions(std::vector<AIMinionClient>& output) {
-    detail::SnapshotInto(detail::AllyLaneMinionsList, output);
+inline std::size_t EnemyMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyMinionsList, output);
 }
+
+inline std::vector<AIMinionClient> AllyLaneMinions() { return detail::Snapshot(detail::AllyLaneMinionsList); }
 inline std::vector<AIMinionClient> EnemyLaneMinions() { return detail::Snapshot(detail::EnemyLaneMinionsList); }
-inline void EnemyLaneMinions(std::vector<AIMinionClient>& output) {
-    detail::SnapshotInto(detail::EnemyLaneMinionsList, output);
+
+inline std::size_t AllyLaneMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::AllyLaneMinionsList, output);
+}
+inline std::size_t EnemyLaneMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyLaneMinionsList, output);
 }
 inline std::vector<AIMinionClient> AllySpecialMinions() { return detail::Snapshot(detail::AllySpecialMinionsList); }
 inline std::vector<AIMinionClient> EnemySpecialMinions() { return detail::Snapshot(detail::EnemySpecialMinionsList); }
+inline std::size_t AllySpecialMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::AllySpecialMinionsList, output);
+}
+inline std::size_t EnemySpecialMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemySpecialMinionsList, output);
+}
 inline std::vector<AIMinionClient> AllyIgnoredMinions() { return detail::Snapshot(detail::AllyIgnoredMinionsList); }
 inline std::vector<AIMinionClient> EnemyIgnoredMinions() { return detail::Snapshot(detail::EnemyIgnoredMinionsList); }
+inline std::size_t EnemyIgnoredMinionsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyIgnoredMinionsList, output);
+}
 inline std::vector<AIMinionClient> Wards() { return detail::Snapshot(detail::WardsList); }
-inline void Wards(std::vector<AIMinionClient>& output) {
-    detail::SnapshotInto(detail::WardsList, output);
+
+inline std::size_t WardsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::WardsList, output);
 }
 inline std::vector<AIMinionClient> AllyWards() { return detail::Snapshot(detail::AllyWardsList); }
 inline std::vector<AIMinionClient> EnemyWards() { return detail::Snapshot(detail::EnemyWardsList); }
+inline std::size_t EnemyWardsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyWardsList, output);
+}
 inline std::vector<AIMinionClient> Jungle() { return detail::Snapshot(detail::JungleList); }
+inline std::size_t JungleInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::JungleList, output);
+}
+
+// ------------------------ zero-allocation frame snapshots -------------------
+// FrameSnapshot<T, Fill> owns a thread_local buffer that the *Into accessor
+// refills under the lock, so per-frame reads of a list cost no heap allocation.
+// Each (T, Fill) specialization keeps its own buffer; callers must consume the
+// returned vector before asking for the same buffer again (never nest the same
+// list twice in one thread).
+template <typename T, std::size_t (*Fill)(std::span<T>)>
+inline const std::vector<T>& FrameSnapshot() {
+    static thread_local std::vector<T> buffer;
+    std::size_t capacity = std::max<std::size_t>(buffer.size(), 8);
+    for (;;) {
+        if (buffer.size() < capacity) {
+            buffer.resize(capacity);
+        }
+        const std::size_t count = Fill(buffer);
+        buffer.resize(count);
+        if (count <= capacity || capacity >= (std::size_t(1) << 24)) {
+            return buffer;
+        }
+        capacity = capacity + std::max<std::size_t>(capacity / 2, 8);
+    }
+}
+
+inline const std::vector<AIHeroClient>& AllyHeroesFrame() {
+    return FrameSnapshot<AIHeroClient, &AllyHeroesInto>();
+}
+inline const std::vector<AIHeroClient>& HeroesFrame() {
+    return FrameSnapshot<AIHeroClient, &HeroesInto>();
+}
+inline const std::vector<AIHeroClient>& EnemyHeroesFrame() {
+    return FrameSnapshot<AIHeroClient, &EnemyHeroesInto>();
+}
+inline const std::vector<AIMinionClient>& MinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &MinionsInto>();
+}
+inline const std::vector<AIMinionClient>& AllyLaneMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &AllyLaneMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& EnemyLaneMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemyLaneMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& AllyMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &AllyMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& EnemyMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemyMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& JungleFrame() {
+    return FrameSnapshot<AIMinionClient, &JungleInto>();
+}
+inline const std::vector<AIMinionClient>& EnemySpecialMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemySpecialMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& AllySpecialMinionsFrame() {
+    return FrameSnapshot<AIMinionClient, &AllySpecialMinionsInto>();
+}
+inline const std::vector<AIMinionClient>& EnemyWardsFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemyWardsInto>();
+}
+inline std::size_t EnemyClonesInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyClonesList, output);
+}
+inline const std::vector<AIMinionClient>& EnemyClonesFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemyClonesInto>();
+}
 inline std::vector<AIMinionClient> JungleMinions() { return Jungle(); }
 inline std::vector<AIMinionClient> JungleSmall() { return detail::Snapshot(detail::JungleSmallList); }
 inline std::vector<AIMinionClient> JungleLarge() { return detail::Snapshot(detail::JungleLargeList); }
-inline void JungleLarge(std::vector<AIMinionClient>& output) {
-    detail::SnapshotInto(detail::JungleLargeList, output);
-}
 inline std::vector<AIMinionClient> JungleLegendary() { return detail::Snapshot(detail::JungleLegendaryList); }
-inline void JungleLegendary(std::vector<AIMinionClient>& output) {
-    detail::SnapshotInto(detail::JungleLegendaryList, output);
+
+inline std::size_t JungleLargeInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::JungleLargeList, output);
+}
+inline std::size_t JungleLegendaryInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::JungleLegendaryList, output);
 }
 inline std::vector<AIMinionClient> SmallJungle() { return JungleSmall(); }
 inline std::vector<AIMinionClient> LargeJungle() { return JungleLarge(); }
@@ -1110,6 +1189,9 @@ inline std::vector<Obj_SpawnPoint> EnemySpawnPoints() { return detail::Snapshot(
 inline std::vector<EffectEmitter> ParticleEmitters() { return detail::Snapshot(detail::ParticleEmittersList); }
 inline std::vector<MissileClient> Missiles() {
     return detail::Snapshot(detail::MissilesList);
+}
+inline std::size_t MissilesInto(std::span<MissileClient> output) {
+    return detail::SnapshotInto(detail::MissilesList, output);
 }
 inline std::vector<GameObject> AllGameObjects() { return detail::Snapshot(detail::GameObjectsList); }
 inline std::vector<AttackableUnit> AttackableUnits() { return detail::Snapshot(detail::AttackableUnitsList); }
@@ -1220,7 +1302,7 @@ namespace SDK {
 inline int AIBaseClient::CountAllyHeroesInRange(float range) const {
     int count = 0;
     const float rangeSqr = range * range;
-    for (const auto& hero : GameObjects::AllyHeroes()) {
+    for (const auto& hero : GameObjects::AllyHeroesFrame()) {
         if (!hero.IsValid() || hero.IsDead() || hero.IsInvulnerable() || hero.Compare(*this)) {
             continue;
         }
@@ -1234,7 +1316,7 @@ inline int AIBaseClient::CountAllyHeroesInRange(float range) const {
 inline int AIBaseClient::CountEnemyHeroesInRange(float range) const {
     int count = 0;
     const float rangeSqr = range * range;
-    for (const auto& hero : GameObjects::EnemyHeroes()) {
+    for (const auto& hero : GameObjects::EnemyHeroesFrame()) {
         if (!hero.IsValid() || hero.IsDead() || hero.IsInvulnerable() || hero.Compare(*this)) {
             continue;
         }

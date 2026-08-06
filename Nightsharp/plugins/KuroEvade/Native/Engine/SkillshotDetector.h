@@ -97,8 +97,8 @@ public:
             }
 
             const int missileId = skillshot->MissileNetworkId;
-            if (!SDK::GameObjects::IsNetworkIdAlive(
-                    static_cast<std::uint32_t>(missileId))) {
+            if (!SDK::GameObjects::GetUnitByNetworkId<SDK::MissileClient>(
+                    missileId).IsValid()) {
                 if (!missingIds.insert(missileId).second) {
                     continue;
                 }
@@ -147,8 +147,8 @@ public:
 
         for (auto it = m_traps.begin(); it != m_traps.end();) {
             if (it->first != 0 &&
-                !SDK::GameObjects::IsNetworkIdAlive(
-                    static_cast<std::uint32_t>(it->first))) {
+                !SDK::GameObjects::GetUnitByNetworkId<SDK::GameObject>(
+                    it->first).IsValid()) {
                 const SkillshotPtr trap = it->second;
                 m_skillshots.erase(
                     std::remove(m_skillshots.begin(), m_skillshots.end(), trap),
@@ -227,9 +227,8 @@ public:
                 // shorter predicted collision time.
                 const bool hasLiveMissile = missile &&
                     skillshot->MissileNetworkId != 0 &&
-                    SDK::GameObjects::IsNetworkIdAlive(
-                        static_cast<std::uint32_t>(
-                            skillshot->MissileNetworkId)) &&
+                    SDK::GameObjects::GetUnitByNetworkId<SDK::MissileClient>(
+                        skillshot->MissileNetworkId).IsValid() &&
                     !skillshot->ProjectileTerminated;
                 return !hasLiveMissile && !skillshot->IsActive(now);
             }), m_skillshots.end());
@@ -692,11 +691,11 @@ private:
         const bool casterIsAlly = skillshot.Native->Caster.IsAlly();
         if (has(SDK::CollisionableObjects::Heroes)) {
             if (casterIsAlly) {
-                for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+                for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
                     consider(SDK::AIBaseClient(hero.Handle()));
                 }
             } else {
-                for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
+                for (const auto& hero : SDK::GameObjects::AllyHeroesFrame()) {
                     consider(SDK::AIBaseClient(hero.Handle()));
                 }
                 const auto player = GameObjects::Player();
@@ -714,16 +713,16 @@ private:
                 !laneMinions;
             if (laneMinions && !skillshot.Data.CollisionExceptMini) {
                 if (casterIsAlly) {
-                    for (const auto& minion : SDK::GameObjects::EnemyMinions()) {
+                    for (const auto& minion : SDK::GameObjects::EnemyMinionsFrame()) {
                         consider(SDK::AIBaseClient(minion.Handle()));
                     }
                 } else {
-                    for (const auto& minion : SDK::GameObjects::AllyMinions()) {
+                    for (const auto& minion : SDK::GameObjects::AllyMinionsFrame()) {
                         consider(SDK::AIBaseClient(minion.Handle()));
                     }
                 }
             }
-            for (const auto& minion : SDK::GameObjects::Jungle()) {
+            for (const auto& minion : SDK::GameObjects::JungleFrame()) {
                 if (largeMonstersOnly) {
                     const SDK::JungleType type = minion.GetJungleType();
                     if (type != SDK::JungleType::Large &&

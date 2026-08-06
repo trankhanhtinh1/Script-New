@@ -88,7 +88,9 @@ public:
         if (point.IsZero() || !point.IsValid()) {
             return false;
         }
-        for (const auto& hero : GameObjects::Get<SDK::AIHeroClient>()) {
+        static constexpr uint32_t kSamiraHash = SDK::Utils::HashName("Samira");
+        static constexpr uint32_t kMelHash = SDK::Utils::HashName("Mel");
+        for (const auto& hero : GameObjects::HeroesFrame()) {
             const SDK::AIBaseClient barrier(hero.Handle());
             if (!IsActiveOpposingBarrier(caster, barrier)) {
                 continue;
@@ -96,11 +98,11 @@ public:
             const std::string champion = barrier.CharacterName();
             float radius = 0.0f;
             bool active = false;
-            if (includeSamira && _stricmp(champion.c_str(), "Samira") == 0) {
+            const uint32_t championHash = SDK::Utils::HashName(champion.c_str());
+            if (includeSamira && championHash == kSamiraHash) {
                 radius = 325.0f;
                 active = HasAnyBuff(barrier, { "SamiraW", "SamiraWBuff" });
-            } else if (includeMel &&
-                       _stricmp(champion.c_str(), "Mel") == 0) {
+            } else if (includeMel && championHash == kMelHash) {
                 radius = 175.0f;
                 active = HasAnyBuff(
                     barrier,
@@ -387,16 +389,16 @@ public:
                 !laneMinions;
             if (laneMinions && !skillshot.Data.CollisionExceptMini) {
                 if (skillshot.Native->Caster.IsAlly()) {
-                    for (const auto& minion : SDK::GameObjects::EnemyMinions()) {
+                    for (const auto& minion : SDK::GameObjects::EnemyMinionsFrame()) {
                         addUnit(SDK::AIBaseClient(minion.Handle()));
                     }
                 } else {
-                    for (const auto& minion : SDK::GameObjects::AllyMinions()) {
+                    for (const auto& minion : SDK::GameObjects::AllyMinionsFrame()) {
                         addUnit(SDK::AIBaseClient(minion.Handle()));
                     }
                 }
             }
-            for (const auto& minion : SDK::GameObjects::Jungle()) {
+            for (const auto& minion : SDK::GameObjects::JungleFrame()) {
                 if (largeMonstersOnly) {
                     const SDK::JungleType type = minion.GetJungleType();
                     if (type != SDK::JungleType::Large &&
@@ -411,12 +413,12 @@ public:
 
         if (heroCollision && has(SDK::CollisionableObjects::Heroes)) {
             if (skillshot.Native->Caster.IsAlly()) {
-                for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
+                for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
                     addUnit(SDK::AIBaseClient(hero.Handle()));
                 }
             } else {
                 const int playerId = GameObjects::Player().NetworkId();
-                for (const auto& hero : SDK::GameObjects::AllyHeroes()) {
+                for (const auto& hero : SDK::GameObjects::AllyHeroesFrame()) {
                     const SDK::AIBaseClient unit(hero.Handle());
                     // The local player is the prospective victim, not a
                     // blocker. Other allies can consume collision hits.

@@ -106,7 +106,7 @@ public:
 
     void OnUpdate() override {
         if (!IsLoaded()) return;
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = SDK::GameObjects::Player();
         if (!player.IsValid() || player.IsDead()) return;
         const int now = SDK::Variables::TickCount();
 
@@ -126,7 +126,7 @@ private:
     }
 
     static bool IsPlayerSender(const ::Core::Events::ObjectInfo& sender) noexcept {
-        const auto player = SDK::ObjectManager::Player();
+        const auto player = SDK::GameObjects::Player();
         return player.IsValid() && sender.IsValid() &&
                sender.NetworkId == static_cast<std::uint32_t>(player.NetworkId());
     }
