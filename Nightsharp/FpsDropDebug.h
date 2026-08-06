@@ -2,14 +2,44 @@
 
 #include "imgui/imgui.h"
 
+#include "DebugLog.h"
 #include "SectionProfiler.h"
 #include <Windows.h>
+#include <DbgHelp.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <iterator>
 
+#pragma comment(lib, "dbghelp.lib")
+
 namespace NightSharpPerf {
+
+inline void ResolveSymbolOrAddress(const void* ptr, char* outBuf, size_t bufSize) {
+    if (!ptr || !outBuf || bufSize == 0) return;
+    outBuf[0] = '\0';
+
+    HANDLE process = GetCurrentProcess();
+    static bool symInitialized = false;
+    if (!symInitialized) {
+        SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
+        SymInitialize(process, nullptr, TRUE);
+        symInitialized = true;
+    }
+
+    const DWORD64 addr = reinterpret_cast<DWORD64>(ptr);
+    char symbolStorage[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = {};
+    auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolStorage);
+    symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+    symbol->MaxNameLen = MAX_SYM_NAME;
+
+    DWORD64 displacement = 0;
+    if (SymFromAddr(process, addr, &displacement, symbol) && symbol->Name && symbol->Name[0]) {
+        _snprintf_s(outBuf, bufSize, _TRUNCATE, "%s+0x%llX", symbol->Name, static_cast<unsigned long long>(displacement));
+    } else {
+        NightSharpDebug::DescribeAddress(const_cast<void*>(ptr), outBuf, bufSize);
+    }
+}
 
 struct PhaseSample {
     const char* Name = "";
@@ -22,9 +52,14 @@ struct PluginSample {
     double UpdateMs = 0.0;
     double RenderMs = 0.0;
     double MenuMs = 0.0;
+    double MaxUpdateMs = 0.0;
+    double MaxRenderMs = 0.0;
+    double MaxTotalMs = 0.0;
+    double TotalUpdateMs = 0.0;
     unsigned UpdateHits = 0;
     unsigned RenderHits = 0;
     unsigned MenuHits = 0;
+    unsigned TotalHits = 0;
 };
 
 struct EventSample {
@@ -39,9 +74,9 @@ struct EventSample {
 // Off by default. Enabled is the master switch gating all frame/plugin/event
 // timing collection; re-enable from the menu (Debug & Profiler > Profiler) or
 // with F10 for the overlay.
-inline bool Enabled = false;
-inline bool OverlayVisible = false;
-inline bool LogEnabled = false;
+inline bool Enabled = true;
+inline bool OverlayVisible = true;
+inline bool LogEnabled = true;
 inline double SlowFrameMs = 33.0;
 inline double SlowPhaseMs = 6.0;
 inline double SlowPluginMs = 2.0;
@@ -70,6 +105,13 @@ inline int PluginCount = 0;
 inline EventSample EventSamples[64] = {};
 inline int EventCount = 0;
 
+struct SlowestHandlerInfo {
+    const char* EventName = "";
+    const void* HandlerPtr = nullptr;
+    double MaxMs = 0.0;
+};
+inline SlowestHandlerInfo SlowestHandler = {};
+
 inline void EnsureFrequency() {
     if (Frequency.QuadPart == 0) {
         QueryPerformanceFrequency(&Frequency);
@@ -95,7 +137,11 @@ inline double MsSince(const LARGE_INTEGER& start) {
 
 inline void ResetFrame() {
     PhaseCount = 0;
-    PluginCount = 0;
+    for (int i = 0; i < PluginCount; ++i) {
+        PluginSamples[i].UpdateMs = 0.0;
+        PluginSamples[i].RenderMs = 0.0;
+        PluginSamples[i].MenuMs = 0.0;
+    }
     LastUpdateMs = 0.0;
     LastRenderMs = 0.0;
     LastMenuMs = 0.0;
@@ -174,13 +220,26 @@ inline void AddPluginTiming(const char* stage,
     if (std::strcmp(stage, "update") == 0) {
         sample->UpdateMs += ms;
         sample->UpdateHits += 1;
+        sample->TotalUpdateMs += ms;
+        if (ms > sample->MaxUpdateMs) {
+            sample->MaxUpdateMs = ms;
+        }
     } else if (std::strcmp(stage, "render") == 0) {
         sample->RenderMs += ms;
         sample->RenderHits += 1;
+        if (ms > sample->MaxRenderMs) {
+            sample->MaxRenderMs = ms;
+        }
     } else if (std::strcmp(stage, "menu") == 0) {
         sample->MenuMs += ms;
         sample->MenuHits += 1;
     }
+
+    const double currentTotal = sample->UpdateMs + sample->RenderMs + sample->MenuMs;
+    if (currentTotal > sample->MaxTotalMs) {
+        sample->MaxTotalMs = currentTotal;
+    }
+    sample->TotalHits += 1;
 }
 
 inline void AppendLog(const char* text) {
@@ -256,7 +315,16 @@ inline void AddEventHandlerTiming(const char* eventName,
                                   int handlerIndex,
                                   const void* handler,
                                   double ms) {
-    if (!Enabled || !LogEnabled || ms < SlowEventMs) {
+    if (!Enabled) {
+        return;
+    }
+    if (ms > SlowestHandler.MaxMs) {
+        SlowestHandler.EventName = eventName ? eventName : "";
+        SlowestHandler.HandlerPtr = handler;
+        SlowestHandler.MaxMs = ms;
+    }
+
+    if (!LogEnabled || ms < SlowEventMs) {
         return;
     }
 
@@ -277,6 +345,18 @@ inline void AddEventHandlerTiming(const char* eventName,
         handler,
         ms);
     AppendLog(line);
+}
+
+inline const EventSample* SlowestEventPeak() {
+    const EventSample* best = nullptr;
+    double maxMs = 0.0;
+    for (int i = 0; i < EventCount; ++i) {
+        if (EventSamples[i].MaxMs > maxMs) {
+            maxMs = EventSamples[i].MaxMs;
+            best = &EventSamples[i];
+        }
+    }
+    return best;
 }
 
 inline const PluginSample* SlowestPlugin() {
@@ -448,65 +528,224 @@ inline void EndFrame() {
 // Renders the collected timing stats with ImGui. Assumes an ImGui window is
 // already active — used both by the floating RenderOverlay and by the in-menu
 // profiler panel (NightSharpMenu Debug Info section).
-inline void DrawStatsBody() {
-    ImGui::Text(
-        "frame %.2f ms  max %.2f  slow %d/%d",
-        LastFrameMs,
-        MaxFrameMs,
-        SlowFrameCount,
-        FrameCount);
-    ImGui::Text(
-        "core %.2f  update %.2f  render %.2f  menu %.2f  present %.2f  sleep %.2f",
-        LastCoreTickMs,
-        LastUpdateMs,
-        LastRenderMs,
-        LastMenuMs,
-        LastPresentMs,
-        LastSleepMs);
-
-    const auto* slowest = SlowestPlugin();
-    if (slowest) {
-        ImGui::Separator();
-        ImGui::Text(
-            "slowest plugin: %s  U %.2f / R %.2f / M %.2f",
-            slowest->Name ? slowest->Name : "",
-            slowest->UpdateMs,
-            slowest->RenderMs,
-            slowest->MenuMs);
-    }
-
-    ImGui::Separator();
-    ImGui::Text("Recent slow events");
-    const DWORD now = GetTickCount();
-    int shownEvents = 0;
-    for (int i = 0; i < EventCount && shownEvents < 8; ++i) {
-        const auto& sample = EventSamples[i];
-        if (now - sample.LastTick > 2500 || sample.LastMs < 0.05) {
-            continue;
-        }
-        ImGui::Text(
-            "%s: last %.2f ms max %.2f hits %u",
-            sample.Name ? sample.Name : "",
-            sample.LastMs,
-            sample.MaxMs,
-            sample.Hits);
-        ++shownEvents;
-    }
-
-    ImGui::Separator();
+inline const PluginSample* SlowestPeakPlugin() {
+    const PluginSample* best = nullptr;
+    double maxMs = 0.0;
     for (int i = 0; i < PluginCount; ++i) {
-        const auto& sample = PluginSamples[i];
-        const double total = sample.UpdateMs + sample.RenderMs + sample.MenuMs;
-        if (total < 0.05) {
-            continue;
+        if (PluginSamples[i].MaxUpdateMs > maxMs) {
+            maxMs = PluginSamples[i].MaxUpdateMs;
+            best = &PluginSamples[i];
         }
+    }
+    return best;
+}
+
+inline void ResetAllStats() {
+    FrameCount = 0;
+    SlowFrameCount = 0;
+    MaxFrameMs = 0.0;
+    SlowestHandler = {};
+    EventCount = 0;
+    for (int i = 0; i < static_cast<int>(std::size(EventSamples)); ++i) {
+        EventSamples[i] = {};
+    }
+    SectionCount = 0;
+    for (int i = 0; i < kMaxSections; ++i) {
+        SectionStats[i] = {};
+    }
+    for (int i = 0; i < PluginCount; ++i) {
+        PluginSamples[i].UpdateMs = 0.0;
+        PluginSamples[i].RenderMs = 0.0;
+        PluginSamples[i].MenuMs = 0.0;
+        PluginSamples[i].MaxUpdateMs = 0.0;
+        PluginSamples[i].MaxRenderMs = 0.0;
+        PluginSamples[i].MaxTotalMs = 0.0;
+        PluginSamples[i].TotalUpdateMs = 0.0;
+        PluginSamples[i].UpdateHits = 0;
+        PluginSamples[i].RenderHits = 0;
+        PluginSamples[i].MenuHits = 0;
+        PluginSamples[i].TotalHits = 0;
+    }
+}
+
+// Renders the collected timing stats with ImGui. Assumes an ImGui window is
+// already active — used both by the floating RenderOverlay and by the in-menu
+// profiler panel (NightSharpMenu Debug Info section).
+inline void DrawStatsBody() {
+    if (ImGui::Button("Clear / Reset Stats")) {
+        ResetAllStats();
+    }
+    ImGui::SameLine();
+    ImGui::Text(" (FPS: %.0f | Frame %.2f ms | Max %.2f ms)",
+        ImGui::GetIO().Framerate, LastFrameMs, MaxFrameMs);
+
+    ImGui::Text("Core: %.2f ms | Update: %.2f ms | Render: %.2f ms | Menu: %.2f ms",
+        LastCoreTickMs, LastUpdateMs, LastRenderMs, LastMenuMs);
+
+    const auto* slowestEv = SlowestEventPeak();
+    if (slowestEv && slowestEv->MaxMs > 0.01) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.35f, 1.0f),
+            "PEAK Event Spike: %s -> MAX: %.2f ms (Hits: %u, Last: %.2f ms)",
+            slowestEv->Name ? slowestEv->Name : "None",
+            slowestEv->MaxMs,
+            slowestEv->Hits,
+            slowestEv->LastMs);
+    } else {
+        ImGui::TextDisabled("PEAK Event Spike: None recorded yet");
+    }
+
+    if (SlowestHandler.MaxMs > 0.01) {
+        char handlerSym[256] = {};
+        ResolveSymbolOrAddress(SlowestHandler.HandlerPtr, handlerSym, sizeof(handlerSym));
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.5f, 0.2f, 1.0f),
+            "Slowest Handler Callback: %s [%s] -> MAX: %.2f ms",
+            SlowestHandler.EventName ? SlowestHandler.EventName : "None",
+            handlerSym[0] ? handlerSym : "Unknown",
+            SlowestHandler.MaxMs);
+    } else {
+        ImGui::TextDisabled("Slowest Handler Callback: None recorded yet");
+    }
+
+    const auto* peakSlowest = SlowestPeakPlugin();
+    if (peakSlowest && peakSlowest->MaxUpdateMs > 0.01) {
+        const double avgUpdate = peakSlowest->UpdateHits > 0
+            ? (peakSlowest->TotalUpdateMs / peakSlowest->UpdateHits)
+            : 0.0;
         ImGui::Text(
-            "%s: %.2f ms (U %.2f R %.2f M %.2f)",
-            sample.Name ? sample.Name : "",
-            total,
-            sample.UpdateMs,
-            sample.RenderMs,
-            sample.MenuMs);
+            "Plugin Direct OnUpdate Loop Max: %s -> MAX: %.2f ms (Avg: %.2f ms)",
+            (peakSlowest->Name && peakSlowest->Name[0]) ? peakSlowest->Name : peakSlowest->InternalId,
+            peakSlowest->MaxUpdateMs,
+            avgUpdate);
+    } else {
+        ImGui::TextDisabled("Plugin Direct OnUpdate Loop Max: N/A");
+    }
+
+    // Section 1: Native & Hotpath Code Probes (SectionStats)
+    if (SectionCount > 0) {
+        ImGui::Separator();
+        ImGui::Text("Native & Hotpath Event Probes");
+        if (ImGui::BeginTable("SectionStatsTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Probe Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Hits", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Avg ms", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Max ms", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Total ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableHeadersRow();
+
+            int indices[kMaxSections];
+            int n = std::min(SectionCount, kMaxSections);
+            for (int i = 0; i < n; ++i) indices[i] = i;
+            std::sort(indices, indices + n, [](int a, int b) {
+                return std::strcmp(SectionStats[a].Name ? SectionStats[a].Name : "",
+                                   SectionStats[b].Name ? SectionStats[b].Name : "") < 0;
+            });
+
+            for (int i = 0; i < n; ++i) {
+                const auto& stat = SectionStats[indices[i]];
+                if (!stat.Name || stat.Hits == 0) continue;
+                const double avgMs = stat.Hits > 0 ? (stat.TotalMs / stat.Hits) : 0.0;
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(stat.Name);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%u", stat.Hits);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%.3f", avgMs);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%.3f", stat.MaxMs);
+                ImGui::TableSetColumnIndex(4);
+                ImGui::Text("%.2f", stat.TotalMs);
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    // Section 2: Handler Event Timings (EventSamples)
+    if (EventCount > 0) {
+        ImGui::Separator();
+        ImGui::Text("Event Handler Timings");
+        if (ImGui::BeginTable("EventStatsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Event Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Hits", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn("Last ms", ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableSetupColumn("Max ms", ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableHeadersRow();
+
+            int indices[64];
+            int n = std::min(EventCount, static_cast<int>(std::size(EventSamples)));
+            for (int i = 0; i < n; ++i) indices[i] = i;
+            std::sort(indices, indices + n, [](int a, int b) {
+                return std::strcmp(EventSamples[a].Name ? EventSamples[a].Name : "",
+                                   EventSamples[b].Name ? EventSamples[b].Name : "") < 0;
+            });
+
+            for (int i = 0; i < n; ++i) {
+                const auto& sample = EventSamples[indices[i]];
+                if (!sample.Name || sample.Hits == 0) continue;
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(sample.Name);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%u", sample.Hits);
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%.3f", sample.LastMs);
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%.3f", sample.MaxMs);
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    // Section 3: Plugin Timings & Peak Spikes
+    if (PluginCount > 0) {
+        ImGui::Separator();
+        ImGui::Text("Plugin Timings & Peak Spikes");
+        if (ImGui::BeginTable("PluginStatsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Current ms", ImGuiTableColumnFlags_WidthFixed, 65.0f);
+            ImGui::TableSetupColumn("Peak Update", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+            ImGui::TableSetupColumn("Avg Update", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableSetupColumn("Peak Render", ImGuiTableColumnFlags_WidthFixed, 75.0f);
+            ImGui::TableSetupColumn("Peak Total", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+            ImGui::TableHeadersRow();
+
+            int pIndices[128];
+            int pCount = std::min(PluginCount, 128);
+            for (int i = 0; i < pCount; ++i) pIndices[i] = i;
+            std::sort(pIndices, pIndices + pCount, [](int a, int b) {
+                return std::strcmp(PluginSamples[a].Name ? PluginSamples[a].Name : "",
+                                   PluginSamples[b].Name ? PluginSamples[b].Name : "") < 0;
+            });
+
+            for (int i = 0; i < pCount; ++i) {
+                const auto& sample = PluginSamples[pIndices[i]];
+                const double currentTotal = sample.UpdateMs + sample.RenderMs + sample.MenuMs;
+                const double avgUpdate = sample.UpdateHits > 0 ? (sample.TotalUpdateMs / sample.UpdateHits) : 0.0;
+
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(sample.Name ? sample.Name : "");
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%.2f", currentTotal);
+                ImGui::TableSetColumnIndex(2);
+                if (sample.MaxUpdateMs > 3.0) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%.2f ms", sample.MaxUpdateMs);
+                } else {
+                    ImGui::Text("%.2f ms", sample.MaxUpdateMs);
+                }
+                ImGui::TableSetColumnIndex(3);
+                ImGui::Text("%.2f ms", avgUpdate);
+                ImGui::TableSetColumnIndex(4);
+                ImGui::Text("%.2f ms", sample.MaxRenderMs);
+                ImGui::TableSetColumnIndex(5);
+                ImGui::Text("%.2f ms", sample.MaxTotalMs);
+            }
+            ImGui::EndTable();
+        }
     }
 }
 

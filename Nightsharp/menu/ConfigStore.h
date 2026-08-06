@@ -400,6 +400,7 @@ namespace ConfigStore {
     }
 
     inline std::map<std::string, ImVec2> g_runtimePositions;
+    inline std::map<std::string, ImVec2> g_runtimeSizes;
 
     // ── Core settings (Config:: globals) ────────────────────────────────────
     struct CoreSnap {
@@ -471,6 +472,13 @@ namespace ConfigStore {
             doc.Set("RuntimePositions", keyX, FmtInt(static_cast<int>(pos.x)));
             doc.Set("RuntimePositions", keyY, FmtInt(static_cast<int>(pos.y)));
         }
+        for (const auto& [name, sz] : g_runtimeSizes) {
+            char keyW[128] = {}, keyH[128] = {};
+            std::snprintf(keyW, sizeof(keyW), "%s_w", name.c_str());
+            std::snprintf(keyH, sizeof(keyH), "%s_h", name.c_str());
+            doc.Set("RuntimeSizes", keyW, FmtInt(static_cast<int>(sz.x)));
+            doc.Set("RuntimeSizes", keyH, FmtInt(static_cast<int>(sz.y)));
+        }
 
         WriteDoc(CoreFilePath(), doc);
         g_lastCore = CaptureCore();
@@ -516,15 +524,27 @@ namespace ConfigStore {
             Config::Language::index             = I("Language", "index", Config::Language::index);
 
             for (const auto& sec : doc.secs) {
-                if (sec.name != "RuntimePositions") continue;
-                for (const auto& kv : sec.kvs) {
-                    const std::string& k = kv.key;
-                    if (k.length() > 2 && k.substr(k.length() - 2) == "_x") {
-                        std::string baseName = k.substr(0, k.length() - 2);
-                        g_runtimePositions[baseName].x = static_cast<float>(ParseInt(kv.val, 0));
-                    } else if (k.length() > 2 && k.substr(k.length() - 2) == "_y") {
-                        std::string baseName = k.substr(0, k.length() - 2);
-                        g_runtimePositions[baseName].y = static_cast<float>(ParseInt(kv.val, 0));
+                if (sec.name == "RuntimePositions") {
+                    for (const auto& kv : sec.kvs) {
+                        const std::string& k = kv.key;
+                        if (k.length() > 2 && k.substr(k.length() - 2) == "_x") {
+                            std::string baseName = k.substr(0, k.length() - 2);
+                            g_runtimePositions[baseName].x = static_cast<float>(ParseInt(kv.val, 0));
+                        } else if (k.length() > 2 && k.substr(k.length() - 2) == "_y") {
+                            std::string baseName = k.substr(0, k.length() - 2);
+                            g_runtimePositions[baseName].y = static_cast<float>(ParseInt(kv.val, 0));
+                        }
+                    }
+                } else if (sec.name == "RuntimeSizes") {
+                    for (const auto& kv : sec.kvs) {
+                        const std::string& k = kv.key;
+                        if (k.length() > 2 && k.substr(k.length() - 2) == "_w") {
+                            std::string baseName = k.substr(0, k.length() - 2);
+                            g_runtimeSizes[baseName].x = static_cast<float>(ParseInt(kv.val, 0));
+                        } else if (k.length() > 2 && k.substr(k.length() - 2) == "_h") {
+                            std::string baseName = k.substr(0, k.length() - 2);
+                            g_runtimeSizes[baseName].y = static_cast<float>(ParseInt(kv.val, 0));
+                        }
                     }
                 }
             }
@@ -547,6 +567,25 @@ namespace ConfigStore {
         auto& existing = g_runtimePositions[name];
         if (std::abs(existing.x - pos.x) > 1.0f || std::abs(existing.y - pos.y) > 1.0f) {
             existing = pos;
+            SaveCore();
+        }
+    }
+
+    inline bool GetRuntimeSize(const char* name, ImVec2& outSize) {
+        if (!name || !name[0]) return false;
+        auto it = g_runtimeSizes.find(name);
+        if (it != g_runtimeSizes.end() && it->second.x > 50.0f && it->second.y > 50.0f) {
+            outSize = it->second;
+            return true;
+        }
+        return false;
+    }
+
+    inline void SetRuntimeSize(const char* name, const ImVec2& size) {
+        if (!name || !name[0]) return;
+        auto& existing = g_runtimeSizes[name];
+        if (std::abs(existing.x - size.x) > 1.0f || std::abs(existing.y - size.y) > 1.0f) {
+            existing = size;
             SaveCore();
         }
     }

@@ -673,7 +673,7 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     // depends on the live selection state and FocusLease.  Do not return the
     // legacy one-tick cache while Kuro is active or a lease could change
     // targets without changing the requested range.
-    if (!kuro && currentTick == lastSelectTick &&
+    if (currentTick == lastSelectTick &&
         std::abs(range - lastSelectRange) < 1.0f) {
         if (ValidEnemy(cachedTarget, range)) {
             return cachedTarget;

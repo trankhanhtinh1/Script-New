@@ -253,7 +253,8 @@ private:
             return;
         }
 
-        if (args.Msg == WM_KEYDOWN && self->CycleHotkeyActive()) {
+        const bool isAutoRepeat = (args.LParam & (1 << 30)) != 0;
+        if (args.Msg == WM_KEYDOWN && !isAutoRepeat && self->CycleHotkeyActive()) {
             self->CycleSelection();
         }
     }

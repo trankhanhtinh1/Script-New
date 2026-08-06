@@ -1281,11 +1281,21 @@ inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
         ImGui::SetNextWindowPos(initPos, ImGuiCond_FirstUseEver);
     }
 
+    ImVec2 savedSize;
+    bool hasSavedSize = ConfigStore::GetRuntimeSize(runtime->Name.c_str(), savedSize);
+    if (hasSavedSize) {
+        ImGui::SetNextWindowSize(savedSize, ImGuiCond_FirstUseEver);
+    } else {
+        const float defaultW = std::max(runtime->MinimumWidth, 550.0f);
+        const float defaultH = 380.0f;
+        ImGui::SetNextWindowSize(ImVec2(defaultW, defaultH), ImGuiCond_FirstUseEver);
+    }
+
     ImGui::SetNextWindowSizeConstraints(
-        ImVec2(runtime->MinimumWidth, ContainerHeight),
+        ImVec2(std::max(runtime->MinimumWidth, 250.0f), 160.0f),
         ImVec2(
-            ImGui::GetMainViewport()->Size.x * 0.85f,
-            ImGui::GetMainViewport()->Size.y * 0.85f));
+            ImGui::GetMainViewport()->Size.x * 0.95f,
+            ImGui::GetMainViewport()->Size.y * 0.95f));
 
     char windowId[128] = {};
     std::snprintf(windowId, sizeof(windowId), "%s##NightSharpRuntime_%p", runtime->DisplayName.c_str(), runtime);
@@ -1318,9 +1328,7 @@ inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
     style.colTextDim = IM_COL32(185, 185, 205, 255);
     style.colAccent = EnabledColor;
 
-    const ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_AlwaysAutoResize;
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings;
 
     if (ImGui::Begin(windowId, &runtime->Open, flags)) {
         runtime->DrawCallback(runtime->DrawUserData);
@@ -1328,9 +1336,8 @@ inline void DrawSingleRuntimePopup(MenuRuntime* runtime, int windowIndex) {
         const ImVec2 size = ImGui::GetWindowSize();
         IncludeBounds(Rect{ pos.x, pos.y, size.x, size.y });
 
-        if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(0)) {
-            ConfigStore::SetRuntimePosition(runtime->Name.c_str(), pos);
-        }
+        ConfigStore::SetRuntimePosition(runtime->Name.c_str(), pos);
+        ConfigStore::SetRuntimeSize(runtime->Name.c_str(), size);
     }
     ImGui::End();
 

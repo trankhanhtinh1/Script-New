@@ -290,7 +290,7 @@ public:
                 manualPreferredId == facts.NetworkId) {
                 decision.Breakdown.Add(
                     "manual-preference", "manual target preference",
-                    menu_ ? menu_->Stickiness() : 80.0f, 0.0f, 240.0f);
+                    100000.0f, 0.0f, 100000.0f);
                 decision.Score = decision.Breakdown.Total;
             }
             if (request.AllowFallback && request.LockedTargetId != 0 &&
@@ -528,23 +528,28 @@ private:
         bool acquired_ = false;
     };
 
-    std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>
+    const std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>&
     BuildProviderOrder() {
         using namespace ::SDK::KuroTargetSelector;
-        std::vector<ProviderRegistry::Entry*> order;
-        order.reserve(providersRegistry_.MutableEntries().size());
+        const auto currentRev = revision_;
+        if (cachedProviderRevision_ == currentRev && !cachedProviderOrder_.empty()) {
+            return cachedProviderOrder_;
+        }
+        cachedProviderOrder_.clear();
+        cachedProviderOrder_.reserve(providersRegistry_.MutableEntries().size());
         for (auto& entry : providersRegistry_.MutableEntries()) {
             // BaseSafety is reserved for the live core action gate.
             if (entry.Provider.Band != ProviderPriorityBand::BaseSafety) {
-                order.push_back(&entry);
+                cachedProviderOrder_.push_back(&entry);
             }
         }
-        std::stable_sort(order.begin(), order.end(),
+        std::stable_sort(cachedProviderOrder_.begin(), cachedProviderOrder_.end(),
             [](const auto* lhs, const auto* rhs) {
                 return static_cast<int>(lhs->Provider.Band) <
                     static_cast<int>(rhs->Provider.Band);
             });
-        return order;
+        cachedProviderRevision_ = currentRev;
+        return cachedProviderOrder_;
     }
 
     static void RestoreCoreFacts(
@@ -793,6 +798,8 @@ private:
         }
     }
 
+    std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*> cachedProviderOrder_;
+    std::uint64_t cachedProviderRevision_ = 0;
     std::unique_ptr<Menu> menu_;
     std::unique_ptr<Drawing> drawing_;
     ::SDK::KuroTargetSelector::ProviderRegistry providersRegistry_;

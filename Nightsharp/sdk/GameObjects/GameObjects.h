@@ -10,6 +10,7 @@
 #include "../Enumerations/ChampionId.h"
 #include "../Utils/HashUtils.h"
 #include "../../CrashTrace.h"
+#include "../../SectionProfiler.h"
 
 #include <Windows.h>
 #include <algorithm>
@@ -426,9 +427,15 @@ namespace detail {
     }
 
     inline void OnObjectAdd(const GameObject& object) {
-        if (!object.IsValid()) return;
         Lock lk(g_mutex);
-        CleanInvalidObjects();
+        static DWORD s_lastCleanTick = 0;
+        const DWORD now = GetTickCount();
+        if (now - s_lastCleanTick > 100) {
+            s_lastCleanTick = now;
+            CleanInvalidObjects();
+        }
+
+        if (!object.IsValid()) return;
 
         PopulateStatic(object);
 
@@ -802,6 +809,7 @@ namespace detail {
     }
 
     inline void OnNativeObjectCreate(const SDK::Events::ObjectEventArgs& args) {
+        NS_PROFILE("GameObjects::OnNativeObjectCreate");
         if (args.Sender.IsValid()) {
             const auto start = NightSharpPerf::Now();
             OnObjectAdd(ObjectFromArgs(args));
@@ -812,6 +820,7 @@ namespace detail {
     }
 
     inline void OnNativeObjectDelete(const SDK::Events::ObjectEventArgs& args) {
+        NS_PROFILE("GameObjects::OnNativeObjectDelete");
         if (args.Sender.IsValid()) {
             StaticStringCache::Clear(static_cast<std::uint32_t>(args.Sender.Index & 0xFFFFu));
             const auto start = NightSharpPerf::Now();
