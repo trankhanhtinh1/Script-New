@@ -274,7 +274,7 @@ private:
              "Peel", "Interrupt", "AntiGapcloser", "FleeThreat", "General"},
             0));
         native_->Add(new ::SDK::MenuKeyBind(
-            "CycleHotkey", "Cycle Selected Target", ::SDK::Keys::Tab,
+            "CycleHotkey", "Cycle Selected Target", ::SDK::Keys::CapsLock,
             ::SDK::KeyBindType::Press, false));
         native_->Add(new ::SDK::MenuKeyBind(
             "ManualOverride", "Manual Target Override", ::SDK::Keys::Shift,
