@@ -742,23 +742,113 @@ private:
             target.Address(), ::CoreBuffs::ResolveGameTime());
         if (buffSnapshot) {
             bool cc = false;
+            bool slow = false;
+            bool knockup = false;
+            bool suppressed = false;
+            bool grounded = false;
+            bool silenced = false;
+            bool blinded = false;
             bool stasis = false;
+            bool hasMark = false;
+            int debuffCount = 0;
+            float debuffScore = 0.0f;
+
             for (int i = 0; i < buffSnapshot->count; ++i) {
                 const auto& entry = buffSnapshot->entries[i];
                 if (!entry.isActive) continue;
                 const std::uint32_t h = entry.hash;
-                if (!cc && (h == kStunHash || h == kRootHash || h == kSnareHash ||
-                            h == kCharmHash || h == kFearHash || h == kTauntHash ||
-                            h == kSilenceHash)) {
-                    cc = true;
-                }
+                const std::uint8_t t = entry.type;
+                const char* name = entry.name;
+
                 if (!stasis && (h == kBardStasisHash || h == kZhonyasHash ||
                                 h == kLissandraHash || h == kVladPoolHash ||
                                 h == kFizzEHash)) {
                     stasis = true;
                 }
+
+                // Hard CC types: Stun (5), Silence (7/13), Taunt (8/14), Berserk (9/15), Polymorph (10/16), Snare (12/18), Fear (22/28), Charm (23/29), Flee (29/35), Asleep (35/41)
+                const bool isHardCC = (t == 5 || t == 7 || t == 8 || t == 9 || t == 10 || t == 12 ||
+                                       t == 13 || t == 14 || t == 15 || t == 16 || t == 18 || t == 22 ||
+                                       t == 23 || t == 28 || t == 29 || t == 35 || t == 41 ||
+                                       h == kStunHash || h == kRootHash || h == kSnareHash ||
+                                       h == kCharmHash || h == kFearHash || h == kTauntHash || h == kSilenceHash);
+                if (isHardCC) {
+                    cc = true;
+                    if (t == 7 || t == 13 || h == kSilenceHash) silenced = true;
+                    debuffScore += 45.0f;
+                    debuffCount++;
+                }
+
+                // Knockup / Knockback / Airborne: Type 30 (Knockup), 31 (Knockback), 36/37
+                const bool isAirborne = (t == 30 || t == 31 || t == 36 || t == 37 ||
+                                         (name && (strstr(name, "knockup") || strstr(name, "knockback") || strstr(name, "airborne"))));
+                if (isAirborne) {
+                    knockup = true;
+                    debuffScore += 55.0f;
+                    debuffCount++;
+                }
+
+                // Suppression: Type 25 or 31
+                const bool isSuppression = (t == 25 || (name && strstr(name, "suppress")));
+                if (isSuppression) {
+                    suppressed = true;
+                    debuffScore += 60.0f;
+                    debuffCount++;
+                }
+
+                // Slow / Grounded / AttackSpeedSlow: Type 11 (Slow), 17, 19, 33 (Grounded), 39
+                const bool isSlow = (t == 11 || t == 17 || t == 19 || (name && strstr(name, "slow")));
+                if (isSlow) {
+                    slow = true;
+                    debuffScore += 20.0f;
+                    debuffCount++;
+                }
+
+                const bool isGrounded = (t == 33 || t == 39 || (name && strstr(name, "grounded")));
+                if (isGrounded) {
+                    grounded = true;
+                    debuffScore += 25.0f;
+                    debuffCount++;
+                }
+
+                const bool isBlind = (t == 26 || t == 32 || (name && strstr(name, "blind")));
+                if (isBlind) {
+                    blinded = true;
+                    debuffScore += 15.0f;
+                    debuffCount++;
+                }
+
+                // Marks / Stack debuffs / Vulnerable debuffs
+                if (name && name[0]) {
+                    if (strstr(name, "tristanae") || strstr(name, "kalistaexpunge") ||
+                        strstr(name, "vaynecounter") || strstr(name, "kaisa") ||
+                        strstr(name, "zedr") || strstr(name, "hemoplague") ||
+                        strstr(name, "dariushemo") || strstr(name, "brandablaze") ||
+                        strstr(name, "teemopoisons") || strstr(name, "fioramark") ||
+                        strstr(name, "varusw") || strstr(name, "akshan") ||
+                        strstr(name, "shred") || strstr(name, "blackcleaver") ||
+                        strstr(name, "abyssal") || strstr(name, "grievous") ||
+                        strstr(name, "vulnerable") || strstr(name, "debuff")) {
+                        hasMark = true;
+                        const float stacksBonus = std::clamp(static_cast<float>(entry.stacks), 1.0f, 5.0f);
+                        debuffScore += 30.0f * (1.0f + 0.25f * (stacksBonus - 1.0f));
+                        debuffCount++;
+                    }
+                }
             }
-            if (facts.Targetable) facts.IsCrowdControlled = cc;
+
+            if (facts.Targetable) {
+                facts.IsCrowdControlled = cc;
+                facts.IsSlowed = slow;
+                facts.IsKnockedUp = knockup;
+                facts.IsSuppressed = suppressed;
+                facts.IsGrounded = grounded;
+                facts.IsSilenced = silenced;
+                facts.IsBlinded = blinded;
+                facts.HasVulnerableMark = hasMark;
+                facts.DebuffCount = debuffCount;
+                facts.DebuffScore = debuffScore;
+            }
             if (!facts.Targetable) facts.IsStasis = stasis;
         }
         if (facts.Targetable) {

@@ -7,6 +7,29 @@ namespace OrbwalkerKuro {
 inline OrbwalkerBase::OrbwalkerBase(Menu* parentMenu)
     : menu_(parentMenu) {
     OrbwalkingDetail::RuntimeInstance = this;
+
+    if (menu_.attackEnabledOption_) {
+        context_.attackEnabled = menu_.attackEnabledOption_->Value;
+        menu_.attackEnabledOption_->ValueChanged = [](MenuItem* sender, void* userData) {
+            auto* self = static_cast<OrbwalkerBase*>(userData);
+            if (self && sender) {
+                self->context_.attackEnabled = sender->As<MenuBool>()->Value;
+            }
+        };
+        menu_.attackEnabledOption_->ValueChangedUd = this;
+    }
+
+    if (menu_.moveEnabledOption_) {
+        context_.moveEnabled = menu_.moveEnabledOption_->Value;
+        menu_.moveEnabledOption_->ValueChanged = [](MenuItem* sender, void* userData) {
+            auto* self = static_cast<OrbwalkerBase*>(userData);
+            if (self && sender) {
+                self->context_.moveEnabled = sender->As<MenuBool>()->Value;
+            }
+        };
+        menu_.moveEnabledOption_->ValueChangedUd = this;
+    }
+
     Events::AddOnGameUpdate(&OrbwalkerBase::OnGameUpdateStatic);
     Events::AddOnDoCast(&OrbwalkerBase::OnDoCastStatic);
     Events::AddOnProcessSpell(&OrbwalkerBase::OnProcessSpellStatic);
@@ -54,10 +77,16 @@ inline void OrbwalkerBase::LastMovementTick(int value) {
     context_.lastMovementTick = value;
     context_.lastMoveOrderTick = value;
 }
-inline bool OrbwalkerBase::AttackEnabled() const { return context_.attackEnabled; }
-inline void OrbwalkerBase::AttackEnabled(bool value) { context_.attackEnabled = value; }
-inline bool OrbwalkerBase::MoveEnabled() const { return context_.moveEnabled; }
-inline void OrbwalkerBase::MoveEnabled(bool value) { context_.moveEnabled = value; }
+inline bool OrbwalkerBase::AttackEnabled() const { return context_.attackEnabled && menu_.AttackEnabled(); }
+inline void OrbwalkerBase::AttackEnabled(bool value) {
+    context_.attackEnabled = value;
+    menu_.SetAttackEnabled(value);
+}
+inline bool OrbwalkerBase::MoveEnabled() const { return context_.moveEnabled && menu_.MoveEnabled(); }
+inline void OrbwalkerBase::MoveEnabled(bool value) {
+    context_.moveEnabled = value;
+    menu_.SetMoveEnabled(value);
+}
 inline void OrbwalkerBase::SetOrbwalkerPosition(const Vector3& position) { context_.orbwalkerPosition = position; }
 inline void OrbwalkerBase::SetPauseTime(int time) { context_.allPauseTick = Tick() + std::max(0, time); }
 inline void OrbwalkerBase::SetServerPauseTime(int time) { SetPauseTime(time - Game::Ping() / 2); }

@@ -287,6 +287,15 @@ struct TargetFacts {
     bool IsDashing = false;
     bool IsMoving = false;
     bool IsCrowdControlled = false;
+    bool IsSlowed = false;
+    bool IsKnockedUp = false;
+    bool IsSuppressed = false;
+    bool IsGrounded = false;
+    bool IsSilenced = false;
+    bool IsBlinded = false;
+    bool HasVulnerableMark = false;
+    int DebuffCount = 0;
+    float DebuffScore = 0.0f;
     bool IsChanneling = false;
     bool IsEscaping = false;
     bool IsFacingSource = false;

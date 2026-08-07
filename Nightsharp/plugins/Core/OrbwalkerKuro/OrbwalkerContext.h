@@ -59,6 +59,7 @@ struct OrbwalkerRuntimeContext {
     float visualReadyWeight = 1.0f;
     float visualCooldownWeight = 0.0f;
     float visualSmoothProgress = 1.0f;
+    float visualTextureAngle = 0.0f;
     int visualLastDrawTick = 0;
 
     bool attackEnabled = true;

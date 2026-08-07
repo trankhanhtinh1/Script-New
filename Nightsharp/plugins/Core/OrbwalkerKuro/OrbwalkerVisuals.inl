@@ -1,15 +1,240 @@
 #pragma once
 
+#include "OrbwalkerRingAssets.inl"
+#include "../../../sdk/Utils/AssetInstaller.h"
+#include "../../../sdk/UI/Icons.h"
+
+#include <Windows.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <string>
+#include <thread>
+#include <unordered_set>
+#include <vector>
 
 using namespace ::SDK;
 
 namespace OrbwalkerKuro {
 
-inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
-    if (!player.IsValid() || !Drawing::IsEnabled()) {
+struct TextureRingData {
+    SDK::UI::Icons::LoadedTexture texture = {};
+    float ringRadiusRatio = 1.0f;
+    bool loaded = false;
+    bool loadAttempted = false;
+};
+
+inline TextureRingData g_ringCache[4] = {};
+
+inline TextureRingData ProcessAndUploadRingPixels(SDK::UI::Icons::ImagePixels& pixels) {
+    TextureRingData result{};
+    if (!pixels.IsValid() || pixels.Width <= 0 || pixels.Height <= 0) {
+        return result;
+    }
+
+    const int width = pixels.Width;
+    const int height = pixels.Height;
+    const float cx = static_cast<float>(width) * 0.5f;
+    const float cy = static_cast<float>(height) * 0.5f;
+    const float maxPossibleR = std::min(cx, cy);
+
+    float maxRingR = 0.0f;
+    std::uint8_t* ptr = pixels.Rgba.data();
+
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            std::size_t idx = (static_cast<std::size_t>(y) * width + x) * 4;
+            std::uint8_t r = ptr[idx + 0];
+            std::uint8_t g = ptr[idx + 1];
+            std::uint8_t b = ptr[idx + 2];
+            std::uint8_t a = ptr[idx + 3];
+
+            // Convert black/dark background to alpha transparency
+            std::uint8_t v = std::max(r, std::max(g, b));
+            if (v < 18) {
+                ptr[idx + 3] = 0;
+            } else {
+                float alphaScale = static_cast<float>(v) / 255.0f;
+                ptr[idx + 3] = static_cast<std::uint8_t>(std::clamp(static_cast<float>(a) * alphaScale, 0.0f, 255.0f));
+            }
+
+            // Measure outer radius of the visible ring in pixels
+            if (ptr[idx + 3] > 25) {
+                float dx = static_cast<float>(x) - cx;
+                float dy = static_cast<float>(y) - cy;
+                float dist = std::sqrt(dx * dx + dy * dy);
+                if (dist > maxRingR && dist <= maxPossibleR * 1.05f) {
+                    maxRingR = dist;
+                }
+            }
+        }
+    }
+
+    if (maxRingR > 0.0f && maxPossibleR > 0.0f) {
+        result.ringRadiusRatio = std::clamp(maxRingR / maxPossibleR, 0.3f, 1.0f);
+    } else {
+        result.ringRadiusRatio = 1.0f;
+    }
+
+    result.texture = SDK::UI::Icons::CreateTextureFromPixels(pixels);
+    result.loaded = (result.texture.Texture != nullptr);
+    result.loadAttempted = true;
+    return result;
+}
+
+inline TextureRingData* EnsureRingTextureLoaded(int index) {
+    if (index < 0 || index >= 4) return nullptr;
+    TextureRingData& cache = g_ringCache[index];
+    if (cache.loaded) return &cache;
+
+    // Load exclusively from embedded binary bytes in DLL memory (100% offline & fast)
+    const auto& embedded = kEmbeddedRings[index];
+    if (embedded.bytes && embedded.size > 0) {
+        SDK::UI::Icons::ImagePixels pixels{};
+        if (SDK::UI::Icons::LoadPixelsFromMemory(embedded.bytes, static_cast<int>(embedded.size), pixels)) {
+            cache = ProcessAndUploadRingPixels(pixels);
+            if (cache.loaded) return &cache;
+        }
+    }
+
+    return nullptr;
+}
+
+inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player) {
+    const float range = GetRealAutoAttackRange(player);
+    if (range <= 0.0f) return;
+
+    const int textureIdx = std::clamp<int>(this->menu_.AARangeTexture(), 0, 3);
+    TextureRingData* ringData = EnsureRingTextureLoaded(textureIdx);
+    if (!ringData || !ringData->loaded || !ringData->texture.Texture) {
         return;
+    }
+
+    auto* draw = Drawing::GetDrawList(true);
+    if (!draw) return;
+
+    const Vector3 center = player.Position();
+    const float quadRadius = range / ringData->ringRadiusRatio;
+
+    const bool ready = this->CanAttack();
+    const bool windingUp = this->IsWindingUp();
+
+    // Color tint based on state (Ready = Green/Cyan, Windup = Amber/Orange, Cooldown = Red/Magenta)
+    ImU32 color = IM_COL32(0, 230, 180, 255);
+    if (windingUp) {
+        color = IM_COL32(255, 180, 20, 255);
+    } else if (!ready) {
+        color = IM_COL32(255, 80, 80, 220);
+    }
+
+    const int opacityPercent = this->menu_.AARangeOpacityPercent();
+    const int alpha = std::clamp<int>(opacityPercent * 255 / 100, 0, 255);
+    color = (color & 0x00FFFFFF) | (static_cast<ImU32>(alpha) << 24);
+
+    // Calculate target facing angle from player direction
+    Vector3 moveDir = player.Direction();
+    if (moveDir.LengthSqr() < 0.001f) {
+        moveDir = player.ServerPosition() - player.Position();
+    }
+
+    float targetAngle = this->context_.visualTextureAngle;
+    if (moveDir.LengthSqr() > 0.001f) {
+        targetAngle = std::atan2(moveDir.z, moveDir.x);
+    }
+
+    // Shortest-path angle difference [-PI, +PI]
+    float diff = targetAngle - this->context_.visualTextureAngle;
+    constexpr float kTwoPi = 6.283185307179586f;
+    constexpr float kPi = 3.141592653589793f;
+
+    while (diff > kPi) diff -= kTwoPi;
+    while (diff < -kPi) diff += kTwoPi;
+
+    // Time delta for smooth rotation lerp
+    const int now = Tick();
+    float dt = 0.016f;
+    if (this->context_.visualLastDrawTick > 0 && now > this->context_.visualLastDrawTick) {
+        dt = std::clamp<float>(static_cast<float>(now - this->context_.visualLastDrawTick) / 1000.0f, 0.001f, 0.1f);
+    }
+    const float speed = static_cast<float>(std::clamp<int>(this->menu_.AARangeRotateSpeed(), 1, 20));
+    const float lerpFactor = std::clamp<float>(dt * speed, 0.01f, 1.0f);
+
+    this->context_.visualTextureAngle += diff * lerpFactor;
+
+    // Rotate UV coordinates centered at (0.5, 0.5) by visualTextureAngle
+    const float angle = this->context_.visualTextureAngle;
+    const float cosA = std::cos(angle);
+    const float sinA = std::sin(angle);
+
+    auto RotateUV = [cosA, sinA](float u, float v) -> ImVec2 {
+        float du = u - 0.5f;
+        float dv = v - 0.5f;
+        float rotU = 0.5f + (du * cosA - dv * sinA);
+        float rotV = 0.5f + (du * sinA + dv * cosA);
+        return ImVec2(rotU, rotV);
+    };
+
+    constexpr int kGridSize = 16;
+    const float step = (quadRadius * 2.0f) / static_cast<float>(kGridSize);
+    const float startX = center.x - quadRadius;
+    const float startZ = center.z - quadRadius;
+
+    struct GridNode {
+        ImVec2 screen;
+        ImVec2 uv;
+        bool valid;
+    };
+
+    GridNode grid[kGridSize + 1][kGridSize + 1];
+
+    for (int row = 0; row <= kGridSize; ++row) {
+        const float v = static_cast<float>(row) / static_cast<float>(kGridSize);
+        const float z = startZ + step * static_cast<float>(row);
+        for (int col = 0; col <= kGridSize; ++col) {
+            const float u = static_cast<float>(col) / static_cast<float>(kGridSize);
+            const float x = startX + step * static_cast<float>(col);
+
+            const float y = SDK::NavMesh::GetHeightForPosition(x, z);
+            Vector3 worldPos(x, y, z);
+            Vector2 screenPos;
+            bool onScreen = Drawing::WorldToScreen(worldPos, screenPos);
+
+            grid[row][col].screen = ImVec2(screenPos.x, screenPos.y);
+            grid[row][col].uv = RotateUV(u, v);
+            grid[row][col].valid = onScreen;
+        }
+    }
+
+    for (int row = 0; row < kGridSize; ++row) {
+        for (int col = 0; col < kGridSize; ++col) {
+            const auto& n0 = grid[row][col];         // Top-Left
+            const auto& n1 = grid[row][col + 1];     // Top-Right
+            const auto& n2 = grid[row + 1][col + 1]; // Bottom-Right
+            const auto& n3 = grid[row + 1][col];     // Bottom-Left
+
+            if (n0.valid || n1.valid || n2.valid || n3.valid) {
+                draw->AddImageQuad(
+                    ringData->texture.Texture,
+                    n0.screen, n1.screen, n2.screen, n3.screen,
+                    n0.uv, n1.uv, n2.uv, n3.uv,
+                    color);
+            }
+        }
+    }
+}
+
+inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
+    if (!player.IsValid() || !Drawing::IsEnabled() || !menu_.DrawAARange()) {
+        return;
+    }
+
+    if (menu_.AARangeStyle() == 1) { // 1 = Texture Ring
+        const int textureIdx = std::clamp(menu_.AARangeTexture(), 0, 3);
+        TextureRingData* ringData = EnsureRingTextureLoaded(textureIdx);
+        if (ringData && ringData->loaded && ringData->texture.Texture) {
+            DrawAutoAttackRangeTexture(player);
+            return;
+        }
     }
 
     const float outerRadius = GetRealAutoAttackRange(player);

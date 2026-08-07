@@ -13,6 +13,7 @@ using namespace ::SDK;
 namespace OrbwalkerKuro {
 
 class OrbwalkerMenu {
+    friend class OrbwalkerBase;
 public:
     explicit OrbwalkerMenu(Menu* parentMenu)
         : parentMenu_(parentMenu) {
@@ -20,8 +21,29 @@ public:
     }
 
     bool Enabled() const { return BoolValue(enabledOption_, true); }
+    bool AttackEnabled() const { return BoolValue(attackEnabledOption_, true); }
+    bool MoveEnabled() const { return BoolValue(moveEnabledOption_, true); }
+
+    MenuBool* AttackEnabledOption() const { return attackEnabledOption_; }
+    MenuBool* MoveEnabledOption() const { return moveEnabledOption_; }
+
+    void SetAttackEnabled(bool value) {
+        if (attackEnabledOption_) {
+            attackEnabledOption_->Set(value);
+        }
+    }
+
+    void SetMoveEnabled(bool value) {
+        if (moveEnabledOption_) {
+            moveEnabledOption_->Set(value);
+        }
+    }
 
     bool DrawAARange() const { return BoolValue(drawAARange_, true); }
+    int AARangeStyle() const { return ListValue(aaRangeStyle_, 0); }
+    int AARangeTexture() const { return ListValue(aaRangeTexture_, 0); }
+    int AARangeOpacityPercent() const { return SliderValue(aaRangeOpacity_, 100); }
+    int AARangeRotateSpeed() const { return SliderValue(aaRangeRotateSpeed_, 8); }
     int AARangeFadeWidth() const { return SliderValue(aaRangeFadeWidth_, 200); }
     int AARangeFadeOpacityPercent() const { return SliderValue(aaRangeFadeOpacityPercent_, 70); }
     bool DrawAARangeEnemy() const { return BoolValue(drawAARangeEnemy_, false); }
@@ -66,7 +88,7 @@ public:
         }
         return IsKeyActive(lastHitKey_, 'X')
             ? OrbwalkingMode::LastHit
-            : IsKeyActive(laneClearKey_, 'V')
+            : (IsKeyActive(laneClearKey_, 'V') || IsKeyActive(fastLaneClearKey_, 'U'))
             ? OrbwalkingMode::LaneClear
             : IsKeyActive(hybridKey_, 'C')
             ? OrbwalkingMode::Hybrid
@@ -75,8 +97,11 @@ public:
             : OrbwalkingMode::None;
     }
 
+    bool FastLaneClear() const { return IsKeyActive(fastLaneClearKey_, 'U'); }
+    bool IsFastLaneClearKeyPressed() const { return fastLaneClearKey_ && fastLaneClearKey_->Active; }
+
     bool IsComboKeyPressed() const { return comboKey_ && comboKey_->Active; }
-    bool IsLaneClearKeyPressed() const { return laneClearKey_ && laneClearKey_->Active; }
+    bool IsLaneClearKeyPressed() const { return (laneClearKey_ && laneClearKey_->Active) || (fastLaneClearKey_ && fastLaneClearKey_->Active); }
     bool IsLastHitKeyPressed() const { return lastHitKey_ && lastHitKey_->Active; }
     bool IsHybridKeyPressed() const { return hybridKey_ && hybridKey_->Active; }
 
@@ -114,6 +139,10 @@ private:
         drawingsMenu_ = menu_->AddSubMenu(new Menu("drawings", "Drawings"));
         if (drawingsMenu_) {
             drawAARange_ = drawingsMenu_->Add(new MenuBool("drawAARange", "Auto-Attack Range", true));
+            aaRangeStyle_ = drawingsMenu_->Add(new MenuList("aaRangeStyle", "AA Range Drawing Style", { "Default (Vector)", "Texture Ring" }, 0));
+            aaRangeTexture_ = drawingsMenu_->Add(new MenuList("aaRangeTexture", "AA Range Texture", { "Demacia Trophy", "Hextech AoE", "Bilgewater Shield", "Olaf Circle" }, 0));
+            aaRangeOpacity_ = drawingsMenu_->Add(new MenuSlider("aaRangeOpacity", "Texture Opacity (%)", 100, 10, 100));
+            aaRangeRotateSpeed_ = drawingsMenu_->Add(new MenuSlider("aaRangeRotateSpeed", "Texture Rotation Speed", 8, 1, 20));
             aaRangeFadeWidth_ = drawingsMenu_->Add(new MenuSlider(
                 "aaRangeFadeWidth", "AA Range Fade Width", 200, 1, 600));
             aaRangeFadeOpacityPercent_ = drawingsMenu_->Add(new MenuSlider(
@@ -191,8 +220,13 @@ private:
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
         lastHitKey_ = menu_->Add(new MenuKeyBind("lasthitKey", "Last Hit", 'X', KeyBindType::Press));
         laneClearKey_ = menu_->Add(new MenuKeyBind("laneclearKey", "Lane Clear", 'V', KeyBindType::Press));
+        fastLaneClearKey_ = menu_->Add(new MenuKeyBind("fastLaneClearKey", "Fast Lane Clear", 'U', KeyBindType::Toggle));
         hybridKey_ = menu_->Add(new MenuKeyBind("hybridKey", "Hybrid", 'C', KeyBindType::Press));
         comboKey_ = menu_->Add(new MenuKeyBind("comboKey", "Combo", VK_SPACE, KeyBindType::Press));
+
+        menu_->Add(new MenuSeparator("separatorControls", "Controls"));
+        attackEnabledOption_ = menu_->Add(new MenuBool("attackEnabled", "Attack Enable", true));
+        moveEnabledOption_ = menu_->Add(new MenuBool("moveEnabled", "Move Enable", true));
         enabledOption_ = menu_->Add(new MenuBool("enabledOption", "Enabled", true));
     }
 
@@ -205,6 +239,10 @@ private:
 
 
     MenuBool* drawAARange_ = nullptr;
+    MenuList* aaRangeStyle_ = nullptr;
+    MenuList* aaRangeTexture_ = nullptr;
+    MenuSlider* aaRangeOpacity_ = nullptr;
+    MenuSlider* aaRangeRotateSpeed_ = nullptr;
     MenuSlider* aaRangeFadeWidth_ = nullptr;
     MenuSlider* aaRangeFadeOpacityPercent_ = nullptr;
     MenuBool* drawAARangeEnemy_ = nullptr;
@@ -245,8 +283,11 @@ private:
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;
+    MenuKeyBind* fastLaneClearKey_ = nullptr;
     MenuKeyBind* hybridKey_ = nullptr;
     MenuKeyBind* comboKey_ = nullptr;
+    MenuBool* attackEnabledOption_ = nullptr;
+    MenuBool* moveEnabledOption_ = nullptr;
     MenuBool* enabledOption_ = nullptr;
 };
 

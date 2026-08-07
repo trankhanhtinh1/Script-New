@@ -189,6 +189,7 @@ private:
     bool EnsureFakeCursorTexture();
     void DrawFakeCursorFallback(ImDrawList* draw, const Vec2& position, float size) const;
     void DrawAutoAttackRangeFade(const AIHeroClient& player);
+    void DrawAutoAttackRangeTexture(const AIHeroClient& player);
     void DrawAzirSoldierRanges(const AIHeroClient& player);
     void DrawFakeCursor();
     void DrawFakeVisuals();

@@ -1004,7 +1004,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     ReadAttackTimingsFromMemory(player);
-    const int farmDelay = menu_.DelayFarm();
+    const int farmDelay = menu_.FastLaneClear() ? 0 : menu_.DelayFarm();
     const int lastHitWindowHorizonMs = std::clamp(
         static_cast<int>(OrbwalkingDetail::kLaneClearWaitCycles *
             (context_.attackDelayMs + context_.attackWindupMs)),
@@ -1085,17 +1085,22 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     // branch had already returned, so LaneClear consumed its next attack even
     // while a lane minion was about to enter the last-hit window.
     if (mode == OrbwalkingMode::LaneClear) {
-        const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
-            player,
-            minionLists.laneMinions,
-            {},
-            critPrediction,
-            farmDelay,
-            lastHitWindowHorizonMs);
-        context_.cachedShouldWait = shouldWait;
-        context_.cachedShouldWaitTick = now;
-        if (shouldWait) {
-            return cacheTarget(AttackableUnit());
+        if (!menu_.FastLaneClear()) {
+            const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
+                player,
+                minionLists.laneMinions,
+                {},
+                critPrediction,
+                farmDelay,
+                lastHitWindowHorizonMs);
+            context_.cachedShouldWait = shouldWait;
+            context_.cachedShouldWaitTick = now;
+            if (shouldWait) {
+                return cacheTarget(AttackableUnit());
+            }
+        } else {
+            context_.cachedShouldWait = false;
+            context_.cachedShouldWaitTick = now;
         }
     }
 
@@ -1222,6 +1227,9 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 }
 
 inline bool OrbwalkerBase::ShouldWait() {
+    if (menu_.FastLaneClear()) {
+        return false;
+    }
     const int now = Tick();
     if (context_.cachedShouldWaitTick == now) {
         return context_.cachedShouldWait;

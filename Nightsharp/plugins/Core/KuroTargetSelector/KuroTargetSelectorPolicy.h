@@ -344,9 +344,22 @@ public:
                       distanceScale * weights.Distance, -100.0f, 100.0f);
         breakdown.Add("threat", "carry threat",
                       threat * weights.Threat, 0.0f, 400.0f);
-        breakdown.Add("crowd-control", "crowd control",
-                      facts.IsCrowdControlled ? weights.CrowdControl : 0.0f,
-                      0.0f, 100.0f);
+        float ccScore = 0.0f;
+        if (facts.IsCrowdControlled) ccScore += weights.CrowdControl;
+        if (facts.IsKnockedUp) ccScore += 45.0f;
+        if (facts.IsSuppressed) ccScore += 50.0f;
+        if (facts.IsSlowed) ccScore += 20.0f;
+        if (facts.IsGrounded) ccScore += 25.0f;
+
+        breakdown.Add("crowd-control", "crowd control & immobilize",
+                      ccScore, 0.0f, 220.0f);
+
+        if (facts.DebuffScore > 0.0f || facts.HasVulnerableMark) {
+            const float markBonus = facts.HasVulnerableMark ? 40.0f : 0.0f;
+            const float debuffBonus = std::clamp(facts.DebuffScore + markBonus, 0.0f, 300.0f);
+            breakdown.Add("debuff-synergy", "debuff & mark synergy bonus",
+                          debuffBonus, 0.0f, 300.0f);
+        }
         breakdown.Add("dash", "dash state",
                       facts.IsDashing ? weights.Dash : 0.0f, 0.0f, 140.0f);
         breakdown.Add("damage-efficiency", "type-aware damage efficiency",
