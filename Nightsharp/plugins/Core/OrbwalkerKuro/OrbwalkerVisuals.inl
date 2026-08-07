@@ -34,13 +34,36 @@ inline TextureRingData ProcessAndUploadRingPixels(SDK::UI::Icons::ImagePixels& p
 
     const int width = pixels.Width;
     const int height = pixels.Height;
-    const float cx = static_cast<float>(width) * 0.5f;
-    const float cy = static_cast<float>(height) * 0.5f;
-    const float maxPossibleR = std::min(cx, cy);
-
-    float maxRingR = 0.0f;
     std::uint8_t* ptr = pixels.Rgba.data();
 
+    // Pass 1: Find true bounding box of active ring pixels
+    float minX = static_cast<float>(width), maxX = 0.0f;
+    float minY = static_cast<float>(height), maxY = 0.0f;
+    bool found = false;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            std::size_t idx = (static_cast<std::size_t>(y) * width + x) * 4;
+            std::uint8_t r = ptr[idx + 0];
+            std::uint8_t g = ptr[idx + 1];
+            std::uint8_t b = ptr[idx + 2];
+            std::uint8_t v = std::max(r, std::max(g, b));
+            if (v >= 18) {
+                minX = std::min(minX, static_cast<float>(x));
+                maxX = std::max(maxX, static_cast<float>(x));
+                minY = std::min(minY, static_cast<float>(y));
+                maxY = std::max(maxY, static_cast<float>(y));
+                found = true;
+            }
+        }
+    }
+
+    const float cx = found ? (minX + maxX) * 0.5f : static_cast<float>(width) * 0.5f;
+    const float cy = found ? (minY + maxY) * 0.5f : static_cast<float>(height) * 0.5f;
+    const float maxPossibleR = std::min(static_cast<float>(width) * 0.5f, static_cast<float>(height) * 0.5f);
+
+    float maxRingR = 0.0f;
+
+    // Pass 2: Apply alpha masking and measure ring radius from true center
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             std::size_t idx = (static_cast<std::size_t>(y) * width + x) * 4;
@@ -49,9 +72,13 @@ inline TextureRingData ProcessAndUploadRingPixels(SDK::UI::Icons::ImagePixels& p
             std::uint8_t b = ptr[idx + 2];
             std::uint8_t a = ptr[idx + 3];
 
+            float dx = static_cast<float>(x) - cx;
+            float dy = static_cast<float>(y) - cy;
+            float dist = std::sqrt(dx * dx + dy * dy);
+
             // Convert black/dark background to alpha transparency
             std::uint8_t v = std::max(r, std::max(g, b));
-            if (v < 18) {
+            if (v < 18 || dist > maxPossibleR * 0.98f) {
                 ptr[idx + 3] = 0;
             } else {
                 float alphaScale = static_cast<float>(v) / 255.0f;
@@ -60,9 +87,6 @@ inline TextureRingData ProcessAndUploadRingPixels(SDK::UI::Icons::ImagePixels& p
 
             // Measure outer radius of the visible ring in pixels
             if (ptr[idx + 3] > 25) {
-                float dx = static_cast<float>(x) - cx;
-                float dy = static_cast<float>(y) - cy;
-                float dist = std::sqrt(dx * dx + dy * dy);
                 if (dist > maxRingR && dist <= maxPossibleR * 1.05f) {
                     maxRingR = dist;
                 }
@@ -119,7 +143,6 @@ inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player
     const bool ready = this->CanAttack();
     const bool windingUp = this->IsWindingUp();
 
-    // Color tint based on state (Ready = Green/Cyan, Windup = Amber/Orange, Cooldown = Red/Magenta)
     ImU32 color = IM_COL32(0, 230, 180, 255);
     if (windingUp) {
         color = IM_COL32(255, 180, 20, 255);
@@ -131,53 +154,42 @@ inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player
     const int alpha = std::clamp<int>(opacityPercent * 255 / 100, 0, 255);
     color = (color & 0x00FFFFFF) | (static_cast<ImU32>(alpha) << 24);
 
-    // Calculate target facing angle from player direction
+    // Calculate facing movement direction angle
     Vector3 moveDir = player.Direction();
     if (moveDir.LengthSqr() < 0.001f) {
         moveDir = player.ServerPosition() - player.Position();
     }
 
     float targetAngle = this->context_.visualTextureAngle;
-    if (moveDir.LengthSqr() > 0.001f) {
+    if (moveDir.LengthSqr2D() > 0.001f) {
         targetAngle = std::atan2(moveDir.z, moveDir.x);
     }
 
-    // Shortest-path angle difference [-PI, +PI]
+    // Smooth angle lerp using shortest rotational path
+    constexpr float kPi = 3.14159265358979323846f;
+    constexpr float kTwoPi = 6.28318530717958647692f;
     float diff = targetAngle - this->context_.visualTextureAngle;
-    constexpr float kTwoPi = 6.283185307179586f;
-    constexpr float kPi = 3.141592653589793f;
-
     while (diff > kPi) diff -= kTwoPi;
     while (diff < -kPi) diff += kTwoPi;
 
-    // Time delta for smooth rotation lerp
     const int now = Tick();
     float dt = 0.016f;
     if (this->context_.visualLastDrawTick > 0 && now > this->context_.visualLastDrawTick) {
         dt = std::clamp<float>(static_cast<float>(now - this->context_.visualLastDrawTick) / 1000.0f, 0.001f, 0.1f);
     }
+    this->context_.visualLastDrawTick = now;
+
     const float speed = static_cast<float>(std::clamp<int>(this->menu_.AARangeRotateSpeed(), 1, 20));
     const float lerpFactor = std::clamp<float>(dt * speed, 0.01f, 1.0f);
 
     this->context_.visualTextureAngle += diff * lerpFactor;
 
-    // Rotate UV coordinates centered at (0.5, 0.5) by visualTextureAngle
     const float angle = this->context_.visualTextureAngle;
     const float cosA = std::cos(angle);
     const float sinA = std::sin(angle);
 
-    auto RotateUV = [cosA, sinA](float u, float v) -> ImVec2 {
-        float du = u - 0.5f;
-        float dv = v - 0.5f;
-        float rotU = 0.5f + (du * cosA - dv * sinA);
-        float rotV = 0.5f + (du * sinA + dv * cosA);
-        return ImVec2(rotU, rotV);
-    };
-
     constexpr int kGridSize = 16;
     const float step = (quadRadius * 2.0f) / static_cast<float>(kGridSize);
-    const float startX = center.x - quadRadius;
-    const float startZ = center.z - quadRadius;
 
     struct GridNode {
         ImVec2 screen;
@@ -189,19 +201,23 @@ inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player
 
     for (int row = 0; row <= kGridSize; ++row) {
         const float v = static_cast<float>(row) / static_cast<float>(kGridSize);
-        const float z = startZ + step * static_cast<float>(row);
+        const float dz = -quadRadius + step * static_cast<float>(row);
         for (int col = 0; col <= kGridSize; ++col) {
             const float u = static_cast<float>(col) / static_cast<float>(kGridSize);
-            const float x = startX + step * static_cast<float>(col);
+            const float dx = -quadRadius + step * static_cast<float>(col);
 
-            const float y = SDK::NavMesh::GetHeightForPosition(x, z);
-            Vector3 worldPos(x, y, z);
+            // Rotate 3D world position (rotX, rotZ) around center
+            const float rotX = center.x + (dx * cosA - dz * sinA);
+            const float rotZ = center.z + (dx * sinA + dz * cosA);
+
+            const float y = center.y;
+            Vector3 worldPos(rotX, y, rotZ);
             Vector2 screenPos;
             bool onScreen = Drawing::WorldToScreen(worldPos, screenPos);
 
             grid[row][col].screen = ImVec2(screenPos.x, screenPos.y);
-            grid[row][col].uv = RotateUV(u, v);
-            grid[row][col].valid = onScreen;
+            grid[row][col].uv = ImVec2(u, v); // Fixed in [0, 1] - zero out-of-bounds UV wrapping!
+            grid[row][col].valid = onScreen && screenPos.x >= -200.0f && screenPos.y >= -200.0f;
         }
     }
 
@@ -212,7 +228,7 @@ inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player
             const auto& n2 = grid[row + 1][col + 1]; // Bottom-Right
             const auto& n3 = grid[row + 1][col];     // Bottom-Left
 
-            if (n0.valid || n1.valid || n2.valid || n3.valid) {
+            if (n0.valid && n1.valid && n2.valid && n3.valid) {
                 draw->AddImageQuad(
                     ringData->texture.Texture,
                     n0.screen, n1.screen, n2.screen, n3.screen,

@@ -2,6 +2,7 @@
 
 #include "../../../../SDK/SDK.h"
 #include "../Engine/Skillshot.h"
+#include "EvadeTextureHelper.h"
 
 #include <algorithm>
 #include <array>
@@ -31,6 +32,8 @@ struct SpellDrawStyle {
     bool Fill = true;
     bool DrawIrrelevant = true;
     bool DrawLabels = false;
+    bool UseTextureForCircles = true;
+    int CircleTextureIndex = 0;
     int IrrelevantOpacity = 15;
     int ThreatOpacity = 70;
     int BorderWidth = 2;
@@ -226,12 +229,18 @@ private:
         const float thickness = irrelevant
             ? 1.0f
             : (info.State == SpellVisualState::PathThreat ? 2.0f : 2.8f);
-        const bool canFill = style.Fill && allVisible && count >= 3 &&
-            skillshot.SData.SpellType != SDK::SpellType::SkillshotRing;
 
-        if (canFill && fillAlpha > 0) {
-            draw->AddConvexPolyFilled(screens.data(), count,
-                                      WithAlpha(base, fillAlpha));
+        const bool isCircle = SDK::IsCircleSpellType(skillshot.SData.SpellType);
+        if (isCircle && style.UseTextureForCircles) {
+            const ImU32 texColor = WithAlpha(base, fillAlpha > 0 ? fillAlpha : 200);
+            DrawCircleSkillshotTexture(draw, skillshot.EndPosition, static_cast<float>(skillshot.SData.Radius), texColor, style.CircleTextureIndex);
+        } else {
+            const bool canFill = style.Fill && allVisible && count >= 3 &&
+                skillshot.SData.SpellType != SDK::SpellType::SkillshotRing;
+            if (canFill && fillAlpha > 0) {
+                draw->AddConvexPolyFilled(screens.data(), count,
+                                          WithAlpha(base, fillAlpha));
+            }
         }
 
         if (info.State == SpellVisualState::Intervention && allVisible) {

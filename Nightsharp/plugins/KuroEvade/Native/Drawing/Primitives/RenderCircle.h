@@ -1,6 +1,7 @@
 #pragma once
 
 #include "RenderObject.h"
+#include "../EvadeTextureHelper.h"
 
 #include "../../../../../SDK/SDK.h"
 
@@ -27,12 +28,10 @@ struct RenderCircle final : RenderObject {
     }
 
     void Draw() override {
-        const auto player = GameObjects::Player();
-        const float height = player.IsValid() ? player.Position().y : 0.0f;
-        SDK::Drawing::DrawCircle(Vec3::From2D(renderPosition, height),
-                                 static_cast<float>(radius),
-                                 color,
-                                 static_cast<float>(width));
+        ImDrawList* draw = ImGui::GetCurrentContext() ? ImGui::GetForegroundDrawList() : nullptr;
+        if (draw) {
+            DrawCircleSkillshotTexture(draw, renderPosition, static_cast<float>(radius), color, 0);
+        }
     }
 };
 

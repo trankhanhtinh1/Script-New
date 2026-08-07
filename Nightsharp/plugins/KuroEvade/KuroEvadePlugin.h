@@ -267,6 +267,8 @@ private:
     MenuSlider* m_borderMenu = nullptr;
     MenuBool* m_enableDrawingsMenu = nullptr;
     MenuBool* m_drawWarningMessageMenu = nullptr;
+    MenuBool* m_useCircleTextureMenu = nullptr;
+    MenuList* m_circleTextureIndexMenu = nullptr;
 
     MenuList* m_blockSpellsMenu = nullptr;
     MenuSlider* m_allowAaLevelMenu = nullptr;
@@ -295,6 +297,7 @@ private:
     };
 
     std::unordered_map<std::string, SpellMenuOption> m_spellOptions;
+    std::unordered_map<std::string, Menu*> m_championSubMenus;
     int m_spellMenuEntries = 0;
 
     struct EvadeSpellMenuOption {
@@ -483,6 +486,8 @@ private:
         style.Fill = true;
         style.DrawIrrelevant = true;
         style.DrawLabels = false;
+        style.UseTextureForCircles = m_useCircleTextureMenu ? m_useCircleTextureMenu->Value : true;
+        style.CircleTextureIndex = m_circleTextureIndexMenu ? m_circleTextureIndexMenu->Index : 0;
         style.IrrelevantOpacity = 15;
         style.ThreatOpacity = 70;
         style.IrrelevantColor = DisabledColor();
@@ -759,7 +764,8 @@ private:
         UpdateSpellVisuals(settings, observedPath, m_evadeIntervening);
     }
 
-    bool IsSpellDodgeEnabled(const KuroEvade::Database::SpellData& data) const {
+    bool IsSpellDodgeEnabled(const KuroEvade::Database::SpellData& data) {
+        EnsureSpellMenuEntry(data);
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         if (it == m_spellOptions.end()) {
             return !data.DisabledByDefault;
@@ -767,24 +773,28 @@ private:
         return !it->second.Enabled || it->second.Enabled->Value;
     }
 
-    bool IsSpellDodgeEnabled(const SDK::SpellDatabaseEntry& data) const {
+    bool IsSpellDodgeEnabled(const SDK::SpellDatabaseEntry& data) {
+        EnsureSpellMenuEntry(data);
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         return it == m_spellOptions.end() || !it->second.Enabled || it->second.Enabled->Value;
     }
 
-    bool ShouldDrawSpell(const SDK::SpellDatabaseEntry& data) const {
+    bool ShouldDrawSpell(const SDK::SpellDatabaseEntry& data) {
+        EnsureSpellMenuEntry(data);
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         return it == m_spellOptions.end() || !it->second.Draw || it->second.Draw->Value;
     }
 
-    int SpellDangerLevel(const KuroEvade::Database::SpellData& data) const {
+    int SpellDangerLevel(const KuroEvade::Database::SpellData& data) {
+        EnsureSpellMenuEntry(data);
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         return it != m_spellOptions.end() && it->second.Danger
             ? it->second.Danger->Value
             : std::clamp(data.DangerValue, 1, 5);
     }
 
-    bool IsSpellDangerous(const KuroEvade::Database::SpellData& data) const {
+    bool IsSpellDangerous(const KuroEvade::Database::SpellData& data) {
+        EnsureSpellMenuEntry(data);
         const auto it = m_spellOptions.find(KuroEvade::SpellMenuKey::Key(data));
         return it != m_spellOptions.end() && it->second.Dangerous
             ? it->second.Dangerous->Value
@@ -947,6 +957,8 @@ private:
         m_disabledColorMenu = drawings->Add(new MenuColor("DisabledColor", "Disabled spell color", 1.0f, 0.0f, 0.0f, 1.0f));
         m_missileColorMenu = drawings->Add(new MenuColor("MissileColor", "Missile color", 0.20f, 0.80f, 0.20f, 1.0f));
         m_borderMenu = drawings->Add(new MenuSlider("Border", "Border Width", 2, 1, 10));
+        m_useCircleTextureMenu = drawings->Add(new MenuBool("UseCircleTexture", "Use PNG Texture for Circle Skillshots", true));
+        m_circleTextureIndexMenu = drawings->Add(new MenuList("CircleTextureStyle", "Circle Texture Style", { "AOE Default", "AOE Gold", "Circular Indicator" }, 0));
         m_enableDrawingsMenu = drawings->Add(new MenuBool("EnableDrawings", "Enabled", true));
         m_drawWarningMessageMenu = drawings->Add(new MenuBool(
             "DrawWarningMsg", "Draw Right Click warning msg", true));
@@ -991,22 +1003,38 @@ private:
         m_menu->Attach();
     }
 
+    Menu* GetOrCreateChampionSubMenu(const std::string& championName) {
+        if (!m_spellsMenu) {
+            return nullptr;
+        }
+        std::string champKey = championName.empty() ? "Global / Traps" : championName;
+        auto it = m_championSubMenus.find(champKey);
+        if (it != m_championSubMenus.end() && it->second) {
+            return it->second;
+        }
+        std::string menuId = "champ_" + KuroEvade::SpellMenuKey::Sanitize(champKey);
+        Menu* champSubMenu = m_spellsMenu->AddSubMenu(new Menu(menuId.c_str(), champKey.c_str()));
+        m_championSubMenus[champKey] = champSubMenu;
+        return champSubMenu;
+    }
+
     void BuildSpellMenu() {
         m_spellOptions.clear();
+        m_championSubMenus.clear();
         m_spellMenuEntries = 0;
         m_spellsMenu = m_menu->AddSubMenu(new Menu("Skillshots", "Skill Shots"));
 
-        PopulateSpellMenu(m_spellsMenu);
+        PopulateSpellMenu();
     }
 
-    void PopulateSpellMenu(Menu* parent) {
-        if (!parent) {
+    void PopulateSpellMenu(Menu* /*parent*/ = nullptr) {
+        if (!m_spellsMenu) {
             return;
         }
 
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
             if (data.IsGlobal) {
-                AddSpellMenuEntry(parent, data);
+                AddSpellMenuEntry(data);
             }
         }
 
@@ -1040,17 +1068,12 @@ private:
         for (const auto& data : KuroEvade::Database::SpellDatabase::Spells()) {
             for (const SDK::ChampionId championId : enemyChampions) {
                 if (data.MatchesChampion(championId)) {
-                    AddSpellMenuEntry(parent, data);
+                    AddSpellMenuEntry(data);
                     break;
                 }
             }
         }
 
-        // Dynamic hostile casters use abilities whose source champion is on
-        // the player's team: Sylas steals their R, Viego possesses their Q/W/E,
-        // and Mel recreates reflected projectiles as missiles owned by herself.
-        // Add those source entries to the existing per-spell menu instead of
-        // silently falling back to unconfigurable defaults.
         const bool enemySylas =
             std::find(enemyChampions.begin(), enemyChampions.end(),
                       SDK::ChampionId::Sylas) != enemyChampions.end();
@@ -1115,20 +1138,29 @@ private:
                     (!data.MissileSpellName.empty() ||
                      !data.ExtraMissileNames.empty());
                 if (stolenUltimate || possessedBasic || reflectedProjectile) {
-                    AddSpellMenuEntry(parent, data);
+                    AddSpellMenuEntry(data);
                 }
                 break;
             }
         }
     }
 
-    void AddSpellMenuEntry(Menu* parent, const KuroEvade::Database::SpellData& data) {
-        if (!parent || data.DontProcess) {
+    void AddSpellMenuEntry(const KuroEvade::Database::SpellData& data) {
+        if (!m_spellsMenu || data.DontProcess) {
             return;
         }
 
         const std::string key = KuroEvade::SpellMenuKey::Key(data);
         if (m_spellOptions.find(key) != m_spellOptions.end()) {
+            return;
+        }
+
+        std::string champName = data.Runtime.ChampionName;
+        if (champName.empty() || data.IsGlobal) {
+            champName = "Global / Traps";
+        }
+        Menu* parent = GetOrCreateChampionSubMenu(champName);
+        if (!parent) {
             return;
         }
 
@@ -1147,6 +1179,40 @@ private:
             "Enabled", "Enabled", !data.DisabledByDefault));
         m_spellOptions.emplace(key, option);
         ++m_spellMenuEntries;
+    }
+
+    void EnsureSpellMenuEntry(const KuroEvade::Database::SpellData& data) {
+        if (data.DontProcess) return;
+        const std::string key = KuroEvade::SpellMenuKey::Key(data);
+        if (m_spellOptions.find(key) == m_spellOptions.end()) {
+            AddSpellMenuEntry(data);
+        }
+    }
+
+    void EnsureSpellMenuEntry(const SDK::SpellDatabaseEntry& data) {
+        const KuroEvade::Database::SpellData* evadeData = nullptr;
+        for (const auto& entry : KuroEvade::Database::SpellDatabase::Spells()) {
+            if (!data.SpellName.empty() && entry.Runtime.SpellName == data.SpellName) {
+                evadeData = &entry;
+                break;
+            }
+            if (!data.MissileSpellName.empty() && entry.Runtime.MissileSpellName == data.MissileSpellName) {
+                evadeData = &entry;
+                break;
+            }
+        }
+        if (evadeData) {
+            EnsureSpellMenuEntry(*evadeData);
+        } else {
+            const std::string key = KuroEvade::SpellMenuKey::Key(data);
+            if (m_spellOptions.find(key) == m_spellOptions.end()) {
+                KuroEvade::Database::SpellData temp;
+                temp.Runtime = data;
+                temp.DisplayName = KuroEvade::SpellMenuKey::DisplayName(data);
+                temp.DangerValue = 3;
+                AddSpellMenuEntry(temp);
+            }
+        }
     }
 
     KuroEvade::EvadeSpellConfig ResolveEvadeSpellConfig(const KuroEvade::Database::EvadeSpellData& data) const {
@@ -1255,9 +1321,10 @@ private:
         m_spellsMenu->Components.clear();
 
         m_spellOptions.clear();
+        m_championSubMenus.clear();
         m_spellMenuEntries = 0;
 
-        PopulateSpellMenu(m_spellsMenu);
+        PopulateSpellMenu();
     }
 
     void RebuildEvadeSpellsMenu() {
