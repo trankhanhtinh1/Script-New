@@ -46,6 +46,11 @@ class MemoryAdapter(ABC):
     def image_base(self) -> int:
         raise NotImplementedError
 
+    def function_bounds(self, address: int) -> Tuple[int, int]:
+        """Return [start, end) of the function containing ``address``."""
+
+        raise NotImplementedError
+
 
 def compile_pattern(pattern: str) -> tuple[bytes, tuple[bool, ...]]:
     """Convert an IDA-style byte pattern to bytes plus a fixed-byte mask."""
@@ -143,6 +148,46 @@ def _relative_target(
     return instruction_address + instruction_size + displacement + addend
 
 
+def _read_displacement(
+    adapter: MemoryAdapter,
+    instruction_address: int,
+    displacement_offset: int,
+    width: int,
+    signed: bool,
+) -> int:
+    if width not in {1, 2, 4}:
+        raise CatalogError(f"unsupported displacement width: {width}")
+    raw = _read_exact(
+        adapter, instruction_address + displacement_offset, width
+    )
+    formats = {1: "b" if signed else "B", 2: "h" if signed else "H",
+               4: "i" if signed else "I"}
+    return struct.unpack("<" + formats[width], raw)[0]
+
+
+def _validate_field(
+    target_id: str,
+    resolved: int,
+    validations: Mapping[str, Any],
+) -> None:
+    """Validate a struct field displacement (not an address)."""
+
+    minimum = int(validations.get("min", 0))
+    maximum = int(validations.get("max", 0x10000))
+    if not minimum <= resolved <= maximum:
+        raise CatalogError(
+            f"{target_id}: field offset 0x{resolved:X} outside plausible "
+            f"range [0x{minimum:X}, 0x{maximum:X}]"
+        )
+
+    alignment = int(validations.get("alignment", 1))
+    if alignment > 1 and resolved % alignment:
+        raise CatalogError(
+            f"{target_id}: field offset 0x{resolved:X} is not "
+            f"{alignment}-byte aligned"
+        )
+
+
 def _validate_target(
     adapter: MemoryAdapter,
     target_id: str,
@@ -195,6 +240,21 @@ def _resolve_locator(
     kind = resolver.get("kind")
     addend = int(resolver.get("addend", 0))
 
+    if kind == "displacement":
+        # Struct field offset: the value IS the instruction displacement,
+        # not an address. Never run address validations against it.
+        resolved = _read_displacement(
+            adapter,
+            instruction_address,
+            int(resolver["displacement_offset"]),
+            int(resolver.get("width", 4)),
+            bool(resolver.get("signed", False)),
+        ) + addend
+        _validate_field(
+            target_id, resolved, locator.get("validations", {})
+        )
+        return resolved
+
     if kind == "match":
         resolved = instruction_address + addend
     elif kind == "function_start":
@@ -203,10 +263,13 @@ def _resolve_locator(
         displacement_offset = int(resolver["displacement_offset"])
         instruction_size = int(resolver["instruction_size"])
         if kind == "call_rel32":
+            # 0xE8 = CALL rel32, 0xE9 = JMP rel32 (tail call). Both encode the
+            # target the same way, and tail calls are a legitimate way to
+            # locate a function, so accept either.
             opcode = _read_exact(adapter, instruction_address, 1)[0]
-            if opcode != 0xE8:
+            if opcode not in (0xE8, 0xE9):
                 raise CatalogError(
-                    f"{target_id}: expected CALL rel32 at "
+                    f"{target_id}: expected CALL/JMP rel32 at "
                     f"0x{instruction_address:X}, found opcode 0x{opcode:02X}"
                 )
         resolved = _relative_target(
@@ -223,6 +286,44 @@ def _resolve_locator(
         adapter, target_id, resolved, locator.get("validations", {})
     )
     return resolved
+
+
+def _resolve_anchor_bounds(
+    adapter: MemoryAdapter,
+    target_id: str,
+    anchor: Mapping[str, Any],
+) -> Tuple[int, int]:
+    """Locate the function that an anchored field pattern is scoped to.
+
+    Anchoring is what keeps short field patterns (a single mov with a
+    displacement) unambiguous: the same instruction shape occurs all over
+    .text, but is unique inside the one accessor function that owns it.
+    """
+
+    pattern = anchor.get("pattern")
+    if not pattern:
+        raise CatalogError(f"{target_id}: anchor requires a pattern")
+    compile_pattern(pattern)
+    matches = adapter.find_pattern(pattern, anchor.get("sections", [".text"]))
+    if not matches:
+        raise CatalogError(f"{target_id}: anchor pattern not found")
+    if len(matches) != 1:
+        raise CatalogError(
+            f"{target_id}: anchor pattern is ambiguous ({len(matches)} matches)"
+        )
+    return adapter.function_bounds(
+        matches[0] + int(anchor.get("instruction_offset", 0))
+    )
+
+
+def _find_in_bounds(
+    adapter: MemoryAdapter,
+    pattern: str,
+    bounds: Tuple[int, int],
+) -> list[int]:
+    start, end = bounds
+    data = _read_exact(adapter, start, end - start)
+    return [start + offset for offset in find_pattern_offsets(data, pattern)]
 
 
 def resolve_catalog(
@@ -252,6 +353,8 @@ def resolve_catalog(
         if mode != "scan":
             continue
 
+        is_field = target.get("target_kind") == "field"
+
         resolved_candidates: list[tuple[int, int, int]] = []
         locator_report: list[dict[str, Any]] = []
         for locator_index, locator in enumerate(target.get("locators", [])):
@@ -268,9 +371,14 @@ def resolve_catalog(
                     }
                 )
                 continue
-            matches = adapter.find_pattern(
-                pattern, locator.get("sections", [".text"])
-            )
+            anchor = locator.get("anchor")
+            if anchor:
+                bounds = _resolve_anchor_bounds(adapter, target_id, anchor)
+                matches = _find_in_bounds(adapter, pattern, bounds)
+            else:
+                matches = adapter.find_pattern(
+                    pattern, locator.get("sections", [".text"])
+                )
             current_report: dict[str, Any] = {
                 "locator": locator_index,
                 "pattern": pattern,
@@ -284,20 +392,40 @@ def resolve_catalog(
                 current_report["status"] = "not-found"
                 continue
             if len(matches) != 1:
-                current_report["status"] = "ambiguous"
-                raise CatalogError(
-                    f"{target_id}: locator {locator_index} is ambiguous "
-                    f"({len(matches)} matches)"
-                )
+                # allow_multiple: the pattern legitimately repeats (e.g. the
+                # same `lea rcx,[r15+0x3108]` emitted at several call sites).
+                # Still refuse unless EVERY match resolves to the same value,
+                # so a genuinely ambiguous pattern can never slip through.
+                if not locator.get("allow_multiple"):
+                    current_report["status"] = "ambiguous"
+                    raise CatalogError(
+                        f"{target_id}: locator {locator_index} is ambiguous "
+                        f"({len(matches)} matches)"
+                    )
+                values = {
+                    _resolve_locator(adapter, target_id, locator, match)
+                    for match in matches
+                }
+                if len(values) != 1:
+                    current_report["status"] = "ambiguous"
+                    formatted = ", ".join(f"0x{v:X}" for v in sorted(values))
+                    raise CatalogError(
+                        f"{target_id}: locator {locator_index} has "
+                        f"{len(matches)} matches resolving to different "
+                        f"values ({formatted})"
+                    )
 
             resolved = _resolve_locator(
                 adapter, target_id, locator, matches[0]
             )
             resolved_candidates.append((resolved, locator_index, matches[0]))
             current_report["status"] = "resolved"
-            current_report["resolved_rva"] = (
-                f"0x{resolved - image_base:X}"
-            )
+            if is_field:
+                current_report["resolved_value"] = f"0x{resolved:X}"
+            else:
+                current_report["resolved_rva"] = (
+                    f"0x{resolved - image_base:X}"
+                )
 
         if not resolved_candidates:
             if target.get("required", True):
@@ -312,12 +440,17 @@ def resolve_catalog(
             )
 
         resolved_value = resolved_candidates[0][0]
-        resolved_rva = resolved_value - image_base
-        results[target_id] = resolved_rva
+        # Field offsets are struct displacements and are already final;
+        # only addresses get rebased into RVAs.
+        final_value = (
+            resolved_value if is_field else resolved_value - image_base
+        )
+        results[target_id] = final_value
         report.append(
             {
                 "id": target_id,
-                "resolved_rva": f"0x{resolved_rva:X}",
+                ("resolved_value" if is_field else "resolved_rva"):
+                    f"0x{final_value:X}",
                 "locators": locator_report,
             }
         )

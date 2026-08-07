@@ -53,6 +53,7 @@ namespace CoreRuntime {
         uintptr_t issueOrderFn = 0;
         uintptr_t castSpellFn = 0;
         uintptr_t getPingFn = 0;
+        uintptr_t sendChatFn = 0;
         uintptr_t getAttackDelayFn = 0;
         uintptr_t getAttackWindupFn = 0;
         uintptr_t getBoundingRadiusFn = 0;
@@ -195,6 +196,7 @@ namespace CoreRuntime {
         g_ctx.issueOrderFn      = ResolveRva(Offset::ControlRuntime::IssueOrder);
         g_ctx.castSpellFn       = 0;
         g_ctx.getPingFn         = ResolveRva(Offset::GameRuntime::GetPing);
+        g_ctx.sendChatFn        = ResolveRva(Offset::GameRuntime::SendChat);
         g_ctx.getAttackDelayFn  = ResolveRva(Offset::ControlRuntime::GetAttackDelay);
         g_ctx.getAttackWindupFn = ResolveRva(Offset::ControlRuntime::GetAttackWindup);
         g_ctx.getBoundingRadiusFn = ResolveRva(Offset::ControlRuntime::GetBoundingRadius);
@@ -203,6 +205,7 @@ namespace CoreRuntime {
         if (g_ctx.worldToScreenFn &&
             g_ctx.issueOrderFn &&
             g_ctx.getPingFn &&
+            g_ctx.sendChatFn &&
             g_ctx.getAttackDelayFn &&
             g_ctx.getAttackWindupFn &&
             g_ctx.getBoundingRadiusFn) {

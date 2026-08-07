@@ -115,6 +115,14 @@ class IdaMemoryAdapter(MemoryAdapter):
             raise CatalogError(f"no IDA function contains 0x{address:X}")
         return int(function.start_ea)
 
+    def function_bounds(self, address: int) -> tuple[int, int]:
+        import ida_funcs
+
+        function = ida_funcs.get_func(address)
+        if function is None:
+            raise CatalogError(f"no IDA function contains 0x{address:X}")
+        return (int(function.start_ea), int(function.end_ea))
+
     def segment_name(self, address: int) -> str:
         segment = self._ida_segment.getseg(address)
         if segment is None:
@@ -167,7 +175,7 @@ def _validate_fixture(
     )
     if missing:
         raise CatalogError(
-            "known fixture lacks expected RVA for: " + ", ".join(missing)
+            "known fixture lacks expected value for: " + ", ".join(missing)
         )
 
     mismatches = []
@@ -246,7 +254,7 @@ def run() -> dict[str, object]:
         REPORT_PATH, json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     )
     print(
-        f"[NightSharp] resolved {len(results)} RVA(s) for {version}; "
+        f"[NightSharp] resolved {len(results)} offset(s) for {version}; "
         f"wrote {OUTPUT_PATH}"
     )
     return report

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../IPlugin.h"
+#include "../../PluginRegistry.h"
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Wrappers/Damages/Damage.h"
@@ -840,12 +841,15 @@ public:
             return;
         }
 
-        // Add() lets the registry restore the persisted/default
-        // implementation.  The service publishes itself from Resume() only
-        // when Kuro is actually current.
-        if (::SDK::TargetSelector::CurrentTargetSelectorName() == kImplementationName) {
-            ::SDK::KuroTargetSelector::SetActiveService(implementation_);
+        if (!::SDK::TargetSelector::SetTargetSelector(kImplementationName)) {
+            ::SDK::TargetSelector::RemoveTargetSelector(kImplementationName);
+            delete implementation_;
+            implementation_ = nullptr;
+            DestroyMenu();
+            return;
         }
+
+        SetSdkTargetSelectorLoaded(false);
     }
 
     void OnUnload() override {
@@ -861,14 +865,44 @@ public:
         delete implementation_;
         implementation_ = nullptr;
         DestroyMenu();
+        SetSdkTargetSelectorLoaded(true);
     }
 
     void OnRender() override {
         if (implementation_) implementation_->OnRender();
     }
 
+    bool LoadSucceeded() const override {
+        return implementation_ &&
+               ::SDK::TargetSelector::GetTargetSelector(kImplementationName) == implementation_ &&
+               ::SDK::TargetSelector::Implementation() == implementation_;
+    }
+
 private:
     static constexpr const char* kImplementationName = "Kuro";
+
+    static void SetSdkTargetSelectorLoaded(bool loaded) {
+        const int idx = ::PluginRegistry::FindByInternalId("targetselector");
+        if (idx >= 0 && ::PluginRegistry::HasRuntime(idx)) {
+            if (loaded) {
+                ::PluginRegistry::LoadPlugin(idx);
+            } else {
+                ::PluginRegistry::UnloadPlugin(idx);
+            }
+            return;
+        }
+
+        if (auto* impl = ::SDK::TargetSelector::GetTargetSelector("SDK")) {
+            if (loaded) {
+                impl->Resume();
+            } else {
+                impl->Suspend();
+            }
+        }
+        if (idx >= 0) {
+            ::PluginRegistry::Plugins[idx].Loaded = loaded;
+        }
+    }
 
     void DestroyMenu() {
         if (!menu_) return;

@@ -847,17 +847,25 @@ inline bool Say(const char* text, bool sendToAll = false, bool triggerEvent = tr
         text = "";
     }
 
+    const char* message = text;
+    bool allChat = sendToAll;
     if (triggerEvent) {
         GameSendChatEventArgs args{};
-        args.Msg = text;
-        args.SendToAll = sendToAll;
+        args.Msg = message;
+        args.SendToAll = allChat;
         args.Process = true;
         if (!detail::DispatchSendChat(args)) {
             return false;
         }
+        message = args.Msg ? args.Msg : "";
+        allChat = args.SendToAll;
     }
 
-    return ::CoreGame::Say(text, sendToAll, triggerEvent);
+    return ::CoreGame::Say(message, allChat, false);
+}
+
+inline bool Say(const std::string& text, bool sendToAll = false, bool triggerEvent = true) {
+    return Say(text.c_str(), sendToAll, triggerEvent);
 }
 
 template <typename... Args>

@@ -1,5 +1,18 @@
 #pragma once
 
+// ---------------------------------------------------------------------------
+// TU DONG SINH bang tools/ida_offset_scanner.py (chay trong IDA).
+// KHONG sua tay cac gia tri hex ben duoi: lan scan sau se ghi de.
+//
+//   Source: League of Legends 16.15.799.6036
+//   SHA-256: fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954
+//
+// Quy trinh khi game update:
+//   1. Dump + mo binary moi trong IDA (cho auto-analysis xong).
+//   2. File -> Script file... -> tools/ida_offset_scanner.py
+//   3. Ket qua: C:\lol\offset.h + C:\lol\offset-report.json
+//   4. Doi chieu report roi copy offset.h vao core/.
+// ---------------------------------------------------------------------------
 
 namespace Offset {
 
@@ -15,7 +28,7 @@ namespace GameObjectsRuntime {
 } // namespace GameObjectsRuntime
 
 namespace VTable {
-    constexpr auto GameObjectBoundingRadius = 0x130;
+    constexpr auto GameObjectBoundingRadius = 0x130; //FF 90 ? ? ? ? F3 0F 58 43
 } // namespace VTable
 
 // Module-relative addresses of the C++ vtables for structure object types.
@@ -100,6 +113,12 @@ namespace GameRuntime {
     // 'this' container passed to PrintChat/DisplayChat; deref before the call.
     // IDA labels it NetInstance but it is distinct from GameRuntime::NetInstance.
     constexpr auto ChatMessageInstance = 0x1EF3240; //48 8B 1D ? ? ? ? 24 || 4C 8B 25 ? ? ? ? 75 || 48 8B 3D ? ? ? ? 48 8D 4C 24 ? 8B 1D
+    // MultiplayerClient::SendChat-like dispatcher.
+    // Signature confirmed in IDA current DB:
+    //   char __fastcall(void* multiplayerClient, const char* text, int channel)
+    // Channels: all=1, team=2, party=4. Builds packet id 475 and sends through
+    // the generic network dispatcher at 0x6FB9F0.
+    constexpr auto SendChat = 0x6FB760; // allchat/teamchat callbacks -> sub_6FB760(qword_1EEFB30, text, channel) E8 ? ? ? ? 48 8B 54 24 ? 48 83 FA ? 76 ? 48 8B 4C 24 ? 48 FF C2 48 8B C1 48 81 FA ? ? ? ? 72 ? 48 8B 49 ? 48 83 C2 ? 48 2B C1 48 83 E8 ? 48 83 F8 ? 77 ? E8 ? ? ? ? 45 84 FF
 } // namespace GameRuntime
 
 namespace MouseInputLayout {
@@ -113,7 +132,7 @@ namespace DrawingRuntime {
     // qword_1ED9F68 + 0x2F8 as its first argument.
     // Verified: caller sub_3ACB60 passes (qword_1ED9F68 + 760) = +0x2F8.
     constexpr auto ViewProjectionRoot = 0x1EF2FA8; //4C 8B 2D ? ? ? ? 48 89 55 || 48 8B 0D ? ? ? ? 0F 57 C0 48 8B || 48 8B 0D ? ? ? ? 4C 8B 84 24
-    constexpr auto WorldToScreenContextOffset = 0x2F8;
+    constexpr auto WorldToScreenContextOffset = 0x2F8; //48 81 C1 ? ? ? ? F3 41 0F 59 C8
     // Hud root/controller object. Verified current dump: 488 xrefs.
     constexpr auto HudRoot = 0x1EEFCC0; //48 8B 0D ? ? ? ? 48 85 C9 75 ? 8B C5 || 48 8B 0D ? ? ? ? 48 85 C9 75 ? 33 C0
     constexpr auto HudInstance = 0x1EEFCC8; //48 8B 1D ? ? ? ? 41 8B 55 || 48 8B 0D ? ? ? ? 44 0F B6 EB || 48 8B 0D ? ? ? ? 8B 57 ? 48 8B 49
@@ -141,8 +160,7 @@ namespace DrawingRuntime {
 
 namespace StatsRuntime {
     // Tree container at StatsManager + 0x30 (std::map layout, MSVC).
-    constexpr auto TreeOffset = 0x30;
-    // Tree node layout (MSVC std::_Tree_node):
+    constexpr auto TreeOffset = 0x30; //4C 8B 43 ? 49 8B D0 ? ? 89 44 24 ? 49 8B 48 ? 44 38 61
     //   +0x00 _Left, +0x08 _Right, +0x10 _Parent,
     //   +0x18 _Color(byte), +0x19 _Isnil(byte),
     //   +0x20 key(uint32 teamId),
@@ -209,18 +227,18 @@ namespace D3D {
 } // namespace D3D
 
 namespace HudRuntime {
-    constexpr auto Camera = 0x18;
-    constexpr auto Input = 0x28;
-    constexpr auto CursorTargetLogic = 0x28;
-    constexpr auto UserData = 0x60;
-    constexpr auto SpellTargeting = 0x68;
-    constexpr auto SpellInfo = 0x68;
-    constexpr auto CameraZoom = 0x58; // legacy field is null in the current Hud; use Camera+0x324
-    constexpr auto CameraZoomLimits = 0x310;
-    constexpr auto AltZoomLimits = 0x3D0;
-    constexpr auto ZoomLockFlag1 = 0x344;
-    constexpr auto ZoomLockFlag2 = 0x345;
-    constexpr auto MouseWorldPos = 0x34;
+    constexpr auto Camera = 0x18; //48 8B 48 ? 48 85 C9 0F 84 ? ? ? ? 48 8B 89 ? ? ? ? 48 85 C9
+    constexpr auto Input = 0x28; //48 8B 49 ? E8 ? ? ? ? B0 ? 48 8B 5C 24
+    constexpr auto CursorTargetLogic = 0x28; //4C 8B 41 ? 49 3B C0 74 ? 66 66 66 0F 1F 84 00
+    constexpr auto UserData = 0x60; //48 8B 5B ? FF 50 ? 44 39 63
+    constexpr auto SpellTargeting = 0x68; //48 8B 58 ? 0F B6 42 ? 48 8D 15
+    constexpr auto SpellInfo = 0x68; //48 8B 58 ? E8 ? ? ? ? 48 8D 8F
+    constexpr auto CameraZoom = 0x58; // 8B 52 ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B D8 48 85 C0 0F 84 ? ? ? ? ? ? ? 48 8B CB
+    constexpr auto CameraZoomLimits = 0x310; //48 8B 81 ? ? ? ? F3 0F 10 40 ? EB ? F3 0F 10 05 ? ? ? ? 0F 2F C8 77 ? 48 8B 81 ? ? ? ? F3 0F 10 40 ? F3 0F 5F C1 0F 2E 81 ? ? ? ? 7A ? 74 ? F3 0F 11 81 ? ? ? ? B0
+    constexpr auto AltZoomLimits = 0x3D0; //48 8B 83 ? ? ? ? F3 0F 10 1D
+    constexpr auto ZoomLockFlag1 = 0x344; //0F B6 91 ? ? ? ? F3 0F 10 89
+    constexpr auto ZoomLockFlag2 = 0x345; //80 B9 ? ? ? ? 00 88 81 ? ? ? ? 75 ? 84 D2 74
+    constexpr auto MouseWorldPos = 0x34; //F3 0F 10 41 ? F3 0F 11 44 24 ? F3 0F 10 49 ? F3 0F 11 4C 24 ? F3 0F 10 41 ? 48 8B CE
     constexpr auto ViewportW2S = 0x2B0;
 } // namespace HudRuntime
 
@@ -229,15 +247,14 @@ namespace HudCursorTargetLogicRuntime {
 } // namespace HudCursorTargetLogicRuntime
 
 namespace HudCursorTargetLogicLayout {
-    constexpr auto ClickPosition = 0x34; // Native Vector3f, used by sub_BC78C0 as effect origin
+    constexpr auto ClickPosition = 0x34; // 48 8D 59 ? 48 8B D3 48 8B CF
 } // namespace HudCursorTargetLogicLayout
 
 namespace HudSpellTargetingLayout {
     // Read-only target picker state verified while manually casting Jax Q.
-    constexpr auto State = 0x20;       // 8 while a target is selected
-    constexpr auto ObjectIndex = 0x30; // uint32, equals target object + 0x20
-    // IDA 13337: `evtChampionOnly` handler sub_C0CFC0 writes `[HudSelectLogic+0x3C]`.
-    constexpr auto TargetChampionsOnly = 0x3C;
+    constexpr auto State = 0x20;       //8B 57 ? 48 8B 49 ? E8
+    constexpr auto ObjectIndex = 0x30; // 44 39 63 ? 75 ? 8B 86
+    constexpr auto TargetChampionsOnly = 0x3C; //F3 0F 10 41 ? 48 8B CE F3 0F 11 45
 } // namespace HudSpellTargetingLayout
 
 // HudZoomLayout removed Apr 25/2026 - duplicate of ZoomRuntime::ZC_MinZoom/ZC_MaxZoom
@@ -247,7 +264,7 @@ namespace HudInputLayout {
     // target network id in the current client. Retained only because existing
     // attack-input compatibility code still names the legacy field; the live
     // picker exposes selected object state through Hud+0x68 instead.
-    constexpr auto SelectedObjNetId = 0x64;
+    constexpr auto SelectedObjNetId = 0x64; //44 89 79 ? 49 8D 95
 } // namespace HudInputLayout
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -295,17 +312,17 @@ namespace TacticalMapLayout {
 // controller+0x5D0 is the narrower input/typing gate used for IsOpenChat blocking.
 // qword_1EA01F0 and dword_1EA0458 are not chat-open state in this dump.
 namespace ChatViewControllerLayout {
-    constexpr auto InputPanel  = 0x368;
-    constexpr auto InputActive = 0x5D0;
-    constexpr auto Ready       = 0x669;
-    constexpr auto PrimaryOpen = 0x66A;
-    constexpr auto InputMode   = 0x66B;       // callback flag; do not use alone as open
+    constexpr auto InputPanel  = 0x368; //48 8D 8D ? ? ? ? B8 ? ? ? ? 41 B8
+    constexpr auto InputActive = 0x5D0; //48 8D A9 ? ? ? ? 48 89 70
+    constexpr auto Ready       = 0x669; //88 90 ? ? ? ? C3
+    constexpr auto PrimaryOpen = 0x66A; //80 BB ? ? ? ? 00 75 ? 48 8B CB C6 83 ? ? ? ? ? E8
+    constexpr auto InputMode   = 0x66B; //80 B9 ? ? ? ? 00 48 8D 44 24 ? 48 8B 35
     constexpr auto Editing     = InputActive; // compatibility alias
     constexpr auto Focused     = InputMode;   // compatibility alias
 
-    constexpr auto PanelVisible = 0xB0;
-    constexpr auto PanelFocused = 0xB1;
-    constexpr auto PanelPending = 0xB2;
+    constexpr auto PanelVisible = 0xB0; //88 88 ? ? ? ? 48 8D 54 24
+    constexpr auto PanelFocused = 0xB1; //89 88 ? ? ? ? 66 89 88 ? ? ? ? 88 88 ? ? ? ? ? ? ? 48 8D 15
+    constexpr auto PanelPending = 0xB2; //45 88 87
 } // namespace ChatViewControllerLayout
 
 namespace ControlRuntime {
@@ -431,41 +448,31 @@ namespace BuffManagerRuntime {
 // shift in a future build, regenerate by hooking sub_BF59E0 (buff add
 // dispatcher) and inspecting the BuffData* it receives.
 namespace BuffManagerLayout {
-    constexpr auto EntriesStart = 0x18;
-    constexpr auto EntriesEnd = 0x20;
+    constexpr auto EntriesStart = 0x18; //48 8B 79 ? 48 8B 69 ? 4C 89 74 24 ? 48 3B FD 74 ? 48 89 5C 24 ? 66 90
+    constexpr auto EntriesEnd = 0x20; //48 8B 69 ? 4C 89 74 24 ? 48 3B FD 74 ? 48 89 5C 24 ? 66 90
     constexpr auto EntriesCapacityEnd = 0x28;
     constexpr auto Array2Start = 0x620;
     constexpr auto Array2End = 0x628;
 } // namespace BuffManagerLayout
 
 namespace BuffEntryLayout {
-    constexpr auto EntryStride = 0x10;
-    constexpr auto EntryBuff = 0x0;
-    constexpr auto EntryAux = 0x8;
+    constexpr auto EntryStride = 0x10; //48 83 EC ? 80 B9 ? ? ? ? 00 48 8B F1 0F 85
+    constexpr auto EntryBuff = 0x0; //? ? ? 48 8B 5F ? ? ? ? FF 50 ? 48 85 DB 74 ? B8 ? ? ? ? F0 0F C1 43 ? 83 F8 ? 75 ? ? ? ? 48 8B CB ? ? B8 ? ? ? ? F0 0F C1 43 ? 83 F8 ? 75 ? ? ? ? 48 8B CB FF 50 ? 48 83 C7 ? 48 3B FD 75 ? 48 8B 5C 24 ? 48 8B 56 ? 48 8B 4E ? 48 8B 7C 24 ? 48 8B 6C 24 ? 48 3B CA 74 ? 4C 8D 46 ? E8 ? ? ? ? 48 8B 46 ? 48 89 46 ? 48 8B 46 ? 4C 8B 74 24 ? 48 3B 46 ? 74 ? 48 89 46 ? 48 83 C4
+    constexpr auto EntryAux = 0x8; //48 8B 47 ? 48 85 C0 74 ? F0 FF 40 ? ? ? ? 48 8B 5F ? ? ? ? FF 50 ? 48 85 DB 74 ? B8 ? ? ? ? F0 0F C1 43 ? 83 F8 ? 75 ? ? ? ? 48 8B CB ? ? B8 ? ? ? ? F0 0F C1 43 ? 83 F8 ? 75 ? ? ? ? 48 8B CB FF 50 ? 48 83 C7 ? 48 3B FD 75 ? 48 8B 5C 24 ? 48 8B 56 ? 48 8B 4E ? 48 8B 7C 24 ? 48 8B 6C 24 ? 48 3B CA 74 ? 4C 8D 46 ? E8 ? ? ? ? 48 8B 46 ? 48 89 46 ? 48 8B 46 ? 4C 8B 74 24 ? 48 3B 46 ? 74 ? 48 89 46 ? 48 83 C4
 } // namespace BuffEntryLayout
 
 namespace BuffDataLayout {
-    constexpr auto BuffType = 0xC;
-    constexpr auto BuffName = 0x8;
-    constexpr auto BuffScriptPtr = 0x10;
-    constexpr auto BuffStartTime = 0x18;
-    constexpr auto BuffEndTime = 0x1C;
-    // Stack array (StlVector of StlSharedPtr<BuffScriptInstance>).
-    // Each entry is 16 bytes: {BuffScriptInstance*, refcount*}.
-    // CE 2026-08-03 live snapshot:
-    //   - target `kalistaexpungemarker` with 7 visible stacks has buff+0x38 = 7
-    //   - buff+0x3C is a secondary/aux field (e.g. 34 on the same buff)
-    // IDA 13337: sub_91BD20 (HasBuff-by-hash iterator, reached from HasBuff
-    // wrapper 0x2844A0 via vfunc +0x7A0) reads buff+0x30 as stack-array begin
-    // and buff+0x38 as the LIVE stack count (end = begin + 0x10*count); the
-    // `cmp [buff+0x38], 0 / jle` there is the liveness gate. (Older notes cited
-    // sub_91BC60, which actually falls inside the unrelated decoder sub_91BAC0.)
-    constexpr auto BuffStackArrayBegin = 0x30;
-    constexpr auto BuffStackCount = 0x38;
-    constexpr auto BuffStacks = 0x38;
-    constexpr auto BuffStacksAlt = 0x3C;
-    constexpr auto BuffCounterCurrent = 0x8C;
-    constexpr auto BuffCounterMax = 0x90;
+    constexpr auto BuffType = 0xC; //8B 47 ? 89 45 ? 8B 47 ? 89 45 ? 8B 47 ? 89 45 ? 8B 47 ? 89 45 ? C7 45 ? 00 00 00 00
+    constexpr auto BuffName = 0x8; //0F B7 47 ? 48 8D 57 ? 66 89 45
+    constexpr auto BuffScriptPtr = 0x10; //8B 47 ? 89 45 ? 8B 47 ? 89 45 ? 8B 47 ? 89 45 ? C7 45 ? 00 00 00 00
+    constexpr auto BuffStartTime = 0x18; //F3 0F 5C 79 ? 48 8B 0D
+    constexpr auto BuffEndTime = 0x1C; //F3 0F 10 71 ? 0F 29 7C 24 ? F3 0F 10 79 ? F3 0F 5C 79
+    constexpr auto BuffStackArrayBegin = 0x30; //4C 8B 41 ? 33 C0 44 8B 49
+    constexpr auto BuffStackCount = 0x38; //44 8B 49 ? 49 C1 E1 ? 4D 03 C8
+    constexpr auto BuffStacks = 0x38; //44 8B 49 ? 49 C1 E1 ? 4D 03 C8
+    constexpr auto BuffStacksAlt = 0x3C; //8B 47 ? 48 8D 5D ? 89 45 ? ? ? ? E8 ? ? ? ? ? ? 48 FF C3 48 8D 45 ? 48 3B D8 75 ? 8B 47 ? 48 8D 5D ? 89 45 ? ? ? ? E8 ? ? ? ? ? ? 48 FF C3 48 8D 45 ? 48 3B D8 75 ? 0F B6 4F ? E8 ? ? ? ? 8B 4F
+    constexpr auto BuffCounterCurrent = 0x8C; //41 8B 96 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B F8
+    constexpr auto BuffCounterMax = 0x90; //41 8B B6 ? ? ? ? 41 BF
 } // namespace BuffDataLayout
 
 // BuffScriptInstance is obtained by dereferencing the first 8 bytes of each
@@ -474,15 +481,15 @@ namespace BuffDataLayout {
 // object's network ID (mov rdx,[rcx]; cmp [rdx+4], eax), confirming +0x4 is
 // the caster's network ID.
 namespace BuffScriptInstanceLayout {
-    constexpr auto CasterNetworkId = 0x4;
-    constexpr auto EntryStride = 0x10;  // 16 bytes per stack entry
+    constexpr auto CasterNetworkId = 0x4; //39 51 ? 75 ? FF C0
+    constexpr auto EntryStride = 0x10;  // 16 bytes per stack entry 49 83 C0 ? 4D 3B C1 75 ? C3
 } // namespace BuffScriptInstanceLayout
 
 namespace BuffEventLayout {
     // OnBuffAdd/OnBuffRemove receive AIBaseClient::eventComponent
     // (hero + 0x2B0) in R9. OnBuffUpdate omits it and is resolved through
     // the per-unit event-bridge pointer cached from add/remove.
-    constexpr auto OwnerComponent = 0x2B0;
+    constexpr auto OwnerComponent = 0x2B0; //48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? E8
 } // namespace BuffEventLayout
 
 namespace NavGridRuntime {
@@ -506,50 +513,45 @@ namespace RuneManagerRuntime {
     // AIHeroClient::GetRuneManager virtual getter. IDA 13337:
     // /liveclientdata/activeplayerrunes calls localPlayer->vfunc[0x800],
     // then reads the returned manager at the RuneManagerLayout offsets below.
-    constexpr auto GetRuneManagerVFunc = 0x800;
+    constexpr auto GetRuneManagerVFunc = 0x800; //FF 90 ? ? ? ? 48 8B DE
 } // namespace RuneManagerRuntime
 
 namespace RuneManagerLayout {
     // Manager fields verified from sub_70EE80/sub_711C60 on IDA 13337.
-    constexpr auto PrimaryRuneTree = 0x198;   // rune tree data pointer
-    constexpr auto SecondaryRuneTree = 0x1E8; // rune tree data pointer
-    constexpr auto RuneEntriesBegin = 0x230;  // std::vector<RuneEntry> begin
-    constexpr auto RuneEntriesEnd = 0x238;    // std::vector<RuneEntry> end
-    constexpr auto RuneEntriesCapacityEnd = 0x240;
+    constexpr auto PrimaryRuneTree = 0x198;   // 48 8B 96 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 48 8D 15 ? ? ? ? 49 8B CF 48 8B F8 E8 ? ? ? ? 48 8B C8 48 8B D7 E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 48 8B 96
+    constexpr auto SecondaryRuneTree = 0x1E8; // 48 8B 96 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 48 8D 15 ? ? ? ? 49 8B CF 48 8B F8 E8 ? ? ? ? 48 8B C8 48 8B D7 E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 4C 8B E3
+    constexpr auto RuneEntriesBegin = 0x230;  // 48 8B 86 ? ? ? ? 48 3B 86 ? ? ? ? 0F 84
+    constexpr auto RuneEntriesEnd = 0x238;    // 48 3B 86 ? ? ? ? 0F 84 ? ? ? ? ? ? ? 48 85 D2
+    constexpr auto RuneEntriesCapacityEnd = 0x240; //48 89 83 ? ? ? ? 48 89 BB ? ? ? ? 48 8B 05 ? ? ? ? 48 89 83 ? ? ? ? 48 89 BB ? ? ? ? 48 8B 05 ? ? ? ? 48 89 83 ? ? ? ? 48 89 BB ? ? ? ? 48 8B 05 ? ? ? ? 48 89 83 ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 8B 05 ? ? ? ? 48 89 83 ? ? ? ? 48 89 BB
 } // namespace RuneManagerLayout
 
 namespace RuneEntryLayout {
     // sub_70EE80 walks manager+[0x230,0x238) in 0x50-byte records and treats
     // the first qword in each record as the BasePerk/Rune data pointer.
-    constexpr auto Stride = 0x50;
-    constexpr auto RuneData = 0x00;
+    constexpr auto Stride = 0x50; //49 83 C4 ? 4D 3B E1 0F 82
+    constexpr auto RuneData = 0x00; //? ? ? ? E8 ? ? ? ? 44 8B F3 48 8D 4D ? 41 83 E6 ? 4D 85 ED 75 ? 48 8D 15 ? ? ? ? E8 ? ? ? ? 45 85 F6 0F 84
 } // namespace RuneEntryLayout
 
 namespace RuneDataLayout {
     // sub_716180 builds rune JSON: id at +0x08, display/raw strings at +0x20/+0x30.
-    constexpr auto Id = 0x08;
-    constexpr auto DisplayName = 0x20;
-    constexpr auto Description = 0x30;
+    constexpr auto Id = 0x08; //41 8B 75 ? 48 8D 15 ? ? ? ? E8 ? ? ? ? 48 8B C8 48 8B F8 E8 ? ? ? ? 49 8D 4D
+    constexpr auto DisplayName = 0x20; //49 8D 4D ? C6 47
+    constexpr auto Description = 0x30; //49 8D 55 ? E8 ? ? ? ? 45 85 F6 74 ? 83 E3 ? 48 8D 4D ? E8 ? ? ? ? 48 8B 75 ? 48 8D 15 ? ? ? ? 49 8B CF E8 ? ? ? ? 48 8B C8 E8 ? ? ? ? 48 8B C8 48 8D 55 ? E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 41 B9
 } // namespace RuneDataLayout
 
 namespace RuneTreeDataLayout {
     // sub_716260 builds primary/secondary tree JSON: id at +0x00,
     // display/raw strings at +0x18/+0x28.
-    constexpr auto Id = 0x00;
-    constexpr auto DisplayName = 0x18;
-    constexpr auto Description = 0x28;
+    constexpr auto Id = 0x00; //? ? ? E8 ? ? ? ? 48 8B C8 48 8B D8 E8 ? ? ? ? 49 8D 4E
+    constexpr auto DisplayName = 0x18; //49 8D 4E ? C6 43
+    constexpr auto Description = 0x28; //49 8D 56 ? E8 ? ? ? ? 48 8B 7C 24
 } // namespace RuneTreeDataLayout
 
 namespace SpellBookLayout {
-    // Current sub_962890 layout. The legacy Owner/CasterNetId fields no
-    // longer exist as direct SpellBookClient fields: +0x08 is initialized to
-    // -1 and +0xA8 belongs to the 40-byte state-record array. Keep those two
-    // constants only for source compatibility; callers must not treat them as
-    // valid current fields without changing the owning logic.
-    constexpr auto Owner = 0x08;
-    constexpr auto CasterNetId = 0xA8;
-    constexpr auto ActiveSlot = 0xAC0;  // sub_971280 returns *(book + 0xAC0)
-    constexpr auto SpellSlotArray = 0xAE0; // sub_974680: book + 0xAE0 + slot*8
+    constexpr auto Owner = 0x08; //49 C7 46 ? ? ? ? ? 49 8D 86
+    constexpr auto CasterNetId = 0xA8; //4D 89 AE ? ? ? ? 4D 89 AE ? ? ? ? 4D 89 AE ? ? ? ? 49 89 7E
+    constexpr auto ActiveSlot = 0xAC0;  // sub_xxxx returns *(book + 0xAC0) 41 C7 86 ? ? ? ? ? ? ? ? 48 8D 4D
+    constexpr auto SpellSlotArray = 0xAE0; // sub_xxxx: book + 0xAE0 + slot*8 48 8B 84 C1 ? ? ? ? C3 48 8B 81
 } // namespace SpellBookLayout
 
     /*namespace HookSignatures {
@@ -666,16 +668,16 @@ namespace SpellBookLayout {
     //   * process-spell setup writes caster position to SpellCastInfo+0xD0
     //     and the decrypted cast/end position to SpellCastInfo+0xDC.
     namespace SpellCastInfoLayout {
-        constexpr auto SpellSlot     = 0x08;   // uint8  0..3 = QWER, 4..5 = D/F, 64=attack
-        constexpr auto State         = 0x0C;   // uint32 enum (Ready/Cast/Channel/Finished)
-        constexpr auto StartTime     = 0x28;   // float  game time when cast started
-        constexpr auto EndTime       = 0x2C;   // float  game time the cast finishes
-        constexpr auto ChannelStart  = 0x30;   // float  0 when not channeled
-        constexpr auto ChannelEnd    = 0x34;   // float  0 when not channeled
-        constexpr auto StartPosition = 0xD0;   // Vec3   cast start/caster position
-        constexpr auto EndPosition   = 0xDC;   // Vec3   cast end/cast position
+        constexpr auto SpellSlot     = 0x08;   // 48 89 48 ? 55 56 41 54 41 55 41 56 48 8D A8
+        constexpr auto State         = 0x0C;   // F0 0F C1 41 ? 83 F8 ? 75 ? ? ? ? FF 50 ? 48 85 DB 0F 84
+        constexpr auto StartTime     = 0x28;   // 8B 4B ? 48 8B 40 ? 8B 84 88 ? ? ? ? 85 C0 7E ? F3 0F 10 4B
+        constexpr auto EndTime       = 0x2C;   // 4C 8D 47 ? 4C 89 6D
+        constexpr auto ChannelStart  = 0x30;   // 45 8B 46 ? 4C 8D 4C 24 ? 8B D7
+        constexpr auto ChannelEnd    = 0x34;   // F3 0F 10 47 ? 0F 2E 05 ? ? ? ? 7A ? 0F 84 ? ? ? ? 41 8B D5
+        constexpr auto StartPosition = 0xD0;   // FF 90 ? ? ? ? 48 85 C0 74 ? 48 8B C8 E8 ? ? ? ? 48 85 C0 74 ? ? ? ? 4C 8D 4C 24 ? 4C 8D 45 ? 48 8B D6 4C 8B 51 ? 48 8D 4C 24 ? 48 89 4C 24 ? 48 8D 4C 24 ? 48 89 4C 24 ? 48 8B C8 41 FF D2 B8 ? ? ? ? C6 45
+        constexpr auto EndPosition   = 0xDC;   // 48 8D 8E ? ? ? ? 0F 57 C0 45 33 C9
         constexpr auto TargetNetId   = 0x138;  // uint32 primary target (0xFFFFFFFF if unit-less)
-        constexpr auto CasterNetId   = 0x2DC;  // uint32 caster net id  (active-cast only - per-slot stride is 0x198)
+        constexpr auto CasterNetId   = 0x2DC;  // 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 41 8B 86 ? ? ? ? 41 89 87 ? ? ? ? 49 8B C7
     } // namespace SpellCastInfoLayout
 
     // =========================================================================
@@ -707,21 +709,21 @@ namespace SpellBookLayout {
     // movement fields below.
     namespace AiManager
     {
-        constexpr auto AiManager = 0x4248;
-        constexpr auto CurrentSegment = 0x320;
-        constexpr auto DashSpeed = 0x360;
-        constexpr auto IsDashing = 0x384;
-        constexpr auto IsMoving = 0x31C;
-        constexpr auto MoveVec3 = 0x480;
-        constexpr auto NavArray = 0x348;
+        constexpr auto AiManager = 0x4248; //48 8D 91 ? ? ? ? 33 C9 0F B6 42 ? 44 0F B6 42 ? 4C 8B 4C C2 ? ? ? ? ? 4D 85 C0 0F 84 ? ? ? ? 49 83 F8 ? 0F 82 ? ? ? ? 48 8D 42 ? ? ? ? ? ? ? ? ? 4E 8D 4C C4 ? 4C 3B D0 77 ? 4C 3B CA 0F 83 ? ? ? ? 4D 8B D0 48 89 5C 24 ? 49 83 E2 ? 48 89 7C 24 ? 66 0F 6F 15 ? ? ? ? ? ? ? ? 48 8D 44 24 ? 48 2B FA 48 2B C2 ? ? ? ? 4C 2B DA 4C 8D 4A ? F3 42 0F 6F 44 0F ? 48 83 C1 ? F3 41 0F 6F 49 ? 4D 8D 49 ? 0F 55 CA 0F 57 C8 F3 42 0F 7F 4C 0F ? F3 42 0F 6F 44 08 ? F3 41 0F 6F 49 ? 0F 55 CA 0F 57 C8 F3 42 0F 7F 4C 08 ? F3 43 0F 6F 44 0B ? F3 41 0F 6F 49 ? 0F 55 CA 0F 57 C8 F3 43 0F 7F 4C 0B ? F3 42 0F 6F 44 08 ? F3 41 0F 6F 49 ? 0F 55 CA 0F 57 C8 F3 42 0F 7F 4C 08 ? 49 3B CA 72 ? 48 8B 7C 24 ? 48 8B 5C 24 ? EB ? 66 66 66 0F 1F 84 00 ? ? ? ? ? ? ? ? 48 F7 D0 ? ? ? ? 48 FF C1 49 3B C8 72 ? ? ? ? ? 0F B6 42 ? 84 C0 74 ? 8B C8 B8 ? ? ? ? 48 2B C1 48 83 F8 ? 73 ? 90 ? ? ? ? F6 D1 ? ? ? 48 FF C0 48 83 F8 ? 72 ? ? ? ? ? 48 8B 40
+        constexpr auto CurrentSegment = 0x320; //C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45
+        constexpr auto DashSpeed = 0x360; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45 ? ? ? ? ? C7 45 ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? 48 89 85
+        constexpr auto IsDashing = 0x384; //F3 0F 10 B5 ? ? ? ? 48 8D 53 ? E8 ? ? ? ? ? ? ? ? ? ? ? ? 0F 28 74 24
+        constexpr auto IsMoving = 0x31C; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45
+        constexpr auto MoveVec3 = 0x480; //C5 7D 6F 95
+        constexpr auto NavArray = 0x348; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45 ? ? ? ? ? C7 45 ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45 ? ? ? ? ? C7 45 ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? 48 89 85
         constexpr auto ObjectOffset = 0x4248;
-        constexpr auto PathState = 0x320;
-        constexpr auto SegmentsCount = 0x350;
-        constexpr auto ServerPos = 0x474;
-        constexpr auto StartPath = 0x330;
-        constexpr auto TargetPos = 0x34;
-        constexpr auto TargetPosition = 0x33C;
-        constexpr auto Velocity = 0x318;
+        constexpr auto PathState = 0x320; //CurrentSegment
+        constexpr auto SegmentsCount = 0x350; //C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45 ? ? ? ? ? C7 45 ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? 48 89 85
+        constexpr auto ServerPos = 0x474; //
+        constexpr auto StartPath = 0x330; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45
+        constexpr auto TargetPos = 0x34; //
+        constexpr auto TargetPosition = 0x33C; //41 C6 87 ? ? ? ? ? 89 BD ? ? ? ? 48 85 D2 74 ? 0F 1F 84 00
+        constexpr auto Velocity = 0x318; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45
     }
     // =========================================================================
     // VERIFIED offset block — imported from old source/core/Offsets.generated.h
@@ -776,21 +778,21 @@ namespace SpellBookLayout {
 
     // ── Current spell objects ─────────────────────────────────────────────
     namespace SpellSlotLayout {
-        constexpr auto SlotLevel             = 0x28;
+        constexpr auto SlotLevel             = 0x28; //8B 4B ? 48 8B 40 ? 8B 84 88 ? ? ? ? 85 C0 7E ? F3 0F 10 4B
         constexpr auto SlotLevelAlt          = 0x28;
-        constexpr auto SlotCooldown          = 0x80;
-        constexpr auto SlotTotalCd           = 0x88;
-        constexpr auto SlotCooldownExpires   = 0x30;
-        constexpr auto SlotChargeTimer       = 0x68;
-        constexpr auto SlotChargeCooldownDuration = 0x6C;
+        constexpr auto SlotCooldown          = 0x80; //48 8D 94 24 ? ? ? ? 41 FF D0 ? ? 89 9C 24
+        constexpr auto SlotTotalCd           = 0x88; //48 89 B4 24 ? ? ? ? E8 ? ? ? ? 49 8D 4F
+        constexpr auto SlotCooldownExpires   = 0x30; //45 8B 46 ? 4C 8D 4C 24 ? 8B D7
+        constexpr auto SlotChargeTimer       = 0x68; //48 8B 74 24 ? 48 83 C4 ? 41 5F 41 5E 5F C3 48 89 5C 24 ? 48 8B CE
+        constexpr auto SlotChargeCooldownDuration = 0x6C; //C6 47 ? 00 E9 ? ? ? ? 41 83 FF
         constexpr auto SlotCooldownDuration  = 0x74;
-        constexpr auto SlotStacks            = 0x5C;
-        constexpr auto SlotMaxStacks         = 0x64;
-        constexpr auto SlotActiveSpellCast   = 0x118;
-        constexpr auto SlotSpellInstanceVars = 0x108;
-        constexpr auto SlotSpellNameHash     = 0x110;
-        constexpr auto SlotSpellInfo         = 0x128; // 0x80-byte per-slot wrapper; +0x60 back-reference is the slot
-        constexpr auto SlotSpellData         = 0x130; // sub_4C2CF0 getter; sub_949020 setter
+        constexpr auto SlotStacks            = 0x5C; //83 7B ? 00 0F 28 F8
+        constexpr auto SlotMaxStacks         = 0x64; //8B 43 ? 85 C0 79 ? ? ? ? 48 8B CB FF 50 ? 84 C0 74 ? ? ? ? 48 8B CB FF 50 ? 8B 4B ? 48 8B 40 ? 8B 84 88 ? ? ? ? 85 C0
+        constexpr auto SlotActiveSpellCast   = 0x118; //4C 89 B4 24 ? ? ? ? 48 83 E6
+        constexpr auto SlotSpellInstanceVars = 0x108; //
+        constexpr auto SlotSpellNameHash     = 0x110; //4C 8B BC 24 ? ? ? ? 41 83 FC ? 0F 87
+        constexpr auto SlotSpellInfo         = 0x128; // F3 0F 58 B7 ? ? ? ? 48 85 C9
+        constexpr auto SlotSpellData         = 0x130; // 48 83 BA ? ? ? ? 00 4D 8B E1 4D 63 E8 48 8B F2 4C 8B F1 0F 84 ? ? ? ? 4C 89 78 ? 4C 8B 3D ? ? ? ? 48 89 58 ? 48 89 78 ? 4D 85 FF 0F 84 ? ? ? ? 48 8B 15 ? ? ? ? 48 85 D2 0F 84 ? ? ? ? 0F B6 42 ? 48 83 C2 ? 66 0F 6F 15 ? ? ? ? 45 33 C0 0F B6 4C 10 ? 44 0F B6 4A ? 88 4C 24 ? 41 8B C8 4D 85 C9 0F 84 ? ? ? ? 49 83 F9 ? 0F 82 ? ? ? ? 48 8D 42 ? ? ? ? ? 4C 8D 5C 24 ? 4E 8D 54 CC ? 4C 3B D8 77 ? 4C 3B D2 0F 83 ? ? ? ? 49 8B F9 48 83 E7 ? 4C 8D 5C 24 ? 4C 8D 54 24 ? 4C 2B DA 4C 2B D2 48 8D 5C 24 ? 48 2B DA 48 8D 42 ? 0F 1F 40
         // Compatibility alias used by existing cast/name readers. The current
         // +0x130 object is SpellData, not a writable SpellInput buffer.
         constexpr auto SlotSpellInput        = SlotSpellData;
@@ -820,7 +822,7 @@ namespace SpellBookLayout {
         // sub_910A80 decodes the request byte at +0xC4 into parsedCastInfo+0x154,
         // the same slot field used by OnProcessSpell.
         constexpr auto EncodedSlot = 0xC4;
-        constexpr auto DecodeTable = 0x1ABE610;
+        constexpr auto DecodeTable = 0x1ABE610; //4C 8D 05 ? ? ? ? 8B 05 ? ? ? ? 0F 57 C9 || 4C 8D 1D ? ? ? ? 49 3B D1 74 ? ? ? ? ? ? ? 2C
     } // namespace ProcessCastSpellRequestLayout
 
     namespace SpellInfoLayout {
@@ -1271,6 +1273,7 @@ namespace SpellBookLayout {
         constexpr auto WorldToScreen     = DrawingRuntime::WorldToScreen;
         constexpr auto GetPing           = GameRuntime::GetPing;
         constexpr auto PrintChat         = GameRuntime::PrintChat;
+        constexpr auto SendChat          = GameRuntime::SendChat;
     } // namespace Function
 
 } // namespace Offset

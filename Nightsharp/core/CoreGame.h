@@ -280,6 +280,9 @@ namespace detail {
         }
         return false;
     }
+
+    inline constexpr int ChatChannelAll = 1;
+    inline constexpr int ChatChannelTeam = 2;
 } // namespace detail
 
 inline float GetTime() {
@@ -577,10 +580,51 @@ inline bool Say(const char* text, bool sendToAll = false, bool /*triggerEvent*/ 
         return false;
     }
 
+    auto& ctx = CoreRuntime::g_ctx;
+    if (!ctx.moduleBase || !Globals::IsValidPtr(ctx.netInstance) || !ctx.sendChatFn) {
+        (void)CoreRuntime::RefreshReadState();
+    }
+
+    uintptr_t client = ctx.netInstance;
+    if (!Globals::IsValidPtr(client) && ctx.netInstanceGlobal) {
+        client = Globals::Read<uintptr_t>(ctx.netInstanceGlobal);
+    }
+
+    const uintptr_t fnAddr = ctx.sendChatFn
+        ? ctx.sendChatFn
+        : (ctx.moduleBase ? ctx.moduleBase + Offset::GameRuntime::SendChat : 0);
+    const bool canCallNative =
+        Globals::IsValidPtr(client) &&
+        Globals::IsExecutablePtrCached(fnAddr, 16);
+
+    if (canCallNative) {
+        using SendChatFn = char(__fastcall*)(uintptr_t, const char*, int);
+        const int channel = sendToAll ? detail::ChatChannelAll : detail::ChatChannelTeam;
+        const auto fn = reinterpret_cast<SendChatFn>(fnAddr);
+        const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
+
+        __try {
+            const char result = Globals::IsValidPtr(trampoline)
+                ? spoof_call(reinterpret_cast<void*>(trampoline), fn, client, text, channel)
+                : fn(client, text, channel);
+            return result != 0;
+        }
+        __except (1) {
+            detail::LogOnce(
+                "say-native-exception",
+                "[CoreGame] Native Game.Say threw an exception; message was not sent.");
+            return false;
+        }
+    }
+
     detail::LogOnce(
-        "say-native-missing",
-        "[CoreGame] MultiplayerClient.SendChat native offset is not verified; Game.Say uses focused-window clipboard fallback.");
+        "say-native-unavailable",
+        "[CoreGame] MultiplayerClient.SendChat unavailable; Game.Say uses focused-window clipboard fallback.");
     return detail::PasteChatLine(text, sendToAll);
+}
+
+inline bool Say(const std::string& text, bool sendToAll = false, bool triggerEvent = true) {
+    return Say(text.c_str(), sendToAll, triggerEvent);
 }
 
 inline bool SendPing(PingCategory /*pingType*/, const Vec2& /*position*/, std::uint32_t /*targetNetworkId*/ = 0) {

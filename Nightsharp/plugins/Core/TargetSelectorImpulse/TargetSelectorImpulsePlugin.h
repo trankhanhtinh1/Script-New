@@ -34,6 +34,17 @@ public:
             DestroyMenu();
             return;
         }
+
+        if (!SDK::TargetSelector::SetTargetSelector(kImplementationName)) {
+            SDK::TargetSelector::RemoveTargetSelector(kImplementationName);
+            implementation_->Dispose();
+            delete implementation_;
+            implementation_ = nullptr;
+            DestroyMenu();
+            return;
+        }
+
+        SetSdkTargetSelectorLoaded(false);
     }
 
     void OnUnload() override {
@@ -44,10 +55,40 @@ public:
         delete implementation_;
         implementation_ = nullptr;
         DestroyMenu();
+        SetSdkTargetSelectorLoaded(true);
+    }
+
+    bool LoadSucceeded() const override {
+        return implementation_ &&
+               SDK::TargetSelector::GetTargetSelector(kImplementationName) == implementation_ &&
+               SDK::TargetSelector::Implementation() == implementation_;
     }
 
 private:
     static constexpr const char* kImplementationName = "Impulse";
+
+    static void SetSdkTargetSelectorLoaded(bool loaded) {
+        const int idx = PluginRegistry::FindByInternalId("targetselector");
+        if (idx >= 0 && PluginRegistry::HasRuntime(idx)) {
+            if (loaded) {
+                PluginRegistry::LoadPlugin(idx);
+            } else {
+                PluginRegistry::UnloadPlugin(idx);
+            }
+            return;
+        }
+
+        if (auto* impl = SDK::TargetSelector::GetTargetSelector("SDK")) {
+            if (loaded) {
+                impl->Resume();
+            } else {
+                impl->Suspend();
+            }
+        }
+        if (idx >= 0) {
+            PluginRegistry::Plugins[idx].Loaded = loaded;
+        }
+    }
 
     void DestroyMenu() {
         if (!menu_) return;
