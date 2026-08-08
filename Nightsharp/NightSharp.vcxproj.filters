@@ -2951,13 +2951,25 @@
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h">
       <Filter>Plugins\Core</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\FsPred\FsPredAimMath.h">
+      <Filter>Plugins\Core\FsPred</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\FsPred\FsPredAoe.h">
       <Filter>Plugins\Core\FsPred</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\Core\FsPred\FsPredCollision.h">
+    <ClInclude Include="Plugins\Core\FsPred\FsPredAoeMath.h">
+      <Filter>Plugins\Core\FsPred</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\FsPred\FsPredCrestAssets.inl">
+      <Filter>Plugins\Core\FsPred</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\FsPred\FsPredDrawing.h">
       <Filter>Plugins\Core\FsPred</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\FsPred\FsPredEngine.h">
+      <Filter>Plugins\Core\FsPred</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\Core\FsPred\FsPredMotionState.h">
       <Filter>Plugins\Core\FsPred</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Core\FsPred\FsPredPlugin.h">
@@ -3768,6 +3780,9 @@
       <Filter>SDK</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Math\Collision.h">
+      <Filter>SDK\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Math\MovingProjectileCollision.h">
       <Filter>SDK\Math</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Math\ConvexHull.h">

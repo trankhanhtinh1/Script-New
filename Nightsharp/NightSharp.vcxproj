@@ -877,9 +877,13 @@
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h" />
     <ClInclude Include="Plugins\Core\BuffInspectorPlugin.h" />
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredAimMath.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredAoe.h" />
-    <ClInclude Include="Plugins\Core\FsPred\FsPredCollision.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredAoeMath.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredCrestAssets.inl" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredDrawing.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredEngine.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredMotionState.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredPlugin.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredUnitTracker.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
@@ -1150,6 +1154,7 @@
     <ClInclude Include="SDK\GameObjects\YasuoWallTracker.h" />
     <ClInclude Include="SDK\Lifecycle.h" />
     <ClInclude Include="SDK\Math\Collision.h" />
+    <ClInclude Include="SDK\Math\MovingProjectileCollision.h" />
     <ClInclude Include="SDK\Math\ConvexHull.h" />
     <ClInclude Include="SDK\Math\Geometry.h" />
     <ClInclude Include="SDK\Math\HealthPrediction.h" />

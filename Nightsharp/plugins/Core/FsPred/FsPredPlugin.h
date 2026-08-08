@@ -6,6 +6,7 @@
 #include "../../../sdk/SDK.h"
 #include "../../../sdk/UI/IMenu/Menu.h"
 #include "FsPredEngine.h"
+#include "FsPredDrawing.h"
 
 #include <string>
 
@@ -22,6 +23,7 @@ public:
 
     void OnLoad() override {
         if (active_) return;
+        FsPred::UnitTracker::Initialize();
 
         previousPrediction_ = SDK::Prediction::CurrentPredictionName();
         previousWasSdk_ = previousPrediction_.empty() || previousPrediction_ == kSdkPredictionName;
@@ -34,6 +36,8 @@ public:
         const bool registered = SDK::Prediction::GetPrediction(kImplementationName) == &engine_;
         if (!registered || !SDK::Prediction::SetPrediction(kImplementationName)) {
             if (added) SDK::Prediction::RemovePrediction(kImplementationName);
+            drawing_.Shutdown();
+            FsPred::UnitTracker::Shutdown();
             DestroyMenu();
             previousPrediction_.clear();
             previousWasSdk_ = false;
@@ -47,6 +51,8 @@ public:
 
     void OnUnload() override {
         if (!active_ && !providerRegistered_) {
+            drawing_.Shutdown();
+            FsPred::UnitTracker::Shutdown();
             DestroyMenu();
             return;
         }
@@ -70,6 +76,8 @@ public:
             SDK::Prediction::RemovePrediction(kImplementationName);
             providerRegistered_ = false;
         }
+        drawing_.Shutdown();
+        FsPred::UnitTracker::Shutdown();
         previousPrediction_.clear();
         previousWasSdk_ = false;
         DestroyMenu();
@@ -81,6 +89,16 @@ public:
         if (SDK::Prediction::GetPrediction(kImplementationName) == &engine_ &&
             SDK::Prediction::CurrentPredictionName() != kImplementationName) {
             SDK::Prediction::SetPrediction(kImplementationName);
+        }
+        if (drawHitchanceCrests_ && drawHitchanceCrests_->Value) {
+            drawing_.Update();
+        }
+    }
+
+    void OnRender() override {
+        if (active_ && drawHitchanceCrests_ &&
+            drawHitchanceCrests_->Value) {
+            drawing_.Render();
         }
     }
 
@@ -95,6 +113,7 @@ private:
     static constexpr const char* kSdkPredictionName = "SDK Prediction";
 
     FsPred::FsPredEngine engine_;
+    FsPred::CrestDrawing drawing_;
     std::string previousPrediction_;
     bool previousWasSdk_ = false;
     bool providerRegistered_ = false;
@@ -105,6 +124,7 @@ private:
     SDK::MenuSlider* extraDelay_ = nullptr;
     SDK::MenuBool* reCheckHitchance_ = nullptr;
     SDK::MenuBool* sdk_ = nullptr;
+    SDK::MenuBool* drawHitchanceCrests_ = nullptr;
 
     FsPred::FsPredConfig BuildConfig() const {
         FsPred::FsPredConfig config;
@@ -122,6 +142,8 @@ private:
         item_ = menu_->Add(new SDK::MenuSlider("PredMaxRange", "Max Range %", 100, 0, 100));
         extraDelay_ = menu_->Add(new SDK::MenuSlider("ExtraDelayMs", "Extra Delay (ms)", 10, 0, 100));
         reCheckHitchance_ = menu_->Add(new SDK::MenuBool("ReCheckHitchance", "Recheck Hitchance", true));
+        drawHitchanceCrests_ = menu_->Add(new SDK::MenuBool(
+            "DrawHitchanceCrests", "Draw Hitchance Crests", true));
         sdk_ = menu_->Add(new SDK::MenuBool("Default", "Default Prediction", false));
 
         menu_->Attach();
@@ -136,6 +158,7 @@ private:
         item_ = nullptr;
         extraDelay_ = nullptr;
         reCheckHitchance_ = nullptr;
+        drawHitchanceCrests_ = nullptr;
         sdk_ = nullptr;
     }
 

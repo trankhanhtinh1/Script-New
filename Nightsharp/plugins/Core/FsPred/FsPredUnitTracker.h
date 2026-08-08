@@ -1,292 +1,403 @@
 #pragma once
 
+#include "FsPredMotionState.h"
+#include "../../../sdk/Events/Events.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/GameObjects/ObjectManager.h"
 #include "../../../sdk/Math/Prediction/Movement.h"
-#include "../../../sdk/Utils/MathUtils.h"
 #include "../../../core/CoreBuffs.h"
+#include "../../../SectionProfiler.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <deque>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include <span>
 
 namespace Plugins::FsPred {
 
-struct PathInfo {
-    SDK::Vector2 Position{};
-    SDK::Vector2 Direction{};
-    float Time = 0.0f;
+struct PathEvent {
+    StablePathIntent Intent{};
+    int Tick = 0;
 };
 
 struct UnitTrackerInfo {
     std::uint32_t NetworkId = 0;
-    int AaTick = 0;
     int NewPathTick = 0;
     int StopMoveTick = 0;
     int LastInvisibleTick = 0;
-    int SpecialSpellFinishTick = 0;
-    std::vector<PathInfo> PathBank;
-    std::deque<PathInfo> RecentPathChanges;
-    SDK::Vector3 LastPosition{};
-    std::vector<SDK::Vector3> LastWaypoints{};
+    int LastSeenTick = 0;
+    StablePathIntent LastIntent{};
+    std::array<PathEvent, 6> PathEvents{};
+    std::size_t PathEventCount = 0;
+    std::size_t NextPathEvent = 0;
     bool WasMoving = false;
-    bool WasWindingUp = false;
-};
-
-struct SpecialSpellDef {
-    std::string Name;
-    double Duration = 0.0;
+    bool SawInvisible = false;
+    SDK::HitChance CachedMotionState = SDK::HitChance::None;
+    bool HasCachedMotionState = false;
 };
 
 class UnitTracker {
 public:
     static void Initialize() {
-        if (initialized_) return;
-        initialized_ = true;
-
-        specialSpells_ = {
-            { "katarinar", 1.0 },
-            { "drain", 1.0 },
-            { "crowstorm", 1.0 },
-            { "consume", 0.5 },
-            { "absolutezero", 1.0 },
-            { "staticfield", 0.5 },
-            { "cassiopeiapetrifyinggaze", 0.5 },
-            { "ezrealtrueshotbarrage", 1.0 },
-            { "galioidolofdurand", 1.0 },
-            { "luxmalicecannon", 1.0 },
-            { "reapthewhirlwind", 1.0 },
-            { "jinxw", 0.6 },
-            { "jinxr", 0.6 },
-            { "missfortunebullettime", 1.0 },
-            { "shenstandunited", 1.0 },
-            { "threshe", 0.4 },
-            { "threshrpenta", 0.75 },
-            { "threshq", 0.75 },
-            { "infiniteduress", 1.0 },
-            { "meditate", 1.0 },
-            { "alzaharnethergrasp", 1.0 },
-            { "lucianq", 0.5 },
-            { "caitlynpiltoverpeacemaker", 0.5 },
-            { "velkozr", 0.5 },
-            { "jhinr", 2.0 }
-        };
-
-        const int tick = SDK::Variables::TickCount();
-        trackerMap_.clear();
-        for (const auto& hero : SDK::GameObjects::EnemyHeroes()) {
-            if (!hero.IsValid()) continue;
-            UnitTrackerInfo info{};
-            info.NetworkId = hero.NetworkId();
-            info.AaTick = tick - 10000;
-            info.NewPathTick = tick;
-            info.StopMoveTick = hero.IsMoving() ? (tick - 10000) : tick;
-            info.LastInvisibleTick = hero.IsVisible() ? (tick - 10000) : tick;
-            info.SpecialSpellFinishTick = tick - 10000;
-            info.LastPosition = hero.Position();
-            info.LastWaypoints = hero.CachedWaypoints();
-            info.WasMoving = hero.IsMoving();
-            trackerMap_[hero.NetworkId()] = info;
+        if (initialized_) {
+            return;
         }
+
+        initialized_ = true;
+        lastUpdateTick_ = -1;
+        slots_ = {};
+        pathHookSubscribed_ =
+            SDK::Events::AddOnNewPath(&UnitTracker::OnNewPath);
+        deleteHookSubscribed_ =
+            SDK::Events::AddOnDeleteObject(&UnitTracker::OnDeleteObject);
+        SeedVisibleEnemies();
+    }
+
+    static void Shutdown() {
+        if (pathHookSubscribed_) {
+            SDK::Events::RemoveOnNewPath(&UnitTracker::OnNewPath);
+        }
+        if (deleteHookSubscribed_) {
+            SDK::Events::RemoveOnDeleteObject(&UnitTracker::OnDeleteObject);
+        }
+        pathHookSubscribed_ = false;
+        deleteHookSubscribed_ = false;
+        initialized_ = false;
+        lastUpdateTick_ = -1;
+        slots_ = {};
     }
 
     static void Update() {
-        if (!initialized_) Initialize();
-        const int tick = SDK::Variables::TickCount();
+        if (!initialized_) {
+            Initialize();
+        }
 
-        // GetPrediction can be called dozens of times per game frame. The tracker
-        // state only needs to be refreshed once per tick — every additional call
-        // in the same tick returns immediately.
-        if (lastUpdateTick_ == tick) return;
+        const int tick = SDK::Variables::TickCount();
+        if (lastUpdateTick_ == tick) {
+            return;
+        }
+        NS_PROFILE("FsPred.Tracker");
         lastUpdateTick_ = tick;
 
-        // Zero-allocation per-frame snapshot (SDK::GameObjects frame buffer).
-        const auto& enemies = SDK::GameObjects::EnemyHeroesFrame();
-        for (const auto& hero : enemies) {
-            if (!hero.IsValid()) continue;
-            const std::uint32_t netId = hero.NetworkId();
-            auto& info = trackerMap_[netId];
-            info.NetworkId = netId;
+        for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
+            if (!hero.IsValid()) {
+                continue;
+            }
 
-            const auto& currentWaypoints = hero.CachedWaypoints();
+            UnitTrackerInfo& info = AcquireSlot(hero.NetworkId(), tick);
             const bool isMoving = hero.IsMoving();
-            const SDK::Vector3 currentPos = hero.Position();
+            info.LastSeenTick = tick;
 
-            // Track visibility
             if (!hero.IsVisible()) {
                 info.LastInvisibleTick = tick;
+                info.SawInvisible = true;
             }
-
-            // Check if path or movement changed
-            bool pathChanged = false;
-            if (currentWaypoints.size() != info.LastWaypoints.size()) {
-                pathChanged = true;
-            } else {
-                for (std::size_t i = 0; i < currentWaypoints.size(); ++i) {
-                    if (currentWaypoints[i].DistanceSquared(info.LastWaypoints[i]) > 1.0f) {
-                        pathChanged = true;
-                        break;
-                    }
-                }
-            }
-
-            if (pathChanged) {
-                info.NewPathTick = tick;
-                if (currentWaypoints.size() <= 1) {
-                    info.StopMoveTick = tick;
-                }
-                if (!currentWaypoints.empty()) {
-                    const SDK::Vector2 endPos = currentWaypoints.back().To2D();
-                    const SDK::Vector2 toEnd = endPos - currentPos.To2D();
-                    const SDK::Vector2 heading = toEnd.LengthSqr() > 1.0f
-                        ? toEnd.Normalized()
-                        : SDK::Vector2{};
-                    const PathInfo entry{ endPos, heading, static_cast<float>(tick) };
-                    info.PathBank.push_back(entry);
-                    if (info.PathBank.size() > 3) {
-                        info.PathBank.erase(info.PathBank.begin());
-                    }
-                    info.RecentPathChanges.push_back(entry);
-                    while (!info.RecentPathChanges.empty() &&
-                           static_cast<float>(tick) - info.RecentPathChanges.front().Time > 800.0f) {
-                        info.RecentPathChanges.pop_front();
-                    }
-                    while (info.RecentPathChanges.size() > 6) {
-                        info.RecentPathChanges.pop_front();
-                    }
-                }
-            }
-
-            // Real stop detection: unit was moving last tick and is not moving now.
             if (info.WasMoving && !isMoving) {
                 info.StopMoveTick = tick;
             }
 
-            if (hero.Spellbook().IsWindingUp()) {
-                info.WasWindingUp = true;
-            } else {
-                info.WasWindingUp = false;
+            if (!pathHookSubscribed_) {
+                const auto& path = hero.CachedWaypoints();
+                RecordPathIntent(
+                    info,
+                    ExtractStablePathIntent(
+                        std::span<const SDK::Vector3>(path.data(), path.size())),
+                    tick);
             }
-
-            info.LastPosition = currentPos;
-            info.LastWaypoints = currentWaypoints;
             info.WasMoving = isMoving;
         }
     }
 
-    static bool SpamSamePlace(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return false;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return false;
-
-        const auto& tracker = it->second;
-        if (tracker.PathBank.size() < 3) return false;
-
-        const int tick = SDK::Variables::TickCount();
-        const auto& p1 = tracker.PathBank[1];
-        const auto& p2 = tracker.PathBank[2];
-
-        if (p2.Time - p1.Time < 180.0f && static_cast<float>(tick) - p2.Time < 90.0f) {
-            if (p1.Position.Distance(p2.Position) < 50.0f) {
-                return true;
-            }
-
-            const SDK::Vector2 C = p1.Position;
-            const SDK::Vector2 A = p2.Position;
-            const SDK::Vector2 B = unit.Position().To2D();
-
-            const float AB = (A.x - B.x) * (A.x - B.x) + (A.y - B.y) * (A.y - B.y);
-            const float BC = (B.x - C.x) * (B.x - C.x) + (B.y - C.y) * (B.y - C.y);
-            const float AC = (A.x - C.x) * (A.x - C.x) + (A.y - C.y) * (A.y - C.y);
-
-            const float denom = 2.0f * std::sqrt(AB) * std::sqrt(BC);
-            if (denom > 0.0001f) {
-                const float cosVal = std::clamp((AB + BC - AC) / denom, -1.0f, 1.0f);
-                const float angleDeg = std::acos(cosVal) * 180.0f / 3.14159265358979323846f;
-                if (angleDeg < 31.0f) {
-                    return true;
-                }
-            }
+    static MotionFacts GetMotionFacts(const SDK::AIBaseClient& unit) {
+        if (!unit.IsValid()) {
+            MotionFacts facts{};
+            facts.CanMove = false;
+            return facts;
         }
-        return false;
+        Update();
+        return BuildMotionFacts(unit, FindSlot(unit.NetworkId()));
     }
 
-    static bool IsReversing(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return false;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return false;
-
-        const auto& changes = it->second.RecentPathChanges;
-        if (changes.size() < 2) return false;
-
-        const int tick = SDK::Variables::TickCount();
-
-        // Compare the intended heading captured at each re-path. One sharp reversal
-        // is already enough to invalidate long linear extrapolation for a short time.
-        for (std::size_t i = 1; i < changes.size(); ++i) {
-            if (static_cast<float>(tick) - changes[i].Time > kReversalWindowMs) {
+    static void RefreshCachedMotionStates() {
+        Update();
+        for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
+            if (!hero.IsValid()) {
                 continue;
             }
-
-            const SDK::Vector2 dir1 = changes[i - 1].Direction;
-            const SDK::Vector2 dir2 = changes[i].Direction;
-            if (dir1.LengthSqr() < 0.25f || dir2.LengthSqr() < 0.25f) continue;
-
-            if (dir1.AngleBetween(dir2) > kReversalAngleDeg) {
-                return true;
+            UnitTrackerInfo* info = FindSlot(hero.NetworkId());
+            if (!info) {
+                continue;
             }
+            info->CachedMotionState =
+                ClassifyMotion(BuildMotionFacts(hero, info));
+            info->HasCachedMotionState = true;
         }
-
-        return false;
     }
 
-    static double GetSpecialSpellEndTime(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return 0.0;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return 0.0;
-        return static_cast<double>(it->second.SpecialSpellFinishTick - SDK::Variables::TickCount());
-    }
-
-    static double GetLastAutoAttackTime(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return 0.0;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return 0.0;
-        return static_cast<double>(SDK::Variables::TickCount() - it->second.AaTick);
+    static bool TryGetCachedMotionState(std::uint32_t networkId,
+                                        SDK::HitChance& state) {
+        const UnitTrackerInfo* info = FindSlot(networkId);
+        if (!info || !info->HasCachedMotionState) {
+            return false;
+        }
+        state = info->CachedMotionState;
+        return true;
     }
 
     static double GetLastNewPathTime(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return 0.0;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return 0.0;
-        return static_cast<double>(SDK::Variables::TickCount() - it->second.NewPathTick);
+        const UnitTrackerInfo* info = FindSlot(unit.NetworkId());
+        return info
+            ? static_cast<double>(SDK::Variables::TickCount() - info->NewPathTick)
+            : 0.0;
     }
 
     static double GetLastVisibleTime(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return 0.0;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return 0.0;
-        return static_cast<double>(SDK::Variables::TickCount() - it->second.LastInvisibleTick);
+        const UnitTrackerInfo* info = FindSlot(unit.NetworkId());
+        return info
+            ? static_cast<double>(SDK::Variables::TickCount() - info->LastInvisibleTick)
+            : 0.0;
     }
 
     static double GetLastStopMoveTime(const SDK::AIBaseClient& unit) {
-        if (!unit.IsValid()) return 0.0;
-        auto it = trackerMap_.find(unit.NetworkId());
-        if (it == trackerMap_.end()) return 0.0;
-        return static_cast<double>(SDK::Variables::TickCount() - it->second.StopMoveTick);
+        const UnitTrackerInfo* info = FindSlot(unit.NetworkId());
+        return info
+            ? static_cast<double>(SDK::Variables::TickCount() - info->StopMoveTick)
+            : 0.0;
     }
 
 private:
+    static MotionFacts BuildMotionFacts(const SDK::AIBaseClient& unit,
+                                        UnitTrackerInfo* info) {
+        MotionFacts facts{};
+        if (!unit.IsValid()) {
+            facts.CanMove = false;
+            return facts;
+        }
+
+        const int tick = SDK::Variables::TickCount();
+        facts.IsDashing = SDK::Extensions::IsDashing(unit);
+        facts.IsRecalling = unit.HasBuff("Recall");
+        facts.CanMove = SDK::CanMove(unit);
+        facts.IsCasting = unit.Spellbook().IsWindingUp();
+        facts.IsMoving = unit.IsMoving();
+
+        const float gameTime = SDK::Game::Time();
+        const auto* buffs =
+            CoreBuffs::GetOrBuildFrameBuffSnapshot(unit.Address(), gameTime);
+        facts.HasHardCrowdControl =
+            RemainingImmobilitySeconds(buffs, gameTime) >= 0.0;
+
+        if (info) {
+            facts.BecameVisible = info->SawInvisible && unit.IsVisible();
+            facts.VisibleAgeMs =
+                static_cast<double>(tick - info->LastInvisibleTick);
+            facts.StopAgeMs = static_cast<double>(tick - info->StopMoveTick);
+            facts.PathAgeMs = static_cast<double>(tick - info->NewPathTick);
+
+            const auto reversal = LatestReversal(*info, tick);
+            facts.ReversalAngleDegrees = reversal.AngleDegrees;
+            facts.ReversalAgeMs = reversal.AgeMs;
+            facts.HasStableHeading =
+                info->LastIntent.HasDestination &&
+                reversal.AngleDegrees <= kReversalAngleDeg;
+        }
+
+        const auto& path = unit.CachedWaypoints();
+        const StablePathIntent currentIntent = ExtractStablePathIntent(
+            std::span<const SDK::Vector3>(path.data(), path.size()));
+        facts.HasPath = currentIntent.HasDestination && facts.IsMoving;
+        if (currentIntent.HasDestination) {
+            const SDK::Vector3 position = unit.ServerPosition();
+            const float dx = currentIntent.DestinationX - position.x;
+            const float dz = currentIntent.DestinationZ - position.z;
+            facts.NearPathEnd = dx * dx + dz * dz <= 100.0f * 100.0f;
+        }
+        return facts;
+    }
+
+    struct ReversalFact {
+        float AngleDegrees = 0.0f;
+        double AgeMs = 0.0;
+    };
+
+    static constexpr std::size_t kMaxEnemySlots = 10;
+    static constexpr std::size_t kPathEventCapacity = 6;
     static constexpr float kReversalWindowMs = 400.0f;
     static constexpr float kReversalAngleDeg = 100.0f;
 
+    static UnitTrackerInfo* FindSlot(std::uint32_t networkId) {
+        if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+            return nullptr;
+        }
+        for (auto& slot : slots_) {
+            if (slot.NetworkId == networkId) {
+                return &slot;
+            }
+        }
+        return nullptr;
+    }
+
+    static const UnitTrackerInfo* FindSlot(std::uint32_t networkId,
+                                           const std::array<UnitTrackerInfo,
+                                                            kMaxEnemySlots>& slots) {
+        if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+            return nullptr;
+        }
+        for (const auto& slot : slots) {
+            if (slot.NetworkId == networkId) {
+                return &slot;
+            }
+        }
+        return nullptr;
+    }
+
+    static UnitTrackerInfo& AcquireSlot(std::uint32_t networkId, int tick) {
+        if (UnitTrackerInfo* existing = FindSlot(networkId)) {
+            return *existing;
+        }
+
+        UnitTrackerInfo* selected = nullptr;
+        for (auto& slot : slots_) {
+            if (slot.NetworkId == 0) {
+                selected = &slot;
+                break;
+            }
+        }
+        if (!selected) {
+            selected = &*std::min_element(
+                slots_.begin(),
+                slots_.end(),
+                [](const UnitTrackerInfo& left, const UnitTrackerInfo& right) {
+                    return left.LastSeenTick < right.LastSeenTick;
+                });
+        }
+
+        *selected = {};
+        selected->NetworkId = networkId;
+        selected->NewPathTick = tick;
+        selected->StopMoveTick = tick;
+        selected->LastInvisibleTick = tick - 10000;
+        selected->LastSeenTick = tick;
+        return *selected;
+    }
+
+    static void SeedVisibleEnemies() {
+        const int tick = SDK::Variables::TickCount();
+        for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
+            if (!hero.IsValid()) {
+                continue;
+            }
+            UnitTrackerInfo& info = AcquireSlot(hero.NetworkId(), tick);
+            info.WasMoving = hero.IsMoving();
+            info.StopMoveTick = info.WasMoving ? tick - 10000 : tick;
+            if (!hero.IsVisible()) {
+                info.LastInvisibleTick = tick;
+                info.SawInvisible = true;
+            }
+            const auto& path = hero.CachedWaypoints();
+            info.LastIntent = ExtractStablePathIntent(
+                std::span<const SDK::Vector3>(path.data(), path.size()));
+        }
+    }
+
+    static void RecordPathIntent(UnitTrackerInfo& info,
+                                 const StablePathIntent& intent,
+                                 int tick) {
+        if (SameStableDestination(info.LastIntent, intent)) {
+            return;
+        }
+
+        info.LastIntent = intent;
+        info.NewPathTick = tick;
+        if (!intent.HasDestination) {
+            return;
+        }
+
+        info.PathEvents[info.NextPathEvent] = { intent, tick };
+        info.NextPathEvent =
+            (info.NextPathEvent + 1) % kPathEventCapacity;
+        info.PathEventCount =
+            std::min(info.PathEventCount + 1, kPathEventCapacity);
+    }
+
+    static const PathEvent& ChronologicalPathEvent(
+        const UnitTrackerInfo& info,
+        std::size_t index) {
+        const std::size_t first =
+            (info.NextPathEvent + kPathEventCapacity - info.PathEventCount) %
+            kPathEventCapacity;
+        return info.PathEvents[(first + index) % kPathEventCapacity];
+    }
+
+    static ReversalFact LatestReversal(const UnitTrackerInfo& info,
+                                       int tick) {
+        ReversalFact result{};
+        if (info.PathEventCount < 2) {
+            return result;
+        }
+
+        for (std::size_t index = 1; index < info.PathEventCount; ++index) {
+            const PathEvent& previous =
+                ChronologicalPathEvent(info, index - 1);
+            const PathEvent& current =
+                ChronologicalPathEvent(info, index);
+            if (!previous.Intent.HasHeading || !current.Intent.HasHeading) {
+                continue;
+            }
+
+            const double age = static_cast<double>(tick - current.Tick);
+            if (age < 0.0 || age > kReversalWindowMs) {
+                continue;
+            }
+            const float dot = std::clamp(
+                previous.Intent.HeadingX * current.Intent.HeadingX +
+                    previous.Intent.HeadingZ * current.Intent.HeadingZ,
+                -1.0f,
+                1.0f);
+            const float angle =
+                std::acos(dot) * 180.0f / 3.14159265358979323846f;
+            if (angle > result.AngleDegrees) {
+                result.AngleDegrees = angle;
+                result.AgeMs = age;
+            }
+        }
+        return result;
+    }
+
+    static void OnNewPath(const SDK::Events::NewPathEventArgs& args) {
+        if (!initialized_ || args.IsDash ||
+            args.Sender.NetworkId == 0 ||
+            args.Sender.NetworkId == 0xFFFFFFFFu) {
+            return;
+        }
+
+        const int count = std::clamp(args.PathCount, 0, 32);
+        const int tick = SDK::Variables::TickCount();
+        UnitTrackerInfo& info = AcquireSlot(args.Sender.NetworkId, tick);
+        info.LastSeenTick = tick;
+        RecordPathIntent(
+            info,
+            ExtractStablePathIntent(
+                std::span<const ::Vec3>(args.Path, count)),
+            tick);
+    }
+
+    static void OnDeleteObject(const SDK::Events::ObjectEventArgs& args) {
+        if (!initialized_) {
+            return;
+        }
+        if (UnitTrackerInfo* info = FindSlot(args.Sender.NetworkId)) {
+            *info = {};
+        }
+    }
+
     inline static bool initialized_ = false;
+    inline static bool pathHookSubscribed_ = false;
+    inline static bool deleteHookSubscribed_ = false;
     inline static int lastUpdateTick_ = -1;
-    inline static std::unordered_map<std::uint32_t, UnitTrackerInfo> trackerMap_;
-    inline static std::vector<SpecialSpellDef> specialSpells_;
+    inline static std::array<UnitTrackerInfo, kMaxEnemySlots> slots_{};
 };
 
 } // namespace Plugins::FsPred

@@ -1,19 +1,24 @@
 #pragma once
 
 #include "FsPredAoe.h"
-#include "FsPredCollision.h"
+#include "FsPredAimMath.h"
+#include "FsPredMotionState.h"
 #include "FsPredUnitTracker.h"
 
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Math/Prediction/Movement.h"
+#include "../../../sdk/Math/Collision.h"
 #include "../../../sdk/Utils/MathUtils.h"
 #include "../../../core/CoreNavGrid.h"
 #include "../../../core/CoreBuffs.h"
+#include "../../../SectionProfiler.h"
 
+#include <array>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <span>
 #include <limits>
 #include <vector>
 
@@ -42,14 +47,17 @@ public:
         return GetPrediction(input, true, true);
     }
 
-    SDK::PredictionOutput GetPrediction(SDK::PredictionInput input, bool ft, bool checkCollision) override {
-        UnitTracker::Update();
-
-        if (!input.Unit.IsValid()) {
+    SDK::PredictionOutput GetPrediction(
+        SDK::PredictionInput input,
+        bool ft,
+        bool checkCollision) override {
+        NS_PROFILE("FsPred.GetPrediction");
+        if (!SDK::Prediction::Movement::IsPredictionTargetUsable(input.Unit)) {
             SDK::PredictionOutput empty;
             empty.Input = input;
             return empty;
         }
+        UnitTracker::Update();
 
         if (config_.useDefaultSdk) {
             if (auto* sdkPred = SDK::Prediction::GetSDKPrediction()) {
@@ -57,46 +65,65 @@ public:
             }
         }
 
-        // Apply range modifier setting if defined
-        if (config_.maxRangePercent < 100 && input.Range > 0.0f && std::abs(input.Range - FLT_MAX) > 0.0001f) {
-            input.Range = input.Range * (static_cast<float>(config_.maxRangePercent) / 100.0f);
+        const int maxRangePercent = std::clamp(config_.maxRangePercent, 0, 100);
+        if (maxRangePercent < 100 &&
+            input.Range > 0.0f &&
+            input.Range != FLT_MAX) {
+            input.Range *= static_cast<float>(maxRangePercent) / 100.0f;
         }
 
-        const SDK::Vector3 unitPos = input.Unit.Position();
-        const SDK::Vector3 rangeFrom = input.ResolveRangeCheckFrom();
-
-        // Target too far away check
-        if (std::abs(input.Range - FLT_MAX) > 0.0001f &&
-            unitPos.DistanceSquared(rangeFrom) > std::pow(input.Range * 1.5f, 2.0f)) {
-            SDK::PredictionOutput output;
-            output.Input = input;
-            return output;
+        const SDK::Vector3 unitPosition = ServerPositionOrPosition(input.Unit);
+        if (input.Range != FLT_MAX &&
+            unitPosition.DistanceSqr2D(input.ResolveRangeCheckFrom()) >
+                std::pow(input.Range * 1.5f, 2.0f)) {
+            SDK::PredictionOutput empty;
+            empty.Input = input;
+            return empty;
         }
 
-        if (ft) {
-            // Always use the real prediction calculator with one consistent
-            // latency-compensation path.
-            input.Delay += (static_cast<float>(SDK::Game::Ping()) / 1000.0f)
-                + (static_cast<float>(config_.extraDelayMs) / 1000.0f);
+        input.Delay = AimMath::EffectiveDelay(
+            input.Delay,
+            SDK::Game::Ping(),
+            config_.extraDelayMs,
+            ft);
 
-            if (input.AoE) {
-                SDK::PredictionOutput output = AoePrediction::GetPrediction(input, [this](SDK::PredictionInput in, bool f, bool c) {
-                    return this->GetPredictionInternal(in, f, c);
+        SDK::PredictionOutput output;
+        if (ft && input.AoE) {
+            output = AoePrediction::GetPrediction(
+                input,
+                [this](SDK::PredictionInput candidate, bool, bool) {
+                    return this->GetPredictionInternal(
+                        candidate,
+                        false,
+                        false);
                 });
-
-                // AoE already chose its geometry. Do not move that cast point with
-                // wall heuristics afterwards; only reject invalid final positions.
-                ApplyRangeChecks(output, input);
-                return output;
-            }
+        } else {
+            output = GetPredictionInternal(input, ft, false);
         }
-
-        return GetPredictionInternal(input, ft, checkCollision);
+        return FinalizePrediction(
+            std::move(output),
+            input,
+            checkCollision);
     }
 
 private:
-    SDK::PredictionOutput GetPredictionInternal(SDK::PredictionInput input, bool ft, bool checkCollision) {
+    static SDK::Vector3 ServerPositionOrPosition(
+        const SDK::AIBaseClient& unit) {
+        if (!unit.IsValid()) {
+            return {};
+        }
+        const SDK::Vector3 serverPosition = unit.ServerPosition();
+        return serverPosition.IsValid() && !serverPosition.IsZero()
+            ? serverPosition
+            : unit.Position();
+    }
+
+    SDK::PredictionOutput GetPredictionInternal(
+        SDK::PredictionInput input,
+        bool ft,
+        bool checkCollision) {
         (void)ft;
+        (void)checkCollision;
         SDK::PredictionOutput output;
         output.Input = input;
 
@@ -116,510 +143,610 @@ private:
             output = GetStandardPrediction(input);
         }
 
-        // Wall adjustment is only a refinement for already-good predictions.
-        // It must never promote a Low/Medium result into a castable High result.
-        if (input.Unit.IsHero() && input.Radius > 1.0f &&
-            output.Hitchance >= SDK::HitChance::High &&
-            output.Hitchance <= SDK::HitChance::VeryHigh) {
-            ApplyWallAdjust(output, input);
+
+        if ((output.Hitchance == SDK::HitChance::High ||
+             output.Hitchance == SDK::HitChance::VeryHigh) &&
+            config_.recheckHitchance) {
+            output = WayPointAnalysis(std::move(output), input);
         }
-
-        // Range checks: demote with certainty, never fix up a wrong prediction.
-        ApplyRangeChecks(output, input);
-
-        // Hitchance refinement based on waypoints
-        if (output.Hitchance == SDK::HitChance::High || output.Hitchance == SDK::HitChance::VeryHigh) {
-            const auto& waypoints3D = input.Unit.CachedWaypoints();
-            if ((waypoints3D.size() > 1) != input.Unit.IsMoving()) {
-                output.Hitchance = SDK::HitChance::Medium;
-            } else if (!waypoints3D.empty()) {
-                const SDK::Vector3 lastWp = waypoints3D.back();
-                const float distWpToUnit = lastWp.Distance(input.Unit.Position());
-                const float distFromToUnit = input.ResolveFrom().Distance(input.Unit.Position());
-                const float distWpToFrom = lastWp.Distance(input.ResolveFrom());
-
-                float speedDelay = (std::abs(input.Speed - FLT_MAX) < 0.0001f) ? 0.0f : (distFromToUnit / input.Speed);
-                const float totalDelay = speedDelay + input.Delay;
-                float fixRange = input.Unit.MoveSpeed() * totalDelay * 0.35f;
-                if (SDK::IsCircleSpellType(input.Type)) {
-                    fixRange -= input.Radius / 2.0f;
-                }
-
-                if (distWpToFrom <= distFromToUnit && distFromToUnit > input.Range - fixRange) {
-                    output.Hitchance = SDK::HitChance::Medium;
-                }
-                if (distWpToUnit > 0.0f && distWpToUnit < 100.0f) {
-                    output.Hitchance = SDK::HitChance::Medium;
-                }
-            }
-        }
-
-        // Collision validation
-        if (checkCollision && input.Collision) {
-            const std::vector<SDK::Vector3> positions = {
-                output.GetUnitPosition(),
-                output.GetCastPosition()
-            };
-
-            // Uses a cheap position-only prediction internally — no recursion
-            // back into the full pipeline per minion/hero (see FsPredCollision.h).
-            auto collisionObjects = Collision::GetCollision(positions, input);
-
-            // Exclude input unit from collision hits
-            const std::uint32_t targetId = input.Unit.NetworkId();
-            collisionObjects.erase(
-                std::remove_if(collisionObjects.begin(), collisionObjects.end(), [targetId](const SDK::AIBaseClient& obj) {
-                    return !obj.IsValid() || obj.NetworkId() == targetId;
-                }),
-                collisionObjects.end());
-
-            output.CollisionObjects = collisionObjects;
-            if (!output.CollisionObjects.empty()) {
-                output.Hitchance = SDK::HitChance::Collision;
-            }
-        }
-
-        // WayPointAnalysis refinement
-        if ((output.Hitchance == SDK::HitChance::High || output.Hitchance == SDK::HitChance::VeryHigh) && config_.recheckHitchance) {
-            output = WayPointAnalysis(output, input);
-        }
-
-        // Final range + geometry validation. WayPointAnalysis / dash / immobile may
-        // have replaced the cast position — nothing may move it past this point.
-        ApplyFinalRangeValidation(output, input);
-
         return output;
     }
 
-    SDK::PredictionOutput GetDashingPrediction(SDK::PredictionInput& input) {
-        SDK::PredictionOutput output;
+    SDK::PredictionOutput FinalizePrediction(
+        SDK::PredictionOutput output,
+        const SDK::PredictionInput& input,
+        bool checkCollision) {
         output.Input = input;
+        ApplyFinalRangeValidation(output, input);
 
-        const auto dashInfo = SDK::Extensions::GetDashInfo(input.Unit);
-        const SDK::Vector3 startPos = input.Unit.Position();
-        const SDK::Vector3 endPos = dashInfo.EndPos.IsValid() ? dashInfo.EndPos : startPos;
-
-        const std::vector<SDK::Vector2> dashPath = { startPos.To2D(), endPos.To2D() };
-        auto pathPred = GetPositionOnPath(input, dashPath, dashInfo.Speed);
-
-        const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(pathPred.GetUnitPosition().To2D(), startPos.To2D(), endPos.To2D());
-        if (pathPred.Hitchance >= SDK::HitChance::High && proj.SegmentPoint.DistanceSquared(startPos.To2D()) < 200.0f * 200.0f) {
-            pathPred.SetCastPosition(pathPred.GetUnitPosition());
-            pathPred.Hitchance = SDK::HitChance::Dash;
-            return pathPred;
-        }
-
-        const float pathLength = SDK::Utils::MathUtils::PathLength(dashPath);
-        const float timeToPoint = (input.Delay * 0.5f) + (input.ResolveFrom().Distance(endPos) / input.Speed) - 0.25f;
-        const float timeForUnit = (input.Unit.Position().Distance(endPos) / std::max(1.0f, dashInfo.Speed)) + (input.RealRadius() / std::max(1.0f, input.Unit.MoveSpeed()));
-
-        if (pathLength > 200.0f && timeToPoint <= timeForUnit && endPos.IsValid() && !endPos.IsZero()) {
-            output.SetCastPosition(endPos);
-            output.SetUnitPosition(endPos);
-            output.Hitchance = SDK::HitChance::Dash;
+        if (!checkCollision ||
+            !input.Collision ||
+            output.Hitchance == SDK::HitChance::None ||
+            output.Hitchance == SDK::HitChance::OutOfRange) {
             return output;
         }
 
-        const auto& waypoints = input.Unit.CachedWaypoints();
-        const SDK::Vector3 lastWp = waypoints.empty() ? endPos : waypoints.back();
-        output.SetCastPosition(lastWp);
-        output.SetUnitPosition(lastWp);
+        output.CollisionObjects = SDK::Collision::GetCollision(
+            output.GetCastPosition(),
+            input);
+        if (SDK::Collision::ExceedsCollisionAllowance(
+                output.CollisionObjects.size(),
+                input.MaxCollisionCount)) {
+            output.SetOriginHitchance(output.Hitchance);
+            output.Hitchance = SDK::HitChance::Collision;
+        }
         return output;
     }
 
-    SDK::PredictionOutput GetImmobilePrediction(const SDK::PredictionInput& input, double remainingImmobileT) {
+    struct PathCursor {
+        SDK::Vector2 Position{};
+        std::size_t NextIndex = 0;
+        bool HasRoute = false;
+    };
+
+    static std::size_t FirstRemainingWaypoint(
+        const SDK::Vector3& start,
+        std::span<const SDK::Vector3> path) {
+        if (path.empty()) {
+            return 0;
+        }
+
+        const SDK::Vector2 start2D = start.To2D();
+        float bestDistance = std::numeric_limits<float>::max();
+        std::size_t bestIndex = 0;
+        SDK::Vector2 previous{};
+        bool hasPrevious = false;
+        for (std::size_t index = 0; index < path.size(); ++index) {
+            if (!path[index].IsValid()) {
+                continue;
+            }
+            const SDK::Vector2 point = path[index].To2D();
+            const float pointDistance = point.DistanceSqr(start2D);
+            if (pointDistance < bestDistance) {
+                bestDistance = pointDistance;
+                bestIndex = index;
+            }
+            if (hasPrevious) {
+                const float segmentDistance = DistanceSquaredToSegment(
+                    start2D,
+                    previous,
+                    point);
+                if (segmentDistance < bestDistance) {
+                    bestDistance = segmentDistance;
+                    bestIndex = index;
+                }
+            }
+            previous = point;
+            hasPrevious = true;
+        }
+        return bestIndex;
+    }
+
+    static float RemainingPathLength(
+        const SDK::Vector3& start,
+        std::span<const SDK::Vector3> path,
+        std::size_t firstIndex) {
+        SDK::Vector2 current = start.To2D();
+        float length = 0.0f;
+        for (std::size_t index = firstIndex; index < path.size(); ++index) {
+            if (!path[index].IsValid()) {
+                continue;
+            }
+            const SDK::Vector2 waypoint = path[index].To2D();
+            length += current.Distance(waypoint);
+            current = waypoint;
+        }
+        return length;
+    }
+
+    static PathCursor CutPathDistance(
+        const SDK::Vector3& start,
+        std::span<const SDK::Vector3> path,
+        std::size_t firstIndex,
+        float distance) {
+        PathCursor cursor{};
+        cursor.Position = start.To2D();
+        cursor.NextIndex = firstIndex;
+        float remaining = std::max(0.0f, distance);
+
+        for (std::size_t index = firstIndex; index < path.size(); ++index) {
+            if (!path[index].IsValid()) {
+                continue;
+            }
+            const SDK::Vector2 waypoint = path[index].To2D();
+            const float segmentLength = cursor.Position.Distance(waypoint);
+            if (segmentLength <= 1.0e-3f) {
+                cursor.Position = waypoint;
+                cursor.NextIndex = index + 1;
+                continue;
+            }
+
+            cursor.HasRoute = true;
+            if (remaining < segmentLength) {
+                cursor.Position = cursor.Position +
+                    (waypoint - cursor.Position).Normalized() * remaining;
+                cursor.NextIndex = index;
+                return cursor;
+            }
+            remaining -= segmentLength;
+            cursor.Position = waypoint;
+            cursor.NextIndex = index + 1;
+        }
+        return cursor;
+    }
+
+    static SDK::Vector3 LastValidPathPosition(
+        const SDK::Vector3& fallback,
+        std::span<const SDK::Vector3> path) {
+        SDK::Vector3 result = fallback;
+        for (const SDK::Vector3& waypoint : path) {
+            if (waypoint.IsValid() && !waypoint.IsZero()) {
+                result = waypoint;
+            }
+        }
+        return result;
+    }
+
+    static float ProjectileArrivalTime(
+        const SDK::PredictionInput& input,
+        const SDK::Vector3& position) {
+        const auto travel = AimMath::ProjectileTravelTime(
+            input.ResolveFrom().Distance2D(position),
+            input.Speed);
+        return travel.has_value()
+            ? std::max(0.0f, input.Delay) + *travel
+            : std::numeric_limits<float>::infinity();
+    }
+
+    SDK::PredictionOutput GetDashingPrediction(SDK::PredictionInput& input) {
+        constexpr int kDashEndToleranceMs = 80;
+
+        SDK::PredictionOutput output;
+        output.Input = input;
+        const auto dash = SDK::Extensions::GetDashInfo(input.Unit);
+        const SDK::Vector3 start = ServerPositionOrPosition(input.Unit);
+        const int pathCount = std::clamp(dash.PathCount, 0, 32);
+        const std::span<const SDK::Vector3> dashPath(dash.Path, pathCount);
+        const SDK::Vector3 end = LastValidPathPosition(
+            dash.EndPos.IsValid() && !dash.EndPos.IsZero()
+                ? dash.EndPos
+                : start,
+            dashPath);
+
+        if (!std::isfinite(dash.Speed) || dash.Speed <= 0.0f ||
+            dashPath.empty()) {
+            output.SetCastPosition(end);
+            output.SetUnitPosition(end);
+            output.Hitchance = SDK::HitChance::Medium;
+            return output;
+        }
+
+        SDK::PredictionOutput pathPrediction = GetPositionOnPath(
+            input,
+            dashPath,
+            dash.Speed);
+        const float arrival = ProjectileArrivalTime(
+            input,
+            pathPrediction.GetCastPosition());
+
+        float dashRemaining = 0.0f;
+        const int now = SDK::Variables::TickCount();
+        if (dash.EndTick > now) {
+            dashRemaining =
+                static_cast<float>(dash.EndTick - now) / 1000.0f;
+        } else {
+            const std::size_t first = FirstRemainingWaypoint(start, dashPath);
+            dashRemaining = RemainingPathLength(start, dashPath, first) /
+                dash.Speed;
+        }
+
+        if (AimMath::ArrivesDuringDash(
+                arrival,
+                dashRemaining,
+                kDashEndToleranceMs) &&
+            pathPrediction.Hitchance >= SDK::HitChance::Medium) {
+            pathPrediction.Hitchance = SDK::HitChance::Dash;
+            return pathPrediction;
+        }
+
+        output.SetCastPosition(end);
+        output.SetUnitPosition(end);
+        output.Hitchance = SDK::HitChance::Medium;
+        return output;
+    }
+
+    SDK::PredictionOutput GetImmobilePrediction(
+        const SDK::PredictionInput& input,
+        double remainingImmobileT) {
         SDK::PredictionOutput output;
         output.Input = input;
 
-        const SDK::Vector3 pos = input.Unit.Position();
-        const float timeToReach = input.Delay + (input.Unit.Distance(input.ResolveFrom()) / input.Speed);
-        const double threshold = remainingImmobileT + static_cast<double>(input.RealRadius() / std::max(1.0f, input.Unit.MoveSpeed()));
+        const SDK::Vector3 position = ServerPositionOrPosition(input.Unit);
+        const float arrival = ProjectileArrivalTime(input, position);
+        if (!std::isfinite(arrival)) {
+            output.SetCastPosition(position);
+            output.SetUnitPosition(position);
+            output.Hitchance = SDK::HitChance::Medium;
+            return output;
+        }
 
-        if (static_cast<double>(timeToReach) <= threshold) {
-            output.SetCastPosition(pos);
-            output.SetUnitPosition(pos);
+        const double radiusWindow =
+            static_cast<double>(input.RealRadius()) /
+            static_cast<double>(std::max(1.0f, input.Unit.MoveSpeed()));
+        if (AimMath::IsImmobileAtImpact(
+                arrival,
+                remainingImmobileT,
+                radiusWindow)) {
+            output.SetCastPosition(position);
+            output.SetUnitPosition(position);
             output.Hitchance = SDK::HitChance::Immobile;
             return output;
         }
 
-        // Projectile arrives AFTER the CC ends — the target gets to run away.
-        // Lead the remaining free movement instead of shooting at the old spot.
-        const double freeMoveT = std::max(0.0, static_cast<double>(timeToReach) - remainingImmobileT);
-        SDK::Vector3 leadPos = pos;
+        const float freeMovementSeconds = static_cast<float>(std::max(
+            0.0,
+            static_cast<double>(arrival) - remainingImmobileT));
         const auto& waypoints = input.Unit.CachedWaypoints();
-        if (!waypoints.empty()) {
-            const SDK::Vector3 dir = (waypoints.back() - pos);
-            if (dir.LengthSqr2D() > 1.0f) {
-                const SDK::Vector2 dir2D = dir.To2D().Normalized();
-                const float leadDist = static_cast<float>(freeMoveT) * input.Unit.MoveSpeed();
-                leadPos = SDK::Vector3::From2D(pos.To2D() + dir2D * leadDist);
-            }
-        }
-
-        output.SetCastPosition(leadPos);
-        output.SetUnitPosition(leadPos);
-        output.Hitchance = SDK::HitChance::High;
+        const auto advance = AimMath::AdvancePath(
+            position,
+            input.Unit.MoveSpeed(),
+            freeMovementSeconds,
+            std::span<const SDK::Vector3>(
+                waypoints.data(),
+                waypoints.size()));
+        const SDK::Vector3 leadPosition =
+            advance.HasRoute ? advance.Position : position;
+        output.SetCastPosition(leadPosition);
+        output.SetUnitPosition(leadPosition);
+        output.Hitchance =
+            advance.HasRoute && advance.ReachedRequestedDistance
+            ? SDK::HitChance::High
+            : SDK::HitChance::Medium;
         return output;
     }
 
     SDK::PredictionOutput GetStandardPrediction(SDK::PredictionInput& input) {
-        // thread_local scratch: GetPrediction is called many times per frame,
-        // so avoid a fresh heap allocation for the 2D path on every call.
-        thread_local std::vector<SDK::Vector2> path;
-        path.clear();
-        const auto& waypoints3D = input.Unit.CachedWaypoints();
-        path.reserve(waypoints3D.size());
-        for (const auto& wp : waypoints3D) {
-            path.push_back(wp.To2D());
-        }
-        return GetPositionOnPath(input, std::move(path), input.Unit.MoveSpeed());
+        const auto& waypoints = input.Unit.CachedWaypoints();
+        return GetPositionOnPath(
+            input,
+            std::span<const SDK::Vector3>(
+                waypoints.data(),
+                waypoints.size()),
+            input.Unit.MoveSpeed());
     }
 
-    SDK::PredictionOutput GetPositionOnPath(SDK::PredictionInput& input, std::vector<SDK::Vector2> path, float speed = -1.0f) {
+    SDK::PredictionOutput GetPositionOnPath(
+        SDK::PredictionInput& input,
+        std::span<const SDK::Vector3> path,
+        float speed = -1.0f) {
         SDK::PredictionOutput output;
         output.Input = input;
+        const SDK::Vector3 serverPosition =
+            ServerPositionOrPosition(input.Unit);
 
-        if (!SDK::Extensions::IsDashing(input.Unit)) {
-            if (input.Unit.Position().DistanceSquared(input.ResolveFrom()) < 200.0f * 200.0f) {
-                speed /= 1.5f;
-            }
-            if (path.size() <= 1) {
-                output.SetUnitPosition(input.Unit.Position());
-                output.SetCastPosition(input.Unit.Position());
-                // No usable path while the SDK still reports movement is uncertain,
-                // not deterministic.
-                output.Hitchance = input.Unit.IsMoving()
-                    ? SDK::HitChance::Medium
-                    : SDK::HitChance::VeryHigh;
-                return output;
-            }
+        speed = std::abs(speed + 1.0f) < 0.0001f
+            ? input.Unit.MoveSpeed()
+            : speed;
+        if (!SDK::Extensions::IsDashing(input.Unit) &&
+            serverPosition.DistanceSqr2D(input.ResolveFrom()) <
+                250.0f * 250.0f) {
+            speed *= 1.5f;
+        }
+        if (!std::isfinite(speed) || speed <= 0.0f) {
+            output.SetUnitPosition(serverPosition);
+            output.SetCastPosition(serverPosition);
+            output.Hitchance = SDK::HitChance::Medium;
+            return output;
+        }
 
-            if (input.Unit.Spellbook().IsWindingUp() || input.Unit.Spellbook().IsCastingSpell() || input.Unit.Spellbook().IsChanneling()) {
-                output.SetUnitPosition(input.Unit.Position());
-                output.SetCastPosition(input.Unit.Position());
+        const std::size_t firstWaypoint =
+            FirstRemainingWaypoint(serverPosition, path);
+        const float pathLength =
+            RemainingPathLength(serverPosition, path, firstWaypoint);
+        if (pathLength <= 1.0f) {
+            output.SetUnitPosition(serverPosition);
+            output.SetCastPosition(serverPosition);
+            output.Hitchance = input.Unit.IsMoving()
+                ? SDK::HitChance::Medium
+                : SDK::HitChance::VeryHigh;
+            return output;
+        }
+
+        if (!SDK::Extensions::IsDashing(input.Unit) &&
+            (input.Unit.Spellbook().IsWindingUp() ||
+             input.Unit.Spellbook().IsCastingSpell() ||
+             input.Unit.Spellbook().IsChanneling())) {
+            output.SetUnitPosition(serverPosition);
+            output.SetCastPosition(serverPosition);
+            output.Hitchance = SDK::HitChance::High;
+            return output;
+        }
+
+        const float delay = std::max(0.0f, input.Delay);
+        const float realRadius = std::isfinite(input.RealRadius())
+            ? std::max(0.0f, input.RealRadius())
+            : 0.0f;
+
+        if (input.Speed == FLT_MAX) {
+            const float castDistance =
+                std::max(0.0f, delay * speed - realRadius);
+            if (castDistance <= pathLength) {
+                const PathCursor cast = CutPathDistance(
+                    serverPosition,
+                    path,
+                    firstWaypoint,
+                    castDistance);
+                const PathCursor unit = CutPathDistance(
+                    serverPosition,
+                    path,
+                    firstWaypoint,
+                    std::min(pathLength, castDistance + realRadius));
+                output.SetCastPosition(SDK::Vector3::From2D(
+                    cast.Position,
+                    serverPosition.y));
+                output.SetUnitPosition(SDK::Vector3::From2D(
+                    unit.Position,
+                    serverPosition.y));
                 output.Hitchance = SDK::HitChance::High;
                 return output;
             }
+        } else {
+            if (!std::isfinite(input.Speed) || input.Speed <= 0.0f) {
+                output.SetUnitPosition(serverPosition);
+                output.SetCastPosition(serverPosition);
+                output.Hitchance = SDK::HitChance::Medium;
+                return output;
+            }
+
+            float cutDistance =
+                std::max(0.0f, delay * speed - realRadius);
+            if ((SDK::IsLineSpellType(input.Type) ||
+                 SDK::IsConeSpellType(input.Type)) &&
+                input.ResolveFrom().DistanceSqr2D(serverPosition) <
+                    200.0f * 200.0f) {
+                cutDistance = delay * speed;
+            }
+
+            if (cutDistance <= pathLength) {
+                PathCursor cursor = CutPathDistance(
+                    serverPosition,
+                    path,
+                    firstWaypoint,
+                    cutDistance);
+                float segmentStartTime = 0.0f;
+                for (std::size_t index = cursor.NextIndex;
+                     index < path.size();
+                     ++index) {
+                    if (!path[index].IsValid()) {
+                        continue;
+                    }
+                    const SDK::Vector2 segmentEnd = path[index].To2D();
+                    const float segmentLength =
+                        cursor.Position.Distance(segmentEnd);
+                    if (segmentLength <= 1.0e-3f) {
+                        cursor.Position = segmentEnd;
+                        continue;
+                    }
+
+                    const float segmentDuration = segmentLength / speed;
+                    const SDK::Vector2 direction =
+                        (segmentEnd - cursor.Position).Normalized();
+                    const SDK::Vector2 movementOrigin =
+                        cursor.Position -
+                        direction * (speed * segmentStartTime);
+                    const auto solution =
+                        SDK::Prediction::Vec2Ext::VectorMovementCollision(
+                            movementOrigin,
+                            segmentEnd,
+                            speed,
+                            input.ResolveFrom().To2D(),
+                            input.Speed,
+                            segmentStartTime);
+                    const float contactTime = solution.CollisionTime;
+                    const SDK::Vector2 contactPosition =
+                        solution.CollisionPosition;
+                    if (contactPosition.IsValid() &&
+                        contactTime >= segmentStartTime &&
+                        contactTime <=
+                            segmentStartTime + segmentDuration) {
+                        if (contactPosition.DistanceSqr(segmentEnd) <
+                            20.0f * 20.0f) {
+                            break;
+                        }
+                        output.SetCastPosition(SDK::Vector3::From2D(
+                            contactPosition,
+                            serverPosition.y));
+                        output.SetUnitPosition(SDK::Vector3::From2D(
+                            contactPosition -
+                                direction * realRadius,
+                            serverPosition.y));
+                        output.Hitchance = SDK::HitChance::High;
+                        return output;
+                    }
+
+                    segmentStartTime += segmentDuration;
+                    cursor.Position = segmentEnd;
+                }
+            }
         }
 
-        speed = (std::abs(speed - (-1.0f)) < 0.0001f) ? input.Unit.MoveSpeed() : speed;
-        float pathLength = SDK::Utils::MathUtils::PathLength(path);
-
-        // Skillshot with delay only (speed == FLT_MAX)
-        if (pathLength >= input.Delay * speed - input.RealRadius() && std::abs(input.Speed - FLT_MAX) < 0.0001f) {
-                float tDistance = input.Delay * speed - input.RealRadius();
-
-                for (std::size_t i = 0; i + 1 < path.size(); ++i) {
-                    const SDK::Vector2 a = path[i];
-                    const SDK::Vector2 b = path[i + 1];
-                    const float d = a.Distance(b);
-
-                    if (d >= tDistance) {
-                        const SDK::Vector2 direction = (b - a).Normalized();
-                        const SDK::Vector2 cp = a + direction * tDistance;
-                        const float pDist = (i == path.size() - 2) ? std::min(tDistance + input.RealRadius(), d) : (tDistance + input.RealRadius());
-                        const SDK::Vector2 p = a + direction * pDist;
-
-                        output.SetCastPosition(SDK::Vector3::From2D(cp));
-                        output.SetUnitPosition(SDK::Vector3::From2D(p));
-                        output.Hitchance = SDK::HitChance::High;
-                        return output;
-                    }
-                    tDistance -= d;
-                }
-            }
-
-        // Skillshot with delay and speed
-        if (pathLength >= input.Delay * speed - input.RealRadius() && std::abs(input.Speed - FLT_MAX) > 0.0001f) {
-                float d = input.Delay * speed - input.RealRadius();
-                if ((SDK::IsLineSpellType(input.Type) || SDK::IsConeSpellType(input.Type)) &&
-                    input.ResolveFrom().DistanceSquared(input.Unit.Position()) < 200.0f * 200.0f) {
-                    d = input.Delay * speed;
-                }
-
-                path = SDK::Utils::MathUtils::CutPath(path, std::max(0.0f, d));
-                float tT = 0.0f;
-
-                for (std::size_t i = 0; i + 1 < path.size(); ++i) {
-                    SDK::Vector2 a = path[i];
-                    SDK::Vector2 b = path[i + 1];
-                    const float tB = a.Distance(b) / speed;
-                    const SDK::Vector2 direction = (b - a).Normalized();
-                    a = a - direction * (speed * tT);
-
-                    const auto sol = SDK::Prediction::Vec2Ext::VectorMovementCollision(a, b, speed, input.ResolveFrom().To2D(), input.Speed, tT);
-                    const float t = sol.CollisionTime;
-                    const SDK::Vector2 pos = sol.CollisionPosition;
-
-                    if (pos.IsValid() && t >= tT && t <= tT + tB) {
-                        if (pos.DistanceSquared(b) < 20.0f) break;
-                        const SDK::Vector2 p = pos + direction * input.RealRadius();
-
-                        output.SetCastPosition(SDK::Vector3::From2D(pos));
-                        output.SetUnitPosition(SDK::Vector3::From2D(p));
-                        output.Hitchance = SDK::HitChance::High;
-                        return output;
-                    }
-                    tT += tB;
-                }
-            }
-
-        const SDK::Vector2 lastPoint = path.empty() ? input.Unit.Position().To2D() : path.back();
-        output.SetCastPosition(SDK::Vector3::From2D(lastPoint));
-        output.SetUnitPosition(SDK::Vector3::From2D(lastPoint));
-        output.Hitchance = SDK::HitChance::Low;
+        const SDK::Vector3 lastPosition =
+            LastValidPathPosition(serverPosition, path);
+        output.SetCastPosition(lastPosition);
+        output.SetUnitPosition(lastPosition);
+        output.Hitchance = SDK::HitChance::Medium;
         return output;
     }
 
-    SDK::PredictionOutput WayPointAnalysis(SDK::PredictionOutput result, const SDK::PredictionInput& input) {
-        // This pass should refine confidence, not manufacture certainty.
-        if (!input.Unit.IsHero() || input.Radius == 1.0f) {
+    static SDK::PredictionOutput WayPointAnalysis(
+        SDK::PredictionOutput result,
+        const SDK::PredictionInput& input) {
+        if (!input.Unit.IsHero() ||
+            input.Radius == 1.0f ||
+            result.Hitchance < SDK::HitChance::Low) {
             return result;
         }
 
-        if (input.Unit.HasBuff("Recall")) {
-            result.Hitchance = SDK::HitChance::VeryHigh;
-            result.SetCastPosition(input.Unit.Position());
-            result.SetUnitPosition(input.Unit.Position());
-            return result;
+        // Motion confidence is geometry-free: only Hitchance changes here.
+        MotionFacts facts = UnitTracker::GetMotionFacts(input.Unit);
+        facts.NearPathEnd = false;
+        SDK::HitChance confidence = ClassifyMotion(facts);
+        const float arrival = ProjectileArrivalTime(
+            input,
+            result.GetUnitPosition());
+
+        if (facts.IsCasting &&
+            (!std::isfinite(arrival) || arrival > 0.30f)) {
+            confidence = std::min(confidence, SDK::HitChance::Medium);
         }
 
-        if (UnitTracker::GetLastVisibleTime(input.Unit) < 100.0) {
-            result.Hitchance = std::min(result.Hitchance, SDK::HitChance::Medium);
-            return result;
-        }
-
-        const auto& waypoints3D = input.Unit.CachedWaypoints();
-        const float distFromToUnit = input.ResolveFrom().Distance(input.Unit.Position());
-        const float speedDelay = (std::abs(input.Speed - FLT_MAX) < 0.0001f)
-            ? 0.0f
-            : (distFromToUnit / std::max(1.0f, input.Speed));
-        const float totalDelay = speedDelay + input.Delay;
-
-        // Actual movement lock is strong evidence. Windup alone is weaker because
-        // many windups end long before a slow projectile arrives.
-        if (!SDK::CanMove(input.Unit)) {
-            result.Hitchance = SDK::HitChance::VeryHigh;
-            return result;
-        }
-        if (input.Unit.Spellbook().IsWindingUp()) {
-            result.Hitchance = (totalDelay <= 0.30f)
-                ? std::max(result.Hitchance, SDK::HitChance::High)
-                : std::min(result.Hitchance, SDK::HitChance::Medium);
-            return result;
-        }
-
-        // A very recent stop is useful only for short-arrival spells. Do not aim at
-        // the current position with VeryHigh confidence when the target can move
-        // again long before impact.
-        if (!input.Unit.IsMoving() && UnitTracker::GetLastStopMoveTime(input.Unit) < 100.0) {
-            result.SetCastPosition(input.Unit.Position());
-            result.SetUnitPosition(input.Unit.Position());
-            result.Hitchance = (totalDelay <= 0.30f)
-                ? SDK::HitChance::High
-                : SDK::HitChance::Medium;
-            return result;
-        }
-
-        // Fresh direction changes, click-spam and repeated reversals are all
-        // uncertainty signals. They may only reduce confidence.
-        const bool recentPathChange = UnitTracker::GetLastNewPathTime(input.Unit) < 140.0;
-        const bool movementSpam = UnitTracker::SpamSamePlace(input.Unit);
-        const bool reversing = UnitTracker::IsReversing(input.Unit);
-        if (recentPathChange || movementSpam || reversing) {
-            result.Hitchance = std::min(result.Hitchance, SDK::HitChance::Medium);
-            return result;
-        }
-
-        if (waypoints3D.empty()) {
-            result.Hitchance = input.Unit.IsMoving()
-                ? std::min(result.Hitchance, SDK::HitChance::Medium)
-                : std::max(result.Hitchance, SDK::HitChance::High);
-            return result;
-        }
-
-        const SDK::Vector3 lastWaypoint = waypoints3D.back();
-        const float distUnitToWp = lastWaypoint.Distance(input.Unit.Position());
-        const float distFromToWp = lastWaypoint.Distance(input.ResolveFrom());
-
-        // The target is about to reach the end of its current path, so extrapolating
-        // beyond that endpoint is fragile.
-        if (distUnitToWp > 0.0f && distUnitToWp < 75.0f + input.Radius) {
-            result.Hitchance = std::min(result.Hitchance, SDK::HitChance::Medium);
-            return result;
-        }
-
-        const double pathAgeMs = UnitTracker::GetLastNewPathTime(input.Unit);
-        const bool stableHeading = pathAgeMs > 300.0;
-
-        if (distUnitToWp > 0.0f && stableHeading && totalDelay <= 0.35f) {
-            const SDK::Vector2 moveDir = lastWaypoint.To2D() - input.Unit.Position().To2D();
-            const SDK::Vector2 toCaster = input.ResolveFrom().To2D() - input.Unit.Position().To2D();
-            const float angle = SDK::Prediction::Vec2Ext::AngleBetween(moveDir, toCaster);
-
-            // Moving almost directly toward/away from the caster is somewhat easier
-            // geometrically, but it is not enough evidence for VeryHigh by itself.
-            if (angle < 20.0f || angle > 160.0f) {
-                result.Hitchance = std::max(result.Hitchance, SDK::HitChance::High);
-            }
-
-            int wallCount = 0;
-            const SDK::Vector2 unitPos2D = input.Unit.Position().To2D();
-            for (int k = 0; k < 10; ++k) {
-                const float a = static_cast<float>(k) * (2.0f * 3.14159265358979323846f / 10.0f);
-                const SDK::Vector2 pt = unitPos2D + SDK::Vector2(std::cos(a) * 200.0f, std::sin(a) * 200.0f);
-                if (::CoreNavGrid::IsWall({ pt.x, 0.0f, pt.y })) ++wallCount;
-            }
-
-            // Nearby walls constrain options, but three sampled wall points do not
-            // make a moving target deterministic.
-            if (wallCount > 2) {
-                result.Hitchance = std::max(result.Hitchance, SDK::HitChance::High);
+        const auto& path = input.Unit.CachedWaypoints();
+        if (!path.empty()) {
+            const SDK::Vector3 endpoint =
+                LastValidPathPosition(
+                    ServerPositionOrPosition(input.Unit),
+                    std::span<const SDK::Vector3>(path.data(), path.size()));
+            const float endpointThreshold =
+                75.0f + std::max(0.0f, input.RealRadius());
+            if (ServerPositionOrPosition(input.Unit).DistanceSqr2D(endpoint) <=
+                endpointThreshold * endpointThreshold) {
+                confidence = std::min(
+                    confidence,
+                    SDK::HitChance::Medium);
             }
         }
 
-        // Close range reduces projectile travel uncertainty. Keep it High at most;
-        // never promote a normal moving target to VeryHigh from distance alone.
-        if (distFromToUnit < 250.0f || input.Unit.MoveSpeed() < 250.0f) {
-            result.Hitchance = std::max(result.Hitchance, SDK::HitChance::High);
-        }
-
-        // A waypoint close to the caster is actually an endpoint-risk signal, not a
-        // reason to become more confident.
-        if (distFromToWp < 250.0f && distUnitToWp < 250.0f) {
-            result.Hitchance = std::min(result.Hitchance, SDK::HitChance::Medium);
-        }
-
+        result.Hitchance = confidence;
         return result;
     }
 
-    void ApplyWallAdjust(SDK::PredictionOutput& output, const SDK::PredictionInput& input) {
-        if (!input.Unit.IsHero() || input.Radius <= 1.0f ||
-            output.Hitchance < SDK::HitChance::High ||
-            output.Hitchance > SDK::HitChance::VeryHigh) return;
-
-        float moveOutWall = input.Unit.BoundingRadius() + input.Radius / 2.0f + 10.0f;
-        if (SDK::IsCircleSpellType(input.Type)) {
-            moveOutWall = input.Unit.BoundingRadius();
+    static float DistanceSquaredToSegment(
+        const SDK::Vector2& point,
+        const SDK::Vector2& start,
+        const SDK::Vector2& end) {
+        const SDK::Vector2 segment = end - start;
+        const float lengthSquared = segment.LengthSqr();
+        if (lengthSquared <= 1.0e-6f) {
+            return point.DistanceSqr(start);
         }
-
-        const SDK::Vector3 wallPoint = GetWallPoint(output.GetCastPosition(), moveOutWall);
-        if (!wallPoint.IsZero() && wallPoint.IsValid()) {
-            output.Hitchance = SDK::HitChance::High;
-            output.SetCastPosition(wallPoint.Extend(output.GetCastPosition(), moveOutWall));
-        }
+        const float projection = std::clamp(
+            (point - start).Dot(segment) / lengthSquared,
+            0.0f,
+            1.0f);
+        return point.DistanceSqr(start + segment * projection);
     }
 
-    // Preliminary range check: demote confidence, never prestretch the prediction.
-    void ApplyRangeChecks(SDK::PredictionOutput& output, const SDK::PredictionInput& input) {
-        if (std::abs(input.Range - FLT_MAX) < 0.0001f || input.Range <= 0.0f) return;
-
-        const SDK::Vector3 rangeFrom = input.ResolveRangeCheckFrom();
-        if (output.Hitchance >= SDK::HitChance::High &&
-            rangeFrom.DistanceSquared(output.GetUnitPosition()) > std::pow(input.Range + input.RealRadius() * 0.75f, 2.0f)) {
-            output.Hitchance = SDK::HitChance::Medium;
+    static bool ClampLineEndpointToCastRange(
+        const SDK::Vector3& originalEndpoint,
+        const SDK::Vector3& projectileFrom,
+        const SDK::Vector3& rangeFrom,
+        float range,
+        SDK::Vector3& clampedEndpoint) {
+        const SDK::Vector2 ray = originalEndpoint.To2D() - projectileFrom.To2D();
+        const float rayLength = ray.Length();
+        if (rayLength <= 1.0e-4f) {
+            return false;
         }
 
-        ApplyFinalRangeValidation(output, input);
+        const SDK::Vector2 direction = ray / rayLength;
+        const SDK::Vector2 offset = projectileFrom.To2D() - rangeFrom.To2D();
+        const float along = offset.Dot(direction);
+        const float discriminant =
+            along * along - (offset.LengthSqr() - range * range);
+        if (discriminant < 0.0f) {
+            return false;
+        }
+
+        const float exitDistance = -along + std::sqrt(discriminant);
+        if (exitDistance < 0.0f) {
+            return false;
+        }
+        const float clampedDistance = std::min(rayLength, exitDistance);
+        clampedEndpoint = SDK::Vector3::From2D(
+            projectileFrom.To2D() + direction * clampedDistance,
+            originalEndpoint.y);
+        return clampedEndpoint.IsValid() && !clampedEndpoint.IsZero();
     }
 
-    // Final range + geometry validation, executed as the LAST step of every path
-    // (standard, dash, immobile, AoE). If the final cast/unit position lies
-    // outside the spell range, the prediction is rejected — it is never
-    // "rescued" by clamping the position back onto the max range.
-    //
-    // Exception: line spells travel along a fixed direction, so the ENDPOINT may
-    // be pulled back onto the max range without changing the tested ray, but the
-    // target position is then re-validated against the effective line.
-    void ApplyFinalRangeValidation(SDK::PredictionOutput& output, const SDK::PredictionInput& input) {
-        if (std::abs(input.Range - FLT_MAX) < 0.0001f || input.Range <= 0.0f) return;
-        if (output.Hitchance <= SDK::HitChance::OutOfRange) return;
+    // Establishes the final finite spell geometry. No caller may mutate either
+    // position after this returns; collision consumes this exact cast endpoint.
+    void ApplyFinalRangeValidation(
+        SDK::PredictionOutput& output,
+        const SDK::PredictionInput& input) {
+        if (output.Hitchance == SDK::HitChance::None ||
+            output.Hitchance == SDK::HitChance::OutOfRange) {
+            return;
+        }
 
-        const SDK::Vector3 rangeFrom = input.ResolveRangeCheckFrom();
-        const float circleExtra = SDK::IsCircleSpellType(input.Type) ? input.RealRadius() : 0.0f;
-        const float maxCastSqr = std::pow(input.Range, 2.0f);
+        SDK::Vector3 castPosition = output.GetCastPosition();
+        const SDK::Vector3 unitPosition = output.GetUnitPosition();
+        if (!castPosition.IsValid() || castPosition.IsZero() ||
+            !unitPosition.IsValid() || unitPosition.IsZero()) {
+            output.Hitchance = SDK::HitChance::None;
+            return;
+        }
 
-        const float castDistSqr = rangeFrom.DistanceSquared(output.GetCastPosition());
-        if (castDistSqr > maxCastSqr) {
-            if (SDK::IsLineSpellType(input.Type)) {
-                // Keep the tested ray, shorten the endpoint to the max range.
-                const SDK::Vector2 dir2D = output.GetCastPosition().To2D() - rangeFrom.To2D();
-                if (!dir2D.IsZero()) {
-                    const SDK::Vector2 clamped2D = rangeFrom.To2D() + dir2D.Normalized() * input.Range;
-                    output.SetCastPosition(SDK::Vector3::From2D(clamped2D));
+        const float realRadius = input.RealRadius();
+        if (!std::isfinite(realRadius) || realRadius < 0.0f) {
+            output.Hitchance = SDK::HitChance::None;
+            return;
+        }
+
+        if (input.Range != FLT_MAX && input.Range > 0.0f) {
+            const SDK::Vector3 rangeFrom = input.ResolveRangeCheckFrom();
+            if (output.Hitchance >= SDK::HitChance::High &&
+                rangeFrom.DistanceSqr2D(unitPosition) >
+                    std::pow(input.Range + realRadius * 0.75f, 2.0f)) {
+                output.Hitchance = SDK::HitChance::Medium;
+            }
+
+            if (rangeFrom.DistanceSqr2D(castPosition) >
+                input.Range * input.Range) {
+                if (!SDK::IsLineSpellType(input.Type) ||
+                    !ClampLineEndpointToCastRange(
+                        castPosition,
+                        input.ResolveFrom(),
+                        rangeFrom,
+                        input.Range,
+                        castPosition)) {
+                    output.Hitchance = SDK::HitChance::OutOfRange;
+                    return;
                 }
-            } else {
+                output.SetCastPosition(castPosition);
+            }
+
+            const float rangeExtension =
+                SDK::IsCircleSpellType(input.Type) ? realRadius : 0.0f;
+            if (rangeFrom.DistanceSqr2D(unitPosition) >
+                std::pow(input.Range + rangeExtension, 2.0f)) {
                 output.Hitchance = SDK::HitChance::OutOfRange;
                 return;
             }
         }
 
-        const float maxUnitSqr = std::pow(input.Range + circleExtra, 2.0f);
-        if (rangeFrom.DistanceSquared(output.GetUnitPosition()) > maxUnitSqr) {
+        if (SDK::IsLineSpellType(input.Type) &&
+            DistanceSquaredToSegment(
+                unitPosition.To2D(),
+                input.ResolveFrom().To2D(),
+                castPosition.To2D()) >
+                realRadius * realRadius + 1.0e-3f) {
+            output.Hitchance = SDK::HitChance::OutOfRange;
+            return;
+        }
+        if (SDK::IsCircleSpellType(input.Type) &&
+            unitPosition.DistanceSqr2D(castPosition) >
+                realRadius * realRadius + 1.0e-3f) {
             output.Hitchance = SDK::HitChance::OutOfRange;
         }
     }
 
-    SDK::Vector3 GetWallPoint(const SDK::Vector3& from, float range) {
-        constexpr int count = 30;
-        SDK::Vector2 circlePoints[count];
-
-        for (int i = 0; i < count; ++i) {
-            const float a = static_cast<float>(i) * (2.0f * 3.14159265358979323846f / static_cast<float>(count));
-            circlePoints[i] = from.To2D() + SDK::Vector2(std::cos(a) * range, std::sin(a) * range);
-        }
-
-        SDK::Vector2 first{};
-        SDK::Vector2 last{};
-
-        for (int i = 0; i < count; ++i) {
-            if (::CoreNavGrid::IsWall({ circlePoints[i].x, 0.0f, circlePoints[i].y })) {
-                if (first.IsZero()) {
-                    const int nextIdx = (i == count - 1) ? 0 : (i + 1);
-                    if (!::CoreNavGrid::IsWall({ circlePoints[nextIdx].x, 0.0f, circlePoints[nextIdx].y })) first = circlePoints[i];
-                }
-                if (last.IsZero()) {
-                    const int prevIdx = (i == 0) ? (count - 1) : (i - 1);
-                    if (!::CoreNavGrid::IsWall({ circlePoints[prevIdx].x, 0.0f, circlePoints[prevIdx].y })) last = circlePoints[i];
-                }
-            }
-        }
-
-        if (!first.IsZero() && !last.IsZero()) {
-            return SDK::Vector3::From2D((first + last) * 0.5f);
-        }
-        return {};
-    }
-
-    double UnitIsImmobileUntil(const SDK::AIBaseClient& unit) {
+    static double UnitIsImmobileUntil(const SDK::AIBaseClient& unit) {
         const float gameTime = SDK::Game::Time();
-        double maxEndTime = 0.0;
-
-        // Build once per unit per frame (cached); every buff query this frame
-        // reuses the same snapshot instead of re-scanning up to 256 buff entries.
-        const auto* snapshot = CoreBuffs::GetOrBuildFrameBuffSnapshot(unit.Address(), gameTime);
-        if (!snapshot) return 0.0;
-
-        for (int i = 0; i < snapshot->count; ++i) {
-            const auto& entry = snapshot->entries[i];
-            if (!entry.isActive) continue;
-
-            switch (entry.type) {
-            case SDK::Prediction::BuffType::Charm:
-            case SDK::Prediction::BuffType::Knockup:
-            case SDK::Prediction::BuffType::Stun:
-            case SDK::Prediction::BuffType::Suppression:
-            case SDK::Prediction::BuffType::Snare:
-            case SDK::Prediction::BuffType::Asleep:
-                if (gameTime <= entry.endTime && entry.endTime > maxEndTime) {
-                    maxEndTime = entry.endTime;
-                }
-                break;
-            default:
-                break;
-            }
-        }
-        return maxEndTime - gameTime;
+        const auto* snapshot =
+            CoreBuffs::GetOrBuildFrameBuffSnapshot(
+                unit.Address(),
+                gameTime);
+        return RemainingImmobilitySeconds(snapshot, gameTime);
     }
 
     FsPredConfig config_;

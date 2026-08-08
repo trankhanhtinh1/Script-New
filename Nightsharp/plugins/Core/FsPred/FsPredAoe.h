@@ -1,347 +1,663 @@
 #pragma once
+#include "FsPredAoeMath.h"
 
 #include "../../../sdk/GameObjects/GameObjects.h"
-#include "../../../sdk/Math/ConvexHull.h"
 #include "../../../sdk/Math/Prediction/Movement.h"
-#include "../../../sdk/Utils/MathUtils.h"
+#include "../../../sdk/Wrappers/Spells/Spell.h"
+#include "../../../SectionProfiler.h"
 
 #include <algorithm>
+#include <array>
+#include <cfloat>
 #include <cmath>
-#include <functional>
-#include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 
 namespace Plugins::FsPred {
 
 class AoePrediction {
 public:
-    using PredictionEvaluator = std::function<SDK::PredictionOutput(SDK::PredictionInput, bool, bool)>;
+    static constexpr std::size_t kMaxTargets = AoeMath::kMaxTargets;
 
     struct PossibleTarget {
         SDK::Vector2 Position{};
         SDK::AIBaseClient Unit{};
+        float HitRadius = 0.0f;
+    };
+
+    struct TargetSet {
+        std::array<PossibleTarget, kMaxTargets> Items{};
+        std::size_t Count = 0;
     };
 
     struct MecCircle {
         SDK::Vector2 Center{};
         float Radius = 0.0f;
+        bool Valid = false;
     };
 
+    template <typename PredictionEvaluator>
     static SDK::PredictionOutput GetPrediction(
         const SDK::PredictionInput& input,
-        const PredictionEvaluator& predEvaluator) {
-        if (SDK::IsLineSpellType(input.Type)) {
+        PredictionEvaluator&& predEvaluator) {
+        NS_PROFILE("FsPred.AoE");
+        switch (AoeMath::ResolveShapeDispatch(input.Type)) {
+        case AoeMath::ShapeDispatch::Line:
             return Line::GetPrediction(input, predEvaluator);
-        } else if (SDK::IsCircleSpellType(input.Type)) {
+        case AoeMath::ShapeDispatch::Circle:
             return Circle::GetPrediction(input, predEvaluator);
-        } else if (SDK::IsConeSpellType(input.Type)) {
+        case AoeMath::ShapeDispatch::Cone:
             return Cone::GetPrediction(input, predEvaluator);
+        case AoeMath::ShapeDispatch::SingleTargetFallback:
+        default:
+            return predEvaluator(input, false, true);
         }
-        return SDK::PredictionOutput{};
     }
 
-    static std::vector<PossibleTarget> GetPossibleTargets(
-        const SDK::PredictionInput& input,
-        const PredictionEvaluator& predEvaluator) {
-        std::vector<PossibleTarget> list;
-        const auto originalUnit = input.Unit;
-        if (!originalUnit.IsValid()) return list;
+private:
+    static constexpr float kGeometryEpsilon = 1.0e-3f;
+    static constexpr float kFallbackConeAngleDegrees = 45.0f;
 
-        const float checkRange = input.Range + 200.0f + input.RealRadius();
-        const auto& enemyHeroes = SDK::GameObjects::EnemyHeroesFrame();
-        for (const auto& hero : enemyHeroes) {
-            if (!hero.IsValid() || hero.NetworkId() == originalUnit.NetworkId()) continue;
-            if (!SDK::Extensions::IsValidTarget(hero, checkRange, true, input.ResolveRangeCheckFrom())) continue;
+    static float ResolveConeHalfAngle(
+        const SDK::PredictionInput& input) {
+        float angleDegrees = kFallbackConeAngleDegrees;
+        if (input.Spell) {
+            const auto spellInstance = input.Spell->Instance();
+            if (spellInstance.IsValid()) {
+                const std::string spellName = spellInstance.Name();
+                const auto* entry = SDK::SpellDatabase::GetByName(spellName);
+                if (entry && entry->Angle > 1 && entry->Angle < 180) {
+                    angleDegrees = static_cast<float>(entry->Angle);
+                }
+            }
+        }
+        return AoeMath::ConeHalfAngleRadians(angleDegrees);
+    }
+
+    static int CountBits(std::uint8_t mask) {
+        return AoeMath::HitCount(mask);
+    }
+
+    static bool ContainsNetworkId(const TargetSet& targets,
+                                  std::uint32_t networkId) {
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if (targets.Items[index].Unit.NetworkId() == networkId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename PredictionEvaluator>
+    static TargetSet BuildTargets(
+        const SDK::PredictionInput& input,
+        const SDK::PredictionOutput& primaryPrediction,
+        PredictionEvaluator& predEvaluator) {
+        TargetSet targets{};
+        if (!input.Unit.IsValid()) {
+            return targets;
+        }
+
+        const auto addTarget = [&](const SDK::AIBaseClient& unit,
+                                   const SDK::Vector2& position) {
+            if (targets.Count >= kMaxTargets || !unit.IsValid() ||
+                ContainsNetworkId(targets, unit.NetworkId())) {
+                return;
+            }
+            const float hitRadius = std::max(
+                0.0f,
+                input.Radius +
+                    (input.AddHitBox ? unit.BoundingRadius() : 0.0f));
+            targets.Items[targets.Count++] = {
+                position,
+                unit,
+                hitRadius
+            };
+        };
+
+        addTarget(input.Unit, primaryPrediction.GetUnitPosition().To2D());
+        if (primaryPrediction.Hitchance < SDK::HitChance::Medium) {
+            return targets;
+        }
+
+        const float checkRange = input.Range == FLT_MAX
+            ? FLT_MAX
+            : std::max(0.0f, input.Range) + 200.0f + input.RealRadius();
+        for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
+            if (targets.Count >= kMaxTargets) {
+                break;
+            }
+            if (!hero.IsValid() || ContainsNetworkId(targets, hero.NetworkId())) {
+                continue;
+            }
+            if (!SDK::Extensions::IsValidTarget(
+                    hero,
+                    checkRange,
+                    true,
+                    input.ResolveRangeCheckFrom())) {
+                continue;
+            }
 
             SDK::PredictionInput targetInput = input;
             targetInput.Unit = hero;
-            const SDK::PredictionOutput pred = predEvaluator(targetInput, false, false);
-            if (pred.Hitchance >= SDK::HitChance::High) {
-                list.push_back({ pred.GetUnitPosition().To2D(), hero });
+            targetInput.AoE = false;
+            const SDK::PredictionOutput predicted =
+                predEvaluator(targetInput, false, false);
+            if (predicted.Hitchance >= SDK::HitChance::High) {
+                addTarget(hero, predicted.GetUnitPosition().To2D());
             }
         }
-        return list;
+        return targets;
     }
 
-    // MEC (Minimum Enclosing Circle) algorithm implementation
-    static MecCircle GetMec(const std::vector<SDK::Vector2>& points) {
-        if (points.empty()) return {};
-        if (points.size() == 1) return { points[0], 0.0f };
+    static bool CastPositionInRange(const SDK::PredictionInput& input,
+                                    const SDK::Vector2& castPosition) {
+        if (input.Range == FLT_MAX) {
+            return true;
+        }
+        if (!std::isfinite(input.Range) || input.Range <= 0.0f) {
+            return false;
+        }
+        const float range = input.Range + kGeometryEpsilon;
+        return castPosition.DistanceSquared(
+                   input.ResolveRangeCheckFrom().To2D()) <=
+               range * range;
+    }
 
-        std::vector<SDK::Vector2> sdkPoints;
-        sdkPoints.reserve(points.size());
-        for (const auto& pt : points) {
-            sdkPoints.push_back(pt);
+    static bool CircleCovers(const MecCircle& circle,
+                             const TargetSet& targets,
+                             std::uint8_t mask) {
+        if (!circle.Valid) {
+            return false;
+        }
+        const float radius = circle.Radius + kGeometryEpsilon;
+        const float radiusSquared = radius * radius;
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if ((mask & (1u << index)) == 0) {
+                continue;
+            }
+            if (targets.Items[index].Position.DistanceSquared(circle.Center) >
+                radiusSquared) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static MecCircle CircleFromPair(const SDK::Vector2& first,
+                                    const SDK::Vector2& second) {
+        const SDK::Vector2 center = (first + second) * 0.5f;
+        return { center, center.Distance(first), true };
+    }
+
+    static MecCircle CircleFromTriple(const SDK::Vector2& a,
+                                      const SDK::Vector2& b,
+                                      const SDK::Vector2& c) {
+        const double denominator = 2.0 * (
+            static_cast<double>(a.x) * (b.y - c.y) +
+            static_cast<double>(b.x) * (c.y - a.y) +
+            static_cast<double>(c.x) * (a.y - b.y));
+        if (std::abs(denominator) <= 1.0e-8) {
+            return {};
         }
 
-        const auto mecResult = SDK::ConvexHull::GetMec(sdkPoints);
-        return { mecResult.Center, mecResult.Radius };
+        const double aSquared =
+            static_cast<double>(a.x) * a.x +
+            static_cast<double>(a.y) * a.y;
+        const double bSquared =
+            static_cast<double>(b.x) * b.x +
+            static_cast<double>(b.y) * b.y;
+        const double cSquared =
+            static_cast<double>(c.x) * c.x +
+            static_cast<double>(c.y) * c.y;
+        const SDK::Vector2 center{
+            static_cast<float>((
+                aSquared * (b.y - c.y) +
+                bSquared * (c.y - a.y) +
+                cSquared * (a.y - b.y)) / denominator),
+            static_cast<float>((
+                aSquared * (c.x - b.x) +
+                bSquared * (a.x - c.x) +
+                cSquared * (b.x - a.x)) / denominator)
+        };
+        if (!center.IsValid()) {
+            return {};
+        }
+        return { center, center.Distance(a), true };
+    }
+
+    static MecCircle GetMec(const TargetSet& targets, std::uint8_t mask) {
+        MecCircle best{};
+        best.Radius = std::numeric_limits<float>::infinity();
+        const auto consider = [&](const MecCircle& candidate) {
+            if (candidate.Valid && candidate.Radius < best.Radius &&
+                CircleCovers(candidate, targets, mask)) {
+                best = candidate;
+            }
+        };
+
+        for (std::size_t first = 0; first < targets.Count; ++first) {
+            if ((mask & (1u << first)) == 0) {
+                continue;
+            }
+            consider({ targets.Items[first].Position, 0.0f, true });
+            for (std::size_t second = first + 1;
+                 second < targets.Count;
+                 ++second) {
+                if ((mask & (1u << second)) == 0) {
+                    continue;
+                }
+                consider(CircleFromPair(
+                    targets.Items[first].Position,
+                    targets.Items[second].Position));
+                for (std::size_t third = second + 1;
+                     third < targets.Count;
+                     ++third) {
+                    if ((mask & (1u << third)) == 0) {
+                        continue;
+                    }
+                    consider(CircleFromTriple(
+                        targets.Items[first].Position,
+                        targets.Items[second].Position,
+                        targets.Items[third].Position));
+                }
+            }
+        }
+        return best;
+    }
+
+    static SDK::PredictionOutput MakeAoeOutput(
+        const SDK::PredictionInput& input,
+        const SDK::PredictionOutput& primaryPrediction,
+        const TargetSet& targets,
+        const SDK::Vector2& castPosition,
+        std::uint8_t hitMask) {
+        SDK::PredictionOutput output;
+        output.Input = input;
+        output.Hitchance = primaryPrediction.Hitchance;
+        output.SetUnitPosition(primaryPrediction.GetUnitPosition());
+        output.SetCastPosition(SDK::Vector3::From2D(castPosition));
+        output.AoeTargetsHit.reserve(CountBits(hitMask));
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if ((hitMask & (1u << index)) == 0) {
+                continue;
+            }
+            const auto& unit = targets.Items[index].Unit;
+            if (unit.IsValid() && unit.IsHero()) {
+                output.AoeTargetsHit.emplace_back(unit.Address());
+            }
+        }
+        output.AoeTargetsHitCount =
+            static_cast<int>(output.AoeTargetsHit.size());
+        return output;
+    }
+
+    static float MinimumHitRadius(const TargetSet& targets,
+                                  std::uint8_t mask) {
+        float radius = std::numeric_limits<float>::infinity();
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if ((mask & (1u << index)) != 0) {
+                radius = std::min(radius, targets.Items[index].HitRadius);
+            }
+        }
+        return radius;
+    }
+
+    static std::uint8_t CircleHitMask(const TargetSet& targets,
+                                      const SDK::Vector2& center) {
+        std::uint8_t mask = 0;
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            const float radius = targets.Items[index].HitRadius;
+            if (targets.Items[index].Position.DistanceSquared(center) <=
+                radius * radius + kGeometryEpsilon) {
+                mask |= static_cast<std::uint8_t>(1u << index);
+            }
+        }
+        return mask;
+    }
+
+    static bool PointHitsLine(const SDK::Vector2& point,
+                              const SDK::Vector2& start,
+                              const SDK::Vector2& end,
+                              float radius) {
+        return AoeMath::PointHitsLine(point, start, end, radius);
+    }
+
+    static std::uint8_t LineHitMask(const TargetSet& targets,
+                                    const SDK::Vector2& start,
+                                    const SDK::Vector2& end) {
+        std::uint8_t mask = 0;
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if (PointHitsLine(
+                    targets.Items[index].Position,
+                    start,
+                    end,
+                    targets.Items[index].HitRadius)) {
+                mask |= static_cast<std::uint8_t>(1u << index);
+            }
+        }
+        return mask;
+    }
+
+    static std::size_t CircleCircleIntersection(
+        const SDK::Vector2& center1,
+        const SDK::Vector2& center2,
+        float radius1,
+        float radius2,
+        std::array<SDK::Vector2, 2>& intersections) {
+        const float distance = center1.Distance(center2);
+        if (distance > radius1 + radius2 ||
+            distance <= std::abs(radius1 - radius2) ||
+            distance <= kGeometryEpsilon) {
+            return 0;
+        }
+        const float along =
+            (radius1 * radius1 - radius2 * radius2 +
+             distance * distance) /
+            (2.0f * distance);
+        const float heightSquared = radius1 * radius1 - along * along;
+        if (heightSquared < 0.0f) {
+            return 0;
+        }
+        const float height = std::sqrt(heightSquared);
+        const SDK::Vector2 direction =
+            (center2 - center1).Normalized();
+        const SDK::Vector2 midpoint = center1 + direction * along;
+        const SDK::Vector2 perpendicular{ -direction.y, direction.x };
+        intersections[0] = midpoint + perpendicular * height;
+        intersections[1] = midpoint - perpendicular * height;
+        return 2;
+    }
+
+    static bool AddUniqueDirection(
+        std::array<SDK::Vector2, 32>& directions,
+        std::size_t& count,
+        const SDK::Vector2& direction) {
+        if (count >= directions.size() || direction.LengthSqr() <= 1.0e-6f) {
+            return false;
+        }
+        const SDK::Vector2 normalized = direction.Normalized();
+        for (std::size_t index = 0; index < count; ++index) {
+            if (directions[index].Dot(normalized) >= 0.99999f) {
+                return false;
+            }
+        }
+        directions[count++] = normalized;
+        return true;
+    }
+
+    static SDK::Vector2 Rotate(const SDK::Vector2& vector, float radians) {
+        const float cosine = std::cos(radians);
+        const float sine = std::sin(radians);
+        return {
+            vector.x * cosine - vector.y * sine,
+            vector.x * sine + vector.y * cosine
+        };
+    }
+
+    static std::uint8_t ConeHitMask(const TargetSet& targets,
+                                    const SDK::Vector2& from,
+                                    const SDK::Vector2& direction,
+                                    float range,
+                                    float halfAngleRadians) {
+        std::uint8_t mask = 0;
+        for (std::size_t index = 0; index < targets.Count; ++index) {
+            if (AoeMath::PointHitsCone(
+                    targets.Items[index].Position - from,
+                    direction,
+                    range,
+                    halfAngleRadians,
+                    targets.Items[index].HitRadius)) {
+                mask |= static_cast<std::uint8_t>(1u << index);
+            }
+        }
+        return mask;
     }
 
     class Circle {
     public:
+        template <typename PredictionEvaluator>
         static SDK::PredictionOutput GetPrediction(
             const SDK::PredictionInput& input,
-            const PredictionEvaluator& predEvaluator) {
-
-            SDK::PredictionOutput prediction = predEvaluator(input, false, true);
-            std::vector<PossibleTarget> list = {
-                { prediction.GetUnitPosition().To2D(), input.Unit }
-            };
-
-            if (prediction.Hitchance >= SDK::HitChance::Medium) {
-                const auto possible = AoePrediction::GetPossibleTargets(input, predEvaluator);
-                list.insert(list.end(), possible.begin(), possible.end());
+            PredictionEvaluator& predEvaluator) {
+            const SDK::PredictionOutput primary =
+                predEvaluator(input, false, true);
+            const TargetSet targets =
+                BuildTargets(input, primary, predEvaluator);
+            if (targets.Count < 2) {
+                return primary;
             }
 
-            while (list.size() > 1) {
-                std::vector<SDK::Vector2> positions;
-                positions.reserve(list.size());
-                for (const auto& item : list) {
-                    positions.push_back(item.Position);
+            std::uint8_t bestMask = 0;
+            SDK::Vector2 bestCenter{};
+            int bestCount = 1;
+            float bestDistanceSquared = std::numeric_limits<float>::infinity();
+            const SDK::Vector2 rangeCheckFrom =
+                input.ResolveRangeCheckFrom().To2D();
+            const std::uint8_t maskLimit =
+                static_cast<std::uint8_t>(1u << targets.Count);
+            for (std::uint8_t subset = 1; subset < maskLimit; ++subset) {
+                if ((subset & 1u) == 0 || CountBits(subset) < 2) {
+                    continue;
                 }
-
-                const MecCircle mec = AoePrediction::GetMec(positions);
-                const float rangeCheckSqr = input.Range * input.Range;
-                const float centerDistSqr = mec.Center.DistanceSquared(input.ResolveRangeCheckFrom().To2D());
-
-                if (mec.Radius <= input.RealRadius() - 10.0f && centerDistSqr < rangeCheckSqr) {
-                    SDK::PredictionOutput output;
-                    output.Input = input;
-                    output.SetCastPosition(SDK::Vector3::From2D(mec.Center));
-                    output.SetUnitPosition(prediction.GetUnitPosition());
-                    output.Hitchance = prediction.Hitchance;
-                    output.AoeTargetsHitCount = static_cast<int>(list.size());
-                    for (const auto& target : list) {
-                        if (target.Unit.IsValid() && target.Unit.IsHero()) {
-                            output.AoeTargetsHit.push_back(SDK::AIHeroClient(target.Unit.Address()));
-                        }
-                    }
-                    return output;
+                const MecCircle circle = GetMec(targets, subset);
+                if (!circle.Valid ||
+                    circle.Radius >
+                        MinimumHitRadius(targets, subset) + kGeometryEpsilon ||
+                    !CastPositionInRange(input, circle.Center)) {
+                    continue;
                 }
-
-                float maxDist = -1.0f;
-                std::size_t removeIndex = 1;
-                for (std::size_t i = 1; i < list.size(); ++i) {
-                    const float dist = list[i].Position.DistanceSquared(list[0].Position);
-                    if (dist > maxDist) {
-                        maxDist = dist;
-                        removeIndex = i;
-                    }
+                const std::uint8_t verified =
+                    CircleHitMask(targets, circle.Center);
+                if ((verified & 1u) == 0) {
+                    continue;
                 }
-                list.erase(list.begin() + removeIndex);
-            }
-            return prediction;
-        }
-    };
-
-    class Cone {
-    public:
-        static SDK::PredictionOutput GetPrediction(
-            const SDK::PredictionInput& input,
-            const PredictionEvaluator& predEvaluator) {
-
-            SDK::PredictionOutput prediction = predEvaluator(input, false, true);
-            std::vector<PossibleTarget> list = {
-                { prediction.GetUnitPosition().To2D(), input.Unit }
-            };
-
-            if (prediction.Hitchance >= SDK::HitChance::Medium) {
-                const auto possible = AoePrediction::GetPossibleTargets(input, predEvaluator);
-                list.insert(list.end(), possible.begin(), possible.end());
-            }
-
-            if (list.size() > 1) {
-                const SDK::Vector2 from2D = input.ResolveFrom().To2D();
-                std::vector<PossibleTarget> relativeList = list;
-                for (auto& target : relativeList) {
-                    target.Position = target.Position - from2D;
-                }
-
-                std::vector<SDK::Vector2> candidatePoints;
-                for (std::size_t i = 0; i < relativeList.size(); ++i) {
-                    for (std::size_t j = 0; j < relativeList.size(); ++j) {
-                        if (i != j) {
-                            const SDK::Vector2 mid = (relativeList[i].Position + relativeList[j].Position) * 0.5f;
-                            const bool found = std::any_of(candidatePoints.begin(), candidatePoints.end(), [&](const SDK::Vector2& pt) {
-                                return pt.DistanceSquared(mid) < 1.0f;
-                            });
-                            if (!found) {
-                                candidatePoints.push_back(mid);
-                            }
-                        }
-                    }
-                }
-
-                int maxHits = -1;
-                SDK::Vector2 bestVector{};
-                std::vector<SDK::Vector2> relativePoints;
-                relativePoints.reserve(relativeList.size());
-                for (const auto& item : relativeList) {
-                    relativePoints.push_back(item.Position);
-                }
-
-                for (const auto& candidate : candidatePoints) {
-                    const int hits = GetHits(candidate, static_cast<double>(input.Range), input.Radius, relativePoints);
-                    if (hits > maxHits) {
-                        maxHits = hits;
-                        bestVector = candidate;
-                    }
-                }
-
-                const SDK::Vector2 castPos2D = bestVector + from2D;
-                if (maxHits > 1 && from2D.DistanceSquared(castPos2D) > 2500.0f) {
-                    SDK::PredictionOutput output;
-                    output.Input = input;
-                    output.Hitchance = prediction.Hitchance;
-                    output.AoeTargetsHitCount = maxHits;
-                    output.SetUnitPosition(prediction.GetUnitPosition());
-                    output.SetCastPosition(SDK::Vector3::From2D(castPos2D));
-                    for (const auto& target : list) {
-                        if (target.Unit.IsValid() && target.Unit.IsHero()) {
-                            output.AoeTargetsHit.push_back(SDK::AIHeroClient(target.Unit.Address()));
-                        }
-                    }
-                    return output;
+                const int count = CountBits(verified);
+                const float distanceSquared =
+                    circle.Center.DistanceSquared(rangeCheckFrom);
+                if (AoeMath::IsBetterPrimaryCandidate(
+                        verified,
+                        distanceSquared,
+                        bestCount,
+                        bestDistanceSquared)) {
+                    bestCount = count;
+                    bestDistanceSquared = distanceSquared;
+                    bestMask = verified;
+                    bestCenter = circle.Center;
                 }
             }
-            return prediction;
-        }
 
-        static int GetHits(const SDK::Vector2& end, double range, float angle, const std::vector<SDK::Vector2>& points) {
-            const float radAngle = angle * 3.14159265358979323846f / 180.0f;
-            const SDK::Vector2 edge1 = SDK::Prediction::Vec2Ext::Rotated(end, -radAngle / 2.0f);
-            const SDK::Vector2 edge2 = SDK::Prediction::Vec2Ext::Rotated(edge1, radAngle);
-
-            int count = 0;
-            for (const auto& point : points) {
-                if (static_cast<double>(point.LengthSqr()) < range * range) {
-                    const float cross1 = edge1.x * point.y - edge1.y * point.x;
-                    const float cross2 = point.x * edge2.y - point.y * edge2.x;
-                    if (cross1 > 0.0f && cross2 > 0.0f) {
-                        ++count;
-                    }
-                }
+            if (bestCount > 1) {
+                return MakeAoeOutput(
+                    input,
+                    primary,
+                    targets,
+                    bestCenter,
+                    bestMask);
             }
-            return count;
+            return primary;
         }
     };
 
     class Line {
     public:
+        template <typename PredictionEvaluator>
         static SDK::PredictionOutput GetPrediction(
             const SDK::PredictionInput& input,
-            const PredictionEvaluator& predEvaluator) {
-
-            SDK::PredictionOutput prediction = predEvaluator(input, false, true);
-            std::vector<PossibleTarget> list = {
-                { prediction.GetUnitPosition().To2D(), input.Unit }
-            };
-
-            if (prediction.Hitchance >= SDK::HitChance::Medium) {
-                const auto possible = AoePrediction::GetPossibleTargets(input, predEvaluator);
-                list.insert(list.end(), possible.begin(), possible.end());
+            PredictionEvaluator& predEvaluator) {
+            const SDK::PredictionOutput primary =
+                predEvaluator(input, false, true);
+            const TargetSet targets =
+                BuildTargets(input, primary, predEvaluator);
+            if (targets.Count < 2 || !std::isfinite(input.Range) ||
+                input.Range <= 0.0f || input.Range == FLT_MAX) {
+                return primary;
             }
 
-            if (list.size() > 1) {
-                const SDK::Vector2 from2D = input.ResolveFrom().To2D();
-                std::vector<SDK::Vector2> candidates;
+            const SDK::Vector2 from = input.ResolveFrom().To2D();
+            std::array<SDK::Vector2, 32> directions{};
+            std::size_t directionCount = 0;
+            for (std::size_t index = 0; index < targets.Count; ++index) {
+                const SDK::Vector2 toTarget =
+                    targets.Items[index].Position - from;
+                AddUniqueDirection(directions, directionCount, toTarget);
 
-                for (const auto& target : list) {
-                    const auto c = GetCandidates(from2D, target.Position, input.Radius, input.Range);
-                    candidates.insert(candidates.end(), c.begin(), c.end());
-                }
-
-                int maxHits = -1;
-                SDK::Vector2 bestCandidate{};
-                std::vector<SDK::Vector2> bestHitPoints;
-                std::vector<SDK::Vector2> allPoints;
-                allPoints.reserve(list.size());
-                for (const auto& t : list) {
-                    allPoints.push_back(t.Position);
-                }
-
-                const float primaryRadius = input.Radius + (input.Unit.IsValid() ? input.Unit.BoundingRadius() / 3.0f : 0.0f) - 10.0f;
-                const std::vector<SDK::Vector2> primaryTargetPoint = { list[0].Position };
-
-                for (const auto& candidate : candidates) {
-                    const auto primaryHits = GetHitsOnLine(from2D, candidate, primaryRadius, primaryTargetPoint);
-                    if (primaryHits.size() == 1) {
-                        const auto lineHits = GetHitsOnLine(from2D, candidate, input.Radius, allPoints);
-                        const int count = static_cast<int>(lineHits.size());
-                        if (count >= maxHits) {
-                            maxHits = count;
-                            bestCandidate = candidate;
-                            bestHitPoints = lineHits;
-                        }
-                    }
-                }
-
-                if (maxHits > 1 && !bestHitPoints.empty()) {
-                    // Cast along the exact same ray that was hit-tested.
-                    // Capping the endpoint to a shorter distance is fine, but the
-                    // direction must never be replaced by an unrelated midpoint.
-                    SDK::Vector2 finalCastPos = bestCandidate;
-                    if (finalCastPos.IsZero()) finalCastPos = bestCandidate;
-
-                    SDK::PredictionOutput output;
-                    output.Input = input;
-                    output.Hitchance = prediction.Hitchance;
-                    output.AoeTargetsHitCount = maxHits;
-                    output.SetUnitPosition(prediction.GetUnitPosition());
-                    output.SetCastPosition(SDK::Vector3::From2D(finalCastPos));
-                    for (const auto& target : list) {
-                        if (target.Unit.IsValid() && target.Unit.IsHero()) {
-                            output.AoeTargetsHit.push_back(SDK::AIHeroClient(target.Unit.Address()));
-                        }
-                    }
-                    return output;
+                const SDK::Vector2 midpoint =
+                    (from + targets.Items[index].Position) * 0.5f;
+                std::array<SDK::Vector2, 2> intersections{};
+                const std::size_t intersectionCount = CircleCircleIntersection(
+                    from,
+                    midpoint,
+                    std::max(0.0f, input.Radius),
+                    from.Distance(midpoint),
+                    intersections);
+                for (std::size_t candidate = 0;
+                     candidate < intersectionCount;
+                     ++candidate) {
+                    AddUniqueDirection(
+                        directions,
+                        directionCount,
+                        targets.Items[index].Position - intersections[candidate]);
                 }
             }
-            return prediction;
+
+            int bestCount = 1;
+            std::uint8_t bestMask = 0;
+            SDK::Vector2 bestCast{};
+            float bestDistanceSquared = std::numeric_limits<float>::infinity();
+            for (std::size_t index = 0; index < directionCount; ++index) {
+                const SDK::Vector2 cast =
+                    from + directions[index] * input.Range;
+                if (!CastPositionInRange(input, cast)) {
+                    continue;
+                }
+                const std::uint8_t hits =
+                    LineHitMask(targets, from, cast);
+                if ((hits & 1u) == 0) {
+                    continue;
+                }
+                const int count = CountBits(hits);
+                const float distanceSquared = cast.DistanceSquared(
+                    input.ResolveRangeCheckFrom().To2D());
+                if (AoeMath::IsBetterPrimaryCandidate(
+                        hits,
+                        distanceSquared,
+                        bestCount,
+                        bestDistanceSquared)) {
+                    bestCount = count;
+                    bestDistanceSquared = distanceSquared;
+                    bestMask = hits;
+                    bestCast = cast;
+                }
+            }
+
+            if (bestCount > 1) {
+                return MakeAoeOutput(
+                    input,
+                    primary,
+                    targets,
+                    bestCast,
+                    bestMask);
+            }
+            return primary;
         }
+    };
 
-        static std::vector<SDK::Vector2> GetCandidates(const SDK::Vector2& from, const SDK::Vector2& to, float radius, float range) {
-            const SDK::Vector2 mid = (from + to) * 0.5f;
-            const auto circleIntersect = CircleCircleIntersection(from, mid, radius, from.Distance(mid));
-            if (circleIntersect.size() > 1) {
-                const SDK::Vector2 c1 = from + (to - circleIntersect[0]).Normalized() * range;
-                const SDK::Vector2 c2 = from + (to - circleIntersect[1]).Normalized() * range;
-                return { c1, c2 };
+    class Cone {
+    public:
+        template <typename PredictionEvaluator>
+        static SDK::PredictionOutput GetPrediction(
+            const SDK::PredictionInput& input,
+            PredictionEvaluator& predEvaluator) {
+            const SDK::PredictionOutput primary =
+                predEvaluator(input, false, true);
+            const TargetSet targets =
+                BuildTargets(input, primary, predEvaluator);
+            if (targets.Count < 2 || !std::isfinite(input.Range) ||
+                input.Range <= 0.0f || input.Range == FLT_MAX) {
+                return primary;
             }
-            return {};
-        }
 
-        static std::vector<SDK::Vector2> CircleCircleIntersection(const SDK::Vector2& center1, const SDK::Vector2& center2, float radius1, float radius2) {
-            const float d = center1.Distance(center2);
-            if (d > radius1 + radius2 || d <= std::abs(radius1 - radius2) || d < 0.0001f) {
-                return {};
+            const SDK::Vector2 from = input.ResolveFrom().To2D();
+            const float halfAngle = ResolveConeHalfAngle(input);
+            std::array<SDK::Vector2, 32> directions{};
+            std::size_t directionCount = 0;
+            for (std::size_t index = 0; index < targets.Count; ++index) {
+                const SDK::Vector2 direction =
+                    targets.Items[index].Position - from;
+                if (direction.LengthSqr() <= kGeometryEpsilon) {
+                    continue;
+                }
+                const SDK::Vector2 normalized = direction.Normalized();
+                AddUniqueDirection(directions, directionCount, normalized);
+                AddUniqueDirection(
+                    directions,
+                    directionCount,
+                    Rotate(normalized, halfAngle));
+                AddUniqueDirection(
+                    directions,
+                    directionCount,
+                    Rotate(normalized, -halfAngle));
             }
-            const float a = (radius1 * radius1 - radius2 * radius2 + d * d) / (2.0f * d);
-            const float hSqr = radius1 * radius1 - a * a;
-            if (hSqr < 0.0f) return {};
-            const float h = std::sqrt(hSqr);
-
-            const SDK::Vector2 dir = (center2 - center1).Normalized();
-            const SDK::Vector2 p2 = center1 + dir * a;
-            const SDK::Vector2 perp = SDK::Prediction::Vec2Ext::Perpendicular(dir);
-
-            const SDK::Vector2 i1 = p2 + perp * h;
-            const SDK::Vector2 i2 = p2 - perp * h;
-            return { i1, i2 };
-        }
-
-        static std::vector<SDK::Vector2> GetHitsOnLine(const SDK::Vector2& start, const SDK::Vector2& end, float radius, const std::vector<SDK::Vector2>& points) {
-            std::vector<SDK::Vector2> hits;
-            const float radiusSqr = radius * radius;
-
-            for (const auto& p : points) {
-                const auto proj = SDK::Prediction::Vec2Ext::ProjectOn(p, start, end);
-                const float distSqr = p.DistanceSquared(proj.SegmentPoint);
-                if (distSqr <= radiusSqr) {
-                    hits.push_back(p);
+            for (std::size_t first = 0; first < targets.Count; ++first) {
+                const SDK::Vector2 firstDirection =
+                    (targets.Items[first].Position - from).Normalized();
+                for (std::size_t second = first + 1;
+                     second < targets.Count;
+                     ++second) {
+                    const SDK::Vector2 secondDirection =
+                        (targets.Items[second].Position - from).Normalized();
+                    AddUniqueDirection(
+                        directions,
+                        directionCount,
+                        firstDirection + secondDirection);
                 }
             }
-            return hits;
+
+            int bestCount = 1;
+            std::uint8_t bestMask = 0;
+            SDK::Vector2 bestCast{};
+            float bestDistanceSquared = std::numeric_limits<float>::infinity();
+            for (std::size_t index = 0; index < directionCount; ++index) {
+                const SDK::Vector2 cast =
+                    from + directions[index] * input.Range;
+                if (!CastPositionInRange(input, cast)) {
+                    continue;
+                }
+                const std::uint8_t hits = ConeHitMask(
+                    targets,
+                    from,
+                    directions[index],
+                    input.Range,
+                    halfAngle);
+                if ((hits & 1u) == 0) {
+                    continue;
+                }
+                const int count = CountBits(hits);
+                const float distanceSquared = cast.DistanceSquared(
+                    input.ResolveRangeCheckFrom().To2D());
+                if (AoeMath::IsBetterPrimaryCandidate(
+                        hits,
+                        distanceSquared,
+                        bestCount,
+                        bestDistanceSquared)) {
+                    bestCount = count;
+                    bestDistanceSquared = distanceSquared;
+                    bestMask = hits;
+                    bestCast = cast;
+                }
+            }
+
+            if (bestCount > 1) {
+                return MakeAoeOutput(
+                    input,
+                    primary,
+                    targets,
+                    bestCast,
+                    bestMask);
+            }
+            return primary;
         }
     };
 };

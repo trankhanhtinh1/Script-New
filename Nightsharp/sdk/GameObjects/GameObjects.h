@@ -6,6 +6,7 @@
 
 #include "ObjectManager.h"
 #include "StructureScan.h"
+#include "FrameSnapshot.h"
 #include "../Events/Events.h"
 #include "../Enumerations/ChampionId.h"
 #include "../Utils/HashUtils.h"
@@ -1062,26 +1063,13 @@ inline std::size_t JungleInto(std::span<AIMinionClient> output) {
 }
 
 // ------------------------ zero-allocation frame snapshots -------------------
-// FrameSnapshot<T, Fill> owns a thread_local buffer that the *Into accessor
-// refills under the lock, so per-frame reads of a list cost no heap allocation.
-// Each (T, Fill) specialization keeps its own buffer; callers must consume the
-// returned vector before asking for the same buffer again (never nest the same
-// list twice in one thread).
+// Each (T, Fill) specialization retains its capacity and publishes one settled
+// snapshot per simulation frame. The generic three-parameter implementation is
+// isolated in FrameSnapshot.h so fake fills and frame keys can exercise the
+// truncation boundary without pulling in the runtime object layer.
 template <typename T, std::size_t (*Fill)(std::span<T>)>
 inline const std::vector<T>& FrameSnapshot() {
-    static thread_local std::vector<T> buffer;
-    std::size_t capacity = std::max<std::size_t>(buffer.size(), 8);
-    for (;;) {
-        if (buffer.size() < capacity) {
-            buffer.resize(capacity);
-        }
-        const std::size_t count = Fill(buffer);
-        buffer.resize(count);
-        if (count <= capacity || capacity >= (std::size_t(1) << 24)) {
-            return buffer;
-        }
-        capacity = capacity + std::max<std::size_t>(capacity / 2, 8);
-    }
+    return FrameSnapshot<T, Fill, &::CoreAiManager::FrameCacheKey>();
 }
 
 inline const std::vector<AIHeroClient>& AllyHeroesFrame() {
@@ -1125,6 +1113,12 @@ inline std::size_t EnemyClonesInto(std::span<AIMinionClient> output) {
 }
 inline const std::vector<AIMinionClient>& EnemyClonesFrame() {
     return FrameSnapshot<AIMinionClient, &EnemyClonesInto>();
+}
+inline std::size_t EnemyPetsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::EnemyPetsList, output);
+}
+inline const std::vector<AIMinionClient>& EnemyPetsFrame() {
+    return FrameSnapshot<AIMinionClient, &EnemyPetsInto>();
 }
 inline std::vector<AIMinionClient> JungleMinions() { return Jungle(); }
 inline std::vector<AIMinionClient> JungleSmall() { return detail::Snapshot(detail::JungleSmallList); }

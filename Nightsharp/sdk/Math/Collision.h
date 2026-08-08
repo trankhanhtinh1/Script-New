@@ -13,15 +13,19 @@
 #include "../Core/Game.h"
 #include "../Core/NavMesh.h"
 #include "../Core/Objects.h"
+#include "../../core/CoreNavGrid.h"
 #include "../Core/Variables.h"
 #include "../Enumerations/SpellSlot.h"
 #include "../Events/Events.h"
+#include "../Extensions/AIBaseClientExtensions.h"
 #include "../Extensions/Unit.h"
 #include "../GameObjects/GameObjects.h"
 #include "../GameObjects/ObjectManager.h"
 #include "../GameObjects/YasuoWallTracker.h"
 #include "HealthPrediction.h"
 #include "Prediction.h"
+#include "MovingProjectileCollision.h"
+#include "../../SectionProfiler.h"
 
 #include <algorithm>
 #include <cctype>
@@ -30,6 +34,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -70,9 +75,6 @@ inline bool ContainsCollisionObject(const PredictionInput& input, CollisionableO
     return input.CollisionObjects.contains(object);
 }
 
-inline float CheckRange(const PredictionInput& input) {
-    return std::min(input.Range + input.Radius + 100.0f, 2000.0f);
-}
 
 inline float UnitBoundingRadius(const AIBaseClient& unit) {
     return unit.IsValid() ? unit.BoundingRadius() : 0.0f;
@@ -156,25 +158,17 @@ inline bool IsCollisionMinionCandidate(const AIMinionClient& minion) {
 }
 
 inline bool IsValidCollisionTarget(const GameObject& object,
-                                   const PredictionInput& input,
-                                   float range) {
-    if (object.Compare(input.Unit)) {
-        return false;
-    }
-
-    if (Extensions::IsValidTarget(object, range, true, input.ResolveRangeCheckFrom())) {
-        return true;
-    }
-
-    // Same defensive fallback as Movement::IsPredictionTargetUsable: the
-    // current NightSharp object layer can misreport Visible/Invulnerable for
-    // targetable, rendered practice/custom units. Collision still needs to
-    // consider those objects if their position/team/targetable state is sane.
-    if (!object.IsValid() || (object.IsDead() && !object.IsZombie()) ||
+                                   const PredictionInput& input) {
+    if (object.Compare(input.Unit) ||
+        !object.IsValid() ||
+        (object.IsDead() && !object.IsZombie()) ||
         !object.IsTargetable()) {
         return false;
     }
 
+    // A visible physical hero still intercepts a projectile while gameplay
+    // invulnerability prevents damage, so collision intentionally does not use
+    // Extensions::IsValidTarget here.
     if (object.IsHero() && !object.IsVisible()) {
         return false;
     }
@@ -184,29 +178,14 @@ inline bool IsValidCollisionTarget(const GameObject& object,
         return false;
     }
 
-    const Vector3 position = object.Position();
-    if (!position.IsValid() || position.IsZero()) {
-        return false;
-    }
-
-    const Vector3 origin = input.ResolveRangeCheckFrom();
-    return range >= FLT_MAX || origin.IsZero() ||
-           position.DistanceSqr2D(origin) < range * range;
+    const Vector3 position = ServerPositionOrPosition(AIBaseClient(object.Handle()));
+    return position.IsValid() && !position.IsZero();
 }
 
 inline bool IsValidMinionCollisionTarget(const AIMinionClient& minion,
-                                         const PredictionInput& input,
-                                         float range) {
-    if (minion.Compare(input.Unit)) {
+                                         const PredictionInput& input) {
+    if (minion.Compare(input.Unit) || !IsCollisionMinionCandidate(minion)) {
         return false;
-    }
-
-    if (!IsCollisionMinionCandidate(minion)) {
-        return false;
-    }
-
-    if (Extensions::IsValidTarget(minion, range, true, input.ResolveRangeCheckFrom())) {
-        return true;
     }
 
     const auto player = ObjectManager::Player();
@@ -214,79 +193,128 @@ inline bool IsValidMinionCollisionTarget(const AIMinionClient& minion,
         return false;
     }
 
-    const Vector3 position = minion.Position();
-    if (!position.IsValid() || position.IsZero()) {
-        return false;
-    }
-
-    const Vector3 origin = input.ResolveRangeCheckFrom();
-    return range >= FLT_MAX || origin.IsZero() ||
-           position.DistanceSqr2D(origin) <= range * range;
+    const Vector3 position = ServerPositionOrPosition(AIBaseClient(minion.Handle()));
+    return position.IsValid() && !position.IsZero();
 }
 
+inline float DistanceSquaredToSegment(const Vec2& point,
+                                      const Vec2& segmentStart,
+                                      const Vec2& segmentEnd) {
+    const Vec2 segment = segmentEnd - segmentStart;
+    const float lengthSquared = segment.LengthSqr();
+    if (lengthSquared <= 1.0e-6f) {
+        return point.DistanceSqr(segmentStart);
+    }
+    const float projection = std::clamp(
+        (point - segmentStart).Dot(segment) / lengthSquared,
+        0.0f,
+        1.0f);
+    return point.DistanceSqr(segmentStart + segment * projection);
+}
+// Kept for non-collision geometry callers that intentionally reject endpoint
+// caps (for example Viktor laser target counting).
 inline float DistanceSquaredToSegmentOnly(const Vec2& point,
                                           const Vec2& segmentStart,
                                           const Vec2& segmentEnd) {
-    const auto projection = Prediction::Vec2Ext::ProjectOn(point, segmentStart, segmentEnd);
-    if (!projection.IsOnSegment) {
+    const Vec2 segment = segmentEnd - segmentStart;
+    const float lengthSquared = segment.LengthSqr();
+    if (lengthSquared <= 1.0e-6f) {
         return std::numeric_limits<float>::max();
     }
-    return point.DistanceSqr(projection.SegmentPoint);
+    const float projection =
+        (point - segmentStart).Dot(segment) / lengthSquared;
+    if (projection < 0.0f || projection > 1.0f) {
+        return std::numeric_limits<float>::max();
+    }
+    return point.DistanceSqr(segmentStart + segment * projection);
 }
 
-inline bool IsPointNearProjection(const Vec2& point,
-                                  const Vec2& segmentStart,
-                                  const Vec2& segmentEnd,
-                                  float radius) {
-    const auto projection = Prediction::Vec2Ext::ProjectOn(point, segmentStart, segmentEnd);
-    return projection.IsOnSegment &&
-           (projection.SegmentPoint.Distance(point) <= radius ||
-            projection.LinePoint.Distance(point) <= radius);
+inline float ResolveBlockerSpeed(const AIBaseClient& unit) {
+    if (!unit.IsValid() || !SDK::CanMove(unit)) {
+        return 0.0f;
+    }
+    if (Extensions::IsDashing(unit)) {
+        const auto dash = Extensions::GetDashInfo(unit);
+        if (std::isfinite(dash.Speed) && dash.Speed > 0.0f) {
+            return dash.Speed;
+        }
+    }
+    const float speed = unit.MoveSpeed();
+    return std::isfinite(speed) && speed > 0.0f ? speed : 0.0f;
 }
 
-inline void AddIfUnique(std::vector<AIBaseClient>& result, const GameObject& object) {
+inline float ProjectileLifetime(const PredictionInput& input,
+                                const Vector3& endpoint) {
+    const float delay = std::isfinite(input.Delay)
+        ? std::max(0.0f, input.Delay)
+        : 0.0f;
+    if (input.Speed == FLT_MAX) {
+        return delay;
+    }
+    if (!std::isfinite(input.Speed) || input.Speed <= 0.0f) {
+        return -1.0f;
+    }
+    return delay + input.ResolveFrom().Distance2D(endpoint) / input.Speed;
+}
+
+inline bool PassesReachableBroadPhase(const Vector3& blockerPosition,
+                                      float blockerSpeed,
+                                      float combinedRadius,
+                                      const Vector3& from,
+                                      const Vector3& endpoint,
+                                      float projectileLifetime) {
+    if (projectileLifetime < 0.0f || !std::isfinite(projectileLifetime)) {
+        return false;
+    }
+    const float reachableRadius = combinedRadius +
+        blockerSpeed * projectileLifetime;
+    return DistanceSquaredToSegment(
+               blockerPosition.To2D(),
+               from.To2D(),
+               endpoint.To2D()) <= reachableRadius * reachableRadius;
+}
+
+inline std::optional<float> FindUnitContact(const AIBaseClient& unit,
+                                            const PredictionInput& input,
+                                            const Vector3& endpoint,
+                                            float combinedRadius,
+                                            float blockerSpeed) {
+    const Vector3 blockerPosition = ServerPositionOrPosition(unit);
+    const auto& waypoints = unit.CachedWaypoints();
+    return MovingProjectileCollision::FirstContactTime(
+        input.ResolveFrom(),
+        endpoint,
+        input.Delay,
+        input.Speed,
+        combinedRadius,
+        blockerPosition,
+        blockerSpeed,
+        std::span<const Vec3>(waypoints.data(), waypoints.size()));
+}
+
+inline bool AddIfUnique(std::vector<AIBaseClient>& result, const GameObject& object) {
     if (!object.IsValid()) {
-        return;
+        return false;
     }
 
     const int networkId = object.NetworkId();
     const auto exists = std::find_if(result.begin(), result.end(), [&](const AIBaseClient& entry) {
         return entry.IsValid() && entry.NetworkId() == networkId;
     });
-    if (exists == result.end()) {
-        result.emplace_back(object.Handle());
+    if (exists != result.end()) {
+        return false;
     }
+    result.emplace_back(object.Handle());
+    return true;
 }
 
 inline void AddPlayerSentinel(std::vector<AIBaseClient>& result) {
-    AddIfUnique(result, ObjectManager::Player());
+    (void)AddIfUnique(result, ObjectManager::Player());
 }
 
 inline bool ShouldStopCollisionScan(const std::vector<AIBaseClient>& result,
                                     const PredictionInput& input) {
-    int blockingCount = 0;
-    const int targetNetworkId = input.Unit.IsValid()
-        ? input.Unit.NetworkId()
-        : 0;
-    for (const auto& object : result) {
-        if (!object.IsValid()) {
-            continue;
-        }
-        if (targetNetworkId != 0 && object.NetworkId() == targetNetworkId) {
-            continue;
-        }
-        ++blockingCount;
-    }
-
-    if (blockingCount <= 0) {
-        return false;
-    }
-
-    if (input.MaxCollisionCount <= 0.0f) {
-        return true;
-    }
-
-    return static_cast<float>(blockingCount) > input.MaxCollisionCount;
+    return ExceedsCollisionAllowance(result.size(), input.MaxCollisionCount);
 }
 
 inline bool HasAnyBuff(const AIBaseClient& unit, std::initializer_list<const char*> names) {
@@ -340,16 +368,11 @@ inline bool HasCircularShieldCollision(const char* championName,
     const Vec2 end2D = end.To2D();
     const std::string targetName = ToLower(championName);
 
-    const auto player = ObjectManager::Player();
-    const GameObjectTeam playerTeam = player.IsValid()
-        ? player.Team()
-        : GameObjectTeam::Unknown;
-    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
-        if (playerTeam != GameObjectTeam::Unknown &&
-            hero.Team() == playerTeam) {
-            continue;
-        }
-        if (!Extensions::IsValidTarget(hero) ||
+    for (const auto& hero : GameObjects::EnemyHeroesFrame()) {
+        if (!hero.IsValid() ||
+            (hero.IsDead() && !hero.IsZombie()) ||
+            !hero.IsVisible() ||
+            !hero.IsTargetable() ||
             ToLower(hero.CharacterName()) != targetName) {
             continue;
         }
@@ -360,16 +383,11 @@ inline bool HasCircularShieldCollision(const char* championName,
         }
 
         const Vector3 shieldPosition = ServerPositionOrPosition(unit);
-        if (!shieldPosition.IsValid()) {
+        if (!shieldPosition.IsValid() || shieldPosition.IsZero()) {
             continue;
         }
-        const Vec2 shield2D = shieldPosition.To2D();
-        if (shield2D.Distance(start2D) <= radius ||
-            end2D.Distance(shield2D) <= radius) {
-            return true;
-        }
-        if (DistanceSquaredToSegmentOnly(
-                shield2D,
+        if (DistanceSquaredToSegment(
+                shieldPosition.To2D(),
                 start2D,
                 end2D) <= radius * radius) {
             return true;
@@ -397,102 +415,122 @@ inline bool HasMelCollision(const Vector3& start, const Vector3& end, float extr
         extraRadius);
 }
 
-inline void ProcessHeroes(std::vector<AIBaseClient>& result,
-                          const Vector3& position,
-                          PredictionInput input) {
-    const float range = CheckRange(input);
-    const Vector3 from = input.ResolveFrom();
-    const Vec2 position2D = position.To2D();
-    const Vec2 from2D = from.To2D();
+inline bool IsDeadAtContact(const AIBaseClient& minion, float contactTime) {
+    if (!minion.IsValid() || !std::isfinite(contactTime) || contactTime < 0.0f) {
+        return false;
+    }
 
-    for (const auto& hero : ObjectManager::Get<AIHeroClient>()) {
-        if (!IsValidCollisionTarget(hero, input, range)) {
+    HealthPrediction::Initialize();
+    const double predictionMs = std::clamp(
+        static_cast<double>(contactTime) * 1000.0 -
+            static_cast<double>(Game::Ping()),
+        0.0,
+        static_cast<double>(std::numeric_limits<int>::max()));
+    return HealthPrediction::GetPrediction(
+               minion,
+               static_cast<int>(predictionMs),
+               0) <= 0.0f;
+}
+
+inline bool ProcessHeroes(std::vector<AIBaseClient>& result,
+                          const Vector3& endpoint,
+                          const PredictionInput& input) {
+    const Vector3 from = input.ResolveFrom();
+    const float projectileLifetime = ProjectileLifetime(input, endpoint);
+    for (const auto& hero : GameObjects::EnemyHeroesFrame()) {
+        if (!IsValidCollisionTarget(hero, input)) {
             continue;
         }
 
-        AIBaseClient heroUnit(hero.Handle());
-        PredictionInput heroInput = input;
-        heroInput.Unit = heroUnit;
-        const auto prediction = Prediction::Movement::GetPrediction(heroInput, false, false);
+        AIBaseClient unit(hero.Handle());
+        const Vector3 blockerPosition = ServerPositionOrPosition(unit);
+        const float blockerSpeed = ResolveBlockerSpeed(unit);
         const float radius = input.Radius + 50.0f + hero.BoundingRadius();
+        if (!PassesReachableBroadPhase(
+                blockerPosition,
+                blockerSpeed,
+                radius,
+                from,
+                endpoint,
+                projectileLifetime)) {
+            continue;
+        }
 
-        if (DistanceSquaredToSegmentOnly(
-                prediction.GetUnitPosition().To2D(),
-                from2D,
-                position2D) <= radius * radius) {
-            AddIfUnique(result, hero);
+        if (FindUnitContact(unit, input, endpoint, radius, blockerSpeed).has_value() &&
+            AddIfUnique(result, hero) &&
+            ShouldStopCollisionScan(result, input)) {
+            return true;
         }
     }
+    return false;
 }
 
-inline void ProcessMinionList(std::vector<AIBaseClient>& result,
+inline bool ProcessMinionList(std::vector<AIBaseClient>& result,
                               const std::vector<AIMinionClient>& minions,
-                              const Vector3& position,
-                              const PredictionInput& input,
-                              int stationaryPadding) {
-    const float range = CheckRange(input);
+                              const Vector3& endpoint,
+                              const PredictionInput& input) {
     const Vector3 from = input.ResolveFrom();
-    const Vec2 from2D = from.To2D();
-    const Vec2 position2D = position.To2D();
-
+    const float projectileLifetime = ProjectileLifetime(input, endpoint);
     for (const auto& minion : minions) {
-        if (!IsValidMinionCollisionTarget(minion, input, range)) {
+        if (!IsValidMinionCollisionTarget(minion, input)) {
             continue;
         }
 
-        AIBaseClient minionUnit(minion.Handle());
-        PredictionInput minionInput = input;
-        minionInput.Unit = minionUnit;
-        const Vector3 livePosition = minion.Position();
-        const Vector3 serverPosition = ServerPositionOrPosition(minionUnit);
-        const Vector3 basePosition = livePosition.IsValid() && !livePosition.IsZero()
-            ? livePosition
-            : serverPosition;
-        const float distanceFromStart = basePosition.Distance(from);
-
-        if (WillDead(input, minionUnit, distanceFromStart)) {
-            continue;
-        }
-
-        const auto minionPrediction = Prediction::Movement::GetPrediction(minionInput, false, false);
-        Vector3 collisionPosition = minionPrediction.GetUnitPosition();
-        if (!collisionPosition.IsValid() || collisionPosition.IsZero()) {
-            collisionPosition = basePosition;
-        }
-
-        const float padding = minion.IsJungle()
-            ? 20.0f
-            : static_cast<float>(stationaryPadding);
+        AIBaseClient unit(minion.Handle());
+        const Vector3 blockerPosition = ServerPositionOrPosition(unit);
+        const float blockerSpeed = ResolveBlockerSpeed(unit);
+        const float padding = minion.IsJungle() ? 20.0f : 15.0f;
         const float radius = input.Radius + padding + minion.BoundingRadius();
+        if (!PassesReachableBroadPhase(
+                blockerPosition,
+                blockerSpeed,
+                radius,
+                from,
+                endpoint,
+                projectileLifetime)) {
+            continue;
+        }
 
-        if (DistanceSquaredToSegmentOnly(
-                collisionPosition.To2D(),
-                from2D,
-                position2D) <= radius * radius) {
-            AddIfUnique(result, minion);
+        const auto contact = FindUnitContact(
+            unit,
+            input,
+            endpoint,
+            radius,
+            blockerSpeed);
+        if (!contact.has_value() || IsDeadAtContact(unit, *contact)) {
+            continue;
+        }
+
+        if (AddIfUnique(result, minion) &&
+            ShouldStopCollisionScan(result, input)) {
+            return true;
         }
     }
+    return false;
 }
 
-inline std::vector<AIMinionClient> SnapshotCollisionMinions() {
-    static std::vector<AIMinionClient> cached;
-    static int lastRefreshTick = 0;
+inline const std::vector<AIMinionClient>& SnapshotCollisionMinions() {
+    static thread_local std::vector<AIMinionClient> cached;
+    static thread_local int cachedFrame = 0;
+    static thread_local bool hasCachedFrame = false;
 
-    const int now = Variables::TickCount();
-    if (now - lastRefreshTick < 50 && !cached.empty()) {
+    const int frame = ::CoreAiManager::FrameCacheKey();
+    if (hasCachedFrame && cachedFrame == frame) {
         return cached;
     }
 
-    std::vector<AIMinionClient> result;
-    result.reserve(64);
+    cached.clear();
+    if (cached.capacity() < 64) {
+        cached.reserve(64);
+    }
 
-    auto addUnique = [&](const AIMinionClient& minion) {
+    const auto addUnique = [&](const AIMinionClient& minion) {
         if (!IsCollisionMinionCandidate(minion)) {
             return;
         }
         const int networkId = minion.NetworkId();
         const uintptr_t address = minion.Address();
-        const auto exists = std::find_if(result.begin(), result.end(), [&](const AIMinionClient& entry) {
+        const auto exists = std::find_if(cached.begin(), cached.end(), [&](const AIMinionClient& entry) {
             if (!entry.IsValid()) {
                 return false;
             }
@@ -501,120 +539,102 @@ inline std::vector<AIMinionClient> SnapshotCollisionMinions() {
             }
             return address != 0 && entry.Address() == address;
         });
-        if (exists == result.end()) {
-            result.push_back(minion);
+        if (exists == cached.end()) {
+            cached.push_back(minion);
         }
     };
 
-    for (const auto& minion : SDK::ObjectManager::Get<AIMinionClient>()) {
-        addUnique(minion);
-    }
-
-    for (const auto& minion : SDK::GameObjects::EnemyMinions()) {
-        addUnique(minion);
-    }
-    for (const auto& minion : SDK::GameObjects::Jungle()) {
-        addUnique(minion);
-    }
-
-    // If the typed minion manager/list is stale or incomplete, fall back to
-    // the object array and classify there. This mirrors EnsoulSharp's
-    // GameObjects source more closely while keeping the scan bounded/cached.
-    if (result.size() < 12) {
-        const auto player = SDK::ObjectManager::Player();
-        const auto playerTeam = player.IsValid()
-            ? player.Team()
-            : GameObjectTeam::Unknown;
-        for (const auto& object : SDK::ObjectManager::Get<GameObject>()) {
-            if (!object.IsValid() || !object.IsMinion()) {
-                continue;
-            }
-            const auto team = object.Team();
-            if (playerTeam != GameObjectTeam::Unknown &&
-                team == playerTeam) {
-                continue;
-            }
-            addUnique(AIMinionClient(object.Handle()));
+    const auto addList = [&](const auto& list) {
+        for (const auto& minion : list) {
+            addUnique(minion);
         }
-    }
+    };
+    addList(GameObjects::EnemyMinionsFrame());
+    addList(GameObjects::EnemySpecialMinionsFrame());
+    addList(GameObjects::EnemyPetsFrame());
+    addList(GameObjects::EnemyClonesFrame());
+    addList(GameObjects::JungleFrame());
 
-    cached = result;
-    lastRefreshTick = now;
+    cachedFrame = frame;
+    hasCachedFrame = true;
     return cached;
 }
 
 inline void ProcessBuildings(std::vector<AIBaseClient>& result,
                              const Vector3& position,
                              const PredictionInput& input) {
-    const float range = CheckRange(input);
-    const Vector3 from = input.ResolveFrom();
-    const Vec2 position2D = position.To2D();
-    const Vec2 from2D = from.To2D();
-
-    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-    /*
-    for (const auto& turret : GameObjects::Turrets()) {
-        if (!IsValidCollisionTarget(turret, input, range)) {
-            continue;
-        }
-
-        const float radius = input.Radius + turret.BoundingRadius() + 50.0f;
-        if (IsPointNearProjection(position2D, from2D, turret.Position().To2D(), radius)) {
-            AddIfUnique(result, turret);
-        }
-    }
-
-    for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
-        if (!IsValidCollisionTarget(inhibitor, input, range)) {
-            continue;
-        }
-
-        const float radius = input.Radius + inhibitor.BoundingRadius() + 50.0f;
-        if (IsPointNearProjection(position2D, from2D, inhibitor.Position().To2D(), radius)) {
-            // DLL adds GameObjects.Player for inhibitor/building sentinel.
-            AddPlayerSentinel(result);
-        }
-    }
-    */
+    // Building collision remains the canonical SDK no-op.
+    (void)result;
+    (void)position;
+    (void)input;
 }
 
-inline void ProcessWalls(std::vector<AIBaseClient>& result,
-                         const Vector3& position,
+inline bool ProcessWalls(std::vector<AIBaseClient>& result,
+                         const Vector3& endpoint,
                          const PredictionInput& input) {
-    const Vector3 from = input.ResolveFrom();
-    const float step = position.Distance(from) / 10.0f;
-
-    for (int i = 0; i < 9; ++i) {
-        const Vec2 sample = from.To2D().Extend(position.To2D(), step * static_cast<float>(i));
-        if (HasFlag(NavMesh::GetCollisionFlags(sample.x, sample.y), CollisionFlags::Wall)) {
-            AddPlayerSentinel(result);
-            return;
-        }
+    Vector3 hitPoint{};
+    if (!::CoreNavGrid::FindWallCollision(
+            input.ResolveFrom(),
+            endpoint,
+            hitPoint)) {
+        return false;
     }
+    return AddIfUnique(result, ObjectManager::Player()) &&
+           ShouldStopCollisionScan(result, input);
 }
 
-inline void ProcessProjectileWalls(std::vector<AIBaseClient>& result,
-                                   const Vector3& position,
+inline bool ProcessProjectileWalls(std::vector<AIBaseClient>& result,
+                                   const Vector3& endpoint,
                                    const PredictionInput& input) {
     if (!input.Collision) {
-        return;
+        return false;
     }
     const Vector3 from = input.ResolveFrom();
 
     if (ContainsCollisionObject(input, CollisionableObjects::YasuoWall) &&
-        SegmentIntersectsYasuoWall(from, position, input.Radius)) {
-        AddPlayerSentinel(result);
+        SegmentIntersectsYasuoWall(from, endpoint, input.Radius) &&
+        AddIfUnique(result, ObjectManager::Player()) &&
+        ShouldStopCollisionScan(result, input)) {
+        return true;
     }
-
     if (ContainsCollisionObject(input, CollisionableObjects::SamiraWall) &&
-        HasSamiraCollision(from, position, input.Radius)) {
-        AddPlayerSentinel(result);
+        HasSamiraCollision(from, endpoint, input.Radius) &&
+        AddIfUnique(result, ObjectManager::Player()) &&
+        ShouldStopCollisionScan(result, input)) {
+        return true;
+    }
+    if (ContainsCollisionObject(input, CollisionableObjects::MelWall) &&
+        HasMelCollision(from, endpoint, input.Radius) &&
+        AddIfUnique(result, ObjectManager::Player()) &&
+        ShouldStopCollisionScan(result, input)) {
+        return true;
+    }
+    return false;
+}
+
+inline bool ScanEndpoint(std::vector<AIBaseClient>& result,
+                         const Vector3& endpoint,
+                         const PredictionInput& input) {
+    if (!endpoint.IsValid() || endpoint.IsZero()) {
+        return false;
     }
 
-    if (ContainsCollisionObject(input, CollisionableObjects::MelWall) &&
-        HasMelCollision(from, position, input.Radius)) {
-        AddPlayerSentinel(result);
+    if (ContainsCollisionObject(input, CollisionableObjects::Heroes) &&
+        ProcessHeroes(result, endpoint, input)) {
+        return true;
     }
+    if (ContainsCollisionObject(input, CollisionableObjects::Minions) &&
+        ProcessMinionList(result, SnapshotCollisionMinions(), endpoint, input)) {
+        return true;
+    }
+    if (ContainsCollisionObject(input, CollisionableObjects::Building)) {
+        ProcessBuildings(result, endpoint, input);
+    }
+    if (ContainsCollisionObject(input, CollisionableObjects::Walls) &&
+        ProcessWalls(result, endpoint, input)) {
+        return true;
+    }
+    return ProcessProjectileWalls(result, endpoint, input);
 }
 
 } // namespace detail
@@ -624,58 +644,28 @@ inline void Initialize() {
 }
 
 // ============================================================================
-// GetCollision — DLL-equivalent signature:
-//   EnsoulSharp.SDK.Collisions.GetCollision(List<Vector3>, PredictionInput)
+// GetCollision — every overload delegates to the same endpoint scan.
 // ============================================================================
-inline std::vector<AIBaseClient> GetCollision(const std::vector<Vector3>& positions,
-                                              PredictionInput input) {
+inline std::vector<AIBaseClient> GetCollision(
+    const Vector3& endpoint,
+    const PredictionInput& input) {
+    NS_PROFILE("FsPred.Collision");
     Initialize();
-
     std::vector<AIBaseClient> result;
-    std::vector<AIMinionClient> minions;
-    if (detail::ContainsCollisionObject(input, CollisionableObjects::Minions)) {
-        minions = detail::SnapshotCollisionMinions();
-    }
+    (void)detail::ScanEndpoint(result, endpoint, input);
+    return result;
+}
 
-    for (const auto& position : positions) {
-        if (!position.IsValid() || position.IsZero()) {
-            continue;
-        }
-
-        if (detail::ContainsCollisionObject(input, CollisionableObjects::Heroes)) {
-            detail::ProcessHeroes(result, position, input);
-            if (detail::ShouldStopCollisionScan(result, input)) {
-                return result;
-            }
-        }
-
-        if (detail::ContainsCollisionObject(input, CollisionableObjects::Minions)) {
-            detail::ProcessMinionList(result, minions, position, input, 15);
-            if (detail::ShouldStopCollisionScan(result, input)) {
-                return result;
-            }
-        }
-
-        if (detail::ContainsCollisionObject(input, CollisionableObjects::Building)) {
-            detail::ProcessBuildings(result, position, input);
-            if (detail::ShouldStopCollisionScan(result, input)) {
-                return result;
-            }
-        }
-
-        if (detail::ContainsCollisionObject(input, CollisionableObjects::Walls)) {
-            detail::ProcessWalls(result, position, input);
-            if (detail::ShouldStopCollisionScan(result, input)) {
-                return result;
-            }
-        }
-
-        detail::ProcessProjectileWalls(result, position, input);
-        if (detail::ShouldStopCollisionScan(result, input)) {
-            return result;
+inline std::vector<AIBaseClient> GetCollision(
+    const std::vector<Vector3>& positions,
+    PredictionInput input) {
+    Initialize();
+    std::vector<AIBaseClient> result;
+    for (const auto& endpoint : positions) {
+        if (detail::ScanEndpoint(result, endpoint, input)) {
+            break;
         }
     }
-
     return result;
 }
 
@@ -774,19 +764,19 @@ inline bool IsCollision(const Vector3& position, float radius = 50.0f) {
 inline bool WillDead(const PredictionInput& input,
                      const AIBaseClient& minion,
                      float distance) {
-    if (!minion.IsValid()) {
+    if (!minion.IsValid() || !std::isfinite(input.Delay) ||
+        !std::isfinite(distance) || distance < 0.0f) {
         return false;
     }
 
-    HealthPrediction::Initialize();
-
-    float time = input.Delay;
-    if (std::abs(input.Speed - FLT_MAX) >= FLT_EPSILON && input.Speed > 0.0f) {
-        time = (distance / input.Speed) + input.Delay;
+    float contactTime = std::max(0.0f, input.Delay);
+    if (input.Speed != FLT_MAX) {
+        if (!std::isfinite(input.Speed) || input.Speed <= 0.0f) {
+            return false;
+        }
+        contactTime += distance / input.Speed;
     }
-
-    const int predictionTime = static_cast<int>(time * 1000.0f) - Game::Ping();
-    return HealthPrediction::GetPrediction(minion, predictionTime, 0) <= 0.0f;
+    return detail::IsDeadAtContact(minion, contactTime);
 }
 
 // Legacy helper kept for existing NightSharp callers.
@@ -814,7 +804,7 @@ inline bool HasLineCollision(const Vector3& from,
         CollisionableObjects::YasuoWall |
         CollisionableObjects::SamiraWall |
         CollisionableObjects::MelWall;
-    return IsCollision(std::vector<Vector3>{ to }, input);
+    return !GetCollision(to, input).empty();
 }
 
 } // namespace SDK::Collision
