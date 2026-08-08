@@ -1047,6 +1047,17 @@ inline int InstallInlineHooks() {
     (void)CoreEventHook::stealth::SelfTestWrite(base + Offsets::OnStopCast);
     (void)CoreEventHook::stealth::SelfTestCoW(base + Offsets::OnStopCast);
 
+    // === CRC Bypass: Shadow Copy + NOP JNE ===
+    // 1. Shadow Copy TRƯỚC — bản sao sạch stub.dll trước khi patch
+    // 2. NOP JNE — skip CRC mismatch handler
+    // Phải chạy trước khi patch bất kỳ hook nào.
+    if (NIGHTSHARP_ENABLE_CRC_BYPASS) {
+        if (!CRCBypass::Install()) {
+            Logf("CRC Bypass: Install failed — abort hooks");
+            return 0;
+        }
+    }
+
     int installed = 0;
     for (int i = 0; i < HookCount; ++i) {
         const auto id = static_cast<HookId>(i);
@@ -1099,15 +1110,7 @@ inline bool InstallHook(HookId id) {
     const uintptr_t installRva = HookInstallRva(id);
     const uintptr_t targetAddr = base + installRva;
 
-    // CRC Bypass: backup memory region trước khi patch
-    // Khi CRC scan đọc vùng này, CheckMemoryBlocks sẽ redirect sang bản backup
-    DbgLogFmt("[CRC] %s CRC Bypass: registering target 0x%llX (stolen=%d bytes)\r\n",
-              kHookSpecs[id].name, (unsigned long long)targetAddr, CoreEventHook::detail::kJmpPatchSize);
-    for (int i = 0; i < CoreEventHook::detail::kJmpPatchSize; ++i) {
-        CRCBypass::AddPatchAddress(targetAddr + i);
-    }
-    DbgLogFmt("[CRC] %s CRC Bypass: fakedRegions=%zu fakedReady=%d\r\n",
-              kHookSpecs[id].name, CRCBypass::g_fakedRegions.size(), (int)CRCBypass::g_fakedReady);
+    // CRC Bypass: NOP JNE đã skip mismatch handler — patch freely, không cần AddPatchAddress.
 
     const bool ok = d.Install(targetAddr, reinterpret_cast<uintptr_t>(&Logger));
     g_status[id] = d.lastStatus;
@@ -1185,6 +1188,9 @@ inline void UninstallInlineHooks() {
 
 inline void UninstallAll() {
     UninstallInlineHooks();
+    if (NIGHTSHARP_ENABLE_CRC_BYPASS) {
+        CRCBypass::Uninstall();
+    }
     CoreEventHook::stealth::Shutdown();
 }
 

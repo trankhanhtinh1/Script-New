@@ -128,19 +128,9 @@ void operator delete[](void* ptr, size_t, std::align_val_t al) noexcept {
 static volatile LONG g_workerStarted = 0;
 static std::uint32_t g_workerModuleSize = 0;
 static volatile LONG g_selfUnloading = 0;
-static HANDLE g_crcThread = nullptr;
 static HANDLE g_ioctlThread = nullptr;
 
-static void StopDeferredCRCThread() {
-    RequestDeferredCRCInstallShutdown();
-
-    HANDLE thread = g_crcThread;
-    g_crcThread = nullptr;
-    if (thread) {
-        WaitForSingleObject(thread, 2500);
-        CloseHandle(thread);
-    }
-
+static void StopDeferredThreads() {
     HANDLE ioctlThread = g_ioctlThread;
     g_ioctlThread = nullptr;
     if (ioctlThread) {
@@ -164,7 +154,7 @@ static DWORD WINAPI DeferredIoctlInstallThread(LPVOID) {
 
 static void ShutdownNightSharpRuntime() {
     OverlayManager::ShutdownCurrent();
-    StopDeferredCRCThread();
+    StopDeferredThreads();
     CRCBypass::Uninstall();
     IoctlFilter::Uninstall();
 }
@@ -301,15 +291,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
             }
         }
 
-        // PackmanHook: init syscalls + deferred CRC bypass install
+        // PackmanHook: init syscalls
         // (ResetLogFile đã gọi ở đầu DllMain để không wipe log PEB scrub)
         DirectSyscall::InitAll();
         DirectSyscall::DumpSyscallTable();
-        ResetDeferredCRCInstallShutdown();
-        HANDLE hCrc = CoreBypass::CreateThreadSpoofed(DeferredCRCInstallThread, nullptr);
-        if (hCrc) {
-            g_crcThread = hCrc;
-        }
 
         // Gap 1: Spawn deferred IoctlFilter installer — chờ stub.dll load
         // rồi IAT hook DeviceIoControl để intercept IOCTL reports tới vgk.sys
