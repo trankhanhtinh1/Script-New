@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreRuntime.h"
+#include "CoreGame.h"
 #include "CoreObjectManager.h"
 #include "Globals.h"
 #include "offset.h"
@@ -317,10 +318,9 @@ namespace CoreBuffs {
     }
 
     inline float ResolveGameTime() {
-        const auto& ctx = CoreRuntime::GetContext();
-        return ctx.moduleBase
-            ? Globals::Read<float>(ctx.moduleBase + Offset::GameRuntime::GameTime)
-            : 0.0f;
+        // Same cached time source as SDK::Game::Time() — keeps the frame
+        // snapshot cache key consistent no matter which API is used.
+        return ::CoreGame::GetTime();
     }
 
     inline bool IsRecallBuffName(const char* name) {
@@ -393,7 +393,7 @@ namespace CoreBuffs {
         if (!Globals::IsValidPtr(obj)) return nullptr;
         if (gameTime <= 0.0f) gameTime = ResolveGameTime();
 
-        constexpr size_t kSlots = 16;
+        constexpr size_t kSlots = 32;
         static thread_local ThreadFrameBuffSnapshot frameCache[kSlots] = {};
         const size_t slot = (obj >> 4) & (kSlots - 1);
         ThreadFrameBuffSnapshot& snapshot = frameCache[slot];

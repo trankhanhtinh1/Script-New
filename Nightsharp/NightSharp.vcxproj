@@ -155,6 +155,7 @@
     <ClCompile Include="Plugins\Registration\DeveloperToolsRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\EzEvadeRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp" />
+    <ClCompile Include="Plugins\Registration\FsPredRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\KuroActivatorRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\KuroAIORegistration.cpp" />
     <ClCompile Include="Plugins\Registration\KuroEvadeRegistration.cpp" />
@@ -877,6 +878,11 @@
     <ClInclude Include="Plugins\Champion\ziblldev9898\ziblldev9898.h" />
     <ClInclude Include="Plugins\Core\BuffInspectorPlugin.h" />
     <ClInclude Include="Plugins\Core\EnsoulsharpOrbPlugin.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredAoe.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredCollision.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredEngine.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredPlugin.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredUnitTracker.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelectorContracts.h" />
@@ -901,6 +907,7 @@
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerKuroPlugin.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerLifecycle.inl" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerMenu.h" />
+    <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerRingAssets.inl" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerSelector.h" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTargeting.inl" />
     <ClInclude Include="Plugins\Core\OrbwalkerKuro\OrbwalkerTypes.h" />
@@ -920,6 +927,7 @@
     <ClInclude Include="Plugins\KuroActivator\KuroAfterAttackActivator.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroQssActivator.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroSmiteActivator.h" />
+    <ClInclude Include="Plugins\KuroEvade\EvadeTextureAssets.inl" />
     <ClInclude Include="Plugins\KuroEvade\KuroEvadePlugin.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Benchmarking\Benchmark.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\CastType.h" />
@@ -930,6 +938,7 @@
     <ClInclude Include="Plugins\KuroEvade\Native\Database\SpellBlocker.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Database\SpellData.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Database\SpellDatabase.h" />
+    <ClInclude Include="Plugins\KuroEvade\Native\Drawing\EvadeTextureHelper.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Drawing\Primitives\RenderCircle.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Drawing\Primitives\RenderLine.h" />
     <ClInclude Include="Plugins\KuroEvade\Native\Drawing\Primitives\RenderObject.h" />

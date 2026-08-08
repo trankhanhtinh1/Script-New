@@ -442,6 +442,10 @@ static bool InKindredRZone(const AIBaseClient& target) {
     return target.IsValid() && target.HasBuff("kindredrnodeathbuff");
 }
 
+static bool AtKindredRDeathFloor(const AIBaseClient& target) {
+    return InKindredRZone(target) && target.HealthPercent() <= 11.0f;
+}
+
 static TargetPolicy::MechanicFacts KindredMechanicFacts(
     const AIBaseClient& target) {
     TargetPolicy::MechanicFacts facts{};
@@ -591,7 +595,7 @@ static bool KindredActionAllowed(
     SDK::KuroTargetSelector::TargetPurpose purpose,
     SDK::KuroTargetSelector::DecisionPhase phase =
         SDK::KuroTargetSelector::DecisionPhase::Execution) {
-    if (!ValidHeroTarget(target) || InKindredRZone(target)) {
+    if (!ValidHeroTarget(target) || AtKindredRDeathFloor(target)) {
         return false;
     }
     auto* service = SDK::KuroTargetSelector::ActiveService();
@@ -610,7 +614,7 @@ static void ReleaseKindredFocus() {
 static bool AcquireKindredFocus(const AIHeroClient& target,
                                 int lifetimeMs) {
     if (!ValidHeroTarget(target) || !HasKindredECharge(target) ||
-        InKindredRZone(target) ||
+        AtKindredRDeathFloor(target) ||
         !AutoAttack::InAutoAttackRange(target)) {
         return false;
     }
@@ -642,7 +646,7 @@ static AIHeroClient CurrentKindredFocus(float range) {
 
     const auto target = GameObjects::GetUnitByNetworkId<AIHeroClient>(
         lease.TargetNetworkId);
-    if (InKindredRZone(target)) {
+    if (AtKindredRDeathFloor(target)) {
         if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Active) {
             (void)AICombatTargetCoordinator::FocusLease::Suspend(
                 kFocusLeaseOwnerId, now);
@@ -686,7 +690,7 @@ static AIHeroClient KindredFallbackTarget(float range) {
     AIHeroClient marked{};
     AIHeroClient fallback{};
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, range) || InKindredRZone(enemy)) {
+        if (!ValidHeroTarget(enemy, range) || AtKindredRDeathFloor(enemy)) {
             continue;
         }
         const float expandedRange = range + player.BoundingRadius() +
@@ -752,7 +756,7 @@ static AIHeroClient SelectKindredETarget(float range) {
     AIHeroClient best{};
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!ValidHeroTarget(enemy, range) || EBlacklisted(enemy) ||
-            InKindredRZone(enemy)) {
+            AtKindredRDeathFloor(enemy)) {
             continue;
         }
         const float attackDamage =
@@ -779,7 +783,7 @@ static bool FastBlackE() {
     float bestScore = FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!ValidHeroTarget(enemy, E.Range) || !EBlacklisted(enemy) ||
-            InKindredRZone(enemy)) {
+            AtKindredRDeathFloor(enemy)) {
             continue;
         }
         const float score = EffectivePhysicalHealth(enemy) -
@@ -820,12 +824,13 @@ static void UpdateForcedETarget() {
         : AIHeroClient();
     const bool suspendedByR = lease.OwnerId == kFocusLeaseOwnerId &&
         lease.Status == AICombatTargetCoordinator::LeaseStatus::Suspended &&
-        HasKindredECharge(leasedTarget) && InKindredRZone(leasedTarget);
+        HasKindredECharge(leasedTarget) &&
+        AtKindredRDeathFloor(leasedTarget);
 
     AIHeroClient marked = {};
     std::vector<AIHeroClient> attackable;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy) || InKindredRZone(enemy) ||
+        if (!ValidHeroTarget(enemy) || AtKindredRDeathFloor(enemy) ||
             !AutoAttack::InAutoAttackRange(enemy)) {
             continue;
         }
@@ -926,7 +931,8 @@ static bool Combo() {
         const float minimumDistance = static_cast<float>(
             Slider(ComboMenu, "comboDistanceW", 450));
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (ValidHeroTarget(enemy, W.Range) && !InKindredRZone(enemy) &&
+            if (ValidHeroTarget(enemy, W.Range) &&
+                !AtKindredRDeathFloor(enemy) &&
                 enemy.Distance(player) <= minimumDistance &&
                 W.Cast(enemy.Position())) {
                 return true;

@@ -6,6 +6,7 @@
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/UI/UI.h"
 #include <array>
+#include <cfloat>
 #include <cstring>
 
 #include <algorithm>
@@ -353,15 +354,20 @@ private:
         const bool blacklistModifier = allowBlacklistModifier &&
             (::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         ::SDK::AIHeroClient closest;
-        float closestDistance = 180.0f;
+        float closestDistance = FLT_MAX;
         for (const auto& hero : ::SDK::GameObjects::EnemyHeroes()) {
             if (!hero.IsValid() || !hero.IsVisible() ||
                 !hero.IsTargetable() ||
                 (!blacklistModifier && IsBlacklisted(hero.NetworkId()))) {
                 continue;
             }
+            // Pick by the real clickable body of the hero, not a fixed world
+            // radius.  The old flat 180.0f made empty-ground clicks in a
+            // skirmish re-select the nearest enemy, so the manual selection
+            // could never be cleared.
+            const float pickRadius = hero.BoundingRadius() + 100.0f;
             const float distance = hero.Distance(cursor);
-            if (distance <= closestDistance) {
+            if (distance <= pickRadius && distance < closestDistance) {
                 closestDistance = distance;
                 closest = hero;
             }
@@ -369,6 +375,10 @@ private:
         if (closest.IsValid()) {
             if (blacklistModifier) {
                 ToggleBlacklist(closest.NetworkId());
+            } else if (selectedNetworkId_ == closest.NetworkId()) {
+                // Clicking the already-selected hero again clears it, so the
+                // selection is trivially removable from the target itself.
+                selectedNetworkId_ = 0;
             } else {
                 SetSelected(closest);
             }

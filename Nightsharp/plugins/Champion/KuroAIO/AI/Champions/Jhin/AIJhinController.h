@@ -47,6 +47,53 @@ inline int OwnedFocusTargetId = 0;
 inline int OwnedFocusUntil = 0;
 inline AIHeroClient LastSmartTarget = {};
 
+// Full skillshot prediction (movement + collision scan) is the dominant cost
+// of this controller because TargetFacts/ShootCurtain evaluate every enemy
+// repeatedly within one decision tick. Cache the PredictionOutput per
+// (spell slot, target, tick) so the three passes share one computed result.
+struct JhinPredictionCacheEntry {
+    int Tick = 0;
+    int NetworkId = 0;
+    bool ProjectileWallComputed = false;
+    bool ProjectileWall = false;
+    SDK::PredictionOutput Output = {};
+};
+
+inline std::array<JhinPredictionCacheEntry, 4> JhinPredictionCache = {};
+
+inline JhinPredictionCacheEntry* CachedGetPrediction(
+    int index,
+    const AIBaseClient& target) {
+    if (index < 0 || index >= 4 || !target.IsValid() ||
+        !Engine::RuntimeSpells[index]) {
+        return nullptr;
+    }
+    const int now = Now();
+    const int networkId = static_cast<int>(target.NetworkId());
+    auto& entry = JhinPredictionCache[static_cast<std::size_t>(index)];
+    if (entry.Tick != now || entry.NetworkId != networkId) {
+        entry = {};
+        entry.Tick = now;
+        entry.NetworkId = networkId;
+        entry.Output = Engine::RuntimeSpells[index]->GetPrediction(target);
+    }
+    return &entry;
+}
+
+inline JhinPredictionCacheEntry* CachedGetPredictionWall(
+    int index,
+    const AIBaseClient& target,
+    float wallRadius) {
+    auto* entry = CachedGetPrediction(index, target);
+    if (!entry) return nullptr;
+    if (!entry->ProjectileWallComputed) {
+        entry->ProjectileWall = PredictionProjectileWall(
+            index, entry->Output, wallRadius);
+        entry->ProjectileWallComputed = true;
+    }
+    return entry;
+}
+
 inline bool Marked(const AIBaseClient& target) {
     return target.IsValid() && target.HasBuff("jhinespotteddebuff");
 }
@@ -124,21 +171,23 @@ inline void RefreshOrbwalkerFocus(Mode mode,
 inline bool ClearWPrediction(const AIHeroClient& target,
                              SDK::PredictionOutput* output = nullptr,
                              SDK::HitChance chance = SDK::HitChance::High) {
-    SDK::PredictionOutput prediction{};
-    const bool valid = PredictionHits(
-        1, target, chance, true, &prediction) &&
-        !PredictionProjectileWall(1, prediction, 45.0f);
-    if (output) *output = prediction;
+    const auto* cached = CachedGetPredictionWall(1, target, 45.0f);
+    if (!cached) return false;
+    const bool valid = ControllerHelpers::PredictionAtLeast(
+                           cached->Output, chance) &&
+        cached->Output.CollisionObjects.empty() && !cached->ProjectileWall;
+    if (output) *output = cached->Output;
     return valid;
 }
 
 inline bool ClearRPrediction(const AIHeroClient& target,
                              SDK::PredictionOutput* output = nullptr) {
-    SDK::PredictionOutput prediction{};
-    const bool valid = PredictionHits(
-        3, target, SDK::HitChance::VeryHigh, true, &prediction) &&
-        !PredictionProjectileWall(3, prediction, 80.0f);
-    if (output) *output = prediction;
+    const auto* cached = CachedGetPredictionWall(3, target, 80.0f);
+    if (!cached) return false;
+    const bool valid = ControllerHelpers::PredictionAtLeast(
+                           cached->Output, SDK::HitChance::VeryHigh) &&
+        cached->Output.CollisionObjects.empty() && !cached->ProjectileWall;
+    if (output) *output = cached->Output;
     return valid;
 }
 
@@ -148,9 +197,10 @@ inline bool TrapPlan(const AIHeroClient& target,
     if (!Engine::ValidEnemy(target, 780.0f) || !Engine::RuntimeSpells[2]) {
         return false;
     }
-    SDK::PredictionOutput prediction{};
-    const bool hit = PredictionHits(
-        2, target, SDK::HitChance::High, false, &prediction);
+    const auto* cached = CachedGetPrediction(2, target);
+    if (!cached) return false;
+    const bool hit = ControllerHelpers::PredictionAtLeast(
+        cached->Output, SDK::HitChance::High);
     const bool recent = LastTrapTargetId ==
         static_cast<int>(target.NetworkId()) &&
         Now() - LastECastTick < Slider(
@@ -164,20 +214,22 @@ inline bool TrapPlan(const AIHeroClient& target,
     context.Gapcloser = gapcloser;
     context.Committed = IsEscaping(target, 0.25f) == false &&
         target.Position().Distance2D(GameObjects::Player().Position()) < 650.0f;
-    if (output) *output = prediction;
+    if (output) *output = cached->Output;
     return ShouldPlaceTrap(context);
 }
 
 inline bool WPlan(const AIHeroClient& target,
                   SDK::PredictionOutput* output = nullptr) {
-    SDK::PredictionOutput prediction{};
-    const bool hit = ClearWPrediction(target, &prediction);
+    const auto* cached = CachedGetPredictionWall(1, target, 45.0f);
+    if (!cached) return false;
+    SDK::PredictionOutput prediction = cached->Output;
+    const bool hit = ControllerHelpers::PredictionAtLeast(
+        cached->Output, SDK::HitChance::High);
     FlourishContext context{};
     context.InRange = Engine::ValidEnemy(target, 2560.0f);
     context.PredictionHits = hit;
     context.FirstChampionIsTarget = prediction.CollisionObjects.empty();
-    context.ProjectileWall =
-        PredictionProjectileWall(1, prediction, 45.0f);
+    context.ProjectileWall = cached->ProjectileWall;
     context.Marked = Marked(target);
     context.Immobilized = IsImmobile(target);
     context.Lethal = SpellDamage(1, target) >=
@@ -326,16 +378,17 @@ inline bool ShootCurtain(const AIHeroClient& preferred) {
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, 3400.0f) ||
             IsCommonUntargetableOrImmune(enemy)) continue;
-        SDK::PredictionOutput prediction{};
-        const bool clear = ClearRPrediction(enemy, &prediction);
+        const auto* cached = CachedGetPredictionWall(3, enemy, 80.0f);
+        if (!cached) continue;
+        const SDK::PredictionOutput& prediction = cached->Output;
         const Vector3 cast = prediction.GetCastPosition();
         CurtainShotContext context{};
         context.InCone = InsideCurtainCone(
             CurtainOrigin, CurtainDirection, cast);
-        context.PredictionVeryHigh = clear;
+        context.PredictionVeryHigh = ControllerHelpers::PredictionAtLeast(
+            prediction, SDK::HitChance::VeryHigh);
         context.FirstChampionIsTarget = prediction.CollisionObjects.empty();
-        context.ProjectileWall =
-            PredictionProjectileWall(3, prediction, 80.0f);
+        context.ProjectileWall = cached->ProjectileWall;
         context.TargetDamageable = !IsCommonUntargetableOrImmune(enemy);
         context.Lethal = SpellDamage(3, enemy) >=
             enemy.Health() + enemy.AllShield();

@@ -301,6 +301,11 @@ struct TargetFacts {
     bool IsFacingSource = false;
     bool IsStasis = false;
 
+    // Local composition around the target: alive friendly heroes that can
+    // follow up inside a radius, and alive enemy heroes nesting around it.
+    int AlliesNearTarget = 0;
+    int EnemiesNearTarget = 0;
+
     std::array<ProviderFact, 16> ProviderFacts = {};
     std::size_t ProviderFactCount = 0;
 

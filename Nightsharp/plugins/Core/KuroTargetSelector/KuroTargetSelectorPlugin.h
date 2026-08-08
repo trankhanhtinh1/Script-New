@@ -289,10 +289,19 @@ public:
                 menu_ ? menu_->Stickiness() : -1.0f);
             if (manualPreferredId != 0 &&
                 manualPreferredId == facts.NetworkId) {
-                decision.Breakdown.Add(
-                    "manual-preference", "manual target preference",
-                    100000.0f, 0.0f, 100000.0f);
-                decision.Score = decision.Breakdown.Total;
+                // Manual preference must follow the menu Stickiness slider
+                // instead of a fixed overwhelming constant.  A low setting
+                // lets a clearly better scoring target take over instead of
+                // the selected hero sticking forever.
+                const float manualGrip = menu_
+                    ? std::clamp(menu_->Stickiness() * 2.0f, 0.0f, 400.0f)
+                    : 160.0f;
+                if (manualGrip > 0.0f) {
+                    decision.Breakdown.Add(
+                        "manual-preference", "manual target preference",
+                        manualGrip, 0.0f, 400.0f);
+                    decision.Score = decision.Breakdown.Total;
+                }
             }
             if (request.AllowFallback && request.LockedTargetId != 0 &&
                 request.LockedTargetId == facts.NetworkId &&
@@ -350,14 +359,9 @@ public:
         }
 
         std::stable_sort(result.begin(), result.end(),
-            [this, manualPreferredId](const TargetDecision& lhs,
+            [this](const TargetDecision& lhs,
                                 const TargetDecision& rhs) {
                 if (lhs.Legal != rhs.Legal) return lhs.Legal > rhs.Legal;
-                const bool lhsPreferred = manualPreferredId != 0 &&
-                    lhs.Target.NetworkId() == manualPreferredId;
-                const bool rhsPreferred = manualPreferredId != 0 &&
-                    rhs.Target.NetworkId() == manualPreferredId;
-                if (lhsPreferred != rhsPreferred) return lhsPreferred;
                 if (std::fabs(lhs.Score - rhs.Score) > 0.0001f) {
                     return lhs.Score > rhs.Score;
                 }
@@ -675,6 +679,42 @@ private:
             ? source.Distance(facts.Position)
             : (player.IsValid() ? player.Distance(facts.Position) : 0.0f);
         facts.Distance = facts.DistanceToSource;
+
+        // Composition around the target: friendly heroes whose auto attack
+        // range covers the target (they can follow up the damage) and enemy
+        // heroes that can answer it (they contest the kill window).  Using
+        // each hero's real attack range keeps the measure champion-specific
+        // instead of a fixed world-space radius.
+        int alliesNear = 0;
+        int enemiesNear = 0;
+        for (const auto& ally : ::SDK::GameObjects::AllyHeroes()) {
+            if (!ally.IsValid() || ally.IsDead() ||
+                ally.NetworkId() == player.NetworkId()) {
+                continue;
+            }
+            const float coverRange =
+                ::SDK::Utils::AutoAttack::GetRealAutoAttackRange(
+                    ally, target);
+            if (ally.Position().DistanceSqr2D(facts.Position) <=
+                coverRange * coverRange) {
+                ++alliesNear;
+            }
+        }
+        for (const auto& enemy : ::SDK::GameObjects::EnemyHeroes()) {
+            if (!enemy.IsValid() || enemy.IsDead() ||
+                enemy.NetworkId() == facts.NetworkId) {
+                continue;
+            }
+            const float threatRange =
+                ::SDK::Utils::AutoAttack::GetRealAutoAttackRange(
+                    enemy, target);
+            if (enemy.Position().DistanceSqr2D(facts.Position) <=
+                threatRange * threatRange) {
+                ++enemiesNear;
+            }
+        }
+        facts.AlliesNearTarget = alliesNear;
+        facts.EnemiesNearTarget = enemiesNear;
 
         // Rejected untargetable or distant identities skip expensive damage simulations
         // (GetAutoAttackDamage / CalculateDamage) to avoid FPS drops.

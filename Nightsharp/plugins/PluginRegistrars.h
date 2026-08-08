@@ -26,6 +26,7 @@ void RegisterEzEvade(PluginManager& manager);
 void RegisterKuroEvade(PluginManager& manager);
 void RegisterZDEvade(PluginManager& manager);
 void RegisterKuroAIO(PluginManager& manager);
+void RegisterFsPred(PluginManager& manager);
 
 } // namespace Registration
 } // namespace Plugins

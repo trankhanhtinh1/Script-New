@@ -17,6 +17,10 @@ struct TargetProfileWeights {
     float Dash = 8.0f;
     float EffectiveDamage = 24.0f;
     float Stickiness = 80.0f;
+    // Allies near the target can follow up and share pressure.
+    float FollowUp = 20.0f;
+    // Enemy champions hugging the target make an engage harder to survive.
+    float EnemyDensity = 24.0f;
 };
 
 class KuroTargetSelectorPolicy final {
@@ -59,41 +63,41 @@ public:
         switch (profile) {
         case TargetProfile::AutoAttack:
             weights = { 44.0f, 42.0f, 34.0f, 10.0f, 12.0f, 6.0f,
-                        52.0f, 110.0f };
+                        52.0f, 110.0f, 25.0f, 40.0f };
             break;
         case TargetProfile::Burst:
             weights = { 46.0f, 64.0f, 20.0f, 22.0f, 18.0f, 10.0f,
-                        78.0f, 72.0f };
+                        78.0f, 72.0f, 30.0f, 35.0f };
             break;
         case TargetProfile::DPS:
             weights = { 42.0f, 35.0f, 30.0f, 18.0f, 10.0f, 6.0f,
-                        42.0f, 130.0f };
+                        42.0f, 130.0f, 20.0f, 25.0f };
             break;
         case TargetProfile::Poke:
             weights = { 34.0f, 18.0f, 32.0f, 24.0f, 22.0f, 6.0f,
-                        35.0f, 55.0f };
+                        35.0f, 55.0f, 15.0f, 20.0f };
             break;
         case TargetProfile::Execute:
             weights = { 45.0f, 100.0f, 18.0f, 12.0f, 8.0f, 4.0f,
-                        100.0f, 90.0f };
+                        100.0f, 90.0f, 25.0f, 22.0f };
             break;
         case TargetProfile::Peel:
             weights = { 48.0f, 12.0f, 46.0f, 84.0f, 18.0f, 20.0f,
-                        12.0f, 100.0f };
+                        12.0f, 100.0f, 8.0f, 30.0f };
             break;
         case TargetProfile::Interrupt:
             weights = { 80.0f, 8.0f, 28.0f, 35.0f, 120.0f, 12.0f,
-                        5.0f, 95.0f };
+                        5.0f, 95.0f, 10.0f, 35.0f };
             break;
         case TargetProfile::AntiGapcloser:
             weights = { 72.0f, 12.0f, 38.0f, 82.0f, 18.0f, 130.0f,
-                        5.0f, 92.0f };
+                        5.0f, 92.0f, 5.0f, 45.0f };
             break;
         case TargetProfile::FleeThreat:
             // Threat and proximity dominate.  Health is intentionally low so
             // fleeing never turns into a lowest-health target selection.
             weights = { 52.0f, 2.0f, 74.0f, 96.0f, 8.0f, 32.0f,
-                        2.0f, 60.0f };
+                        2.0f, 60.0f, 10.0f, 75.0f };
             break;
         case TargetProfile::General:
         default:
@@ -344,6 +348,26 @@ public:
                       distanceScale * weights.Distance, -100.0f, 100.0f);
         breakdown.Add("threat", "carry threat",
                       threat * weights.Threat, 0.0f, 400.0f);
+        // Nearby allies can follow up and nearby enemies can contest the
+        // kill; both only matter on offensive profiles.
+        if (favorsDamageOpportunity) {
+            const float allyFollowUp = std::clamp(
+                static_cast<float>(facts.AlliesNearTarget), 0.0f, 3.0f);
+            const float enemyContest = std::clamp(
+                static_cast<float>(facts.EnemiesNearTarget), 0.0f, 4.0f);
+            breakdown.Add(
+                "ally-followup",
+                "allies near target",
+                allyFollowUp * weights.FollowUp,
+                0.0f,
+                160.0f);
+            breakdown.Add(
+                "enemy-contest",
+                "enemies near target",
+                -enemyContest * weights.EnemyDensity,
+                -300.0f,
+                0.0f);
+        }
         float ccScore = 0.0f;
         if (facts.IsCrowdControlled) ccScore += weights.CrowdControl;
         if (facts.IsKnockedUp) ccScore += 45.0f;

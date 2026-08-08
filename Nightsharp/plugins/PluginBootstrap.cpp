@@ -133,6 +133,7 @@ void EnsureRegistered() {
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
     Registration::RegisterOrbwalker7UP(PluginManager::Get());
     Registration::RegisterKuroTargetSelector(PluginManager::Get());
+    Registration::RegisterFsPred(PluginManager::Get());
     PluginManager::Get().Register<TargetSelectorImpulsePlugin>();
     Registration::RegisterPlayerEventFilter(PluginManager::Get());
     PluginManager::Get().Register<BuffInspectorPlugin>();
