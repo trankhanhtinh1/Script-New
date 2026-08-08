@@ -431,7 +431,7 @@ inline bool TryCallObjectFloatVFunc(uintptr_t object, uintptr_t vtableOffset, fl
         const auto fn = reinterpret_cast<ObjectFloatVFunc>(fnAddress);
         const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         out = Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), fn, object)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), fn, object)
             : fn(object);
         return IsSaneFloat(out, 0.0f, 10000.0f);
     }
@@ -457,7 +457,7 @@ inline bool TryCallObjectFloatFunction(uintptr_t object, uintptr_t rva, float& o
 
         const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         out = Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), fn, object)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), fn, object)
             : fn(object);
         return IsSaneFloat(out, 0.0f, 10000.0f);
     }

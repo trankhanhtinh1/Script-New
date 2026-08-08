@@ -418,7 +418,7 @@ namespace CoreCastSpell {
             uintptr_t runtimeSlot = 0;
             __try {
                 using FnResolveOwnerSlot = uintptr_t(__fastcall*)(uintptr_t, uintptr_t);
-                runtimeSlot = spoof_call(
+                runtimeSlot = spoof_call_hybrid(
                     reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
                     reinterpret_cast<FnResolveOwnerSlot>(resolveOwnerSlot),
                     g_lastTrace.castContext,
@@ -505,7 +505,7 @@ namespace CoreCastSpell {
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
-                g_lastTrace.canCastAccepted = spoof_call(
+                g_lastTrace.canCastAccepted = spoof_call_hybrid(
                     reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
                     reinterpret_cast<FnCanCastCheck>(g_lastTrace.canCastCheck),
                     g_lastTrace.castContext,
@@ -513,7 +513,7 @@ namespace CoreCastSpell {
                     std::uint32_t{0});
 
                 if (g_lastTrace.canCastAccepted) {
-                    g_lastTrace.nativeResult = spoof_call(
+                    g_lastTrace.nativeResult = spoof_call_hybrid(
                         reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
                         reinterpret_cast<FnCastSpellSafe>(g_lastTrace.castSpellSafe),
                         g_lastTrace.castContext,
@@ -600,7 +600,7 @@ namespace CoreCastSpell {
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
-                spoof_call(
+                spoof_call_hybrid(
                     reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
                     reinterpret_cast<FnCastSpellVector>(castFn),
                     g_lastTrace.spellbook,   // book (localPlayer + SpellBookOffset)
@@ -689,7 +689,7 @@ namespace CoreCastSpell {
             __try {
                 g_lastTrace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
-                spoof_call(
+                spoof_call_hybrid(
                     reinterpret_cast<void*>(g_lastTrace.spoofTrampoline),
                     reinterpret_cast<FnHudSpellHandler>(g_lastTrace.castSpellSafe),
                     g_lastTrace.castContext,

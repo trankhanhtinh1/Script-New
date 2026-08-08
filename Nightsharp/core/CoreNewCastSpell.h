@@ -234,7 +234,7 @@ namespace CoreNewCastSpell {
 
             std::int32_t resolved = -1;
             __try {
-                resolved = spoof_call(
+                resolved = spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<FnGetOwnerSlotIndex>(fn),
                     spellInput);
@@ -268,7 +268,7 @@ namespace CoreNewCastSpell {
             };
 
             __try {
-                (void)spoof_call(
+                (void)spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<FnUpdateChargeAim>(aimFn),
                     trace.spellbook,
@@ -308,7 +308,7 @@ namespace CoreNewCastSpell {
                 trace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
-                nativeResult = spoof_call(
+                nativeResult = spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<FnUpdateChargeableSpell>(updateChargeFn),
                     trace.spellbook,
@@ -382,13 +382,13 @@ namespace CoreNewCastSpell {
                 trace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
-                nativeResult = spoof_call(
+                nativeResult = spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<CoreCastSpell::FnCastSpellSafe>(castFn),
                     trace.castContext,
                     trace.spellInput);
 
-                spoof_call(
+                spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<FnInitChargeState>(initChargeFn),
                     trace.castContext,
@@ -625,7 +625,7 @@ namespace CoreNewCastSpell {
                 trace.bypassPrepared = CoreBypass::PrepareCastSpell();
                 bypassTouched = true;
 
-                nativeResult = spoof_call(
+                nativeResult = spoof_call_hybrid(
                     reinterpret_cast<void*>(trace.spoofTrampoline),
                     reinterpret_cast<CoreCastSpell::FnCastSpellSafe>(castFn),
                     trace.castContext,
