@@ -310,7 +310,7 @@ inline int GetPing() {
     const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
         const int ping = Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetPingFn>(ctx.getPingFn), ctx.netInstance)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetPingFn>(ctx.getPingFn), ctx.netInstance)
             : reinterpret_cast<GetPingFn>(ctx.getPingFn)(ctx.netInstance);
         if (ping > 0 && ping < 5000) {
             ctx.cachedPing = ping;
@@ -559,7 +559,7 @@ inline bool Print(const char* text, bool /*triggerEvent*/ = true, std::uint32_t 
             const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
             __try {
                 if (Globals::IsValidPtr(trampoline)) {
-                    spoof_call(reinterpret_cast<void*>(trampoline), fn, container, text, static_cast<int>(flags));
+                    spoof_call_hybrid(reinterpret_cast<void*>(trampoline), fn, container, text, static_cast<int>(flags));
                 } else {
                     fn(container, text, static_cast<int>(flags));
                 }
@@ -605,7 +605,7 @@ inline bool Say(const char* text, bool sendToAll = false, bool /*triggerEvent*/ 
 
         __try {
             const char result = Globals::IsValidPtr(trampoline)
-                ? spoof_call(reinterpret_cast<void*>(trampoline), fn, client, text, channel)
+                ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), fn, client, text, channel)
                 : fn(client, text, channel);
             return result != 0;
         }

@@ -205,7 +205,7 @@ inline int GetPing() {
         const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         __try {
             const int ping = Globals::IsValidPtr(trampoline)
-                ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetPing>(ctx.getPingFn), ctx.netInstance)
+                ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetPing>(ctx.getPingFn), ctx.netInstance)
                 : reinterpret_cast<FnGetPing>(ctx.getPingFn)(ctx.netInstance);
             if (ping > 0 && ping < 5000) {
                 ctx.cachedPing = ping;
@@ -227,7 +227,7 @@ inline float ReadAttackDelayFor(uintptr_t object) {
     const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
         const float value = Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn), object)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn), object)
             : reinterpret_cast<FnAttackDelay>(ctx.getAttackDelayFn)(object);
         return IsSaneSeconds(value) ? value : 0.0f;
     } __except (1) {
@@ -254,7 +254,7 @@ inline uintptr_t GetAttackWindupProfileRoot(uintptr_t object) {
     const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
         return Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetAttackProfile>(profileFn), object)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnGetAttackProfile>(profileFn), object)
             : reinterpret_cast<FnGetAttackProfile>(profileFn)(object);
     } __except (1) {
         return 0;
@@ -289,7 +289,7 @@ inline float ReadAttackWindupFor(uintptr_t object, int attackId) {
     const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
     __try {
         const float value = Globals::IsValidPtr(trampoline)
-            ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn), object, attackId)
+            ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn), object, attackId)
             : reinterpret_cast<FnAttackWindup>(ctx.getAttackWindupFn)(object, attackId);
         return IsSaneSeconds(value) ? value : 0.0f;
     } __except (1) {
@@ -509,7 +509,7 @@ inline OrderIssueResult IssueOrderDetailed(
         CoreBypass::PrepareIssueOrder(static_cast<std::uint8_t>(order));
         bypassTouched = true;
 
-        spoof_call(
+        spoof_call_hybrid(
             reinterpret_cast<void*>(ctx.spoofTrampoline),
             reinterpret_cast<FnIssueOrder>(ctx.issueOrderFn),
             ctx.localPlayer,

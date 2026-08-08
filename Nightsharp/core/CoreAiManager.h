@@ -165,7 +165,7 @@ namespace detail {
         const auto trampoline = CoreBypass::ResolveSpoofTrampoline();
         __try {
             const uintptr_t manager = Globals::IsValidPtr(trampoline)
-                ? spoof_call(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetAiManagerFn>(function), object)
+                ? spoof_call_hybrid(reinterpret_cast<void*>(trampoline), reinterpret_cast<GetAiManagerFn>(function), object)
                 : reinterpret_cast<GetAiManagerFn>(function)(object);
             return Globals::IsValidPtr(manager) ? manager : 0;
         }

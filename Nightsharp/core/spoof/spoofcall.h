@@ -4,6 +4,7 @@
 namespace detail
 {
 	extern "C" void* _spoofer_stub();
+	extern "C" void* _hybrid_spoofer_stub();
 
 	template <typename Ret, typename... Args>
 	inline auto shellcode_stub_helper(
@@ -107,4 +108,33 @@ static inline auto spoof_call(
 	shell_params p{ trampoline, reinterpret_cast<void*>(fn) };
 	using mapper = detail::argument_remapper<sizeof...(Args), void>;
 	return mapper::template do_call<Ret, Args...>((void*)&detail::_spoofer_stub, &p, args...);
+}
+
+// ---------------------------------------------------------------------------
+// spoof_call_hybrid — uses _hybrid_spoofer_stub
+//
+// Hybrid approach: allocates a clean aligned stack for the target function,
+// spoofs the return address to a system-DLL gadget (FF 23 = jmp [rbx]),
+// and zeroes the new stack to prevent NightSharp address leaks.
+//
+// When target_fn is running:
+//   - Return address = gadget (system DLL) — spoofed
+//   - Stack frames on new stack — no NightSharp addresses
+//   - Shadow space zeroed — no stale NightSharp pointers
+//   - rbx = &shell_param on new stack — not NightSharp .text
+//
+// The stub calling convention is a normal C++ call:
+//   rcx = target_fn, rdx = trampoline (gadget), r8 = arg1, r9 = arg2, ...
+// So we can cast it directly without the argument_remapper complexity.
+// ---------------------------------------------------------------------------
+template <typename Ret, typename... Args>
+static inline auto spoof_call_hybrid(
+	void* trampoline,
+	Ret(*fn)(Args...),
+	Args... args
+) -> Ret
+{
+	using stub_fn = Ret(*)(void*, void*, Args...);
+	auto stub = reinterpret_cast<stub_fn>(&detail::_hybrid_spoofer_stub);
+	return stub(reinterpret_cast<void*>(fn), trampoline, args...);
 }
