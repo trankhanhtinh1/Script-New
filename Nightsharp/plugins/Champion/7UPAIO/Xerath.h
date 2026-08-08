@@ -35,14 +35,11 @@ inline Menu* Ulti = nullptr;
 inline Menu* Semi = nullptr;
 inline Menu* Draw = nullptr;
 
-// GameData: XerathArcanopulseChargeUp mSpell.castRange = 750.
+// Spell setup mirrors 7UPAIO/Champion/Xerath.cs.
 inline Spell Q{ SpellSlot::Q, 750.0f };
-// GameData: XerathArcaneBarrage2 mSpell.castRange = 1000 (C# had 950).
-inline Spell W{ SpellSlot::W, 1000.0f };
-// GameData: XerathMageSpear mSpell.castRangeDisplayOverride = 1050.
+inline Spell W{ SpellSlot::W, 950.0f };
 inline Spell E{ SpellSlot::E, 1050.0f };
-// GameData: XerathLocusOfPower2 mSpell.castRange = 5000 (C# had 4990).
-inline Spell R{ SpellSlot::R, 5000.0f };
+inline Spell R{ SpellSlot::R, 4990.0f };
 
 inline bool Loaded = false;
 // Tracked because the C# tracked them. The wall itself no longer needs a
@@ -53,6 +50,9 @@ inline bool Loaded = false;
 // future rule needs the cast timestamp.
 inline int WallCastT = 0;
 inline Vec2 YasuoWallCastedPos = {};
+
+static constexpr float kQCloseReleaseRange = 300.0f;
+static constexpr float kRCenterPredictionRadius = 1.0f;
 
 static AIHeroClient Player() {
     return ObjectManager::Player();
@@ -107,6 +107,102 @@ static bool ValidHeroTarget(const AIHeroClient& hero, float range = FLT_MAX) {
 static AIHeroClient GetTarget(float range, DamageType damageType) {
     auto* selector = SDK::TargetSelector::Instance();
     return selector ? selector->GetTarget(range, damageType) : AIHeroClient();
+}
+
+static Vector3 UnitServerOrPosition(const AIBaseClient& unit) {
+    if (!unit.IsValid()) {
+        return {};
+    }
+
+    Vector3 position = unit.ServerPosition();
+    if (!position.IsValid() || position.IsZero()) {
+        position = unit.Position();
+    }
+    return position;
+}
+
+static Vector3 WithNavHeight(Vector3 position) {
+    if (position.IsValid() && !position.IsZero()) {
+        position.y = NavMesh::GetHeightForPosition(position);
+    }
+    return position;
+}
+
+static bool CloseQReleasePosition(const AIBaseClient& target,
+                                  float currentRange,
+                                  Vector3& castPosition) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return false;
+    }
+
+    const Vector3 playerPosition = player.Position();
+    const Vector3 targetPosition = UnitServerOrPosition(target);
+    if (!playerPosition.IsValid() || playerPosition.IsZero() ||
+        !targetPosition.IsValid() || targetPosition.IsZero()) {
+        return false;
+    }
+
+    const float distance = playerPosition.Distance2D(targetPosition);
+    if (distance > kQCloseReleaseRange || distance < 1.0f) {
+        return false;
+    }
+
+    const float endpointDistance = std::min(
+        currentRange,
+        std::max(kQCloseReleaseRange, distance + target.BoundingRadius() + Q.Width));
+    castPosition = WithNavHeight(playerPosition.Extend(targetPosition, endpointDistance));
+    return castPosition.IsValid() && !castPosition.IsZero();
+}
+
+static bool TryShootChargedQ(const AIBaseClient& target, HitChance hitChance) {
+    if (!Q.IsReady() || !Q.IsCharging()) {
+        return false;
+    }
+
+    const float currentRange = Q.CurrentRange();
+    if (!ValidTarget(target, currentRange)) {
+        return false;
+    }
+
+    Vector3 closeCastPosition;
+    if (CloseQReleasePosition(target, currentRange, closeCastPosition)) {
+        const auto player = Player();
+        if (!player.IsValid()) {
+            return false;
+        }
+
+        const auto collisions = Q.GetCollision(
+            player.Position().To2D(),
+            std::vector<Vector2>{ closeCastPosition.To2D() });
+        return collisions.empty() && Q.ShootChargedSpell(closeCastPosition);
+    }
+
+    const auto pred = Q.GetPrediction(target);
+    if (pred.CollisionObjects.empty() &&
+        HitchanceAtLeast(pred.Hitchance, hitChance)) {
+        return Q.ShootChargedSpell(pred.GetCastPosition());
+    }
+    return false;
+}
+
+static PredictionOutput GetRShotPrediction(const AIHeroClient& target) {
+    PredictionInput input;
+    input.Unit = target;
+    input.Delay = R.Delay;
+    input.Radius = kRCenterPredictionRadius;
+    input.Speed = FLT_MAX;
+    input.From = R.From;
+    input.Range = R.Range;
+    input.Collision = false;
+    input.SetType(SpellType::Circle);
+    input.Spell = &R;
+    input.RangeCheckFrom = R.RangeCheckFrom;
+    input.AoE = false;
+    input.AddHitBox = false;
+    input.MaxCollisionCount = R.MaxCollisionCount;
+    input.CollisionObjects = R.CollisionObjects;
+    return SDK::Prediction::GetPrediction(input);
 }
 
 static void BuildMenu();
@@ -203,34 +299,18 @@ static void OnGameLoad() {
         return;
     }
 
-    // GameData 16.14: XerathArcanopulse2 mSpell.mCastTime = 0.5 (C# 0.55),
-    // XerathArcanopulseChargeUp mSpell.mLineWidth = 100 (C# 65).
-    //
-    // Minions do not stop Arcanopulse but a Wind Wall does, and the C# expressed
-    // only the first half by passing collision=false — which in this SDK switches
-    // the whole collision pass off, walls included, so Q fired straight through a
-    // wall. Asking for collision with a wall-only object set says both things:
-    // ProcessProjectileWalls runs while the hero and minion passes are skipped.
     Q = Spell(SpellSlot::Q, 750.0f);
-    Q.SetSkillshot(0.5f, 100.0f, FLT_MAX, true, SpellType::Line);
-    Q.SetCollisionObjects(SDK::CollisionableObjects::YasuoWall);
-    // GameData 16.14: castRange 750 -> mCastRangeGrowthMax 1700 over
-    // mCastRangeGrowthDuration 1.5s. C# used a 1550 maximum.
-    Q.SetCharged("XerathArcanopulseChargeUp", "XerathArcanopulseChargeUp", 750, 1700, 1.5f);
+    Q.SetSkillshot(0.55f, 65.0f, FLT_MAX, false, SpellType::Line);
+    Q.SetCharged("XerathArcanopulseChargeUp", "XerathArcanopulseChargeUp", 750, 1550, 1.5f);
 
-    // GameData 16.14: mCastTime 0.25 plus DataValues DamageDelay 0.5. The C#
-    // 0.65 sits between the two and is a tuned prediction delay, so it is kept.
-    W = Spell(SpellSlot::W, 1000.0f);
+    W = Spell(SpellSlot::W, 950.0f);
     W.SetSkillshot(0.65f, 110.0f, FLT_MAX, false, SpellType::Circle);
 
-    // GameData 16.14: XerathMageSpear mSpell.mLineWidth = 70 (C# 55),
-    // mCastTime 0.25. Missile speed kept from the source.
     E = Spell(SpellSlot::E, 1050.0f);
-    E.SetSkillshot(0.25f, 70.0f, 1400.0f, true, SpellType::Line);
+    E.SetSkillshot(0.25f, 55.0f, 1400.0f, true, SpellType::Line);
 
-    // GameData 16.14: XerathLocusOfPower2 DataValues AoESize = 200 (C# 110).
-    R = Spell(SpellSlot::R, 5000.0f);
-    R.SetSkillshot(0.70f, 200.0f, FLT_MAX, false, SpellType::Circle);
+    R = Spell(SpellSlot::R, 4990.0f);
+    R.SetSkillshot(0.70f, 110.0f, FLT_MAX, false, SpellType::Circle);
 
     BuildMenu();
 
@@ -341,6 +421,11 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    if (player.HasBuff("XerathLocusOfPower2")) {
+        AutoR();
+        return;
+    }
+
     switch (Orbwalker::ActiveMode()) {
     case OrbwalkingMode::Combo:
         Combo();
@@ -405,10 +490,7 @@ static void Combo() {
             const float currentRange = Q.CurrentRange();
             const auto target = GetTarget(currentRange, DamageType::Magical);
             if (ValidHeroTarget(target, currentRange)) {
-                const auto pred = Q.GetPrediction(target);
-                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
+                TryShootChargedQ(target, QHitchance());
             }
         }
     }
@@ -440,7 +522,7 @@ static void AutoR() {
 
     if (ValidHeroTarget(target, R.Range)) {
         if (Key(Ulti, "RKey")) {
-            const auto pred = R.GetPrediction(target);
+            const auto pred = GetRShotPrediction(target);
             if (HitchanceAtLeast(pred.Hitchance, RHitchance())) {
                 R.Cast(pred.GetCastPosition());
             }
@@ -564,10 +646,7 @@ static void KillSteal() {
                             const float currentRange = Q.CurrentRange();
                             const auto target2 = GetTarget(currentRange, DamageType::Magical);
                             if (ValidHeroTarget(target2, currentRange)) {
-                                const auto pred = Q.GetPrediction(target2);
-                                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                                    Q.ShootChargedSpell(pred.GetCastPosition());
-                                }
+                                TryShootChargedQ(target2, QHitchance());
                             }
                         }
                     }
@@ -639,10 +718,7 @@ static void Harass() {
             const float currentRange = Q.CurrentRange();
             const auto target = GetTarget(currentRange, DamageType::Magical);
             if (ValidHeroTarget(target, currentRange)) {
-                const auto pred = Q.GetPrediction(target);
-                if (HitchanceAtLeast(pred.Hitchance, QHitchance())) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
+                TryShootChargedQ(target, QHitchance());
             }
         }
     }
@@ -800,10 +876,7 @@ static void JungleClear() {
             }
 
             if (ValidTarget(mob, Q.CurrentRange())) {
-                const auto pred = Q.GetPrediction(mob);
-                if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                    Q.ShootChargedSpell(pred.GetCastPosition());
-                }
+                TryShootChargedQ(mob, HitChance::High);
             }
         }
     }

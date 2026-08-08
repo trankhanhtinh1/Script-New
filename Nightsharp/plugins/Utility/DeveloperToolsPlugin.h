@@ -4,9 +4,9 @@
 #include "../../SDK/SDK.h"
 
 namespace SDK::GameObjects::detail {
-    inline std::vector<AITurretClient> TurretsList;
-    inline std::vector<AITurretClient> AllyTurretsList;
-    inline std::vector<AITurretClient> EnemyTurretsList;
+    // inline std::vector<AITurretClient> TurretsList;
+    // inline std::vector<AITurretClient> AllyTurretsList;
+    // inline std::vector<AITurretClient> EnemyTurretsList;
     inline std::vector<BarracksDampenerClient> InhibitorsList;
     inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
     inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
@@ -1080,11 +1080,11 @@ public:
         case ::Core::Objects::ObjectType::GameObject: return "GameObject";
         case ::Core::Objects::ObjectType::AIHeroClient: return "AIHeroClient";
         case ::Core::Objects::ObjectType::AIMinionClient: return "AIMinionClient";
-        case ::Core::Objects::ObjectType::AITurretClient: return "AITurretClient";
+        // case ::Core::Objects::ObjectType::AITurretClient: return "AITurretClient";
         case ::Core::Objects::ObjectType::MissileClient: return "MissileClient";
         case ::Core::Objects::ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
         case ::Core::Objects::ObjectType::HQClient: return "HQClient";
-        case ::Core::Objects::ObjectType::ShopClient: return "ShopClient";
+        // case ::Core::Objects::ObjectType::ShopClient: return "ShopClient";
         case ::Core::Objects::ObjectType::Obj_SpawnPoint: return "Obj_SpawnPoint";
         case ::Core::Objects::ObjectType::EffectEmitter: return "EffectEmitter";
         default: return "Unknown";

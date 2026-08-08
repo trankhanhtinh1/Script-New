@@ -161,7 +161,6 @@ void EnsureRegistered() {
     Registration::RegisterKuroAIO(PluginManager::Get());
     Registration::RegisterSharpShooterAIO(PluginManager::Get());
     Registration::RegisterZiblldev9898(PluginManager::Get());
-    Registration::RegisterEzEvade(PluginManager::Get());
     Registration::RegisterKuroEvade(PluginManager::Get());
     Registration::RegisterZDEvade(PluginManager::Get());
     Registration::RegisterKuroActivator(PluginManager::Get());

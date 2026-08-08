@@ -189,7 +189,7 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
         // REMOVED: Filter out Turret/Inhibitor/Nexus objects from enumeration
         // so plugins never receive structure objects (user request).
         const ObjectType otype = InferLifecycleType(entry);
-        if (otype == ObjectType::AITurretClient ||
+        if (//otype == ObjectType::AITurretClient ||
             otype == ObjectType::BarracksDampenerClient ||
             otype == ObjectType::HQClient) {
             continue;
@@ -545,7 +545,7 @@ inline ObjectType InferType(uintptr_t object) {
     } else if (ManagerContains(ManagerKind::Minions, object)) {
         result = ObjectType::AIMinionClient;
     } else if (ManagerContains(ManagerKind::Turrets, object)) {
-        result = ObjectType::AITurretClient;
+        //result = ObjectType::AITurretClient;
     } else if (ManagerContains(ManagerKind::Missiles, object)) {
         result = ObjectType::MissileClient;
     }
@@ -592,7 +592,7 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
         resolved = ObjectType::HQClient;
     }
     if (Core::Objects::ContainsInsensitive(name, "shop")) {
-        resolved = ObjectType::ShopClient;
+        //resolved = ObjectType::ShopClient;
     } else if (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
                Core::Objects::ContainsInsensitive(name, "spawn_point")) {
         resolved = ObjectType::Obj_SpawnPoint;

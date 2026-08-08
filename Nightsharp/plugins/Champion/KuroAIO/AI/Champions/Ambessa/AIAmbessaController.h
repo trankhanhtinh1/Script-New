@@ -1331,22 +1331,22 @@ inline void ObserveIncomingCast(
     if (!player.IsValid()) return;
     const int now = Now();
 
-    if (args.Sender.Type == ::Core::Objects::ObjectType::AITurretClient &&
-        args.IsAutoAttack &&
-        (args.TargetNetworkId ==
-             static_cast<std::uint32_t>(player.NetworkId()) ||
-         args.Target.NetworkId ==
-             static_cast<std::uint32_t>(player.NetworkId()))) {
-        IncomingFromTurret = true;
-        IncomingDamage = std::max(
-            IncomingDamage, player.MaxHealth() * 0.16f);
-        IncomingThreatUntil = now + 1400;
-        IncomingImpactTick = now + 420;
-        if (Bool(WMenu, "ReactiveShield", true)) {
-            (void)TryEmergencyW({}, Mode::Automatic);
-        }
-        return;
-    }
+    // if (args.Sender.Type == ::Core::Objects::ObjectType::AITurretClient &&
+    //     args.IsAutoAttack &&
+    //     (args.TargetNetworkId ==
+    //          static_cast<std::uint32_t>(player.NetworkId()) ||
+    //      args.Target.NetworkId ==
+    //          static_cast<std::uint32_t>(player.NetworkId()))) {
+    //     IncomingFromTurret = true;
+    //     IncomingDamage = std::max(
+    //         IncomingDamage, player.MaxHealth() * 0.16f);
+    //     IncomingThreatUntil = now + 1400;
+    //     IncomingImpactTick = now + 420;
+    //     if (Bool(WMenu, "ReactiveShield", true)) {
+    //         (void)TryEmergencyW({}, Mode::Automatic);
+    //     }
+    //     return;
+    // }
 
     const auto analysis = AnalyzeEnemyCast(
         args, 220.0f, 110.0f, 210, 250, 180, 1500, 520);

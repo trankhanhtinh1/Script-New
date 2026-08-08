@@ -22,7 +22,6 @@ void RegisterEzrealMissileLifecycle(PluginManager& manager);
 void RegisterAIO7UP(PluginManager& manager);
 void RegisterSharpShooterAIO(PluginManager& manager);
 void RegisterZiblldev9898(PluginManager& manager);
-void RegisterEzEvade(PluginManager& manager);
 void RegisterKuroEvade(PluginManager& manager);
 void RegisterZDEvade(PluginManager& manager);
 void RegisterKuroAIO(PluginManager& manager);

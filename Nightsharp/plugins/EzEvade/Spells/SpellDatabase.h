@@ -6,18 +6,17 @@
 // `Spells`, khởi tạo 1 lần trong InitSpells(). MỖI entry là 1 block `{ SpellData
 // spell; ...; Spells.push_back(spell); }`.
 //
-// DỮ LIỆU spell lấy từ CommunityDragon `latest` + LoL Wiki (wiki.leagueoflegends.com):
-//   * range        <- v1/champions/<id>.json spells[slot].range[0] (gameplay range)
-//   * spellDelay   <- <alias>.bin.json  mSpell.mCastTime * 1000 (ms); null → 250
-//   * projectileSpeed <- <alias>.bin.json  mMissileSpec...movementComponent.mSpeed
+// DỮ LIỆU spell lấy từ bin JSON (E:\DamageData\Database) + LoL Wiki (wiki.leagueoflegends.com):
+//   * range        <- wiki hitbox dimensions (bin CastRange thường = 25000 cho direction)
+//   * spellDelay   <- bin mSpell.mCastTime * 1000 (ms); null → 250
+//   * projectileSpeed <- bin mMissileSpec.MovementComponent.mSpeed
 //   * missileName  <- mScriptName của missile
-//   * radius (QUAN TRỌNG — dùng cho EVADE, không phải prediction):
-//       - Line/missile: = WIDTH đầy đủ theo wiki = 2 × bin.mMissileWidth (đã verify
-//         8 champ: Blitz 140=2×70, Ahri Q 200=2×100, Aatrox W 160=2×80, ...).
-//         mMissileWidth (=/2) hợp prediction nhưng KHÔNG hợp evade → dùng full width.
-//       - Positional/instant (không missile): lấy WIDTH wiki trực tiếp vì targeter
-//         indicator trong bin không khớp (Aatrox Q1=180 chứ không phải 400, Briar E=380).
-//       - Circle: = RADIUS wiki trực tiếp (Cho'Gath Q=250, Bard R=350, ...).
+//   * radius (QUAN TRỌNG — code dùng radius làm HALF-WIDTH cho Line, RADIUS cho Circle):
+//       - Line/missile: = mLineWidth (half-width) từ bin. Code RectanglePoly và
+//         InSkillShot đều dùng radius làm half-width. Wiki width = 2 × mLineWidth.
+//       - Positional/instant (không missile): = wiki width ÷ 2 (half-width).
+//       - Circle: = wiki radius trực tiếp (distance từ center đến edge).
+//       - Cone: angle = full cone angle (degrees), range = max distance từ caster.
 // ============================================================================
 #include "SpellData.h"
 
@@ -67,7 +66,7 @@ public:
             spell.missileName = "AatroxW";
             spell.name = "Infernal Chains";
             spell.projectileSpeed = 1800.0f;   // mMissileSpec.movementComponent.mSpeed
-            spell.radius = 160.0f;             // wiki width (=2×80 mMissileWidth)
+            spell.radius = 80.0f;              // mLineWidth (half-width; code dùng radius làm half-width)
             spell.range = 825.0f;              // mSpell.castRange
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::W;
@@ -85,8 +84,8 @@ public:
             spell.charName = "Aatrox";
             spell.dangerlevel = 3;
             spell.name = "The Darkin Blade (Cast 1)";
-            spell.radius = 180.0f;             // wiki width Cast 1
-            spell.range = 850.0f;              // Q1 overrideBaseRange
+            spell.radius = 90.0f;              // wiki width 180 ÷ 2 (half-width)
+            spell.range = 625.0f;              // wiki: 625×180 rectangle
             spell.spellDelay = 600;            // AatroxQWrapperCast mCastTime 0.6
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AatroxQ";
@@ -100,7 +99,7 @@ public:
             spell.dangerlevel = 3;
             spell.name = "The Darkin Blade (Cast 2)";
             spell.angle = 35.0f;               // Q2 TargeterDefinitionCone coneAngleDegrees
-            spell.range = 550.0f;              // Q2 coneRange
+            spell.range = 475.0f;              // wiki: 475 front edge from Aatrox
             spell.spellDelay = 600;            // AatroxQWrapperCast mCastTime 0.6
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AatroxQ2";
@@ -114,7 +113,7 @@ public:
             spell.dangerlevel = 3;
             spell.name = "The Darkin Blade (Cast 3)";
             spell.radius = 300.0f;             // wiki radius Cast 3 (sweetspot knockup 180)
-            spell.range = 300.0f;              // Q3 TargeterDefinitionRange overrideBaseRange
+            spell.range = 200.0f;              // wiki: center 200 units in front of Aatrox
             spell.spellDelay = 600;            // AatroxQWrapperCast mCastTime 0.6
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AatroxQ3";
@@ -131,9 +130,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "AhriQMissile";
             spell.name = "Orb of Deception";
-            spell.projectileSpeed = 2500.0f;   // AcceleratingMovement: mInitialSpeed 2500 (giảm dần tới mMinSpeed 400)
-            spell.radius = 200.0f;             // wiki width (=2×100 mLineWidth)
-            spell.range = 970.0f;              // champions/103.json Q range
+            spell.projectileSpeed = 2500.0f;   // AcceleratingMovement mInitialSpeed 2500 (decel to mMinSpeed 400)
+            spell.radius = 100.0f;             // mMissileWidth (half-width)
+            spell.range = 900.0f;              // wiki range
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AhriQ";
@@ -147,9 +146,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "AhriEMissile";
             spell.name = "Charm";
-            spell.projectileSpeed = 1550.0f;   // FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 975.0f;              // champions/103.json E range
+            spell.projectileSpeed = 1550.0f;   // FixedSpeedMovement mSpeed
+            spell.radius = 60.0f;              // mMissileWidth (half-width)
+            spell.range = 1000.0f;             // wiki range
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "AhriE";
@@ -164,9 +163,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "AhriQReturnMissile";
             spell.name = "Orb of Deception (Return)";
-            spell.projectileSpeed = 2600.0f;   // AhriQReturnMissile AcceleratingMovement mMaxSpeed (tăng tốc từ 60 để bắt kịp Ahri)
-            spell.radius = 200.0f;             // wiki width (=2×100, cùng orb với Q đi)
-            spell.range = 970.0f;              // champions/103.json Q range (orb quay về phía Ahri)
+            spell.projectileSpeed = 2600.0f;   // AcceleratingMovement mMaxSpeed (tăng tốc từ mInitialSpeed 60)
+            spell.radius = 100.0f;             // mMissileWidth (half-width, cùng orb với Q)
+            spell.range = 900.0f;              // wiki range (orb quay về phía Ahri)
             spell.spellDelay = 250;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AhriQReturn";   // id orb quay về; detection key thực = missileName AhriQReturnMissile (C# gốc: "AhriOrbofDeception2")
@@ -184,9 +183,10 @@ public:
             spell.dangerlevel = 1;
             spell.name = "Five Point Strike";
             spell.projectileSpeed = 3200.0f;   // AkaliQMis0..5 FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth từng kunai)
-            spell.range = 550.0f;              // champions/84.json Q range
-            spell.spellDelay = 250;            // mCastTime 0.25
+            spell.radius = 60.0f;              // mMissileWidth từng kunai (half-width)
+            spell.range = 550.0f;              // bin CastRange
+            spell.angle = 40.0f;               // wiki: 20° half-angle × 2 = 40° full
+            spell.spellDelay = 250;            // mCastTime 0.25 (level 1; giảm theo level)
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AkaliQ";
             spell.spellType = SpellType::Cone; // quạt 5 phi tiêu
@@ -200,8 +200,8 @@ public:
             spell.missileName = "AkaliEMis";
             spell.name = "Shuriken Flip";
             spell.projectileSpeed = 1900.0f;   // AkaliEMis FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 825.0f;              // champions/84.json E range
+            spell.radius = 60.0f;              // mMissileWidth (half-width)
+            spell.range = 825.0f;              // wiki target range
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "AkaliE";
@@ -219,9 +219,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "AkshanQMissile";
             spell.name = "Avengerang";
-            spell.projectileSpeed = 1500.0f;   // AkshanQMissile FixedSpeedMovement.mSpeed (đi ra; AkshanQMissileReturn 2400)
-            spell.radius = 120.0f;             // wiki width (=2×60 mLineWidth)
-            spell.range = 850.0f;              // champions/166.json Q range
+            spell.projectileSpeed = 1500.0f;   // AkshanQMissile FixedSpeedMovement.mSpeed (đi ra; return 2400)
+            spell.radius = 60.0f;              // mLineWidth (half-width)
+            spell.range = 850.0f;              // wiki range (850 + up to 500 per enemy hit)
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AkshanQ";
@@ -242,8 +242,8 @@ public:
             spell.dangerlevel = 3;
             spell.name = "Public Execution";
             spell.projectileSpeed = std::numeric_limits<float>::max(); // line-select tức thời (chọn champ cuối trên đường thẳng), không có missile travel
-            spell.radius = 130.0f;             // wiki width (=2×65)
-            spell.range = 1250.0f;             // champions/799.json R range
+            spell.radius = 65.0f;              // wiki width 130 ÷ 2 (half-width; bin LineWidth=15 là targeting line)
+            spell.range = 1250.0f;             // wiki range
             spell.spellDelay = 700;            // mCastTime 0.7
             spell.spellKey = SpellSlot::R;
             spell.spellName = "AmbessaR";
@@ -261,8 +261,8 @@ public:
             spell.missileName = "SadMummyBandageToss";
             spell.name = "Bandage Toss";
             spell.projectileSpeed = 2000.0f;   // SadMummyBandageToss FixedSpeedMovement.mSpeed
-            spell.radius = 160.0f;             // wiki width (=2×80 mLineWidth)
-            spell.range = 1100.0f;             // champions/32.json Q range
+            spell.radius = 80.0f;              // mLineWidth (half-width)
+            spell.range = 1100.0f;             // wiki range
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "BandageToss";
@@ -281,8 +281,8 @@ public:
             spell.missileName = "FlashFrost";
             spell.name = "Flash Frost";
             spell.projectileSpeed = 950.0f;    // FlashFrostSpell FixedSpeedMovement.mSpeed
-            spell.radius = 220.0f;             // wiki width (=2×110 mLineWidth)
-            spell.range = 1075.0f;             // champions/34.json Q range
+            spell.radius = 110.0f;             // mLineWidth (half-width)
+            spell.range = 1100.0f;             // wiki range
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "FlashFrost";
@@ -299,8 +299,8 @@ public:
             spell.dangerlevel = 1;
             spell.name = "Incinerate";
             spell.radius = 0.0f;               // cone: dùng angle
-            spell.angle = 27.5f;               // mTargeterDefinitions coneAngleDegrees
-            spell.range = 690.0f;              // coneRange (bin); champions/1.json ghi 600
+            spell.angle = 49.52f;              // wiki: 49.52° full cone angle
+            spell.range = 600.0f;              // wiki effect radius = bin CastRange
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::W;
             spell.spellName = "AnnieW";
@@ -318,9 +318,9 @@ public:
             spell.missileName = "ApheliosRMis";
             spell.name = "Moonlight Vigil";
             spell.projectileSpeed = 2050.0f;   // ApheliosRMis FixedSpeedMovement.mSpeed
-            spell.radius = 220.0f;             // wiki width (=2×110 mLineWidth)
-            spell.range = 1300.0f;             // champions/523.json R range
-            spell.spellDelay = 500;            // mCastTime 0.5
+            spell.radius = 110.0f;             // ApheliosR mLineWidth (half-width; RMis=125)
+            spell.range = 1300.0f;             // wiki target range
+            spell.spellDelay = 600;            // wiki cast time 0.6
             spell.spellKey = SpellSlot::R;
             spell.spellName = "ApheliosR";
             spell.spellType = SpellType::Line;
@@ -337,9 +337,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "EnchantedCrystalArrow";
             spell.name = "Enchanted Crystal Arrow";
-            spell.projectileSpeed = 1500.0f;   // AcceleratingMovement: mInitialSpeed 1500 (tăng tới mMaxSpeed 2100)
-            spell.radius = 260.0f;             // wiki width (=2×130 mMissileWidth)
-            spell.range = 25000.0f;            // toàn map (castRange placeholder 25000)
+            spell.projectileSpeed = 1500.0f;   // AcceleratingMovement mInitialSpeed 1500 (tăng tới mMaxSpeed 2100)
+            spell.radius = 130.0f;             // mLineWidth (half-width)
+            spell.range = 25000.0f;            // wiki: Global (castRange placeholder 25000)
             spell.fixedRange = true;
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::R;
@@ -364,8 +364,8 @@ public:
             spell.missileName = "AuroraQ";
             spell.name = "Twofold Hex";
             spell.projectileSpeed = 1600.0f;   // AuroraQ FixedSpeedMovement.mSpeed (return 2000)
-            spell.radius = 180.0f;             // wiki width (=2×90 mMissileWidth)
-            spell.range = 900.0f;              // champions/893.json Q range
+            spell.radius = 90.0f;              // mLineWidth (half-width)
+            spell.range = 900.0f;              // wiki range
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "AuroraQ";
@@ -378,9 +378,9 @@ public:
             spell.charName = "Aurora";
             spell.dangerlevel = 2;
             spell.name = "The Weirding";
-            spell.projectileSpeed = std::numeric_limits<float>::max(); // blast tức thời, không có missile
-            spell.radius = 175.0f;             // wiki width trực tiếp (targeter bin 80 không khớp)
-            spell.range = 825.0f;              // champions/893.json E range
+            spell.projectileSpeed = std::numeric_limits<float>::max(); // blast tức thời (dash recoil), không missile
+            spell.radius = 87.5f;             // wiki width 175 ÷ 2 (half-width)
+            spell.range = 825.0f;              // wiki range
             spell.spellDelay = 350;            // mCastTime 0.35
             spell.spellKey = SpellSlot::E;
             spell.spellName = "AuroraE";
@@ -424,8 +424,8 @@ public:
             spell.missileName = "BardQMissile";
             spell.name = "Cosmic Binding";
             spell.projectileSpeed = 1500.0f;   // BardQMissile FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 950.0f;              // BardQMissile castRange (BardQ + champions ghi 25000 placeholder)
+            spell.radius = 60.0f;              // mLineWidth (half-width)
+            spell.range = 850.0f;              // wiki target range (bin CastRange 950 = missile travel)
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "BardQ";
@@ -458,9 +458,9 @@ public:
             spell.charName = "Belveth";
             spell.dangerlevel = 3;
             spell.name = "Above and Below";
-            spell.projectileSpeed = 300000.0f; // BelvethW FixedSpeedMovement.mSpeed (slam ~tức thời)
-            spell.radius = 200.0f;             // wiki width (=2×100 mMissileWidth)
-            spell.range = 715.0f;              // champions/200.json W range
+            spell.projectileSpeed = 300000.0f; // BelvethW MissileSpec.Speed (slam ~tức thời)
+            spell.radius = 100.0f;             // wiki width 200 ÷ 2 (half-width; bin không có LineWidth)
+            spell.range = 660.0f;              // wiki: 0-660 edge range
             spell.spellDelay = 500;            // mCastTime 0.5
             spell.spellKey = SpellSlot::W;
             spell.spellName = "BelvethW";
@@ -478,8 +478,8 @@ public:
             spell.missileName = "RocketGrabMissile";
             spell.name = "Rocket Grab";
             spell.projectileSpeed = 1800.0f;   // RocketGrabMissile FixedSpeedMovement.mSpeed
-            spell.radius = 140.0f;             // wiki width (=2×70 mMissileWidth)
-            spell.range = 1079.0f;             // champions/53.json Q range
+            spell.radius = 70.0f;              // mLineWidth (half-width)
+            spell.range = 1080.0f;             // bin CastRange (missile travel; wiki 1115 incl lollipop)
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "RocketGrab";
@@ -498,8 +498,8 @@ public:
             spell.missileName = "BrandQMissile";
             spell.name = "Sear";
             spell.projectileSpeed = 1600.0f;   // BrandQMissile FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 1050.0f;             // champions/63.json Q range
+            spell.radius = 60.0f;              // mLineWidth (half-width)
+            spell.range = 1100.0f;             // wiki range (centered) = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "BrandQ";
@@ -568,10 +568,10 @@ public:
             spell.charName = "Briar";
             spell.dangerlevel = 3;
             spell.name = "Chilling Scream";
-            spell.projectileSpeed = std::numeric_limits<float>::max(); // scream tức thời, không có missile
-            spell.radius = 380.0f;             // wiki width trực tiếp (targeter bin 230 không khớp)
-            spell.range = 400.0f;              // champions/233.json E range
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.projectileSpeed = std::numeric_limits<float>::max(); // scream tức thời (channel + recast)
+            spell.radius = 190.0f;            // wiki width 380 ÷ 2 (half-width)
+            spell.range = 400.0f;              // wiki min range (charge tối đa 600)
+            spell.spellDelay = 150;            // wiki recast cast time 0.15
             spell.spellKey = SpellSlot::E;
             spell.spellName = "BriarE";
             spell.spellType = SpellType::Line;
@@ -584,9 +584,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "BriarR";
             spell.name = "Certain Death";
-            spell.projectileSpeed = 2000.0f;   // BriarR FixedSpeedMovement.mSpeed
-            spell.radius = 320.0f;             // wiki width (=2×160 mMissileWidth)
-            spell.range = 12000.0f;            // toàn map (castRange 12000)
+            spell.projectileSpeed = 2000.0f;   // BriarR MissileSpec.mSpeed
+            spell.radius = 160.0f;             // mLineWidth (half-width)
+            spell.range = 12000.0f;            // wiki range (centered)
             spell.spellDelay = 1000;           // mCastTime 1.0
             spell.spellKey = SpellSlot::R;
             spell.spellName = "BriarR";
@@ -607,10 +607,10 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "CaitlynQMissile";
             spell.name = "Piltover Peacemaker";
-            spell.projectileSpeed = 2200.0f;   // CaitlynQMissile FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 1250.0f;             // champions/51.json Q range
-            spell.spellDelay = 250;            // mCastTime null (windup scripted) → default 250
+            spell.projectileSpeed = 2200.0f;   // CaitlynQ MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; expands to 180 sau target đầu)
+            spell.range = 1300.0f;             // wiki range (centered) = bin CastRange
+            spell.spellDelay = 625;            // wiki cast time 0.625
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "CaitlynQ";
             spell.spellType = SpellType::Line;
@@ -623,10 +623,10 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "CaitlynEMissile";
             spell.name = "90 Caliber Net";
-            spell.projectileSpeed = 1600.0f;   // CaitlynEMissile FixedSpeedMovement.mSpeed
-            spell.radius = 140.0f;             // wiki width (=2×70 mMissileWidth)
-            spell.range = 750.0f;              // champions/51.json E range
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.projectileSpeed = 1600.0f;   // CaitlynEMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width)
+            spell.range = 800.0f;              // wiki range (centered) = bin CastRange
+            spell.spellDelay = 150;            // wiki cast time 0.15
             spell.spellKey = SpellSlot::E;
             spell.spellName = "CaitlynE";
             spell.spellType = SpellType::Line;
@@ -659,9 +659,9 @@ public:
             spell.charName = "Camille";
             spell.dangerlevel = 2;
             spell.name = "Tactical Sweep";
-            spell.range = 650.0f;              // W TargeterDefinitionCone coneRange (champions ghi 610)
-            spell.angle = 35.0f;               // coneAngleDegrees
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.range = 650.0f;              // wiki: outer effect radius
+            spell.angle = 70.0f;               // wiki: 70° full cone angle
+            spell.spellDelay = 250;            // wiki: cast time none → default 250 (1.1s animation delay)
             spell.spellKey = SpellSlot::W;
             spell.spellName = "CamilleW";
             spell.spellType = SpellType::Cone;
@@ -691,9 +691,9 @@ public:
             spell.charName = "Cassiopeia";
             spell.dangerlevel = 3;
             spell.name = "Petrifying Gaze";
-            spell.range = 825.0f;              // R coneRange
-            spell.angle = 40.0f;               // coneAngleDegrees
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.range = 850.0f;              // wiki effect radius
+            spell.angle = 80.0f;               // wiki: 80° full cone angle
+            spell.spellDelay = 500;            // wiki cast time 0.5
             spell.spellKey = SpellSlot::R;
             spell.spellName = "CassiopeiaR";
             spell.spellType = SpellType::Cone;
@@ -710,9 +710,9 @@ public:
             spell.dangerlevel = 3;
             spell.name = "Rupture";
             spell.projectileSpeed = std::numeric_limits<float>::max(); // AoE tròn đặt chỗ, không missile ngang
-            spell.radius = 250.0f;             // wiki radius
-            spell.range = 950.0f;              // champions/31.json Q range
-            spell.spellDelay = 250;            // mCastTime null → default 250 (nổ sau delay ~0.6s)
+            spell.radius = 250.0f;             // wiki effect radius
+            spell.range = 950.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 500;            // wiki cast time 0.5 (rupture nổ sau 0.627s delay riêng)
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "Rupture";
             spell.spellType = SpellType::Circle;
@@ -724,9 +724,9 @@ public:
             spell.charName = "Chogath";
             spell.dangerlevel = 3;
             spell.name = "Feral Scream";
-            spell.range = 675.0f;              // W coneRange (champions ghi 300)
-            spell.angle = 28.0f;               // coneAngleDegrees
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.range = 650.0f;              // wiki target range (edge)
+            spell.angle = 60.0f;               // wiki: 60° full cone angle
+            spell.spellDelay = 500;            // wiki cast time 0.5
             spell.spellKey = SpellSlot::W;
             spell.spellName = "FeralScream";
             spell.spellType = SpellType::Cone;
@@ -758,10 +758,10 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "MissileBarrageMissile";
             spell.name = "Missile Barrage";
-            spell.projectileSpeed = 2000.0f;   // MissileBarrageMissile FixedSpeedMovement.mSpeed
-            spell.radius = 80.0f;              // wiki width (=2×40 mMissileWidth)
-            spell.range = 1225.0f;             // champions/42.json R range
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.projectileSpeed = 2000.0f;   // MissileBarrageMissile MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width)
+            spell.range = 1300.0f;             // wiki target range (centered) = bin CastRange
+            spell.spellDelay = 175;            // wiki cast time 0.175
             spell.spellKey = SpellSlot::R;
             spell.spellName = "MissileBarrage";
             spell.spellType = SpellType::Line;
@@ -782,8 +782,8 @@ public:
             spell.charName = "Darius";
             spell.dangerlevel = 2;
             spell.name = "Decimate";
-            spell.radius = 425.0f;             // wiki radius (= CDragon overrideRadius; ring quanh Darius)
-            spell.range = 425.0f;
+            spell.radius = 460.0f;             // wiki outer effect radius (ring quanh Darius)
+            spell.range = 460.0f;
             spell.spellDelay = 234;            // mCastTime 0.234 (C# gốc dùng 750)
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "DariusCleave";
@@ -798,8 +798,8 @@ public:
             spell.charName = "Darius";
             spell.dangerlevel = 2;
             spell.name = "Apprehend";
-            spell.range = 535.0f;              // E coneRange
-            spell.angle = 25.0f;               // coneAngleDegrees
+            spell.range = 535.0f;              // wiki effect radius (edge)
+            spell.angle = 50.0f;               // wiki: 50° full cone angle
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "DariusAxeGrabCone";
@@ -816,9 +816,9 @@ public:
             spell.charName = "Diana";
             spell.dangerlevel = 2;
             spell.name = "Crescent Strike";
-            spell.projectileSpeed = 2100.0f;   // DianaQOuterMissile FixedSpeedMovement.mSpeed (inner 1900)
-            spell.radius = 140.0f;             // wiki width (=2×70 mMissileWidth)
-            spell.range = 900.0f;              // champions/131.json Q range
+            spell.projectileSpeed = 2100.0f;   // DianaQOuterMissile MissileSpec.mSpeed (inner 1900)
+            spell.radius = 50.0f;              // mLineWidth 100 ÷ 2 (half-width; wiki không ghi width)
+            spell.range = 900.0f;              // wiki target range = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "DianaQ";
@@ -836,9 +836,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "DrMundoQ";
             spell.name = "Infected Bonesaw";
-            spell.projectileSpeed = 2000.0f;   // DrMundoQ FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60 mMissileWidth)
-            spell.range = 975.0f;              // champions/36.json Q range
+            spell.projectileSpeed = 2000.0f;   // DrMundoQ MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width)
+            spell.range = 1050.0f;             // wiki target range (centered) = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "DrMundoQ";
@@ -857,9 +857,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "DravenDoubleShotMissile";
             spell.name = "Stand Aside";
-            spell.projectileSpeed = 1400.0f;   // DravenDoubleShotMissile FixedSpeedMovement.mSpeed
-            spell.radius = 260.0f;             // wiki width (=2×130 mMissileWidth)
-            spell.range = 1050.0f;             // champions/119.json E range
+            spell.projectileSpeed = 1400.0f;   // DravenDoubleShotMissile MissileSpec.mSpeed
+            spell.radius = 130.0f;             // mLineWidth (half-width)
+            spell.range = 1100.0f;             // wiki target range (centered) = bin CastRange
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "DravenDoubleShot";
@@ -873,9 +873,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "DravenR";
             spell.name = "Whirling Death";
-            spell.projectileSpeed = 2000.0f;   // DravenR AcceleratingMovement mInitialSpeed 2000 (=mMaxSpeed)
-            spell.radius = 320.0f;             // wiki width (=2×160 mMissileWidth)
-            spell.range = 20000.0f;            // toàn map (castRange 20000, boomerang quay về)
+            spell.projectileSpeed = 2000.0f;   // DravenR MissileSpeed (boomerang toàn map)
+            spell.radius = 160.0f;             // mLineWidth (half-width)
+            spell.range = 20000.0f;            // wiki global (boomerang quay về)
             spell.fixedRange = true;
             spell.spellDelay = 500;            // mCastTime 0.5
             spell.spellKey = SpellSlot::R;
@@ -898,9 +898,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "EkkoQMis";
             spell.name = "Timewinder";
-            spell.projectileSpeed = 1650.0f;   // EkkoQMis FixedSpeedMovement.mSpeed (đi ra)
-            spell.radius = 120.0f;             // wiki width đi ra (=2×60)
-            spell.range = 1075.0f;             // champions/245.json Q range
+            spell.projectileSpeed = 1650.0f;   // EkkoQMis MissileSpec.mSpeed (đi ra)
+            spell.radius = 60.0f;              // mLineWidth (half-width; nở ra 200 lúc quay về)
+            spell.range = 1100.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "EkkoQ";
@@ -914,8 +914,8 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "EkkoQReturn";
             spell.name = "Timewinder (Return)";
-            spell.projectileSpeed = 2300.0f;   // EkkoQReturn FixedSpeedMovement.mSpeed
-            spell.radius = 200.0f;             // wiki width lúc quay về (=2×100)
+            spell.projectileSpeed = 2300.0f;   // EkkoQReturn MissileSpec.mSpeed
+            spell.radius = 100.0f;             // mLineWidth (half-width; orb nở ra lúc quay về)
             spell.range = 1250.0f;             // C# gốc (orb quay về Ekko)
             spell.spellDelay = 0;
             spell.spellKey = SpellSlot::Q;
@@ -947,9 +947,9 @@ public:
             spell.missileName = "EkkoR";
             spell.name = "Chronobreak";
             spell.projectileSpeed = std::numeric_limits<float>::max(); // teleport về vị trí quá khứ + AoE, không missile ngang
-            spell.radius = 375.0f;             // wiki radius (= C# 375)
-            spell.range = 1600.0f;             // C# gốc / champions
-            spell.spellDelay = 250;            // C# gốc
+            spell.radius = 375.0f;             // wiki effect radius
+            spell.range = 1600.0f;             // C# gốc / wiki (afterimage 4s trước)
+            spell.spellDelay = 500;            // wiki cast time 0.5
             spell.spellKey = SpellSlot::R;
             spell.spellName = "EkkoR";
             spell.spellType = SpellType::Circle;
@@ -967,9 +967,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "EliseHumanEMissile";
             spell.name = "Cocoon";
-            spell.projectileSpeed = 1600.0f;   // EliseHumanEMissile FixedSpeedMovement.mSpeed
-            spell.radius = 110.0f;             // wiki width (=2×55 mLineWidth)
-            spell.range = 1075.0f;             // champions/60.json E range
+            spell.projectileSpeed = 1600.0f;   // EliseHumanEMissile MissileSpec.mSpeed
+            spell.radius = 55.0f;              // mLineWidth (half-width)
+            spell.range = 1100.0f;             // wiki target range (centered) = bin CastRange
             spell.spellDelay = 250;            // mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "EliseHumanE";
@@ -988,10 +988,10 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "EvelynnQ";
             spell.name = "Hate Spike";
-            spell.projectileSpeed = 2400.0f;   // EvelynnQ FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width đầu (=2×60)
-            spell.range = 800.0f;              // champions/28.json Q range
-            spell.spellDelay = 250;            // mCastTime 0.25
+            spell.projectileSpeed = 2400.0f;   // EvelynnQ MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; recast nở 180)
+            spell.range = 800.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 300;            // wiki cast time 0.3 (initial dart)
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "EvelynnQ";
             spell.spellType = SpellType::Line;
@@ -1023,9 +1023,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "EzrealQ";
             spell.name = "Mystic Shot";
-            spell.projectileSpeed = 2000.0f;   // EzrealQ FixedSpeedMovement.mSpeed
-            spell.radius = 120.0f;             // wiki width (=2×60)
-            spell.range = 1150.0f;             // champions/81.json Q range
+            spell.projectileSpeed = 2000.0f;   // EzrealQ MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width)
+            spell.range = 1200.0f;             // wiki target range (centered) = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "EzrealQ";
@@ -1040,9 +1040,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "EzrealW";
             spell.name = "Essence Flux";
-            spell.projectileSpeed = 1700.0f;   // EzrealW FixedSpeedMovement.mSpeed
-            spell.radius = 160.0f;             // wiki width (=2×80)
-            spell.range = 1150.0f;             // champions/81.json W range
+            spell.projectileSpeed = 1700.0f;   // EzrealW MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; wiki visual 160 ≠ JSON 60)
+            spell.range = 1200.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 250;            // mCastTime null → default 250
             spell.spellKey = SpellSlot::W;
             spell.spellName = "EzrealW";
@@ -1056,11 +1056,11 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "EzrealR";
             spell.name = "Trueshot Barrage";
-            spell.projectileSpeed = 2000.0f;   // EzrealR FixedSpeedMovement.mSpeed
-            spell.radius = 320.0f;             // wiki width (=2×160)
-            spell.range = 25000.0f;            // toàn map (castRange placeholder 25000)
+            spell.projectileSpeed = 2000.0f;   // EzrealR MissileSpec.mSpeed
+            spell.radius = 160.0f;             // mLineWidth (half-width)
+            spell.range = 25000.0f;            // wiki global (castRange placeholder)
             spell.fixedRange = true;
-            spell.spellDelay = 250;            // mCastTime null → default 250
+            spell.spellDelay = 1000;           // wiki cast time 1.0
             spell.spellKey = SpellSlot::R;
             spell.spellName = "EzrealR";
             spell.spellType = SpellType::Line;
@@ -1070,12 +1070,38 @@ public:
         // #endregion Ezreal
 
         // #region Fiddlesticks
-        // E Reap is a crescent-shaped area. CDragon exposes mLineWidth=70,
-        // missileSpeed=1800 and targeter widths 400/100, but no standard cone
-        // angle; the Wiki also does not publish a usable width/angle pair.
-        // Defer it until the custom geometry is mapped; do not invent one.
-        // Q is targeted fear, W is a self-centered drain and R is a channelled
-        // self-centered AoE, so they are not standard database missiles.
+        {
+            SpellData spell;
+            spell.charName = "Fiddlesticks";
+            spell.dangerlevel = 2;
+            spell.missileName = "FiddleSticksE";
+            spell.name = "Reap";
+            spell.projectileSpeed = 1800.0f;    // FiddleSticksE MissileSpec.mSpeed
+            spell.radius = 500.0f;              // bin CastRadius (crescent AoE)
+            spell.range = 850.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 400.0f;          // wiki cast time 0.4
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "FiddleSticksE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Fiddlesticks";
+            spell.dangerlevel = 1;              // low danger: detect landing zone to reposition
+            spell.name = "Crowstorm";
+            spell.radius = 600.0f;              // wiki effect radius
+            spell.range = 800.0f;               // wiki target range
+            spell.spellDelay = 1500.0f;         // wiki channel 1.5s
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "FiddleSticksR";
+            spell.spellType = SpellType::Circle;
+            spell.isSpecial = true;
+            spell.defaultOff = true;
+            Spells.push_back(spell);
+        }
         // #endregion Fiddlesticks
 
         // #region Fiora
@@ -1085,10 +1111,10 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "FioraWMissile";
             spell.name = "Riposte";
-            spell.projectileSpeed = 3200.0f;   // CDragon FioraWMissile.mSpell.mMissileSpec.movementComponent.mSpeed
-            spell.radius = 140.0f;             // Wiki width 140 (=2x CDragon mMissileWidth 70)
-            spell.range = 750.0f;              // champions/114.json W range; bin castRange=3000 is internal
-            spell.spellDelay = 9.999999776482582f; // CDragon mCastTime=0.009999999776482582 * 1000
+            spell.projectileSpeed = 3200.0f;   // FioraWMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width)
+            spell.range = 900.0f;              // wiki target range (bin CastRange=5000 placeholder)
+            spell.spellDelay = 9.999999776482582f; // CDragon mCastTime=0.01 (stab sau 0.5s poise)
             spell.spellKey = SpellSlot::W;
             spell.spellName = "FioraW";
             spell.spellType = SpellType::Line;
@@ -1105,9 +1131,9 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "FizzRMissile";
             spell.name = "Chum the Waters";
-            spell.projectileSpeed = 1300.0f;   // CDragon FizzRMissile.mSpell.mMissileSpec.movementComponent.mSpeed
-            spell.radius = 160.0f;             // CDragon mMissileWidth=80; full evade width=2x80
-            spell.range = 1300.0f;             // champions/105.json R range; bin display override=1300
+            spell.projectileSpeed = 1300.0f;   // FizzRMissile MissileSpec.mSpeed
+            spell.radius = 80.0f;              // mLineWidth (half-width; lure missile)
+            spell.range = 1300.0f;             // wiki target range = bin display override
             spell.spellDelay = 250.0f;         // CDragon mCastTime=0.25
             spell.spellKey = SpellSlot::R;
             spell.spellName = "FizzR";
@@ -1132,9 +1158,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "GalioQMissile";
             spell.name = "Winds of War";
-            spell.projectileSpeed = 1400.0f;   // CDragon GalioQMissile.mSpell.missileSpeed
-            spell.radius = 120.0f;             // Wiki width 120
-            spell.range = 825.0f;              // champions/3.json Q range
+            spell.projectileSpeed = 1400.0f;   // GalioQMissile MissileSpec.mSpeed
+            spell.radius = 150.0f;             // wiki effect radius (tornado sau khi 2 missile hội tụ)
+            spell.range = 825.0f;              // wiki target range = bin display override
             spell.spellDelay = 250.0f;         // CDragon mCastTime null -> default 250
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "GalioQ";
@@ -1147,10 +1173,10 @@ public:
             spell.charName = "Galio";
             spell.dangerlevel = 3;
             spell.name = "Justice Punch";
-            spell.projectileSpeed = std::numeric_limits<float>::max(); // CDragon GalioE không có missile; cast line tức thời
-            spell.radius = 160.0f;             // CDragon GalioE mLineWidth
-            spell.range = 650.0f;              // CDragon GalioE castRangeDisplayOverride
-            spell.spellDelay = 250.0f;         // CDragon mCastTime null -> default 250
+            spell.projectileSpeed = std::numeric_limits<float>::max(); // GalioE dash tức thời, không missile ngang
+            spell.radius = 200.0f;             // wiki width 400 / 2 (half-width; CDragon mLineWidth=160 ≠ wiki)
+            spell.range = 650.0f;              // wiki target range max = bin display override
+            spell.spellDelay = 400;            // wiki cast time 0.4 (lunge step-back + dash)
             spell.spellKey = SpellSlot::E;
             spell.spellName = "GalioE";
             spell.spellType = SpellType::Line;
@@ -1166,9 +1192,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "GnarQMissile";
             spell.name = "Boomerang Throw";
-            spell.projectileSpeed = 2500.0f;   // CDragon GnarQMissile.mSpell.missileSpeed
-            spell.radius = 110.0f;             // Wiki Mini width 110
-            spell.range = 1100.0f;             // champions/150.json Q range
+            spell.projectileSpeed = 2500.0f;   // GnarQMissile MissileSpeed
+            spell.radius = 55.0f;              // mLineWidth (half-width)
+            spell.range = 1125.0f;             // wiki range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon GnarQMissile.mCastTime=0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "GnarQ";
@@ -1183,9 +1209,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "GnarBigQMissile";
             spell.name = "Boulder Toss";
-            spell.projectileSpeed = 2100.0f;   // CDragon GnarBigQMissile.mSpell.missileSpeed
-            spell.radius = 150.0f;             // Wiki Mega width 150
-            spell.range = 1100.0f;             // champions/150.json Q range
+            spell.projectileSpeed = 2100.0f;   // GnarBigQMissile MissileSpec.mSpeed
+            spell.radius = 90.0f;              // mLineWidth (half-width; wiki width 180)
+            spell.range = 1150.0f;             // wiki range = bin CastRange
             spell.spellDelay = 500.0f;         // CDragon GnarBigQMissile.mCastTime=0.5
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "GnarBigQ";
@@ -1198,8 +1224,8 @@ public:
             spell.charName = "Gnar";
             spell.dangerlevel = 3;
             spell.name = "Wallop";
-            spell.radius = 200.0f;             // Wiki width 200
-            spell.range = 525.0f;              // CDragon GnarBigW targeter range
+            spell.radius = 100.0f;             // mLineWidth (half-width; wiki width 200)
+            spell.range = 550.0f;              // wiki range = bin display override
             spell.spellDelay = 600.0000238418579f; // CDragon mCastTime=0.6000000238418579 * 1000
             spell.spellKey = SpellSlot::W;
             spell.spellName = "GnarBigW";
@@ -1267,9 +1293,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "GravesQLineMis";
             spell.name = "End of the Line";
-            spell.projectileSpeed = 3000.0f;   // CDragon GravesQLineMis.mSpell.missileSpeed
-            spell.radius = 80.0f;              // Wiki outbound width 80
-            spell.range = 925.0f;              // champions/104.json Q range
+            spell.projectileSpeed = 3000.0f;   // GravesQLineMis MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width; wiki outbound 80)
+            spell.range = 900.0f;              // wiki edge range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon mCastTime null -> default 250
             spell.extraEndTime = 1300.0f;      // C# detector timing
             spell.spellKey = SpellSlot::Q;
@@ -1285,9 +1311,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "GravesQReturn";
             spell.name = "End of the Line (Return)";
-            spell.projectileSpeed = 1600.0f;   // CDragon GravesQReturn.mSpell.missileSpeed
-            spell.radius = 200.0f;             // Wiki return width 200
-            spell.range = 925.0f;              // champions/104.json Q range
+            spell.projectileSpeed = 1600.0f;   // GravesQReturn MissileSpec.mSpeed
+            spell.radius = 100.0f;             // mLineWidth (half-width; wiki return 200)
+            spell.range = 900.0f;              // wiki edge range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "GravesQLineSpell";
@@ -1317,9 +1343,9 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "GravesChargeShotShot";
             spell.name = "Collateral Damage";
-            spell.projectileSpeed = 2100.0f;   // CDragon GravesChargeShotShot.mSpell.missileSpeed
-            spell.radius = 200.0f;             // Wiki shell width 200
-            spell.range = 1000.0f;             // champions/104.json R range
+            spell.projectileSpeed = 2100.0f;   // GravesChargeShotShot MissileSpec.mSpeed
+            spell.radius = 100.0f;             // mLineWidth (half-width; wiki shell 200)
+            spell.range = 1100.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon mCastTime=0.25
             spell.spellKey = SpellSlot::R;
             spell.spellName = "GravesChargeShot";
@@ -1333,9 +1359,9 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "GravesChargeShotFxMissile";
             spell.name = "Collateral Damage (Explosion)";
-            spell.projectileSpeed = 2000.0f;   // CDragon GravesChargeShotFxMissile.mSpell.missileSpeed
-            spell.radius = 200.0f;             // Wiki explosion cone width 200
-            spell.range = 1000.0f;             // champions/104.json R range
+            spell.projectileSpeed = 2000.0f;   // GravesChargeShotFxMissile MissileSpec.mSpeed
+            spell.radius = 200.0f;             // wiki explosion cone width 200
+            spell.range = 1100.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "GravesChargeShotFxMissile";
@@ -1375,9 +1401,9 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "HecarimUltMissile";
             spell.name = "Onslaught of Shadows";
-            spell.projectileSpeed = 1100.0f;   // CDragon HecarimUltMissile.missileSpeed
-            spell.radius = 80.0f;              // Wiki width 80 (=2x CDragon mLineWidth 40)
-            spell.range = 1650.0f;             // CDragon HecarimUltMissile range
+            spell.projectileSpeed = 1100.0f;   // HecarimUltMissile MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width; mỗi rider 80)
+            spell.range = 1510.0f;             // wiki rider travel range (bin CastRange=1650)
             spell.spellDelay = 10.0f;          // CDragon HecarimUlt mCastTime 0.01
             spell.spellKey = SpellSlot::R;
             spell.spellName = "HecarimUlt";
@@ -1402,9 +1428,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "HeimerdingerWAttack2";
             spell.name = "Hextech Micro-Rockets";
-            spell.projectileSpeed = 750.0f;    // CDragon HeimerdingerWAttack2.missileSpeed
-            spell.radius = 80.0f;              // CDragon mLineWidth 40 -> full evade width
-            spell.range = 1325.0f;             // champions/74.json W range
+            spell.projectileSpeed = 750.0f;    // HeimerdingerWAttack2 MissileSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width)
+            spell.range = 1150.0f;             // wiki target range = bin display override
             spell.spellDelay = 250.0f;         // CDragon HeimerdingerW mCastTime 0.25
             spell.spellKey = SpellSlot::W;
             spell.spellName = "HeimerdingerW";
@@ -1420,9 +1446,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "HeimerdingerESpell";
             spell.name = "CH-2 Electron Storm Grenade";
-            spell.projectileSpeed = 1200.0f;   // CDragon HeimerdingerESpell.missileSpeed
-            spell.radius = 250.0f;             // CDragon/Wiki outer effect radius
-            spell.range = 970.0f;              // champions/74.json E range
+            spell.projectileSpeed = 1200.0f;   // HeimerdingerESpell MissileSpec.mSpeed
+            spell.radius = 250.0f;             // wiki effect radius (outer)
+            spell.range = 925.0f;              // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon HeimerdingerE mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "HeimerdingerE";
@@ -1521,8 +1547,8 @@ public:
             spell.charName = "Illaoi";
             spell.dangerlevel = 3;
             spell.name = "Tentacle Smash";
-            spell.radius = 200.0f;             // Wiki width
-            spell.range = 850.0f;              // champions/420.json Q range
+            spell.radius = 100.0f;             // wiki width 200 / 2 (half-width)
+            spell.range = 803.0f;              // wiki edge range max (≈802.75)
             spell.spellDelay = 750.0f;         // CDragon IllaoiQ mCastTime 0.75
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "IllaoiQ";
@@ -1537,9 +1563,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "IllaoiEMis";
             spell.name = "Test of Spirit";
-            spell.projectileSpeed = 1900.0f;   // CDragon IllaoiEMis.missileSpeed
-            spell.radius = 100.0f;             // Wiki width
-            spell.range = 900.0f;              // champions/420.json E range
+            spell.projectileSpeed = 1900.0f;   // IllaoiEMis MissileSpec.mSpeed
+            spell.radius = 50.0f;              // mLineWidth (half-width)
+            spell.range = 950.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon IllaoiE mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "IllaoiE";
@@ -1557,8 +1583,8 @@ public:
             spell.charName = "Irelia";
             spell.dangerlevel = 2;
             spell.name = "Defiant Dance (Release)";
-            spell.radius = 240.0f;             // Wiki width
-            spell.range = 825.0f;              // CDragon Irelia W display range
+            spell.radius = 120.0f;             // mLineWidth (half-width; wiki width 240)
+            spell.range = 895.0f;              // wiki max range (centered 775 + edge 120)
             spell.spellDelay = 250.0f;         // default for null mCastTime
             spell.spellKey = SpellSlot::W;
             spell.spellName = "IreliaW2";
@@ -1572,9 +1598,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "IreliaEMissile";
             spell.name = "Flawless Duet";
-            spell.projectileSpeed = 2000.0f;   // CDragon IreliaEMissile.missileSpeed
-            spell.radius = 180.0f;             // CDragon mLineWidth 90 -> full evade width
-            spell.range = 850.0f;              // champions/39.json E range
+            spell.projectileSpeed = 2000.0f;   // IreliaEMissile MissileSpeed
+            spell.radius = 90.0f;              // mLineWidth (half-width; wiki width 140 ≈ 2×70)
+            spell.range = 775.0f;              // wiki target range (bin CastRange placeholder)
             spell.spellDelay = 250.0f;         // convergence delay
             spell.spellKey = SpellSlot::E;
             spell.spellName = "IreliaE2";
@@ -1590,10 +1616,10 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "IreliaR";
             spell.name = "Vanguard's Edge";
-            spell.projectileSpeed = 2000.0f;   // CDragon IreliaR.missileSpeed
-            spell.radius = 320.0f;             // Wiki width
-            spell.range = 950.0f;              // champions/39.json R range
-            spell.spellDelay = 250.0f;         // CDragon mCastTime null -> default 250
+            spell.projectileSpeed = 2000.0f;   // IreliaR MissileSpec.mSpeed
+            spell.radius = 160.0f;             // mLineWidth (half-width; wiki width 320)
+            spell.range = 1000.0f;             // wiki target range (centered) = bin CastRange
+            spell.spellDelay = 400;            // wiki cast time 0.4
             spell.spellKey = SpellSlot::R;
             spell.spellName = "IreliaR";
             spell.spellType = SpellType::Line;
@@ -1608,9 +1634,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "IvernQ";
             spell.name = "Rootcaller";
-            spell.projectileSpeed = 1300.0f;   // CDragon IvernQ.missileSpeed
-            spell.radius = 160.0f;             // Wiki width
-            spell.range = 1125.0f;             // champions/427.json Q range
+            spell.projectileSpeed = 1300.0f;   // IvernQ MissileSpec.mSpeed
+            spell.radius = 80.0f;              // mLineWidth (half-width; wiki width 160)
+            spell.range = 1150.0f;             // wiki range (centered) = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon IvernQ mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "IvernQ";
@@ -1629,9 +1655,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "HowlingGaleSpell";
             spell.name = "Howling Gale";
-            spell.projectileSpeed = 667.67f;   // CDragon HowlingGaleSpell.missileSpeed
-            spell.radius = 240.0f;             // Wiki width
-            spell.range = 1700.0f;             // Wiki max travel range
+            spell.projectileSpeed = 667.67f;   // HowlingGaleSpell MissileSpec.mSpeed (min charge)
+            spell.radius = 120.0f;             // mLineWidth (half-width; wiki width 240)
+            spell.range = 1760.0f;             // wiki max range (charge 3s)
             spell.spellDelay = 0.0f;           // spell is tracked when released
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "JannaQ";
@@ -1646,9 +1672,9 @@ public:
             spell.charName = "JarvanIV";
             spell.dangerlevel = 2;
             spell.name = "Dragon Strike";
-            spell.radius = 140.0f;             // Wiki width 136 / CDragon mLineWidth 70
-            spell.range = 770.0f;              // CDragon JarvanIVDragonStrike range
-            spell.spellDelay = 250.0f;         // default for null mCastTime
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 136)
+            spell.range = 770.0f;              // bin CastRange (≈ wiki edge 785)
+            spell.spellDelay = 400;            // wiki cast time 0.4
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "JarvanIVDragonStrike";
             spell.spellType = SpellType::Line;
@@ -1661,8 +1687,8 @@ public:
             spell.charName = "JarvanIV";
             spell.dangerlevel = 1;
             spell.name = "Demacian Standard";
-            spell.radius = 175.0f;             // CDragon castRadius
-            spell.range = 860.0f;              // champions/59.json E range
+            spell.radius = 200.0f;             // wiki effect radius
+            spell.range = 860.0f;              // wiki target range = bin display
             spell.spellDelay = 250.0f;         // default for null mCastTime
             spell.spellKey = SpellSlot::E;
             spell.spellName = "JarvanIVDemacianStandard";
@@ -1693,10 +1719,10 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "JayceShockBlastMis";
             spell.name = "Shock Blast";
-            spell.projectileSpeed = 1450.0f;   // CDragon JayceShockBlastMis.missileSpeed
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 1050.0f;             // champions/126.json Q range
-            spell.spellDelay = 250.0f;         // CDragon mCastTime 0.25
+            spell.projectileSpeed = 1450.0f;   // JayceShockBlastMis MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 1050.0f;             // wiki edge range
+            spell.spellDelay = 214;            // wiki cast time 0.2143
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "JayceShockBlast";
             spell.spellType = SpellType::Line;
@@ -1712,10 +1738,10 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "JayceShockBlastWallMis";
             spell.name = "Shock Blast (Through Acceleration Gate)";
-            spell.projectileSpeed = 2350.0f;   // CDragon JayceShockBlastWallMis.missileSpeed
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 1600.0f;             // Wiki accelerated range
-            spell.spellDelay = 250.0f;
+            spell.projectileSpeed = 2350.0f;   // JayceShockBlastWallMis MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 1600.0f;             // wiki accelerated edge range
+            spell.spellDela            y = 214;            // wiki cast time 0.2143
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "JayceShockBlastWall";
             spell.spellType = SpellType::Line;
@@ -1733,9 +1759,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "JinxWMissile";
             spell.name = "Zap!";
-            spell.projectileSpeed = 3300.0f;   // CDragon JinxWMissile.missileSpeed
-            spell.radius = 120.0f;             // Wiki width
-            spell.range = 1500.0f;             // CDragon JinxWMissile range
+            spell.projectileSpeed = 3300.0f;   // JinxWMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; wiki width 120)
+            spell.range = 1500.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 600.0f;         // CDragon JinxWMissile mCastTime 0.6
             spell.spellKey = SpellSlot::W;
             spell.spellName = "JinxW";
@@ -1768,8 +1794,8 @@ public:
             spell.charName = "Jinx";
             spell.dangerlevel = 4;
             spell.name = "Super Mega Death Rocket!";
-            spell.projectileSpeed = 1700.0f;   // CDragon JinxR.missileSpeed
-            spell.radius = 280.0f;             // Wiki width
+            spell.projectileSpeed = 1700.0f;   // JinxR MissileSpec.mSpeed
+            spell.radius = 140.0f;             // mLineWidth (half-width; wiki width 280)
             spell.range = 25000.0f;            // global line
             spell.spellDelay = 600.0f;         // CDragon JinxR mCastTime 0.6
             spell.spellKey = SpellSlot::R;
@@ -1787,8 +1813,8 @@ public:
             spell.charName = "Jhin";
             spell.dangerlevel = 3;
             spell.name = "Deadly Flourish";
-            spell.radius = 90.0f;              // Wiki width
-            spell.range = 3000.0f;             // CDragon/Jhin W display range
+            spell.radius = 40.0f;              // mLineWidth (half-width; wiki width 80)
+            spell.range = 2520.0f;             // wiki edge range (bin CastRange placeholder)
             spell.spellDelay = 750.0f;         // CDragon JhinW mCastTime 0.75
             spell.spellKey = SpellSlot::W;
             spell.spellName = "JhinW";
@@ -1804,9 +1830,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "JhinRShotMis";
             spell.name = "Curtain Call";
-            spell.projectileSpeed = 5000.0f;   // CDragon JhinRShotMis.missileSpeed
-            spell.radius = 160.0f;             // Wiki width
-            spell.range = 3500.0f;             // Wiki range
+            spell.projectileSpeed = 5000.0f;   // JhinRShotMis MissileSpec.mSpeed
+            spell.radius = 80.0f;              // mLineWidth (half-width; wiki width 160)
+            spell.range = 3500.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "JhinRShot";
@@ -1875,9 +1901,9 @@ public:
             spell.charName = "Kaisa";
             spell.dangerlevel = 3;
             spell.name = "Void Seeker";
-            spell.projectileSpeed = 1750.0f;   // CDragon KaisaW.missileSpeed
-            spell.radius = 200.0f;             // Wiki width
-            spell.range = 3000.0f;             // CDragon KaisaW range
+            spell.projectileSpeed = 1750.0f;   // KaisaW MissileSpec.mSpeed
+            spell.radius = 100.0f;             // mLineWidth (half-width; wiki width 200)
+            spell.range = 3000.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 400.0f;         // CDragon KaisaW mCastTime 0.4
             spell.spellKey = SpellSlot::W;
             spell.spellName = "KaisaW";
@@ -1894,9 +1920,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KalistaMysticShotMissile";
             spell.name = "Pierce";
-            spell.projectileSpeed = 2400.0f;   // Wiki speed
-            spell.radius = 80.0f;              // Wiki width
-            spell.range = 1150.0f;             // champions/429.json Q range
+            spell.projectileSpeed = 2400.0f;   // wiki speed (bin MissileSpec 3000 là wrapper)
+            spell.radius = 40.0f;              // mLineWidth (half-width; wiki width 80)
+            spell.range = 1200.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon Kalista Q cast time
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KalistaMysticShot";
@@ -1914,9 +1940,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KarmaQMissile";
             spell.name = "Inner Flame";
-            spell.projectileSpeed = 1700.0f;   // CDragon KarmaQMissile.missileSpeed
-            spell.radius = 120.0f;             // Wiki width
-            spell.range = 950.0f;              // CDragon KarmaQMissile range
+            spell.projectileSpeed = 1700.0f;   // KarmaQMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; wiki width 120)
+            spell.range = 950.0f;              // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KarmaQ";
@@ -1955,8 +1981,8 @@ public:
             spell.dangerlevel = 2;
             spell.name = "Force Pulse";
             spell.radius = 0.0f;               // Cone uses angle
-            spell.angle = 40.0f;               // C# targeter cone angle
-            spell.range = 600.0f;              // Wiki effect range
+            spell.angle = 78.0f;               // wiki full cone angle
+            spell.range = 600.0f;              // wiki effect range
             spell.spellDelay = 250.0f;         // CDragon ForcePulse mCastTime 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "ForcePulse";
@@ -1986,9 +2012,9 @@ public:
             spell.charName = "Kayle";
             spell.dangerlevel = 2;
             spell.name = "Radiant Blast";
-            spell.projectileSpeed = 1600.0f;   // Wiki speed
-            spell.radius = 150.0f;             // Wiki width
-            spell.range = 900.0f;              // CDragon KayleQ range
+            spell.projectileSpeed = 1600.0f;   // KayleQ MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; wiki width 150)
+            spell.range = 900.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;         // CDragon KayleQ mCastTime 0.25
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KayleQ";
@@ -2019,10 +2045,10 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KennenShurikenHurlMissile1";
             spell.name = "Thundering Shuriken";
-            spell.projectileSpeed = 1700.0f;   // CDragon missile speed
-            spell.radius = 100.0f;             // Wiki width
-            spell.range = 1050.0f;             // CDragon missile range
-            spell.spellDelay = 250.0f;         // default for null mCastTime
+            spell.projectileSpeed = 1700.0f;   // KennenShurikenHurlMissile1 MissileSpec.mSpeed
+            spell.radius = 50.0f;              // mLineWidth (half-width; wiki width 100)
+            spell.range = 1050.0f;             // wiki target range = bin CastRange
+            spell.spellDelay = 175;            // wiki cast time 0.175
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KennenQ";
             spell.spellType = SpellType::Line;
@@ -2038,9 +2064,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KhazixWMissile";
             spell.name = "Void Spike";
-            spell.projectileSpeed = 1700.0f;   // CDragon KhazixWMissile.missileSpeed
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 1000.0f;             // CDragon display range
+            spell.projectileSpeed = 1700.0f;   // KhazixWMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 1025.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::W;
             spell.spellName = "KhazixW";
@@ -2057,8 +2083,8 @@ public:
             spell.angle = 22.0f;               // C# evolved three-way spread
             spell.isThreeWay = true;
             spell.projectileSpeed = 1700.0f;
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 1000.0f;
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 1025.0f;             // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::W;
             spell.spellName = "KhazixWLong";
@@ -2072,13 +2098,13 @@ public:
             SpellData spell;
             spell.charName = "Kled";
             spell.dangerlevel = 2;
-            spell.angle = 5.0f;
+            spell.angle = 20.0f;               // wiki full cone angle
             spell.isThreeWay = true;
             spell.missileName = "KledRiderQMissile";
             spell.name = "Pocket Pistol";
-            spell.projectileSpeed = 3000.0f;   // CDragon missile speed
-            spell.radius = 80.0f;              // Wiki width
-            spell.range = 700.0f;              // CDragon missile range
+            spell.projectileSpeed = 3000.0f;   // KledRiderQMissile MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width; wiki width 80)
+            spell.range = 700.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KledRiderQ";
@@ -2093,9 +2119,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "KledQMissile";
             spell.name = "Bear Trap on a Rope";
-            spell.projectileSpeed = 1600.0f;   // Wiki speed
-            spell.radius = 90.0f;              // Wiki width
-            spell.range = 800.0f;              // Wiki range
+            spell.projectileSpeed = 1600.0f;   // KledQMissile MissileSpec.mSpeed
+            spell.radius = 45.0f;              // mLineWidth (half-width; wiki width 90)
+            spell.range = 800.0f;              // wiki centered range = bin KledQ CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KledQ";
@@ -2111,9 +2137,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KogMawQ";
             spell.name = "Caustic Spittle";
-            spell.projectileSpeed = 1650.0f;   // CDragon KogMawQ.missileSpeed
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 1200.0f;             // CDragon KogMawQ range
+            spell.projectileSpeed = 1650.0f;   // KogMawQ MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 1200.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "KogMawQ";
@@ -2129,9 +2155,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "KogMawVoidOozeMissile";
             spell.name = "Void Ooze";
-            spell.projectileSpeed = 1400.0f;   // CDragon KogMawVoidOozeMissile.missileSpeed
-            spell.radius = 240.0f;             // Wiki width
-            spell.range = 1360.0f;             // CDragon missile range
+            spell.projectileSpeed = 1400.0f;   // KogMawVoidOozeMissile MissileSpec.mSpeed
+            spell.radius = 120.0f;             // mLineWidth (half-width; wiki width 240)
+            spell.range = 1360.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::E;
             spell.spellName = "KogMawVoidOoze";
@@ -2164,9 +2190,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "LeblancEMissile";
             spell.name = "Ethereal Chains";
-            spell.projectileSpeed = 1750.0f;
-            spell.radius = 110.0f;             // Wiki width
-            spell.range = 925.0f;
+            spell.projectileSpeed = 1750.0f;   // LeblancEMissile MissileSpec.mSpeed
+            spell.radius = 55.0f;              // mLineWidth (half-width; wiki width 110)
+            spell.range = 950.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::E;
             spell.spellName = "LeblancE";
@@ -2196,9 +2222,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "BlindMonkQOne";
             spell.name = "Sonic Wave";
-            spell.projectileSpeed = 1800.0f;
-            spell.radius = 120.0f;             // Wiki width
-            spell.range = 1100.0f;
+            spell.projectileSpeed = 1800.0f;   // LeeSinQOne MissileSpec.mSpeed
+            spell.radius = 60.0f;              // mLineWidth (half-width; wiki width 120)
+            spell.range = 1200.0f;             // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "BlindMonkQOne";
@@ -2227,10 +2253,10 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "LeonaZenithBladeMissile";
             spell.name = "Zenith Blade";
-            spell.projectileSpeed = 2000.0f;
-            spell.radius = 140.0f;             // Wiki width
-            spell.range = 900.0f;
-            spell.spellDelay = 200.0f;
+            spell.projectileSpeed = 2000.0f;   // LeonaZenithBladeMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 900.0f;              // wiki centered range = bin CastRange
+            spell.spellDelay = 250.0f;         // wiki cast time 0.25
             spell.spellKey = SpellSlot::E;
             spell.spellName = "LeonaZenithBlade";
             spell.spellType = SpellType::Line;
@@ -2272,10 +2298,10 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "LilliaERollingMissile";
             spell.name = "Swirlseed";
-            spell.projectileSpeed = 1150.0f;
-            spell.radius = 120.0f;              // Wiki width
-            spell.range = 10000.0f;
-            spell.spellDelay = 350.0f;
+            spell.projectileSpeed = 1150.0f;    // LilliaERollingMissile MissileSpec.mSpeed
+            spell.radius = 85.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 10000.0f;             // global rolling
+            spell.spellDelay = 400.0f;          // wiki cast time 0.4
             spell.spellKey = SpellSlot::E;
             spell.spellName = "LilliaE";
             spell.spellType = SpellType::Line;
@@ -2288,8 +2314,8 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "LissandraW";
             spell.name = "Ring of Frost";
-            spell.radius = 450.0f;
-            spell.range = 450.0f;
+            spell.radius = 275.0f;             // wiki effect radius = bin CastRadius
+            spell.range = 275.0f;              // PBAoE centered on caster
             spell.spellDelay = 125.0f;
             spell.spellKey = SpellSlot::W;
             spell.spellName = "LissandraW";
@@ -2304,9 +2330,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "LissandraQMissile";
             spell.name = "Ice Shard";
-            spell.projectileSpeed = 2200.0f;
-            spell.radius = 150.0f;              // Wiki width
-            spell.range = 750.0f;
+            spell.projectileSpeed = 2200.0f;    // LissandraQMissile MissileSpec.mSpeed
+            spell.radius = 75.0f;               // mLineWidth (half-width; wiki width 150)
+            spell.range = 825.0f;               // wiki initial range
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "LissandraQ";
@@ -2321,9 +2347,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "LissandraQShards";
             spell.name = "Ice Shard Extended";
-            spell.projectileSpeed = 2200.0f;
-            spell.radius = 180.0f;              // Wiki extended width
-            spell.range = 1650.0f;
+            spell.projectileSpeed = 2200.0f;    // LissandraQShards MissileSpec.mSpeed
+            spell.radius = 90.0f;               // mLineWidth (half-width; wiki extended width 180)
+            spell.range = 950.0f;               // wiki extended range
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "LissandraQShards";
@@ -2337,9 +2363,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "LissandraEMissile";
             spell.name = "Glacial Path";
-            spell.projectileSpeed = 850.0f;
-            spell.radius = 250.0f;              // Wiki width
-            spell.range = 1050.0f;
+            spell.projectileSpeed = 850.0f;     // LissandraEMissile MissileSpec.mSpeed (initial)
+            spell.radius = 125.0f;              // mLineWidth (half-width; wiki width 250)
+            spell.range = 1025.0f;              // wiki range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::E;
             spell.spellName = "LissandraE";
@@ -2353,9 +2379,9 @@ public:
             spell.dangerlevel = 1;
             spell.missileName = "lucianwmissile";
             spell.name = "Ardent Blaze";
-            spell.projectileSpeed = 1600.0f;
-            spell.radius = 110.0f;              // Wiki width
-            spell.range = 900.0f;
+            spell.projectileSpeed = 1600.0f;    // LucianWMissile MissileSpec.mSpeed
+            spell.radius = 55.0f;               // mLineWidth (half-width; wiki width 110)
+            spell.range = 900.0f;               // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::W;
             spell.spellName = "lucianw";
@@ -2373,8 +2399,8 @@ public:
             spell.charName = "Lucian";
             spell.dangerlevel = 3;
             spell.name = "Piercing Light";
-            spell.radius = 120.0f;              // Wiki width
-            spell.range = 1140.0f;
+            spell.radius = 65.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 1000.0f;              // wiki range
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "LucianQ";
@@ -2388,9 +2414,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "lucianrmissile";
             spell.name = "The Culling";
-            spell.projectileSpeed = 2800.0f;
-            spell.radius = 220.0f;              // Wiki width
-            spell.range = 1400.0f;
+            spell.projectileSpeed = 2800.0f;    // LucianRMissile MissileSpec.mSpeed
+            spell.radius = 110.0f;              // mLineWidth (half-width; wiki width 220)
+            spell.range = 1200.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 500.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "lucianrmis";
@@ -2410,9 +2436,9 @@ public:
             spell.missileName = "LuluQMissile";
             spell.extraMissileNames = { "LuluQMissileTwo" };
             spell.name = "Glitterlance";
-            spell.projectileSpeed = 1450.0f;
-            spell.radius = 120.0f;              // Wiki width
-            spell.range = 925.0f;
+            spell.projectileSpeed = 1450.0f;    // LuluQMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 950.0f;               // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "LuluQ";
@@ -2428,9 +2454,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "LuxLightStrikeKugel";
             spell.name = "Lucent Singularity";
-            spell.projectileSpeed = 1300.0f;
-            spell.radius = 310.0f;              // Wiki effect radius
-            spell.range = 1100.0f;
+            spell.projectileSpeed = 1200.0f;    // wiki speed
+            spell.radius = 310.0f;              // wiki effect radius
+            spell.range = 1100.0f;              // wiki target range
             spell.spellDelay = 250.0f;
             spell.extraEndTime = 500.0f;
             spell.spellKey = SpellSlot::E;
@@ -2458,8 +2484,8 @@ public:
             spell.charName = "Lux";
             spell.dangerlevel = 4;
             spell.name = "Final Spark";
-            spell.radius = 200.0f;              // Wiki width
-            spell.range = 3340.0f;
+            spell.radius = 100.0f;              // mLineWidth/2 (half-width; wiki width 200)
+            spell.range = 3400.0f;              // wiki edge range
             spell.spellDelay = 1000.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "LuxMaliceCannon";
@@ -2473,9 +2499,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "LuxLightBindingMis";
             spell.name = "Light Binding";
-            spell.projectileSpeed = 1200.0f;
-            spell.radius = 140.0f;              // Wiki width
-            spell.range = 1175.0f;
+            spell.projectileSpeed = 1200.0f;    // LuxLightBindingMis MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1300.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "LuxLightBinding";
@@ -2527,13 +2553,13 @@ public:
         {
             SpellData spell;
             spell.charName = "Maokai";
-            spell.dangerlevel = 3;
+            spell.dangerlevel = 2;
             spell.missileName = "MaokaiQMissile";
             spell.name = "Bramble Smash";
-            spell.projectileSpeed = 1600.0f;
-            spell.radius = 140.0f;              // CDragon mLineWidth 70 -> full width
-            spell.range = 600.0f;
-            spell.spellDelay = 250.0f;
+            spell.projectileSpeed = 1600.0f;    // MaokaiQMissile MissileSpec.mSpeed
+            spell.radius = 110.0f;              // mLineWidth (half-width)
+            spell.range = 600.0f;               // wiki target range
+            spell.spellDelay = 300.0f;          // wiki cast time 0.3
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "MaokaiQ";
             spell.extraSpellNames = { "MaokaiTrunkLine" };
@@ -2542,35 +2568,17 @@ public:
             spell.fixedRange = true;
             Spells.push_back(spell);
         }
+
         {
             SpellData spell;
             spell.charName = "Maokai";
             spell.dangerlevel = 1;
-            spell.missileName = "MaokaiEMissile";
-            spell.name = "Sapling Toss";
-            spell.projectileSpeed = 1500.0f;
-            spell.radius = 225.0f;              // Wiki medium sapling effect radius
-            spell.range = 1100.0f;
-            spell.spellDelay = 250.0f;
-            spell.spellKey = SpellSlot::E;
-            spell.spellName = "MaokaiE";
-            spell.extraSpellNames = { "MaokaiSapling2" };
-            spell.spellType = SpellType::Circle;
-            spell.ccType = CCType::Slow;
-            spell.hasTrap = true;
-            spell.defaultOff = true;
-            Spells.push_back(spell);
-        }
-        {
-            SpellData spell;
-            spell.charName = "Maokai";
-            spell.dangerlevel = 4;
             spell.missileName = "MaokaiRMis";
             spell.name = "Nature's Grasp";
-            spell.projectileSpeed = 50.0f;
-            spell.radius = 240.0f;              // Wiki width
-            spell.range = 3000.0f;
-            spell.spellDelay = 250.0f;
+            spell.projectileSpeed = 50.0f;      // wiki base speed
+            spell.radius = 120.0f;              // mLineWidth (half-width; wiki width 240)
+            spell.range = 3000.0f;              // wiki centered range = bin CastRange
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
             spell.spellKey = SpellSlot::R;
             spell.spellName = "MaokaiR";
             spell.spellType = SpellType::Line;
@@ -2633,6 +2641,20 @@ public:
         {
             SpellData spell;
             spell.charName = "MissFortune";
+            spell.dangerlevel = 2;
+            spell.missileName = "MissFortuneRicochetShot";
+            spell.name = "Double Up";
+            spell.projectileSpeed = 1400.0f;    // wiki speed = bin MissileSpeed
+            spell.radius = 20.0f;               // targeted missile (small)
+            spell.range = 550.0f;               // wiki target range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "MissFortuneRicochetShot";
+            spell.spellType = SpellType::Targeted;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "MissFortune";
             spell.dangerlevel = 1;
             spell.name = "Make It Rain";
             spell.radius = 200.0f;              // Wiki effect radius
@@ -2651,10 +2673,10 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "MissFortuneBullets";
             spell.name = "Bullet Time";
-            spell.projectileSpeed = 2000.0f;
-            spell.radius = 40.0f;               // Wiki bullet width
-            spell.range = 1400.0f;
-            spell.angle = 17.0f;                // CDragon cone angle
+            spell.projectileSpeed = 2000.0f;    // wiki speed
+            spell.radius = 40.0f;               // wiki bullet width
+            spell.range = 1450.0f;              // wiki effect radius
+            spell.angle = 30.0f;                // wiki full cone angle
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "MissFortuneBulletTime";
@@ -2668,9 +2690,9 @@ public:
             spell.charName = "Mordekaiser";
             spell.dangerlevel = 3;
             spell.name = "Obliterate";
-            spell.radius = 160.0f;              // Wiki width
-            spell.range = 675.0f;
-            spell.spellDelay = 500.0f;
+            spell.radius = 75.0f;               // wiki max width 150 / 2 (half-width)
+            spell.range = 625.0f;               // wiki max range
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "MordekaiserQ";
             spell.spellType = SpellType::Line;
@@ -2703,9 +2725,9 @@ public:
             spell.missileName = "DarkBindingMissile";
             spell.extraMissileNames = { "MorganaQ", "Morgana_Q_Mis" };
             spell.name = "Dark Binding";
-            spell.projectileSpeed = 1200.0f;
-            spell.radius = 140.0f;              // Wiki width
-            spell.range = 1300.0f;
+            spell.projectileSpeed = 1200.0f;    // MorganaQ MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1300.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "DarkBindingMissile";
@@ -2721,8 +2743,8 @@ public:
             spell.charName = "Morgana";
             spell.dangerlevel = 2;
             spell.name = "Tormented Soil";
-            spell.radius = 280.0f;
-            spell.range = 900.0f;
+            spell.radius = 275.0f;              // wiki effect radius
+            spell.range = 900.0f;               // wiki target range
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::W;
             spell.spellName = "TormentedSoil";
@@ -2758,9 +2780,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "namiqmissile";
             spell.name = "Aqua Prison";
-            spell.projectileSpeed = 2500.0f;
-            spell.radius = 200.0f;
-            spell.range = 875.0f;
+            spell.projectileSpeed = 2500.0f;    // NamiQMissile speed
+            spell.radius = 200.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 850.0f;               // wiki target range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "NamiQ";
@@ -2775,9 +2797,9 @@ public:
             spell.dangerlevel = 4;
             spell.missileName = "namirmissile";
             spell.name = "Tidal Wave";
-            spell.projectileSpeed = 850.0f;
-            spell.radius = 500.0f;              // Wiki width
-            spell.range = 2750.0f;
+            spell.projectileSpeed = 850.0f;     // NamiRMissile MissileSpec.mSpeed
+            spell.radius = 250.0f;              // mLineWidth (half-width; wiki width 500)
+            spell.range = 2750.0f;              // wiki target range = bin CastRange
             spell.spellDelay = 500.0f;
             spell.spellKey = SpellSlot::R;
             spell.spellName = "NamiR";
@@ -2805,9 +2827,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "NautilusAnchorDragMissile";
             spell.name = "Dredge Line";
-            spell.projectileSpeed = 2000.0f;
-            spell.radius = 180.0f;              // Wiki width
-            spell.range = 1150.0f;
+            spell.projectileSpeed = 2000.0f;    // NautilusAnchorDragMissile MissileSpec.mSpeed
+            spell.radius = 90.0f;               // mLineWidth (half-width; wiki width 180)
+            spell.range = 1122.0f;              // wiki edge range
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "NautilusAnchorDrag";
@@ -2853,9 +2875,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "NeekoE";
             spell.name = "Tangle-Barbs";
-            spell.projectileSpeed = 1300.0f;
-            spell.radius = 140.0f;              // Wiki initial width
-            spell.range = 1000.0f;
+            spell.projectileSpeed = 1300.0f;    // NeekoE MissileSpec.mSpeed (initial)
+            spell.radius = 70.0f;               // wiki initial width 140 / 2 (half-width)
+            spell.range = 1000.0f;              // wiki range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::E;
             spell.spellName = "NeekoE";
@@ -2869,9 +2891,9 @@ public:
             spell.charName = "Neeko";
             spell.dangerlevel = 4;
             spell.name = "Pop Blossom";
-            spell.radius = 600.0f;
-            spell.range = 600.0f;
-            spell.spellDelay = 600.0f;
+            spell.radius = 590.0f;              // wiki effect radius
+            spell.range = 600.0f;               // bin CastRange
+            spell.spellDelay = 1850.0f;         // wind-up 1.25s + cast time 0.6s
             spell.spellKey = SpellSlot::R;
             spell.spellName = "NeekoR";
             spell.spellType = SpellType::Circle;
@@ -2886,9 +2908,9 @@ public:
             spell.dangerlevel = 3;
             spell.missileName = "JavelinToss";
             spell.name = "Javelin Toss";
-            spell.projectileSpeed = 1300.0f;
-            spell.radius = 80.0f;               // Wiki width
-            spell.range = 1500.0f;
+            spell.projectileSpeed = 1300.0f;    // JavelinToss MissileSpec.mSpeed
+            spell.radius = 40.0f;               // mLineWidth (half-width; wiki width 80)
+            spell.range = 1500.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "JavelinToss";
@@ -2897,21 +2919,7 @@ public:
             spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
             Spells.push_back(spell);
         }
-        {
-            SpellData spell;
-            spell.charName = "Nidalee";
-            spell.dangerlevel = 1;
-            spell.name = "Bushwhack";
-            spell.radius = 100.0f;
-            spell.range = 900.0f;
-            spell.spellDelay = 250.0f;
-            spell.spellKey = SpellSlot::W;
-            spell.spellName = "Bushwhack";
-            spell.spellType = SpellType::Circle;
-            spell.hasTrap = true;
-            spell.defaultOff = true;
-            Spells.push_back(spell);
-        }
+
         {
             SpellData spell;
             spell.charName = "Nilah";
@@ -2933,9 +2941,9 @@ public:
             spell.dangerlevel = 2;
             spell.missileName = "NocturneDuskbringer";
             spell.name = "Duskbringer";
-            spell.projectileSpeed = 1600.0f;
-            spell.radius = 120.0f;              // Wiki width
-            spell.range = 1200.0f;
+            spell.projectileSpeed = 1600.0f;    // NocturneDuskbringer MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 1200.0f;              // wiki centered range = bin CastRange
             spell.spellDelay = 250.0f;
             spell.spellKey = SpellSlot::Q;
             spell.spellName = "NocturneDuskbringer";
@@ -2943,18 +2951,89 @@ public:
             spell.ccType = CCType::Slow;
             Spells.push_back(spell);
         }
+
+        // Lee Sin R, Nautilus R, Naafiri W, Nilah E and Nunu Q are targeted/dash mechanics; skip.
+        // #endregion N
+
+        // #region O
         {
             SpellData spell;
-            spell.charName = "Nunu";
-            spell.dangerlevel = 3;
-            spell.missileName = "NunuWSnowballMissile";
-            spell.name = "Biggest Snowball Ever!";
-            spell.projectileSpeed = 1500.0f;
-            spell.radius = 50.0f;               // Wiki width
-            spell.range = 7500.0f;
-            spell.spellDelay = 250.0f;
-            spell.spellKey = SpellSlot::W;
-            spell.spellName = "NunuW";
+            spell.charName = "Olaf";
+            spell.dangerlevel = 2;
+            spell.missileName = "OlafAxeThrowCast";
+            spell.name = "Undertow";
+            spell.projectileSpeed = 1600.0f;    // OlafAxeThrowCast MissileSpeed
+            spell.radius = 90.0f;               // mLineWidth (half-width; wiki width 180)
+            spell.range = 1000.0f;              // wiki max target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "OlafAxeThrowCast";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Orianna";
+            spell.dangerlevel = 2;
+            spell.missileName = "OrianaRedact";
+            spell.name = "Command: Attack";
+            spell.projectileSpeed = 1400.0f;    // wiki speed
+            spell.radius = 80.0f;               // mLineWidth (half-width; wiki width 160)
+            spell.range = 825.0f;               // wiki target range
+            spell.spellDelay = 250.0f;          // wiki cast time none (default)
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "OrianaRedactCommand";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Orianna";
+            spell.dangerlevel = 4;
+            spell.name = "Command: Shockwave";
+            spell.radius = 415.0f;              // wiki effect radius
+            spell.range = 415.0f;               // PBAoE centered on ball
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "OrianaDetonateCommand";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Stun;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ornn";
+            spell.dangerlevel = 2;
+            spell.missileName = "OrnnQ";
+            spell.name = "Volcanic Rupture";
+            spell.projectileSpeed = 1800.0f;    // OrnnQ MissileSpec.mSpeed
+            spell.radius = 65.0f;               // mLineWidth (half-width; wiki width 130)
+            spell.range = 750.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "OrnnQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ornn";
+            spell.dangerlevel = 4;
+            spell.missileName = "OrnnRWave";
+            spell.extraMissileNames = { "OrnnRWave2" };
+            spell.name = "Call of the Forge God";
+            spell.projectileSpeed = 450.0f;     // OrnnRWave MissileSpec.mSpeed (initial)
+            spell.radius = 170.0f;              // mLineWidth 250 / 2 (half-width; wiki width 340)
+            spell.range = 3000.0f;              // wiki effect radius (initial pass)
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "OrnnR";
             spell.spellType = SpellType::Line;
             spell.ccType = CCType::KnockUp;
             spell.fixedRange = true;
@@ -2962,22 +3041,1739 @@ public:
         }
         {
             SpellData spell;
-            spell.charName = "Nunu";
+            spell.charName = "Pantheon";
+            spell.dangerlevel = 2;
+            spell.missileName = "PantheonQMissile";
+            spell.name = "Comet Spear";
+            spell.projectileSpeed = 2700.0f;    // PantheonQMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 1200.0f;              // wiki hurl range
+            spell.spellDelay = 200.0f;          // wiki cast time 0.2
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "PantheonQMissile";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Pantheon";
             spell.dangerlevel = 4;
-            spell.name = "Absolute Zero";
-            spell.radius = 500.0f;
-            spell.range = 650.0f;
-            spell.spellDelay = 250.0f;
+            spell.name = "Grand Starfall";
+            spell.radius = 450.0f;              // wiki effect radius (landing)
+            spell.range = 5500.0f;              // wiki target range
+            spell.spellDelay = 2000.0f;         // channel 2s
             spell.spellKey = SpellSlot::R;
-            spell.spellName = "NunuR";
+            spell.spellName = "PantheonRFall";
             spell.spellType = SpellType::Circle;
             spell.ccType = CCType::Slow;
-            spell.defaultOff = true;
             spell.isSpecial = true;
             Spells.push_back(spell);
         }
-        // Lee Sin R, Nautilus R, Naafiri W, Nilah E and Nunu Q are targeted/dash mechanics; skip.
-        // #endregion N
+        {
+            SpellData spell;
+            spell.charName = "Poppy";
+            spell.dangerlevel = 2;
+            spell.name = "Hammer Shock";
+            spell.radius = 80.0f;               // mLineWidth (half-width; wiki width 160)
+            spell.range = 460.0f;               // wiki range
+            spell.spellDelay = 332.0f;          // wiki cast time 0.3325
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "PoppyQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Poppy";
+            spell.dangerlevel = 4;
+            spell.missileName = "PoppyRMissile";
+            spell.name = "Keeper's Verdict";
+            spell.projectileSpeed = 2500.0f;    // PoppyRMissile MissileSpec.mSpeed
+            spell.radius = 100.0f;              // mLineWidth (half-width; wiki width 180)
+            spell.range = 1200.0f;              // wiki max charged range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "PoppyR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Pyke";
+            spell.dangerlevel = 3;
+            spell.missileName = "PykeQRange";
+            spell.name = "Bone Skewer";
+            spell.projectileSpeed = 2000.0f;    // PykeQRange MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1100.0f;              // wiki max charged target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "PykeQRange";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Pyke";
+            spell.dangerlevel = 4;
+            spell.name = "Death from Below";
+            spell.radius = 282.0f;              // wiki max effect radius
+            spell.range = 750.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "PykeR";
+            spell.spellType = SpellType::Circle;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Qiyana";
+            spell.dangerlevel = 2;
+            spell.missileName = "QiyanaQ_Rock";
+            spell.extraMissileNames = { "QiyanaQ_Water", "QiyanaQ_Grass", "QiyanaQ_ExplosionMissile" };
+            spell.name = "Elemental Wrath";
+            spell.projectileSpeed = 1600.0f;    // QiyanaQ_Rock MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 865.0f;               // wiki Elemental Wrath range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "QiyanaQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Qiyana";
+            spell.dangerlevel = 4;
+            spell.missileName = "QiyanaRMissile";
+            spell.name = "Supreme Display of Terrible Power";
+            spell.projectileSpeed = 2000.0f;    // QiyanaRMissile MissileSpec.mSpeed
+            spell.radius = 120.0f;              // mLineWidth (half-width)
+            spell.range = 950.0f;               // wiki target range = bin QiyanaR CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "QiyanaR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Quinn";
+            spell.dangerlevel = 2;
+            spell.missileName = "QuinnQ";
+            spell.name = "Blinding Assault";
+            spell.projectileSpeed = 1550.0f;    // QuinnQ MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 1050.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "QuinnQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Blind;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rakan";
+            spell.dangerlevel = 2;
+            spell.missileName = "RakanQMis";
+            spell.name = "Gleaming Quill";
+            spell.projectileSpeed = 1850.0f;    // RakanQMis MissileSpec.mSpeed
+            spell.radius = 65.0f;               // mLineWidth (half-width; wiki width 130)
+            spell.range = 900.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "RakanQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rakan";
+            spell.dangerlevel = 3;
+            spell.name = "Grand Entrance";
+            spell.radius = 275.0f;              // wiki effect radius
+            spell.range = 650.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 350.0f;          // 0.35s delay after arrival
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "RakanW";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "RekSai";
+            spell.dangerlevel = 2;
+            spell.missileName = "RekSaiQBurrowedMis";
+            spell.name = "Prey Seeker";
+            spell.projectileSpeed = 1950.0f;    // RekSaiQBurrowedMis MissileSpec.mSpeed
+            spell.radius = 65.0f;               // mLineWidth (half-width; wiki width 130)
+            spell.range = 1500.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 125.0f;          // wiki cast time 0.125
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "RekSaiQBurrowed";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rell";
+            spell.dangerlevel = 3;
+            spell.name = "Shattering Strike";
+            spell.radius = 75.0f;               // wiki width 150 / 2 (half-width)
+            spell.range = 520.0f;               // wiki range
+            spell.spellDelay = 400.0f;          // wiki cast time 0.4
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "RellQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rell";
+            spell.dangerlevel = 3;
+            spell.name = "Ferromancy: Crash Down";
+            spell.radius = 200.0f;              // wiki collision radius
+            spell.range = 400.0f;               // wiki max target range
+            spell.spellDelay = 625.0f;          // wiki cast time 0.625
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "RellW";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "RenataGlasc";
+            spell.dangerlevel = 2;
+            spell.missileName = "RenataQ";
+            spell.name = "Bug Out";
+            spell.projectileSpeed = 1450.0f;    // RenataQ MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width)
+            spell.range = 900.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "RenataQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "RenataGlasc";
+            spell.dangerlevel = 3;
+            spell.missileName = "RenataE";
+            spell.name = "Loyalty Program";
+            spell.projectileSpeed = 1450.0f;    // RenataE MissileSpec.mSpeed
+            spell.radius = 110.0f;              // mLineWidth (half-width; wiki width 220)
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "RenataE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "RenataGlasc";
+            spell.dangerlevel = 4;
+            spell.missileName = "RenataRMissile";
+            spell.name = "Hostile Takeover";
+            spell.projectileSpeed = 1200.0f;    // RenataR MissileSpeed
+            spell.radius = 250.0f;              // mLineWidth (half-width; wiki width 500)
+            spell.range = 2000.0f;              // wiki centered range = bin CastRange
+            spell.spellDelay = 750.0f;          // wiki cast time 0.75
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "RenataR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Charm;
+            spell.fixedRange = true;
+            spell.angle = 14.0f;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rengar";
+            spell.dangerlevel = 2;
+            spell.missileName = "RengarEMis";
+            spell.extraMissileNames = { "RengarEEmpMis" };
+            spell.name = "Bola Strike";
+            spell.projectileSpeed = 1500.0f;    // RengarEMis MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1000.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "RengarE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rumble";
+            spell.dangerlevel = 2;
+            spell.missileName = "RumbleGrenadeMissile";
+            spell.extraMissileNames = { "RumbleGrenadeMissileDangerZone" };
+            spell.name = "Electro Harpoon";
+            spell.projectileSpeed = 2000.0f;    // RumbleGrenadeMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 950.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "RumbleGrenade";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Rumble";
+            spell.dangerlevel = 4;
+            spell.missileName = "RumbleCarpetBombMissile";
+            spell.name = "The Equalizer";
+            spell.projectileSpeed = 1600.0f;    // RumbleCarpetBombMissile MissileSpec.mSpeed
+            spell.radius = 200.0f;              // mLineWidth (half-width; wiki width ~400)
+            spell.range = 1700.0f;              // wiki target range
+            spell.spellDelay = 583.0f;          // wiki cast time 0.5833
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "RumbleCarpetBomb";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ryze";
+            spell.dangerlevel = 2;
+            spell.missileName = "RyzeQ";
+            spell.name = "Overload";
+            spell.projectileSpeed = 1700.0f;    // RyzeQ MissileSpec.mSpeed
+            spell.radius = 55.0f;               // mLineWidth (half-width; wiki width 110)
+            spell.range = 1000.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "RyzeQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Samira";
+            spell.dangerlevel = 2;
+            spell.missileName = "SamiraQGun";
+            spell.name = "Flair";
+            spell.projectileSpeed = 2600.0f;    // SamiraQGun MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 950.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SamiraQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+
+
+        {
+            SpellData spell;
+            spell.charName = "Sejuani";
+            spell.dangerlevel = 3;
+            spell.name = "Arctic Assault";
+            spell.projectileSpeed = 1000.0f;    // wiki speed
+            spell.radius = 75.0f;               // wiki collision radius
+            spell.range = 650.0f;               // wiki target range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SejuaniQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sejuani";
+            spell.dangerlevel = 4;
+            spell.missileName = "SejuaniRMissile";
+            spell.name = "Glacial Prison";
+            spell.projectileSpeed = 1600.0f;    // SejuaniRMissile MissileSpec.mSpeed
+            spell.radius = 120.0f;              // mLineWidth (half-width; wiki width 240)
+            spell.range = 1300.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SejuaniR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Seraphine";
+            spell.dangerlevel = 3;
+            spell.missileName = "SeraphineEMissile";
+            spell.name = "Beat Drop";
+            spell.projectileSpeed = 1200.0f;    // SeraphineEMissile MissileSpec.mSpeed
+            spell.radius = 80.0f;               // mLineWidth (half-width; wiki width 140 - approx)
+            spell.range = 1300.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SeraphineE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Seraphine";
+            spell.dangerlevel = 4;
+            spell.missileName = "SeraphineR";
+            spell.name = "Encore";
+            spell.projectileSpeed = 1600.0f;    // SeraphineR MissileSpec.mSpeed
+            spell.radius = 160.0f;              // half-width (wiki width 320)
+            spell.range = 1300.0f;              // wiki target range
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SeraphineR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Charm;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sett";
+            spell.dangerlevel = 3;
+            spell.missileName = "SettWPassiveBuff";
+            spell.name = "Haymaker";
+            spell.radius = 90.0f;               // mLineWidth (half-width)
+            spell.range = 720.0f;               // wiki circle radius
+            spell.spellDelay = 750.0f;          // wiki cast time 0.75
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "SettW";
+            spell.spellType = SpellType::Line;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sett";
+            spell.dangerlevel = 2;
+            spell.name = "The Show Stopper";
+            spell.radius = 600.0f;              // wiki effect radius
+            spell.range = 400.0f;               // wiki target range
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SettR";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+
+        {
+            SpellData spell;
+            spell.charName = "Shen";
+            spell.dangerlevel = 3;
+            spell.name = "Shadow Dash";
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki collision radius 60)
+            spell.range = 600.0f;               // wiki max target range
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ShenE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Taunt;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Shyvana";
+            spell.dangerlevel = 2;
+            spell.missileName = "ShyvanaE";
+            spell.extraMissileNames = { "ShyvanaEDragon" };
+            spell.name = "Flame Breath";
+            spell.projectileSpeed = 1600.0f;    // ShyvanaEDragon MissileSpec.mSpeed
+            spell.radius = 60.0f;               // half-width (wiki width 120)
+            spell.range = 925.0f;               // wiki target range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ShyvanaE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Singed";
+            spell.dangerlevel = 3;
+            spell.missileName = "MegaAdhesive";
+            spell.name = "Mega Adhesive";
+            spell.projectileSpeed = 700.0f;    // MegaAdhesive MissileSpeed
+            spell.radius = 265.0f;             // wiki effect radius
+            spell.range = 1000.0f;             // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;         // wiki cast time 0.25
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "MegaAdhesive";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sion";
+            spell.dangerlevel = 2;
+            spell.missileName = "SionEMissile";
+            spell.name = "Roar of the Slayer";
+            spell.projectileSpeed = 1800.0f;    // SionEMissile MissileSpec.mSpeed
+            spell.radius = 80.0f;               // mLineWidth (half-width; wiki width 160)
+            spell.range = 800.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SionE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions, CollisionObjectType::EnemyMinions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sion";
+            spell.dangerlevel = 4;
+            spell.name = "Unstoppable Onslaught";
+            spell.radius = 100.0f;              // mLineWidth (half-width)
+            spell.range = 7500.0f;              // bin CastRange
+            spell.projectileSpeed = 1500.0f;    // bin MissileSpeed
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SionR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sivir";
+            spell.dangerlevel = 2;
+            spell.missileName = "SivirQMissile";
+            spell.extraMissileNames = { "SivirQMissileReturn" };
+            spell.name = "Boomerang Blade";
+            spell.projectileSpeed = 1450.0f;    // SivirQMissile MissileSpec.mSpeed
+            spell.radius = 90.0f;               // mLineWidth (half-width; wiki width 180)
+            spell.range = 1250.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SivirQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+
+        {
+            SpellData spell;
+            spell.charName = "Skarner";
+            spell.dangerlevel = 4;
+            spell.name = "Impale";
+            spell.radius = 175.0f;              // half-width (wiki width 350)
+            spell.range = 625.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 750.0f;          // wiki cast time 0.75
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SkarnerR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Suppression;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Smolder";
+            spell.dangerlevel = 2;
+            spell.missileName = "SmolderW";
+            spell.name = "Achooo!";
+            spell.projectileSpeed = 2000.0f;    // wiki speed
+            spell.radius = 75.0f;               // mLineWidth (half-width)
+            spell.range = 1500.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 350.0f;          // wiki cast time 0.35
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "SmolderW";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Smolder";
+            spell.dangerlevel = 3;
+            spell.missileName = "SmolderRMomMissile";
+            spell.name = "MMOOOMMMM!";
+            spell.projectileSpeed = 1700.0f;    // SmolderRMomMissile MissileSpec.mSpeed
+            spell.radius = 125.0f;              // wiki width (half-width)
+            spell.range = 4250.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 750.0f;          // wiki cast time 0.75
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SmolderR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sona";
+            spell.dangerlevel = 4;
+            spell.missileName = "SonaR";
+            spell.name = "Crescendo";
+            spell.projectileSpeed = 2400.0f;    // SonaR MissileSpec.mSpeed
+            spell.radius = 140.0f;              // mLineWidth (half-width; wiki width 280)
+            spell.range = 1000.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "SonaR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Soraka";
+            spell.dangerlevel = 2;
+            spell.name = "Starcall";
+            spell.radius = 265.0f;              // wiki effect radius
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SorakaQ";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Soraka";
+            spell.dangerlevel = 3;
+            spell.name = "Equinox";
+            spell.radius = 260.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 925.0f;               // wiki target range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SorakaE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Silence;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Swain";
+            spell.dangerlevel = 2;
+            spell.name = "Vision of Empire";
+            spell.radius = 325.0f;              // wiki effect radius
+            spell.range = 7500.0f;              // wiki max target range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "SwainW";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Swain";
+            spell.dangerlevel = 3;
+            spell.missileName = "SwainE";
+            spell.extraMissileNames = { "SwainEReturnMissile" };
+            spell.name = "Nevermove";
+            spell.projectileSpeed = 935.0f;     // SwainE MissileSpeed
+            spell.radius = 85.0f;               // mLineWidth (half-width; wiki width 180)
+            spell.range = 850.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SwainE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Root;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sylas";
+            spell.dangerlevel = 2;
+            spell.missileName = "SylasQ";
+            spell.name = "Chain Lash";
+            spell.projectileSpeed = 1800.0f;    // SylasQ MissileSpec.mSpeed
+            spell.radius = 200.0f;              // wiki effect radius (explosion)
+            spell.range = 775.0f;               // wiki target range
+            spell.spellDelay = 400.0f;          // wiki cast time 0.4
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SylasQ";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Sylas";
+            spell.dangerlevel = 3;
+            spell.missileName = "SylasE2";
+            spell.name = "Abduct";
+            spell.projectileSpeed = 1600.0f;    // SylasE2 MissileSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 850.0f;               // bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SylasE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Syndra";
+            spell.dangerlevel = 2;
+            spell.name = "Dark Sphere";
+            spell.radius = 210.0f;              // wiki effect radius
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 600.0f;          // wiki 0.6s delay
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "SyndraQ";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Syndra";
+            spell.dangerlevel = 3;
+            spell.missileName = "SyndraEMissile";
+            spell.extraMissileNames = { "SyndraESphereMissile" };
+            spell.name = "Scatter the Weak";
+            spell.projectileSpeed = 2500.0f;    // SyndraEMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 700.0f;               // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "SyndraE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Taliyah";
+            spell.dangerlevel = 3;
+            spell.name = "Seismic Shove";
+            spell.radius = 225.0f;              // wiki effect radius
+            spell.range = 900.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 1042.0f;         // wiki cast time 0.25 + 0.792 delay
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "TaliyahW";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Taliyah";
+            spell.dangerlevel = 2;
+            spell.name = "Unraveled Earth";
+            spell.radius = 800.0f;              // wiki effect radius
+            spell.range = 950.0f;               // bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "TaliyahE";
+            spell.spellType = SpellType::Cone;
+            spell.ccType = CCType::Slow;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Talon";
+            spell.dangerlevel = 2;
+            spell.missileName = "TalonWMissileOne";
+            spell.extraMissileNames = { "TalonWMissileTwo" };
+            spell.name = "Rake";
+            spell.projectileSpeed = 2500.0f;    // TalonWMissileOne MissileSpeed
+            spell.radius = 75.0f;               // mLineWidth (half-width; wiki width 150)
+            spell.range = 900.0f;               // wiki range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "TalonW";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Talon";
+            spell.dangerlevel = 3;
+            spell.missileName = "TalonRMisOne";
+            spell.extraMissileNames = { "TalonRMisTwo" };
+            spell.name = "Shadow Assault";
+            spell.projectileSpeed = 2400.0f;    // TalonRMisOne MissileSpeed
+            spell.radius = 140.0f;              // mLineWidth (half-width; wiki width 280)
+            spell.range = 550.0f;               // wiki effect radius
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "TalonR";
+            spell.spellType = SpellType::Line;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Taric";
+            spell.dangerlevel = 3;
+            spell.missileName = "TaricE";
+            spell.name = "Dazzle";
+            spell.projectileSpeed = 1750.0f;    // TaricE MissileSpeed
+            spell.radius = 100.0f;              // mLineWidth (half-width; wiki width 140)
+            spell.range = 575.0f;               // wiki range
+            spell.spellDelay = 1000.0f;         // wiki 1s windup
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "TaricE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Teemo";
+            spell.dangerlevel = 2;
+            spell.missileName = "TeemoQ";
+            spell.name = "Blinding Dart";
+            spell.projectileSpeed = 2500.0f;    // TeemoQ MissileSpec.mSpeed
+            spell.radius = 20.0f;               // targeted missile default
+            spell.range = 680.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "TeemoQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Blind;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Thresh";
+            spell.dangerlevel = 4;
+            spell.missileName = "ThreshQMissile";
+            spell.name = "Death Sentence";
+            spell.projectileSpeed = 1900.0f;    // ThreshQMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1100.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ThreshQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Thresh";
+            spell.dangerlevel = 3;
+            spell.missileName = "ThreshEMissile1";
+            spell.name = "Flay";
+            spell.projectileSpeed = 2000.0f;    // ThreshEMissile1 MissileSpeed
+            spell.radius = 110.0f;              // mLineWidth (half-width; wiki width 220)
+            spell.range = 525.0f;               // wiki range
+            spell.spellDelay = 389.0f;          // wiki cast time 0.3889
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ThreshE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Thresh";
+            spell.dangerlevel = 4;
+            spell.name = "The Box";
+            spell.radius = 400.0f;              // bin CastRadius (distance to walls)
+            spell.range = 400.0f;               // bin CastRadius
+            spell.spellDelay = 450.0f;          // wiki cast time 0.45
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "ThreshR";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Trundle";
+            spell.dangerlevel = 2;
+            spell.name = "Pillar of Ice";
+            spell.radius = 225.0f;              // wiki effect radius
+            spell.range = 1000.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "TrundleE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Tryndamere";
+            spell.dangerlevel = 2;
+            spell.name = "Spinning Slash";
+            spell.projectileSpeed = 700.0f;     // TryndamereE MissileSpeed
+            spell.radius = 160.0f;              // mLineWidth (half-width)
+            spell.range = 660.0f;               // wiki target range
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "TryndamereE";
+            spell.spellType = SpellType::Line;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "TwistedFate";
+            spell.dangerlevel = 2;
+            spell.missileName = "WildCards";
+            spell.name = "Wild Cards";
+            spell.projectileSpeed = 1450.0f;    // WildCards MissileSpeed
+            spell.radius = 40.0f;               // half-width (wiki width 80)
+            spell.range = 1450.0f;              // wiki target range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "WildCards";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Twitch";
+            spell.dangerlevel = 2;
+            spell.missileName = "TwitchVenomCaskMissile";
+            spell.name = "Venom Cask";
+            spell.projectileSpeed = 1400.0f;    // TwitchVenomCaskMissile MissileSpeed
+            spell.radius = 300.0f;              // wiki effect radius (edge)
+            spell.range = 950.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "TwitchVenomCask";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Urgot";
+            spell.dangerlevel = 2;
+            spell.name = "Corrosive Charge";
+            spell.radius = 210.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 550.0f;          // wiki cast time 0.25 + 0.3s landing delay
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "UrgotQ";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Urgot";
+            spell.dangerlevel = 5;
+            spell.missileName = "UrgotR";
+            spell.name = "Fear Beyond Death";
+            spell.projectileSpeed = 3200.0f;    // UrgotR MissileSpec.mSpeed
+            spell.radius = 80.0f;               // mLineWidth (half-width; wiki width 160)
+            spell.range = 2500.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 500.0f;          // wiki cast time 0.5
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "UrgotR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Suppression;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Varus";
+            spell.dangerlevel = 3;
+            spell.missileName = "VarusQMissile";
+            spell.name = "Piercing Arrow";
+            spell.projectileSpeed = 1900.0f;    // VarusQMissile MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width; wiki width 140)
+            spell.range = 1600.0f;              // wiki max range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "VarusQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Varus";
+            spell.dangerlevel = 2;
+            spell.missileName = "VarusEMissile";
+            spell.name = "Hail of Arrows";
+            spell.projectileSpeed = 1750.0f;    // VarusE MissileSpeed
+            spell.radius = 300.0f;              // wiki effect radius
+            spell.range = 925.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 742.0f;          // wiki cast time 0.2419 + 0.5s landing
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VarusE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Varus";
+            spell.dangerlevel = 5;
+            spell.missileName = "VarusRMissile";
+            spell.name = "Chain of Corruption";
+            spell.projectileSpeed = 1500.0f;    // VarusRMissile MissileSpec.mSpeed
+            spell.radius = 120.0f;              // mLineWidth (half-width; wiki width 240)
+            spell.range = 1370.0f;              // wiki range
+            spell.spellDelay = 242.0f;          // wiki cast time 0.2419
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "VarusR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Root;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vayne";
+            spell.dangerlevel = 3;
+            spell.missileName = "VayneCondemnMissile";
+            spell.name = "Condemn";
+            spell.projectileSpeed = 2200.0f;    // VayneCondemnMissile MissileSpec.mSpeed
+            spell.radius = 20.0f;               // targeted missile default
+            spell.range = 550.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VayneCondemn";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Knockback;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Veigar";
+            spell.dangerlevel = 2;
+            spell.missileName = "VeigarBalefulStrikeMis";
+            spell.name = "Baleful Strike";
+            spell.projectileSpeed = 2200.0f;    // VeigarBalefulStrikeMis MissileSpec.mSpeed
+            spell.radius = 70.0f;               // mLineWidth (half-width)
+            spell.range = 1050.0f;              // bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "VeigarBalefulStrike";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Veigar";
+            spell.dangerlevel = 3;
+            spell.name = "Dark Matter";
+            spell.radius = 240.0f;              // wiki effect radius
+            spell.range = 950.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 1221.0f;         // wiki 1.221s delay
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "VeigarDarkMatter";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Veigar";
+            spell.dangerlevel = 4;
+            spell.name = "Event Horizon";
+            spell.radius = 390.0f;              // wiki effect radius (cage)
+            spell.range = 725.0f;               // wiki target range
+            spell.spellDelay = 750.0f;          // wiki cast time 0.25 + 0.5s delay
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VeigarEventHorizon";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Stun;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Velkoz";
+            spell.dangerlevel = 3;
+            spell.missileName = "VelkozQMissile";
+            spell.extraMissileNames = { "VelkozQMissileSplit" };
+            spell.name = "Plasma Fission";
+            spell.projectileSpeed = 1300.0f;    // VelkozQMissile MissileSpec.mSpeed
+            spell.radius = 50.0f;               // mLineWidth (half-width; wiki width 100)
+            spell.range = 1100.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "VelkozQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Velkoz";
+            spell.dangerlevel = 2;
+            spell.missileName = "VelkozWMissile";
+            spell.name = "Void Rift";
+            spell.projectileSpeed = 1700.0f;    // VelkozWMissile MissileSpec.mSpeed
+            spell.radius = 87.0f;               // mLineWidth (half-width; wiki width 175)
+            spell.range = 1105.0f;              // wiki range
+            spell.spellDelay = 250.0f;          // wiki 0.25s delay
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "VelkozW";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Velkoz";
+            spell.dangerlevel = 3;
+            spell.name = "Tectonic Disruption";
+            spell.radius = 225.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 800.0f;          // wiki cast time 0.25 + 0.55s max delay
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VelkozE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vex";
+            spell.dangerlevel = 2;
+            spell.missileName = "VexQ";
+            spell.name = "Mistral Bolt";
+            spell.projectileSpeed = 600.0f;     // VexQ MissileSpec.mSpeed (initial)
+            spell.radius = 80.0f;               // half-width (wiki width 160 narrow)
+            spell.range = 1200.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 150.0f;          // wiki cast time 0.15
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "VexQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vex";
+            spell.dangerlevel = 2;
+            spell.missileName = "VexE";
+            spell.name = "Looming Darkness";
+            spell.projectileSpeed = 1300.0f;    // VexE MissileSpec.mSpeed
+            spell.radius = 300.0f;              // wiki max effect radius
+            spell.range = 800.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VexE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vex";
+            spell.dangerlevel = 5;
+            spell.missileName = "VexR";
+            spell.name = "Shadow Surge";
+            spell.projectileSpeed = 1600.0f;    // VexR MissileSpec.mSpeed
+            spell.radius = 130.0f;              // mLineWidth (half-width; wiki width 260)
+            spell.range = 3000.0f;              // wiki max range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "VexR";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vi";
+            spell.dangerlevel = 3;
+            spell.missileName = "ViQ";
+            spell.name = "Vault Breaker";
+            spell.projectileSpeed = 1500.0f;    // ViQ MissileSpeed
+            spell.radius = 55.0f;               // mLineWidth (collision radius)
+            spell.range = 725.0f;               // wiki max target range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ViQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Knockback;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Viktor";
+            spell.dangerlevel = 3;
+            spell.missileName = "ViktorEMissile";
+            spell.extraMissileNames = { "ViktorEMissile2", "ViktorEAugMissile" };
+            spell.name = "Death Ray";
+            spell.projectileSpeed = 1050.0f;    // ViktorEMissile MissileSpec.mSpeed
+            spell.radius = 90.0f;               // mLineWidth (half-width)
+            spell.range = 600.0f;               // wiki target range 550 + beam range 500
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ViktorE";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Viktor";
+            spell.dangerlevel = 3;
+            spell.name = "Gravity Field";
+            spell.radius = 300.0f;              // bin CastRadius
+            spell.range = 800.0f;               // bin CastRange
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "ViktorW";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Stun;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Viktor";
+            spell.dangerlevel = 4;
+            spell.name = "Chaos Storm";
+            spell.radius = 325.0f;              // wiki effect radius
+            spell.range = 700.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "ViktorR";
+            spell.spellType = SpellType::Circle;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vladimir";
+            spell.dangerlevel = 2;
+            spell.missileName = "VladimirEMissile";
+            spell.name = "Tides of Blood";
+            spell.projectileSpeed = 4000.0f;    // VladimirEMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 600.0f;               // wiki effect radius
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VladimirE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Vladimir";
+            spell.dangerlevel = 3;
+            spell.name = "Hemoplague";
+            spell.radius = 375.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 625.0f;               // wiki target range = bin CastRange
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "VladimirR";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Volibear";
+            spell.dangerlevel = 3;
+            spell.name = "Sky Splitter";
+            spell.radius = 325.0f;              // wiki effect radius = bin CastRadius
+            spell.range = 1200.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 2000.0f;         // wiki 2s delay
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "VolibearE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Volibear";
+            spell.dangerlevel = 1;
+            spell.name = "Stormbringer";
+            spell.radius = 300.0f;              // wiki epicenter effect radius
+            spell.range = 700.0f;               // wiki target range = bin CastRange
+            spell.spellDelay = 1000.0f;         // wiki 1s leap duration
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "VolibearR";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Warwick";
+            spell.dangerlevel = 5;
+            spell.missileName = "WarwickR";
+            spell.name = "Infinite Duress";
+            spell.radius = 205.0f;              // wiki collision radius
+            spell.range = 1100.0f;              // approx max leap range with Blood Hunt
+            spell.spellDelay = 100.0f;          // wiki cast time 0.1
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "WarwickR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Suppression;
+            spell.isSpecial = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Xayah";
+            spell.dangerlevel = 2;
+            spell.missileName = "XayahQMissile1";
+            spell.extraMissileNames = { "XayahQMissile2" };
+            spell.name = "Double Daggers";
+            spell.projectileSpeed = 400.0f;     // XayahQMissile1 MissileSpec.mSpeed
+            spell.radius = 50.0f;               // mLineWidth (half-width; wiki width 100)
+            spell.range = 1100.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "XayahQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Xerath";
+            spell.dangerlevel = 3;
+            spell.missileName = "XerathArcanopulse2";
+            spell.name = "Arcanopulse";
+            spell.projectileSpeed = 3000.0f;    // XerathArcanopulse2 MissileSpeed
+            spell.radius = 72.0f;               // half-width (wiki width 145)
+            spell.range = 1450.0f;              // wiki max range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "XerathArcanopulse";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Xerath";
+            spell.dangerlevel = 2;
+            spell.name = "Eye of Destruction";
+            spell.radius = 275.0f;              // wiki effect radius
+            spell.range = 1000.0f;              // wiki target range = bin CastRange
+            spell.spellDelay = 778.0f;          // wiki cast time 0.25 + 0.528s delay
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "XerathArcaneBarrage";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Xerath";
+            spell.dangerlevel = 3;
+            spell.missileName = "XerathMageSpearMissile";
+            spell.name = "Shocking Orb";
+            spell.projectileSpeed = 1400.0f;    // XerathMageSpearMissile MissileSpec.mSpeed
+            spell.radius = 60.0f;               // mLineWidth (half-width; wiki width 120)
+            spell.range = 1125.0f;              // wiki range
+            spell.spellDelay = 250.0f;          // wiki cast time 0.25
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "XerathMageSpear";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            spell.collisionObjects = { CollisionObjectType::EnemyChampions };
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Xerath";
+            spell.dangerlevel = 4;
+            spell.missileName = "XerathLocusPulse";
+            spell.name = "Rite of the Arcane";
+            spell.radius = 200.0f;              // wiki effect radius
+            spell.range = 3200.0f;              // wiki range
+            spell.spellDelay = 400.0f;          // wiki cast time 0.4
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "XerathLocusOfPower2";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yasuo";
+            spell.dangerlevel = 3;
+            spell.missileName = "YasuoQ3Mis";
+            spell.name = "Steel Tempest (Tornado)";
+            spell.projectileSpeed = 1200.0f;   // YasuoQ3Mis MissileSpec.mSpeed
+            spell.radius = 45.0f;              // mLineWidth (half-width; wiki width 90)
+            spell.range = 1000.0f;             // wiki tornado range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "YasuoQ3";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yone";
+            spell.dangerlevel = 3;
+            spell.missileName = "YoneQ3Missile";
+            spell.name = "Mortal Steel (Tornado)";
+            spell.projectileSpeed = 1500.0f;   // YoneQ3Missile MissileSpec.mSpeed
+            spell.radius = 45.0f;              // half-width (default)
+            spell.range = 950.0f;              // bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "YoneQ3";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yone";
+            spell.dangerlevel = 2;
+            spell.name = "Spirit Cleave";
+            spell.radius = 400.0f;             // cone half-angle
+            spell.range = 700.0f;              // bin CastRange
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "YoneW";
+            spell.spellType = SpellType::Cone;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yone";
+            spell.dangerlevel = 5;
+            spell.missileName = "YoneR";
+            spell.name = "Fate Sealed";
+            spell.projectileSpeed = 1500.0f;   // YoneR MissileSpeed
+            spell.radius = 112.0f;             // mLineWidth (half-width; wiki width 225)
+            spell.range = 1000.0f;             // wiki range = bin CastRange
+            spell.spellDelay = 750.0f;         // wiki cast time 0.75
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "YoneR";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yorick";
+            spell.dangerlevel = 2;
+            spell.missileName = "YorickEMissile";
+            spell.name = "Mourning Mist";
+            spell.projectileSpeed = 1800.0f;   // YorickEMissile MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width)
+            spell.range = 700.0f;              // wiki range
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "YorickE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Yuumi";
+            spell.dangerlevel = 2;
+            spell.missileName = "YuumiQ";
+            spell.name = "Prowling Projectile";
+            spell.projectileSpeed = 100.0f;    // YuumiQ MissileSpeed
+            spell.radius = 32.0f;              // mLineWidth (half-width; wiki width 65)
+            spell.range = 1150.0f;             // bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "YuumiQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.isSpecial = true;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+
+        {
+            SpellData spell;
+            spell.charName = "Zac";
+            spell.dangerlevel = 2;
+            spell.missileName = "ZacQMissile";
+            spell.name = "Stretching Strike";
+            spell.projectileSpeed = 2800.0f;   // ZacQMissile MissileSpec.mSpeed
+            spell.radius = 40.0f;              // mLineWidth (half-width)
+            spell.range = 951.0f;              // bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZacQ";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zac";
+            spell.dangerlevel = 4;
+            spell.missileName = "ZacETimingMissile";
+            spell.name = "Elastic Slingshot";
+            spell.projectileSpeed = 1000.0f;   // ZacETimingMissile MissileSpec.mSpeed
+            spell.radius = 265.0f;             // wiki effect radius
+            spell.range = 1800.0f;             // wiki max target range
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ZacE";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zed";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZedQMissile";
+            spell.name = "Razor Shuriken";
+            spell.projectileSpeed = 1700.0f;   // ZedQMissile MissileSpec.mSpeed
+            spell.radius = 25.0f;              // mLineWidth (half-width)
+            spell.range = 925.0f;              // bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZedQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zeri";
+            spell.dangerlevel = 1;
+            spell.missileName = "ZeriQMis";
+            spell.extraMissileNames = { "ZeriQMisPierce", "ZeriQMisEmpowered", "ZeriQMisEmpoweredPierce" };
+            spell.name = "Burst Fire";
+            spell.projectileSpeed = 2600.0f;   // ZeriQMis MissileSpec.mSpeed
+            spell.radius = 30.0f;              // mLineWidth (half-width; wiki width 60)
+            spell.range = 825.0f;              // bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZeriQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zeri";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZeriW";
+            spell.name = "Ultrashock Laser";
+            spell.projectileSpeed = 2500.0f;   // ZeriW MissileSpec.mSpeed
+            spell.radius = 20.0f;              // mLineWidth (half-width)
+            spell.range = 1200.0f;             // bin CastRange
+            spell.spellKey = SpellSlot::W;
+            spell.spellName = "ZeriW";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Slow;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ziggs";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZiggsQSpell";
+            spell.name = "Bouncing Bomb";
+            spell.projectileSpeed = 1700.0f;   // ZiggsQSpell MissileSpec.mSpeed
+            spell.radius = 150.0f;             // wiki effect radius
+            spell.range = 1400.0f;             // wiki max range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZiggsQ";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Ziggs";
+            spell.dangerlevel = 5;
+            spell.missileName = "ZiggsRBoomLong";
+            spell.extraMissileNames = { "ZiggsRBoomMedium", "ZiggsRBoomExtraLong" };
+            spell.name = "Mega Inferno Bomb";
+            spell.projectileSpeed = 2250.0f;   // ZiggsRBoomLong MissileSpec.mSpeed
+            spell.radius = 525.0f;             // wiki effect radius
+            spell.range = 5300.0f;             // wiki range
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "ZiggsR";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zilean";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZileanQMissile";
+            spell.name = "Time Bomb";
+            spell.projectileSpeed = 2000.0f;   // ZileanQMissile MissileSpeed
+            spell.radius = 150.0f;             // wiki effect radius
+            spell.range = 900.0f;              // wiki range = bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZileanQ";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::Stun;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zoe";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZoeQMissile";
+            spell.extraMissileNames = { "ZoeQMis2", "ZoeQRecast" };
+            spell.name = "Paddle Star";
+            spell.projectileSpeed = 2500.0f;   // ZoeQMis2 MissileSpeed (max)
+            spell.radius = 25.0f;              // mLineWidth (half-width)
+            spell.range = 1300.0f;             // wiki max range
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZoeQ";
+            spell.spellType = SpellType::Line;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zoe";
+            spell.dangerlevel = 4;
+            spell.missileName = "ZoeEMis";
+            spell.extraMissileNames = { "ZoeEb", "ZoeEb2", "ZoeEb3", "ZoeEb4", "ZoeEb5" };
+            spell.name = "Sleep Trouble Bubble";
+            spell.projectileSpeed = 1850.0f;   // ZoeE MissileSpec.mSpeed
+            spell.radius = 20.0f;              // mLineWidth (half-width)
+            spell.range = 2875.0f;             // wiki max range (through walls)
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ZoeE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Sleep;
+            spell.isSpecial = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zyra";
+            spell.dangerlevel = 2;
+            spell.missileName = "ZyraQ";
+            spell.name = "Deadly Spines";
+            spell.projectileSpeed = 1400.0f;   // ZyraQ MissileSpec.mSpeed
+            spell.radius = 140.0f;             // wiki effect radius = bin CastRadius
+            spell.range = 800.0f;              // wiki range = bin CastRange
+            spell.spellKey = SpellSlot::Q;
+            spell.spellName = "ZyraQ";
+            spell.spellType = SpellType::Circle;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zyra";
+            spell.dangerlevel = 3;
+            spell.missileName = "ZyraE";
+            spell.name = "Grasping Roots";
+            spell.projectileSpeed = 1150.0f;   // ZyraE MissileSpec.mSpeed
+            spell.radius = 35.0f;              // mLineWidth (half-width)
+            spell.range = 1150.0f;             // bin CastRange
+            spell.spellKey = SpellSlot::E;
+            spell.spellName = "ZyraE";
+            spell.spellType = SpellType::Line;
+            spell.ccType = CCType::Root;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
+        {
+            SpellData spell;
+            spell.charName = "Zyra";
+            spell.dangerlevel = 4;
+            spell.name = "Stranglethorns";
+            spell.radius = 500.0f;             // wiki effect radius = bin CastRadius
+            spell.range = 700.0f;              // wiki range = bin CastRange
+            spell.spellDelay = 2000.0f;        // wiki 2s delay
+            spell.spellKey = SpellSlot::R;
+            spell.spellName = "ZyraR";
+            spell.spellType = SpellType::Circle;
+            spell.ccType = CCType::KnockUp;
+            spell.fixedRange = true;
+            Spells.push_back(spell);
+        }
 
     }
 };

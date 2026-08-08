@@ -68,9 +68,9 @@ public:
             return 0.0f;
         }
 
-        if (sender.Type() == ::Core::Objects::ObjectType::AITurretClient) {
-            return 900.0f;
-        }
+        // if (sender.Type() == ::Core::Objects::ObjectType::AITurretClient) {
+        //     return 900.0f;
+        // }
 
         float result = sender.AttackRange() + sender.BoundingRadius();
         if (target.IsValid() && !target.IsDead()) {

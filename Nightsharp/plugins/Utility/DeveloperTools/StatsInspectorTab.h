@@ -295,8 +295,8 @@ public:
                 drawStatRow("Health Regen Rate", selectedSnap.healthRegen);
 
                 const bool isAIBase = selectedSnap.type == ::Core::Objects::ObjectType::AIHeroClient ||
-                                     selectedSnap.type == ::Core::Objects::ObjectType::AIMinionClient ||
-                                     selectedSnap.type == ::Core::Objects::ObjectType::AITurretClient;
+                                     selectedSnap.type == ::Core::Objects::ObjectType::AIMinionClient;
+                                     // selectedSnap.type == ::Core::Objects::ObjectType::AITurretClient;
                 if (isAIBase) {
                     drawStatRowInt("Level", selectedSnap.level);
                     drawStatRow("Mana", selectedSnap.mana);
@@ -376,8 +376,8 @@ public:
             dump += line;
 
             const bool isAIBase = selectedSnap.type == ::Core::Objects::ObjectType::AIHeroClient ||
-                                 selectedSnap.type == ::Core::Objects::ObjectType::AIMinionClient ||
-                                 selectedSnap.type == ::Core::Objects::ObjectType::AITurretClient;
+                                 selectedSnap.type == ::Core::Objects::ObjectType::AIMinionClient;
+                                 // selectedSnap.type == ::Core::Objects::ObjectType::AITurretClient;
             if (isAIBase) {
                 std::snprintf(line, sizeof(line), "Level: %d | Mana: %.2f / %.2f\n", selectedSnap.level, selectedSnap.mana, selectedSnap.maxMana);
                 dump += line;

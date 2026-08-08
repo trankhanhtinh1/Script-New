@@ -580,6 +580,9 @@
     <Filter Include="Plugins\EzEvade\Spells">
       <UniqueIdentifier>{64659F90-9001-12B5-369A-CFA30FD75670}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\EzEvade\Draw">
+      <UniqueIdentifier>{B1E5C0F7-3A2D-4F61-9C7E-1D2B7E8F1A3C}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\KuroActivator">
       <UniqueIdentifier>{2C75296D-7D75-FA58-A3D4-528D2F578ED3}</UniqueIdentifier>
     </Filter>
@@ -797,9 +800,6 @@
       <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="Plugins\Registration\DeveloperToolsRegistration.cpp">
-      <Filter>Plugins\Registration</Filter>
-    </ClCompile>
-    <ClCompile Include="Plugins\Registration\EzEvadeRegistration.cpp">
       <Filter>Plugins\Registration</Filter>
     </ClCompile>
     <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp">
@@ -3047,8 +3047,17 @@
     <ClInclude Include="Plugins\EzEvade\EzEvade.h">
       <Filter>Plugins\EzEvade</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\EzEvade\EzEvadePlugin.h">
-      <Filter>Plugins\EzEvade</Filter>
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h">
+      <Filter>Plugins\EzEvade\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderCircle.h">
+      <Filter>Plugins\EzEvade\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderLine.h">
+      <Filter>Plugins\EzEvade\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderText.h">
+      <Filter>Plugins\EzEvade\Draw</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h">
       <Filter>Plugins\EzEvade\Spells</Filter>

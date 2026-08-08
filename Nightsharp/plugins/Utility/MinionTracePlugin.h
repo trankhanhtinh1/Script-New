@@ -65,7 +65,7 @@ public:
                                   type != ::Core::Objects::ObjectType::AIMinionClient &&
                                   // REMOVED: Turret/Inhibitor/Nexus disabled by user request
                                   // type != ::Core::Objects::ObjectType::AITurretClient &&
-                                  type != ::Core::Objects::ObjectType::ShopClient &&
+                                  // type != ::Core::Objects::ObjectType::ShopClient &&
                                   type != ::Core::Objects::ObjectType::Obj_SpawnPoint
                                   // REMOVED: Turret/Inhibitor/Nexus disabled by user request
                                   // && type != ::Core::Objects::ObjectType::BarracksDampenerClient
