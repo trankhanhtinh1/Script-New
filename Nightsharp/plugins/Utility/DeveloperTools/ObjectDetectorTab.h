@@ -376,9 +376,9 @@ public:
                 if (ImGui::Checkbox("Minions & Pets (AIMinionClient)", &plugin_->scanMinions_)) {
                     if (plugin_->menuScanMinions_) plugin_->menuScanMinions_->SetValue(plugin_->scanMinions_);
                 }
-                if (ImGui::Checkbox("Turrets (AITurretClient)", &plugin_->scanTurrets_)) {
-                    if (plugin_->menuScanTurrets_) plugin_->menuScanTurrets_->SetValue(plugin_->scanTurrets_);
-                }
+                // if (ImGui::Checkbox("Turrets (AITurretClient)", &plugin_->scanTurrets_)) {
+                //     if (plugin_->menuScanTurrets_) plugin_->menuScanTurrets_->SetValue(plugin_->scanTurrets_);
+                // }
                 ImGui::SameLine();
                 if (ImGui::Checkbox("Missiles (MissileClient)", &plugin_->scanMissiles_)) {
                     if (plugin_->menuScanMissiles_) plugin_->menuScanMissiles_->SetValue(plugin_->scanMissiles_);
@@ -519,12 +519,12 @@ public:
                         bool match = false;
                         if (snapTypeFilter == 1 && snap.type == ::Core::Objects::ObjectType::AIHeroClient) match = true;
                         else if (snapTypeFilter == 2 && snap.type == ::Core::Objects::ObjectType::AIMinionClient) match = true;
-                        else if (snapTypeFilter == 3 && snap.type == ::Core::Objects::ObjectType::AITurretClient) match = true;
+                        // else if (snapTypeFilter == 3 && snap.type == ::Core::Objects::ObjectType::AITurretClient) match = true;
                         else if (snapTypeFilter == 4 && snap.type == ::Core::Objects::ObjectType::MissileClient) match = true;
                         else if (snapTypeFilter == 5 && 
                                  snap.type != ::Core::Objects::ObjectType::AIHeroClient && 
                                  snap.type != ::Core::Objects::ObjectType::AIMinionClient && 
-                                 snap.type != ::Core::Objects::ObjectType::AITurretClient && 
+                                 // snap.type != ::Core::Objects::ObjectType::AITurretClient &&
                                  snap.type != ::Core::Objects::ObjectType::MissileClient) match = true;
                         
                         if (!match) {
@@ -648,11 +648,11 @@ private:
                         if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
-                if (plugin_->scanTurrets_) {
-                    for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
-                        if (obj.IsValid()) scanCache_.push_back(obj);
-                    }
-                }
+                // if (plugin_->scanTurrets_) {
+                //     for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
+                //         if (obj.IsValid()) scanCache_.push_back(obj);
+                //     }
+                // }
                 if (plugin_->scanMissiles_) {
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::MissileClient>()) {
                         if (obj.IsValid()) scanCache_.push_back(obj);
@@ -766,13 +766,13 @@ private:
                             plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyPetsList);
                             break;
                         case GameObjectListType::Turrets:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
                             break;
                         case GameObjectListType::AllyTurrets:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyTurretsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyTurretsList);
                             break;
                         case GameObjectListType::EnemyTurrets:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyTurretsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyTurretsList);
                             break;
                         case GameObjectListType::Inhibitors:
                             plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::InhibitorsList);
@@ -793,13 +793,13 @@ private:
                             plugin_->AddUniqueObject(scanCache_, SDK::GameObjects::detail::EnemyNexusObject);
                             break;
                         case GameObjectListType::Shops:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ShopsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ShopsList);
                             break;
                         case GameObjectListType::AllyShops:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyShopsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyShopsList);
                             break;
                         case GameObjectListType::EnemyShops:
-                            plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyShopsList);
+                            //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyShopsList);
                             break;
                         case GameObjectListType::SpawnPoints:
                             plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::SpawnPointsList);
@@ -840,7 +840,7 @@ private:
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyIgnoredMinionsList);
                     }
                     if (plugin_->scanTurrets_) {
-                        plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                        //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
                     }
                     if (plugin_->scanMissiles_) {
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MissilesList);

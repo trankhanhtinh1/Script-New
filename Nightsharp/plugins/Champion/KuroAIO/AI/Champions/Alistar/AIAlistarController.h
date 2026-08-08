@@ -1419,17 +1419,17 @@ inline void ObserveLocalW(const SDK::Events::ProcessSpellEventArgs& args) {
 inline void ObserveEnemyCast(const SDK::Events::ProcessSpellEventArgs& args) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (args.Sender.Type ==
-            ::Core::Objects::ObjectType::AITurretClient &&
-        args.IsAutoAttack &&
-        args.TargetNetworkId == static_cast<std::uint32_t>(player.NetworkId())) {
-        TurretAggroUntil = Now() + 1800;
-        ++TurretShotsObserved;
-        RecentIncomingDamage = std::max(
-            RecentIncomingDamage, player.MaxHealth() * 0.18f);
-        IncomingThreatUntil = Now() + 1800;
-        return;
-    }
+    // if (args.Sender.Type ==
+    //         ::Core::Objects::ObjectType::AITurretClient &&
+    //     args.IsAutoAttack &&
+    //     args.TargetNetworkId == static_cast<std::uint32_t>(player.NetworkId())) {
+    //     TurretAggroUntil = Now() + 1800;
+    //     ++TurretShotsObserved;
+    //     RecentIncomingDamage = std::max(
+    //         RecentIncomingDamage, player.MaxHealth() * 0.18f);
+    //     IncomingThreatUntil = Now() + 1800;
+    //     return;
+    // }
 
     const auto analysis = AnalyzeEnemyCast(args, 220.0f, 115.0f);
     if (!analysis.Valid) return;

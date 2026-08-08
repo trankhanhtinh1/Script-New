@@ -1027,7 +1027,8 @@ public:
     }
 
     bool IsTurret() const {
-        return Type() == ::Core::Objects::ObjectType::AITurretClient;
+        // return Type() == ::Core::Objects::ObjectType::AITurretClient;
+        return false;
     }
 
     bool IsMissile() const {
@@ -1282,11 +1283,12 @@ public:
         } else if (Type() == ::Core::Objects::ObjectType::AIHeroClient) {
             flatArmorPen = Lethality() * (0.6f + 0.4f * static_cast<float>(Level()) / 18.0f);
             if (std::isnan(flatArmorPen)) flatArmorPen = 0.0f;
-        } else if (Type() == ::Core::Objects::ObjectType::AITurretClient) {
-            flatArmorPen = 0.0f;
-            percentArmorPen = 1.0f;
-            percentBonusArmorPen = 1.0f;
         }
+        // } else if (Type() == ::Core::Objects::ObjectType::AITurretClient) {
+        //     flatArmorPen = 0.0f;
+        //     percentArmorPen = 1.0f;
+        //     percentBonusArmorPen = 1.0f;
+        // }
 
         float armor = target.Armor();
         float bonusArmor = target.BonusArmor();
@@ -1840,40 +1842,18 @@ public:
     // anywhere in CharacterName; the precise tier comes from the Name
     // ("Turret_T1_R_03_A" = bot outer, etc.) but for orbwalker target
     // selection only the Lane/Fountain/Other split matters.
-    bool IsLaneTurret() const {
-        const std::string name = ObjectDetail::ToLower(CharacterName());
-        if (name.find("turret") == std::string::npos) {
-            return false;
-        }
-        // Fountain/shrine turrets appear with the SAME CharacterName but
-        // their unit Name starts with "Turret_OrderTurretShrine" /
-        // "Turret_ChaosTurretShrine"; carve them out below.
-        const std::string unitName = ObjectDetail::ToLower(Name());
-        if (unitName.find("shrine") != std::string::npos ||
-            unitName.find("nexustower") != std::string::npos) {
-            return false;
-        }
-        return true;
-    }
+    bool IsLaneTurret() const {}
 
     // Fountain / nexus shrine turrets. Untargetable when a friendly hero
     // is in fountain — orbwalker MUST never target these even when the
     // game reports them as enemy & targetable, because attacking them
     // immediately puts the player in the fountain laser's range.
-    bool IsFountainTurret() const {
-        const std::string unitName = ObjectDetail::ToLower(Name());
-        return unitName.find("shrine") != std::string::npos ||
-               unitName.find("nexustower") != std::string::npos;
-    }
+    bool IsFountainTurret() const {}
 
     // Shuriman / Azir-style summoned tower (sand soldier or special map
     // event). These are NOT real lane structures — they spawn from
     // gameplay scripts and orbwalker should treat them as champion-pet.
-    bool IsShurimaTurret() const {
-        const std::string name = ObjectDetail::ToLower(CharacterName());
-        return name.find("shuriman") != std::string::npos ||
-               name.find("azirsoldier") != std::string::npos;
-    }
+    bool IsShurimaTurret() const {}
 };
 
 

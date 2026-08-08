@@ -363,8 +363,9 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!IsLocalPlayer(args.Sender)) {
         const bool targetsPlayer = args.TargetNetworkId ==
             static_cast<std::uint32_t>(player.NetworkId());
-        const bool turretAttack = args.Sender.Type ==
-            ::Core::Objects::ObjectType::AITurretClient;
+        // const bool turretAttack = args.Sender.Type ==
+        //     ::Core::Objects::ObjectType::AITurretClient;
+        const bool turretAttack = false;
         if (args.IsAutoAttack && targetsPlayer) {
             IncomingBasicAttackUntil = now + 650;
             IncomingBasicAttackSourceId = static_cast<int>(args.Sender.NetworkId);

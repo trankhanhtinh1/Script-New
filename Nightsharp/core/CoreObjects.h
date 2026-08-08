@@ -199,11 +199,11 @@ inline bool IsLifecycleType(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    case ObjectType::AITurretClient:
+    //case ObjectType::AITurretClient:
     case ObjectType::MissileClient:
     case ObjectType::BarracksDampenerClient:
     case ObjectType::HQClient:
-    case ObjectType::ShopClient:
+    //case ObjectType::ShopClient:
     case ObjectType::Obj_SpawnPoint:
     case ObjectType::EffectEmitter:
         return true;
@@ -305,7 +305,7 @@ inline const char* TypeName(ObjectType type) {
     case ObjectType::MissileClient: return "MissileClient";
     case ObjectType::EffectEmitter: return "EffectEmitter";
     case ObjectType::Obj_SpawnPoint: return "Obj_SpawnPoint";
-    case ObjectType::ShopClient: return "ShopClient";
+    //case ObjectType::ShopClient: return "ShopClient";
     case ObjectType::GameObject: return "GameObject";
     default: return "Unknown";
     }

@@ -81,9 +81,9 @@ namespace detail {
     // EffectEmitter. Kept (empty) so the public API surface stays identical.
     // To enable: dump the vtable RVA live (see Offset::StructureVTable notes)
     // and add a branch in RefreshStructures.
-    inline std::vector<ShopClient> ShopsList;
-    inline std::vector<ShopClient> AllyShopsList;
-    inline std::vector<ShopClient> EnemyShopsList;
+    // inline std::vector<ShopClient> ShopsList;
+    // inline std::vector<ShopClient> AllyShopsList;
+    // inline std::vector<ShopClient> EnemyShopsList;
     inline std::vector<Obj_SpawnPoint> SpawnPointsList;
     inline std::vector<Obj_SpawnPoint> AllySpawnPointsList;
     inline std::vector<Obj_SpawnPoint> EnemySpawnPointsList;
@@ -416,9 +416,9 @@ namespace detail {
         // if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
         // if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
 
-        CleanInvalid(ShopsList);
-        CleanInvalid(AllyShopsList);
-        CleanInvalid(EnemyShopsList);
+        // CleanInvalid(ShopsList);
+        // CleanInvalid(AllyShopsList);
+        // CleanInvalid(EnemyShopsList);
         CleanInvalid(SpawnPointsList);
         CleanInvalid(AllySpawnPointsList);
         CleanInvalid(EnemySpawnPointsList);
@@ -728,9 +728,9 @@ namespace detail {
         // NexusList.clear();
         // AllyNexusObject = {};
         // EnemyNexusObject = {};
-        ShopsList.clear();
-        AllyShopsList.clear();
-        EnemyShopsList.clear();
+        // ShopsList.clear();
+        // AllyShopsList.clear();
+        // EnemyShopsList.clear();
         SpawnPointsList.clear();
         AllySpawnPointsList.clear();
         EnemySpawnPointsList.clear();
@@ -1187,9 +1187,9 @@ inline std::vector<AIMinionClient> EnemyPets() { return detail::Snapshot(detail:
 // inline std::vector<BarracksDampenerClient> ScanInhibitors() { return Inhibitors(); }
 // inline std::vector<HQClient> ScanNexuses() { return Nexuses(); }
 
-inline std::vector<ShopClient> Shops() { return detail::Snapshot(detail::ShopsList); }
-inline std::vector<ShopClient> AllyShops() { return detail::Snapshot(detail::AllyShopsList); }
-inline std::vector<ShopClient> EnemyShops() { return detail::Snapshot(detail::EnemyShopsList); }
+// inline std::vector<ShopClient> Shops() { return detail::Snapshot(detail::ShopsList); }
+// inline std::vector<ShopClient> AllyShops() { return detail::Snapshot(detail::AllyShopsList); }
+// inline std::vector<ShopClient> EnemyShops() { return detail::Snapshot(detail::EnemyShopsList); }
 
 inline std::vector<Obj_SpawnPoint> SpawnPoints() { return detail::Snapshot(detail::SpawnPointsList); }
 inline std::vector<Obj_SpawnPoint> AllySpawnPoints() { return detail::Snapshot(detail::AllySpawnPointsList); }
@@ -1255,8 +1255,8 @@ inline std::vector<T> Get() {
         return ParticleEmitters();
     } else if constexpr (std::is_same_v<T, MissileClient>) {
         return Missiles();
-    } else if constexpr (std::is_same_v<T, ShopClient>) {
-        return Shops();
+    // } else if constexpr (std::is_same_v<T, ShopClient>) {
+    //     return Shops();
     } else if constexpr (std::is_same_v<T, Obj_SpawnPoint>) {
         return SpawnPoints();
     } else {

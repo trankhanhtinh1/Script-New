@@ -153,7 +153,6 @@
     <ClCompile Include="Plugins\Registration\AwarenessActivatorRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\ChampionCastSpellRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\DeveloperToolsRegistration.cpp" />
-    <ClCompile Include="Plugins\Registration\EzEvadeRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\EzrealMissileLifecycleRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\FsPredRegistration.cpp" />
     <ClCompile Include="Plugins\Registration\KuroActivatorRegistration.cpp" />
@@ -918,7 +917,10 @@
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulse.h" />
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulsePlugin.h" />
     <ClInclude Include="Plugins\EzEvade\EzEvade.h" />
-    <ClInclude Include="Plugins\EzEvade\EzEvadePlugin.h" />
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h" />
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderCircle.h" />
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderLine.h" />
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderText.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h" />
     <ClInclude Include="Plugins\IPlugin.h" />

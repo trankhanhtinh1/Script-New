@@ -198,10 +198,10 @@ private:
         switch (type) {
         case Type::AIHeroClient: return "Hero";
         case Type::AIMinionClient: return "Minion";
-        case Type::AITurretClient: return "Turret";
+        // case Type::AITurretClient: return "Turret";
         case Type::MissileClient: return "Missile";
         case Type::EffectEmitter: return "Effect";
-        case Type::ShopClient: return "Shop";
+        // case Type::ShopClient: return "Shop";
         case Type::BarracksDampenerClient: return "Inhib";
         case Type::HQClient: return "HQ";
         case Type::GameObject: return "Object";

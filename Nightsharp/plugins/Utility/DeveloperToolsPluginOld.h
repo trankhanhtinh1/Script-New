@@ -4,9 +4,9 @@
 #include "../../SDK/SDK.h"
 
 namespace SDK::GameObjects::detail {
-    inline std::vector<AITurretClient> TurretsList;
-    inline std::vector<AITurretClient> AllyTurretsList;
-    inline std::vector<AITurretClient> EnemyTurretsList;
+    // inline std::vector<AITurretClient> TurretsList;
+    // inline std::vector<AITurretClient> AllyTurretsList;
+    // inline std::vector<AITurretClient> EnemyTurretsList;
     inline std::vector<BarracksDampenerClient> InhibitorsList;
     inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
     inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
@@ -556,9 +556,9 @@ public:
                 if (ImGui::Checkbox("Minions & Pets (AIMinionClient)", &scanMinions_)) {
                     if (menuScanMinions_) menuScanMinions_->SetValue(scanMinions_);
                 }
-                if (ImGui::Checkbox("Turrets (AITurretClient)", &scanTurrets_)) {
-                    if (menuScanTurrets_) menuScanTurrets_->SetValue(scanTurrets_);
-                }
+                // if (ImGui::Checkbox("Turrets (AITurretClient)", &scanTurrets_)) {
+                //     if (menuScanTurrets_) menuScanTurrets_->SetValue(scanTurrets_);
+                // }
                 ImGui::SameLine();
                 if (ImGui::Checkbox("Missiles (MissileClient)", &scanMissiles_)) {
                     if (menuScanMissiles_) menuScanMissiles_->SetValue(scanMissiles_);
@@ -1015,11 +1015,11 @@ private:
                         if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
-                if (scanTurrets_) {
-                    for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
-                        if (obj.IsValid()) scanCache_.push_back(obj);
-                    }
-                }
+                // if (scanTurrets_) {
+                //     for (const auto& obj : SDK::ObjectManager::Get<SDK::AITurretClient>()) {
+                //         if (obj.IsValid()) scanCache_.push_back(obj);
+                //     }
+                // }
                 if (scanMissiles_) {
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::MissileClient>()) {
                         if (obj.IsValid()) scanCache_.push_back(obj);
@@ -1133,13 +1133,13 @@ private:
                             AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyPetsList);
                             break;
                         case GameObjectListType::Turrets:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
                             break;
                         case GameObjectListType::AllyTurrets:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyTurretsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyTurretsList);
                             break;
                         case GameObjectListType::EnemyTurrets:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyTurretsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyTurretsList);
                             break;
                         case GameObjectListType::Inhibitors:
                             AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::InhibitorsList);
@@ -1160,13 +1160,13 @@ private:
                             AddUniqueObject(scanCache_, SDK::GameObjects::detail::EnemyNexusObject);
                             break;
                         case GameObjectListType::Shops:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ShopsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::ShopsList);
                             break;
                         case GameObjectListType::AllyShops:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyShopsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyShopsList);
                             break;
                         case GameObjectListType::EnemyShops:
-                            AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyShopsList);
+                            //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyShopsList);
                             break;
                         case GameObjectListType::SpawnPoints:
                             AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::SpawnPointsList);
@@ -1207,7 +1207,7 @@ private:
                         AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyIgnoredMinionsList);
                     }
                     if (scanTurrets_) {
-                        AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                        //AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
                     }
                     if (scanMissiles_) {
                         AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MissilesList);
@@ -1717,11 +1717,11 @@ private:
         case ::Core::Objects::ObjectType::GameObject: return "GameObject";
         case ::Core::Objects::ObjectType::AIHeroClient: return "AIHeroClient";
         case ::Core::Objects::ObjectType::AIMinionClient: return "AIMinionClient";
-        case ::Core::Objects::ObjectType::AITurretClient: return "AITurretClient";
+        // case ::Core::Objects::ObjectType::AITurretClient: return "AITurretClient";
         case ::Core::Objects::ObjectType::MissileClient: return "MissileClient";
         case ::Core::Objects::ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
         case ::Core::Objects::ObjectType::HQClient: return "HQClient";
-        case ::Core::Objects::ObjectType::ShopClient: return "ShopClient";
+        // case ::Core::Objects::ObjectType::ShopClient: return "ShopClient";
         case ::Core::Objects::ObjectType::Obj_SpawnPoint: return "Obj_SpawnPoint";
         case ::Core::Objects::ObjectType::EffectEmitter: return "EffectEmitter";
         default: return "Unknown";

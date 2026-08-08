@@ -30,8 +30,8 @@ namespace detail {
         //     return ::Core::Objects::ObjectType::BarracksDampenerClient;
         // } else if constexpr (std::is_same_v<T, HQClient>) {
         //     return ::Core::Objects::ObjectType::HQClient;
-        } else if constexpr (std::is_same_v<T, ShopClient>) {
-            return ::Core::Objects::ObjectType::ShopClient;
+        // } else if constexpr (std::is_same_v<T, ShopClient>) {
+        //     return ::Core::Objects::ObjectType::ShopClient;
         } else if constexpr (std::is_same_v<T, Obj_SpawnPoint>) {
             return ::Core::Objects::ObjectType::Obj_SpawnPoint;
         } else if constexpr (std::is_same_v<T, EffectEmitter>) {
