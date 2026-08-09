@@ -542,6 +542,41 @@ inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForMode(Mode mode) {
     }
 }
 
+inline SDK::KuroTargetSelector::TargetProfile KuroProfileForMode(Mode mode) {
+    using namespace SDK::KuroTargetSelector;
+    if (!ActiveProfile) return KuroTargetSelectorPolicy::ProfileFor(
+        KuroPurposeForMode(mode));
+
+    const Archetype archetype = ActiveProfile->PrimaryArchetype;
+    if (mode == Mode::Combo) {
+        switch (archetype) {
+        case Archetype::Marksman:
+        case Archetype::Battlemage:
+        case Archetype::Skirmisher:
+        case Archetype::Juggernaut:
+            return TargetProfile::DPS;
+        default:
+            return TargetProfile::Burst;
+        }
+    }
+    if (mode == Mode::Harass) {
+        const auto player = GameObjects::Player();
+        const bool meleeRange = player.IsValid() &&
+            player.AttackRange() <= 350.0f;
+        const bool meleeArchetype =
+            archetype == Archetype::Assassin ||
+            archetype == Archetype::Diver ||
+            archetype == Archetype::Juggernaut ||
+            archetype == Archetype::Skirmisher ||
+            archetype == Archetype::Tank ||
+            archetype == Archetype::Vanguard;
+        return meleeRange || meleeArchetype
+            ? TargetProfile::DPS
+            : TargetProfile::Poke;
+    }
+    return KuroTargetSelectorPolicy::ProfileFor(KuroPurposeForMode(mode));
+}
+
 inline SDK::KuroTargetSelector::TargetPurpose KuroPurposeForSpell(
     const SpellSpec& spec,
     Mode mode) {
@@ -602,6 +637,26 @@ inline SDK::KuroTargetSelector::RouteKind KuroRouteForSpell(
     }
 }
 
+inline bool UsesTargetPrediction(const SpellSpec& spec) {
+    if (spec.Aim != AimPolicy::Prediction &&
+        spec.Aim != AimPolicy::BestAoe) {
+        return false;
+    }
+    switch (spec.Kind) {
+    case CastKind::Line:
+    case CastKind::Circle:
+    case CastKind::Cone:
+    case CastKind::Direction:
+    case CastKind::Position:
+    case CastKind::Vector:
+    case CastKind::ChargedLine:
+    case CastKind::ChargedCircle:
+        return true;
+    default:
+        return false;
+    }
+}
+
 inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     float range,
     SDK::DamageType damageType,
@@ -618,6 +673,10 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     const TargetPurpose purpose = KuroPurposeForMode(mode);
     auto request = Plugins::KuroAIO::MakeKuroTargetRequest(
         range, damageType, purpose, DecisionPhase::Planning);
+    if (mode == Mode::Combo || mode == Mode::Harass) {
+        request.ProfileHint = KuroProfileForMode(mode);
+        request.HasProfileHint = true;
+    }
     request.RequesterId = spec
         ? static_cast<std::uint32_t>(SlotIndex(spec->Slot) + 1)
         : 0u;
@@ -625,12 +684,37 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     request.Route.Kind = spec
         ? KuroRouteForSpell(*spec)
         : RouteKind::NonProjectile;
+    const int predictionIndex = spec ? SlotIndex(spec->Slot) : -1;
+    const ::SDK::Spell* predictionSpell =
+        predictionIndex >= 0 && predictionIndex < 4
+            ? RuntimeSpells[predictionIndex]
+            : nullptr;
+    const bool usePrediction = spec && UsesTargetPrediction(*spec);
+    request.Route.ActionSpell = predictionSpell;
+    request.Route.PredictionSpell = usePrediction
+        ? predictionSpell
+        : nullptr;
+    request.Route.PredictionType = usePrediction
+        ? spec->Shape
+        : ::SDK::SpellType::None;
+    request.Route.PredictionRadius = usePrediction
+        ? std::max(0.0f,
+            predictionSpell ? predictionSpell->Width : spec->Width)
+        : 0.0f;
+    request.Route.PredictionMaxCollisionCount =
+        predictionSpell ? predictionSpell->MaxCollisionCount : 0.0f;
+    request.Route.PredictionAddHitBox =
+        !predictionSpell || predictionSpell->AddHitBox;
     request.Route.ProjectileWallCheck = spec && spec->ProjectileWall;
     request.Route.ProjectileRadius = spec && spec->ProjectileWall
         ? std::max(0.0f, spec->Width * 0.5f)
         : 0.0f;
-    request.Route.ProjectileSpeed = spec ? spec->Speed : 0.0f;
-    request.Route.Delay = spec ? spec->Delay : 0.0f;
+    request.Route.ProjectileSpeed = spec
+        ? (predictionSpell ? predictionSpell->Speed : spec->Speed)
+        : 0.0f;
+    request.Route.Delay = spec
+        ? (predictionSpell ? predictionSpell->Delay : spec->Delay)
+        : 0.0f;
     request.Route.CollisionCheck = spec && spec->Collision;
     request.Route.RequireNoCollision = spec && spec->Collision;
     request.Route.AllowUnitCollision = !(spec && spec->Collision);
@@ -681,15 +765,51 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     }
 
     AIHeroClient result{};
-    SDK::DamageType damage = SDK::DamageType::True;
-    const SpellSpec* planningSpec = nullptr;
-    for (const auto& spec : ResolvedSpecs) {
-        if (Has(spec.Intents, Intent::Damage)) {
-            damage = spec.Damage;
-            planningSpec = &spec;
-            break;
+    const Mode planningMode = ActivePlanMode != Mode::None
+        ? ActivePlanMode
+        : CurrentMode();
+    int fallbackPlanningIndex = -1;
+    int predictionPlanningIndex = -1;
+    for (int index = 0; index < 4; ++index) {
+        const auto& spec = ResolvedSpecs[index];
+        if (!Has(spec.Intents, Intent::Damage)) continue;
+        if (fallbackPlanningIndex < 0) fallbackPlanningIndex = index;
+
+        const bool modeApplies = planningMode == Mode::None ||
+            ModeEnabled(spec, planningMode);
+        if (!modeApplies || !UsesTargetPrediction(spec) ||
+            !RuntimeSpells[index] || !RuntimeSpells[index]->IsReady()) {
+            continue;
+        }
+        if (planningMode != Mode::None &&
+            (!MenuSpellEnabled(MenuForMode(planningMode), index, true) ||
+             !ResourceOkay(spec, planningMode))) {
+            continue;
+        }
+
+        // Prefer the highest-priority castable basic skillshot.  Ultimates
+        // often have target-dependent conservation rules that cannot be
+        // decided until after target selection, so they are the prediction
+        // representative only when no basic damage skillshot is available.
+        const bool candidateIsUltimate = index == 3;
+        const bool currentIsUltimate = predictionPlanningIndex == 3;
+        if (predictionPlanningIndex < 0 ||
+            (currentIsUltimate && !candidateIsUltimate) ||
+            (currentIsUltimate == candidateIsUltimate &&
+             spec.Priority >
+                 ResolvedSpecs[predictionPlanningIndex].Priority)) {
+            predictionPlanningIndex = index;
         }
     }
+    const int planningIndex = predictionPlanningIndex >= 0
+        ? predictionPlanningIndex
+        : fallbackPlanningIndex;
+    const SpellSpec* planningSpec = planningIndex >= 0
+        ? &ResolvedSpecs[planningIndex]
+        : nullptr;
+    const SDK::DamageType damage = planningSpec
+        ? planningSpec->Damage
+        : SDK::DamageType::True;
 
     bool hardLeaseRequested = false;
     int hardLeaseTargetId = 0;
@@ -697,9 +817,6 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
         const auto state = kuro->GetSelectionState();
         SyncFocusLeaseManualOverride(state);
         if (!state.Suspended) {
-            const Mode planningMode = ActivePlanMode != Mode::None
-                ? ActivePlanMode
-                : CurrentMode();
             auto request = MakeKuroPlanningRequest(
                 range, damage, planningMode, planningSpec);
             const bool preferSelected = ActiveProfile->PreferSelectedTarget &&
@@ -710,7 +827,9 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
                 : 0;
             request.LockedTargetId = LockedTargetNetworkId != 0
                 ? LockedTargetNetworkId
-                : state.IncumbentNetworkId;
+                : (ValidEnemy(cachedTarget, range)
+                    ? cachedTarget.NetworkId()
+                    : 0);
             request.RespectManualSelection = preferSelected;
 
             const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(
@@ -1144,12 +1263,19 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroExecutionRequest(
         spec.Damage,
         KuroPurposeForSpell(spec, mode),
         DecisionPhase::Execution);
+    if (mode == Mode::Combo || mode == Mode::Harass) {
+        request.ProfileHint = KuroProfileForMode(mode);
+        request.HasProfileHint = true;
+    }
     request.RequesterId = static_cast<std::uint32_t>(
         std::max(0, index) + 1);
     request.Source = source;
     request.Range = range;
     request.Route.Kind = KuroRouteForSpell(spec);
     request.Route.Start = source;
+    request.Route.ActionSpell = index >= 0 && index < 4
+        ? RuntimeSpells[index]
+        : nullptr;
     request.Route.Destination = destination.IsValid() && !destination.IsZero()
         ? destination
         : target.Position();
@@ -1177,21 +1303,13 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroExecutionRequest(
     request.Damage.IgnoreShields = false;
     request.Damage.IsLethalAttempt =
         KuroPurposeForSpell(spec, mode) == TargetPurpose::Execute;
-    if (index >= 0 && index < 4 && RuntimeSpells[index]) {
-        const float rawDamage = RuntimeSpells[index]->GetDamage(target);
-        if (std::isfinite(rawDamage) && rawDamage > 0.0f) {
-            request.Damage.RawDamage = rawDamage;
-        }
-    }
+    request.LockedTargetId = target.NetworkId();
 
     if (auto* kuro = SDK::KuroTargetSelector::ActiveService()) {
         const auto state = kuro->GetSelectionState();
         request.PreferredTargetId = state.PreferSelectedTarget
             ? state.SelectedNetworkId
             : 0;
-        request.LockedTargetId = LockedTargetNetworkId != 0
-            ? LockedTargetNetworkId
-            : state.IncumbentNetworkId;
         request.RespectManualSelection = state.PreferSelectedTarget;
     }
     request.AllowFallback = false;

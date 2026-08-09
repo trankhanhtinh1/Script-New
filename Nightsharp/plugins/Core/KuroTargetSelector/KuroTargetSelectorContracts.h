@@ -6,6 +6,7 @@
 
 #include "../../../sdk/Wrappers/TargetSelector/ITargetSelector.h"
 #include "../../../sdk/Enumerations/HitChance.h"
+#include "../../../sdk/Enumerations/SpellType.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +16,10 @@
 #include <cmath>
 #include <string>
 #include <vector>
+
+namespace SDK {
+class Spell;
+}
 
 namespace SDK::KuroTargetSelector {
 
@@ -163,6 +168,18 @@ struct RouteDescriptor {
     float ProjectileRadius = 0.0f;
     float ProjectileSpeed = 0.0f;
     float Delay = 0.0f;
+    // Borrowed action identity used for request-local damage estimation.  It
+    // is valid only for the synchronous Select/Rank/ValidateExecution call.
+    const ::SDK::Spell* ActionSpell = nullptr;
+    // Planning requests may carry a borrowed runtime spell so the selector
+    // can query the active prediction provider with exactly the same slot,
+    // calibration, collision set, and geometry that execution will use.  The
+    // pointer is only borrowed for the synchronous Select/Rank call.
+    const ::SDK::Spell* PredictionSpell = nullptr;
+    SpellType PredictionType = SpellType::None;
+    float PredictionRadius = 0.0f;
+    float PredictionMaxCollisionCount = 0.0f;
+    float SourceBoundingRadius = 0.0f;
     int PredictionHitChance = static_cast<int>(HitChance::None);
     int MinimumHitChance = static_cast<int>(HitChance::None);
     int CastSubjectId = 0;
@@ -180,6 +197,11 @@ struct RouteDescriptor {
     bool IsChargedRelease = false;
     bool IsChargeStart = false;
     bool CheckAllSegments = false;
+    // Auto-attack callers normally provide base AttackRange.  The gate adds
+    // source/target hitboxes unless the caller explicitly supplied an already
+    // expanded real range.
+    bool RangeIncludesHitboxes = false;
+    bool PredictionAddHitBox = true;
     bool PredictionAvailable = false;
     bool PredictionCollides = false;
     // Compatibility-only advisory field.  Planning may use the snapshot
@@ -204,6 +226,11 @@ struct TargetRequest {
     int PreferredTargetId = 0;
     int RequiredTargetId = 0;
     int LockedTargetId = 0;
+
+    // Automatic callers may provide an archetype-aware profile while keeping
+    // Purpose reserved for action legality (interrupt, execute, flee, ...).
+    TargetProfile ProfileHint = TargetProfile::General;
+    bool HasProfileHint = false;
 
     std::array<int, kMaxIgnoredTargets> IgnoredTargetIds = {};
     std::size_t IgnoredTargetCount = 0;
@@ -234,7 +261,8 @@ struct TargetRequest {
 };
 
 struct ProviderFact {
-    const char* Key = nullptr;
+    static constexpr std::size_t kMaxKeyLength = 64;
+    std::array<char, kMaxKeyLength> Key = {};
     float Value = 0.0f;
 };
 
@@ -271,11 +299,15 @@ struct TargetFacts {
     float AttackDamage = 0.0f;
     float AbilityPower = 0.0f;
     float BoundingRadius = 0.0f;
-    // Damage the local player would deal with one ordinary attack.
+    // Raw-equivalent damage of one ordinary attack; effective health applies
+    // the target's mitigation exactly once during scoring.
     float AutoAttackDamage = 0.0f;
     // A lightweight magic-route estimate used when a request has no concrete
-    // spell damage yet (planning).  Execution requests provide RawDamage.
+    // spell damage. Concrete requests use ActionDamageEstimate instead.
     float MagicalDamageEstimate = 0.0f;
+    // Request-local spell damage, populated from Route.ActionSpell after the
+    // immutable snapshot is copied.
+    float ActionDamageEstimate = 0.0f;
 
     bool Valid = false;
     bool Dead = false;
@@ -301,6 +333,17 @@ struct TargetFacts {
     bool IsFacingSource = false;
     bool IsStasis = false;
 
+    // Candidate-specific prediction facts are deliberately request-local and
+    // are populated after the immutable per-tick snapshot is copied.  This
+    // lets FsPred's confidence classification influence ranking without
+    // contaminating snapshots shared by requests for different spells.
+    Vector3 PredictionCastPosition = {};
+    Vector3 PredictionUnitPosition = {};
+    int PredictionHitChance = static_cast<int>(HitChance::None);
+    bool PredictionEvaluated = false;
+    bool PredictionAvailable = false;
+    bool PredictionCollides = false;
+
     // Local composition around the target: alive friendly heroes that can
     // follow up inside a radius, and alive enemy heroes nesting around it.
     int AlliesNearTarget = 0;
@@ -314,14 +357,17 @@ struct TargetFacts {
         const std::size_t count =
             std::min(ProviderFactCount, ProviderFacts.size());
         for (std::size_t i = 0; i < count; ++i) {
-            if (ProviderFacts[i].Key &&
-                _stricmp(ProviderFacts[i].Key, key) == 0) {
-                ProviderFacts[i] = { key, value };
+            if (ProviderFacts[i].Key[0] &&
+                _stricmp(ProviderFacts[i].Key.data(), key) == 0) {
+                ProviderFacts[i].Value = value;
                 return;
             }
         }
         if (count >= ProviderFacts.size()) return;
-        ProviderFacts[count] = { key, value };
+        auto& fact = ProviderFacts[count];
+        strncpy_s(
+            fact.Key.data(), fact.Key.size(), key, _TRUNCATE);
+        fact.Value = value;
         ProviderFactCount = count + 1;
     }
 
@@ -330,8 +376,8 @@ struct TargetFacts {
         const std::size_t count =
             std::min(ProviderFactCount, ProviderFacts.size());
         for (std::size_t i = 0; i < count; ++i) {
-            if (ProviderFacts[i].Key &&
-                _stricmp(ProviderFacts[i].Key, key) == 0) {
+            if (ProviderFacts[i].Key[0] &&
+                _stricmp(ProviderFacts[i].Key.data(), key) == 0) {
                 return ProviderFacts[i].Value;
             }
         }

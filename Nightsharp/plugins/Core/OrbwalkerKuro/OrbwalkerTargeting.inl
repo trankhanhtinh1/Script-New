@@ -289,7 +289,8 @@ MakeKuroAutoAttackExecutionRequest(const AIHeroClient& player,
         player.Position(),
         GetRealAutoAttackRange(player, target),
         DecisionPhase::Execution,
-        0);
+        0,
+        true);
     request.Route.Kind = WillUseAzirSoldierAttack(player, target)
         ? RouteKind::NonProjectile
         : RouteKind::AutoAttack;

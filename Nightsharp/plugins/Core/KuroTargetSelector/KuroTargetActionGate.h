@@ -101,10 +101,23 @@ public:
         if (request.Range > 0.0f && request.Range < FLT_MAX) {
             const Vector3 source = ResolveSource(request, player);
             const Vector3 destination = ResolveRangeDestination(request, target);
-            if (source.IsValid() && !source.IsZero() &&
-                destination.IsValid() && !destination.IsZero() &&
-                source.DistanceSqr2D(destination) >
-                    request.Range * request.Range) {
+            if (!source.IsValid() || source.IsZero() ||
+                !destination.IsValid() || destination.IsZero()) {
+                result.Rejection = RejectReason::OutOfRange;
+                return result;
+            }
+
+            float allowedRange = request.Range;
+            if (request.Route.Kind == RouteKind::AutoAttack &&
+                !request.Route.RangeIncludesHitboxes) {
+                const float sourceRadius = request.Route.SourceBoundingRadius > 0.0f
+                    ? request.Route.SourceBoundingRadius
+                    : (player.IsValid() ? player.BoundingRadius() : 0.0f);
+                allowedRange += std::max(0.0f, sourceRadius) +
+                    std::max(0.0f, target.BoundingRadius());
+            }
+            if (source.DistanceSqr2D(destination) >
+                allowedRange * allowedRange) {
                 result.Rejection = RejectReason::OutOfRange;
                 return result;
             }
@@ -182,15 +195,22 @@ public:
         const Vector3& source,
         float range,
         DecisionPhase phase = DecisionPhase::Planning,
-        std::uint32_t requesterId = 0) {
+        std::uint32_t requesterId = 0,
+        bool rangeIncludesHitboxes = false) {
         TargetRequest request{};
         request.RequesterId = requesterId;
         request.Purpose = TargetPurpose::AutoAttack;
         request.Phase = phase;
         request.Source = source;
         request.Range = range;
+        request.Damage.Type = DamageType::Physical;
         request.Route.Kind = RouteKind::AutoAttack;
         request.Route.Start = source;
+        const auto player = GameObjects::Player();
+        request.Route.SourceBoundingRadius = player.IsValid()
+            ? std::max(0.0f, player.BoundingRadius())
+            : 0.0f;
+        request.Route.RangeIncludesHitboxes = rangeIncludesHitboxes;
         request.Route.ProjectileWallCheck = true;
         request.Route.RequireLineOfSight = true;
         return request;
@@ -252,8 +272,18 @@ private:
             return RejectReason::Collision;
         }
         if (route.MinimumHitChance > static_cast<int>(HitChance::None)) {
-            if (!route.PredictionAvailable ||
-                route.PredictionHitChance < route.MinimumHitChance) {
+            const bool predictionSupplied = route.PredictionAvailable ||
+                route.PredictionCollides ||
+                route.PredictionHitChance !=
+                    static_cast<int>(HitChance::None);
+            const bool deferredPlanningPrediction =
+                request.Phase == DecisionPhase::Planning &&
+                !predictionSupplied &&
+                (route.PredictionSpell != nullptr ||
+                 route.PredictionType != SpellType::None);
+            if (!deferredPlanningPrediction &&
+                (!route.PredictionAvailable ||
+                 route.PredictionHitChance < route.MinimumHitChance)) {
                 return RejectReason::PredictionLow;
             }
         }

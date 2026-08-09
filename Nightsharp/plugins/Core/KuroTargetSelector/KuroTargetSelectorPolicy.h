@@ -21,6 +21,11 @@ struct TargetProfileWeights {
     float FollowUp = 20.0f;
     // Enemy champions hugging the target make an engage harder to survive.
     float EnemyDensity = 24.0f;
+    // Confidence from the active prediction provider.  FsPred already folds
+    // path stability, reaction horizon, cast distance, and immobility into
+    // HitChance, so the selector should consume that calibrated result rather
+    // than trying to duplicate its motion model.
+    float Prediction = 125.0f;
 };
 
 class KuroTargetSelectorPolicy final {
@@ -40,6 +45,12 @@ public:
         case TargetPurpose::General:
         default: return TargetProfile::General;
         }
+    }
+
+    static TargetProfile ProfileFor(const TargetRequest& request) {
+        return request.HasProfileHint
+            ? request.ProfileHint
+            : ProfileFor(request.Purpose);
     }
 
     static const char* ProfileName(TargetProfile profile) {
@@ -63,47 +74,119 @@ public:
         switch (profile) {
         case TargetProfile::AutoAttack:
             weights = { 44.0f, 42.0f, 34.0f, 10.0f, 12.0f, 6.0f,
-                        52.0f, 110.0f, 25.0f, 40.0f };
+                        52.0f, 110.0f, 25.0f, 40.0f, 20.0f };
             break;
         case TargetProfile::Burst:
             weights = { 46.0f, 64.0f, 20.0f, 22.0f, 18.0f, 10.0f,
-                        78.0f, 72.0f, 30.0f, 35.0f };
+                        78.0f, 72.0f, 30.0f, 35.0f, 150.0f };
             break;
         case TargetProfile::DPS:
             weights = { 42.0f, 35.0f, 30.0f, 18.0f, 10.0f, 6.0f,
-                        42.0f, 130.0f, 20.0f, 25.0f };
+                        42.0f, 130.0f, 20.0f, 25.0f, 110.0f };
             break;
         case TargetProfile::Poke:
             weights = { 34.0f, 18.0f, 32.0f, 24.0f, 22.0f, 6.0f,
-                        35.0f, 55.0f, 15.0f, 20.0f };
+                        35.0f, 55.0f, 15.0f, 20.0f, 175.0f };
             break;
         case TargetProfile::Execute:
             weights = { 45.0f, 100.0f, 18.0f, 12.0f, 8.0f, 4.0f,
-                        100.0f, 90.0f, 25.0f, 22.0f };
+                        100.0f, 90.0f, 25.0f, 22.0f, 155.0f };
             break;
         case TargetProfile::Peel:
             weights = { 48.0f, 12.0f, 46.0f, 84.0f, 18.0f, 20.0f,
-                        12.0f, 100.0f, 8.0f, 30.0f };
+                        12.0f, 100.0f, 8.0f, 30.0f, 140.0f };
             break;
         case TargetProfile::Interrupt:
             weights = { 80.0f, 8.0f, 28.0f, 35.0f, 120.0f, 12.0f,
-                        5.0f, 95.0f, 10.0f, 35.0f };
+                        5.0f, 95.0f, 10.0f, 35.0f, 180.0f };
             break;
         case TargetProfile::AntiGapcloser:
             weights = { 72.0f, 12.0f, 38.0f, 82.0f, 18.0f, 130.0f,
-                        5.0f, 92.0f, 5.0f, 45.0f };
+                        5.0f, 92.0f, 5.0f, 45.0f, 175.0f };
             break;
         case TargetProfile::FleeThreat:
             // Threat and proximity dominate.  Health is intentionally low so
             // fleeing never turns into a lowest-health target selection.
             weights = { 52.0f, 2.0f, 74.0f, 96.0f, 8.0f, 32.0f,
-                        2.0f, 60.0f, 10.0f, 75.0f };
+                        2.0f, 60.0f, 10.0f, 75.0f, 95.0f };
             break;
         case TargetProfile::General:
         default:
+            // Value-initialization applies TargetProfileWeights' non-zero
+            // member defaults. Keep this explicit so General cannot silently
+            // become an all-zero profile after future refactors.
+            weights = TargetProfileWeights{};
             break;
         }
         return weights;
+    }
+
+    static float PredictionExpectedHitFactor(const TargetRequest& request,
+                                              const TargetFacts& facts) {
+        if (!facts.PredictionEvaluated) return 1.0f;
+
+        const auto chance = static_cast<HitChance>(
+            facts.PredictionHitChance);
+        const bool blockingCollision = request.Route.RequireNoCollision &&
+            (facts.PredictionCollides || chance == HitChance::Collision);
+        if (blockingCollision) return 0.0f;
+        if (chance == HitChance::Collision) return 0.55f;
+        if (!facts.PredictionAvailable) {
+            return chance == HitChance::OutOfRange ? 0.0f : 0.12f;
+        }
+        switch (chance) {
+        case HitChance::Low: return 0.32f;
+        case HitChance::Medium: return 0.55f;
+        case HitChance::High: return 0.76f;
+        case HitChance::VeryHigh: return 0.90f;
+        case HitChance::Immobile: return 0.98f;
+        case HitChance::Dash: return 0.94f;
+        case HitChance::Collision: return 0.55f;
+        case HitChance::OutOfRange: return 0.0f;
+        case HitChance::None:
+        default: return 0.12f;
+        }
+    }
+
+    // Backward-compatible helper keeps the historical blocking-projectile
+    // interpretation for direct policy callers.
+    static float PredictionExpectedHitFactor(const TargetFacts& facts) {
+        TargetRequest blockingRequest{};
+        blockingRequest.Route.RequireNoCollision = true;
+        return PredictionExpectedHitFactor(blockingRequest, facts);
+    }
+
+    static float PredictionPreferenceFactor(const TargetRequest& request,
+                                            const TargetFacts& facts) {
+        if (!facts.PredictionEvaluated) return 0.0f;
+
+        const auto chance = static_cast<HitChance>(
+            facts.PredictionHitChance);
+        const bool blockingCollision = request.Route.RequireNoCollision &&
+            (facts.PredictionCollides || chance == HitChance::Collision);
+        if (blockingCollision) return -1.25f;
+        if (chance == HitChance::Collision) return 0.0f;
+        if (!facts.PredictionAvailable) {
+            return chance == HitChance::OutOfRange ? -1.25f : -0.90f;
+        }
+        switch (chance) {
+        case HitChance::Low: return -0.70f;
+        case HitChance::Medium: return 0.0f;
+        case HitChance::High: return 0.65f;
+        case HitChance::VeryHigh: return 1.0f;
+        case HitChance::Immobile:
+        case HitChance::Dash: return 1.15f;
+        case HitChance::Collision: return 0.0f;
+        case HitChance::OutOfRange: return -1.25f;
+        case HitChance::None:
+        default: return -0.90f;
+        }
+    }
+
+    static float PredictionPreferenceFactor(const TargetFacts& facts) {
+        TargetRequest blockingRequest{};
+        blockingRequest.Route.RequireNoCollision = true;
+        return PredictionPreferenceFactor(blockingRequest, facts);
     }
 
     static float RawHealthPoolFor(const TargetRequest& request,
@@ -155,6 +238,10 @@ public:
 
     static float MitigationMultiplierFor(const TargetRequest& request,
                                          const TargetFacts& facts) {
+        // True damage bypasses armor/MR. Shields remain part of the raw health
+        // pool and are handled independently by RawHealthPoolFor().
+        if (request.Damage.Type == DamageType::True) return 1.0f;
+
         // Stored effective-health pools include their applicable shields.  Use
         // the same reference pool to isolate mitigation, even when the caller
         // wants the final score to ignore shields.
@@ -204,6 +291,10 @@ public:
             request.Damage.RawDamage > 0.0f) {
             return request.Damage.RawDamage * expectedHits;
         }
+        if (std::isfinite(facts.ActionDamageEstimate) &&
+            facts.ActionDamageEstimate > 0.0f) {
+            return facts.ActionDamageEstimate * expectedHits;
+        }
 
         switch (request.Damage.Type) {
         case DamageType::Physical:
@@ -236,7 +327,9 @@ public:
                 facts.NetworkId != request.Route.ExactEventSenderId) {
                 return RejectReason::PurposeRejected;
             }
-            if (!facts.IsChanneling && request.Route.ExactEventSenderId == 0) {
+            if (!facts.IsChanneling &&
+                (request.Route.ExactEventSenderId == 0 ||
+                 request.Phase == DecisionPhase::Execution)) {
                 return RejectReason::PurposeRejected;
             }
         }
@@ -245,7 +338,9 @@ public:
                 facts.NetworkId != request.Route.ExactEventSenderId) {
                 return RejectReason::PurposeRejected;
             }
-            if (!facts.IsDashing && request.Route.ExactEventSenderId == 0) {
+            if (!facts.IsDashing &&
+                (request.Route.ExactEventSenderId == 0 ||
+                 request.Phase == DecisionPhase::Execution)) {
                 return RejectReason::PurposeRejected;
             }
         }
@@ -263,7 +358,7 @@ public:
             configuredPriority,
             incumbentNetworkId,
             breakdown,
-            ProfileFor(request.Purpose),
+            ProfileFor(request),
             -1.0f);
     }
 
@@ -307,9 +402,16 @@ public:
         const float lowHealthUrgency = favorsDamageOpportunity
             ? std::clamp((0.60f - boundedHealthRatio) / 0.60f, 0.0f, 1.0f)
             : 0.0f;
-        const float distanceScale = request.Range > 0.0f
+        float scoringRange = request.Range;
+        if (request.Route.Kind == RouteKind::AutoAttack &&
+            !request.Route.RangeIncludesHitboxes &&
+            std::isfinite(scoringRange)) {
+            scoringRange += std::max(0.0f, request.Route.SourceBoundingRadius) +
+                std::max(0.0f, facts.BoundingRadius);
+        }
+        const float distanceScale = scoringRange > 0.0f
             ? std::clamp(1.0f - facts.DistanceToSource /
-                         std::max(request.Range, 1.0f), -1.0f, 1.0f)
+                         std::max(scoringRange, 1.0f), -1.0f, 1.0f)
             : 0.0f;
         const float threat = std::clamp(
             (facts.AttackDamage * 0.55f + facts.AbilityPower * 0.35f) /
@@ -317,6 +419,9 @@ public:
             0.0f, 4.0f);
         const float projectedDamage = EstimatedDamageFor(request, facts);
         const float damageRatio = DamageRatioFor(request, facts);
+        const float expectedHitFactor =
+            PredictionExpectedHitFactor(request, facts);
+        const float expectedDamageRatio = damageRatio * expectedHitFactor;
 
         breakdown.Add("priority", "configured priority",
                       priority * weights.Priority, 0.0f, 260.0f);
@@ -386,16 +491,33 @@ public:
         }
         breakdown.Add("dash", "dash state",
                       facts.IsDashing ? weights.Dash : 0.0f, 0.0f, 140.0f);
+        if (facts.PredictionEvaluated) {
+            breakdown.Add(
+                "prediction-confidence",
+                "prediction hit confidence",
+                PredictionPreferenceFactor(request, facts) * weights.Prediction,
+                -260.0f,
+                260.0f);
+            if (facts.PredictionCollides && request.Route.RequireNoCollision) {
+                breakdown.Add(
+                    "prediction-collision",
+                    "predicted route collision",
+                    -weights.Prediction * 1.65f,
+                    -320.0f,
+                    0.0f);
+            }
+        }
         breakdown.Add("damage-efficiency", "type-aware damage efficiency",
-                      damageRatio * weights.EffectiveDamage, 0.0f, 220.0f);
+                      expectedDamageRatio * weights.EffectiveDamage,
+                      0.0f, 220.0f);
         if (allInProfile && projectedDamage > 0.0f) {
             breakdown.Add(
                 "all-in-feasibility",
-                "all-in damage versus effective health",
-                std::clamp(damageRatio, 0.0f, 1.0f) * 180.0f,
+                "prediction-adjusted all-in feasibility",
+                std::clamp(expectedDamageRatio, 0.0f, 1.0f) * 180.0f,
                 0.0f,
                 180.0f);
-            if (damageRatio >= 1.0f) {
+            if (expectedDamageRatio >= 1.0f) {
                 breakdown.Add(
                     "lethal-confidence",
                     "all-in can kill target",

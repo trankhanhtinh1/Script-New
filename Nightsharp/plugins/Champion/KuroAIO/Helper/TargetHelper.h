@@ -109,7 +109,7 @@ inline AIHeroClient GetTarget(float range, DamageType damageType) {
                 SDK::KuroTargetSelector::TargetPurpose::General,
                 SDK::KuroTargetSelector::DecisionPhase::Planning,
                 state.PreferSelectedTarget ? state.SelectedNetworkId : 0,
-                state.IncumbentNetworkId);
+                0);
             request.RespectManualSelection = state.PreferSelectedTarget;
 
             const auto decision = kuro->Select(request);

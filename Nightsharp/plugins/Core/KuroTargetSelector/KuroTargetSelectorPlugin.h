@@ -3,6 +3,7 @@
 #include "../../IPlugin.h"
 #include "../../PluginRegistry.h"
 #include "../../../sdk/Wrappers/TargetSelector/TargetSelector.h"
+#include "../../../sdk/Wrappers/Spells/Spell.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Wrappers/Damages/Damage.h"
 #include "../../../core/CoreBuffs.h"
@@ -66,11 +67,12 @@ public:
         bool ignoreShields = true,
         const ::SDK::Vector3& from = ::SDK::Vector3(),
         const std::vector<::SDK::AIHeroClient>* ignoreChampions = nullptr) override {
-        const auto ranked = Rank(LegacyRequest(
-            range, damageType, ignoreShields, from, ignoreChampions));
+        const auto request = LegacyRequest(
+            range, damageType, ignoreShields, from, ignoreChampions);
+        const auto ranked = Rank(request);
         for (const auto& decision : ranked) {
             if (decision.Legal && !Ignored(decision.Target, ignoreChampions)) {
-                incumbentNetworkId_ = decision.Target.NetworkId();
+                CommitIncumbent(request, decision.Target.NetworkId());
                 return decision.Target;
             }
         }
@@ -84,15 +86,16 @@ public:
         const ::SDK::Vector3& from = ::SDK::Vector3(),
         const std::vector<::SDK::AIHeroClient>* ignoreChampions = nullptr) override {
         std::vector<::SDK::AIHeroClient> result;
-        const auto ranked = Rank(LegacyRequest(
-            range, damageType, ignoreShields, from, ignoreChampions));
+        const auto request = LegacyRequest(
+            range, damageType, ignoreShields, from, ignoreChampions);
+        const auto ranked = Rank(request);
         result.reserve(ranked.size());
         for (const auto& decision : ranked) {
             if (decision.Legal && !Ignored(decision.Target, ignoreChampions)) {
                 result.push_back(decision.Target);
             }
         }
-        if (!result.empty()) incumbentNetworkId_ = result.front().NetworkId();
+        if (!result.empty()) CommitIncumbent(request, result.front().NetworkId());
         return result;
     }
 
@@ -123,7 +126,7 @@ public:
         const auto ranked = Rank(request);
         for (const auto& decision : ranked) {
             if (decision.Legal) {
-                incumbentNetworkId_ = decision.Target.NetworkId();
+                CommitIncumbent(request, decision.Target.NetworkId());
                 return decision;
             }
         }
@@ -166,6 +169,16 @@ public:
         result.reserve(snapshot_.Count);
 
         const int selectedId = menu_ ? menu_->Selected().NetworkId() : 0;
+        const auto selectedSnapshot = std::find_if(
+            snapshot_.Enemies.begin(),
+            snapshot_.Enemies.begin() + snapshot_.Count,
+            [selectedId](const TargetFacts& facts) {
+                return selectedId > 0 && facts.NetworkId == selectedId;
+            });
+        const bool selectedActionable = selectedSnapshot !=
+                snapshot_.Enemies.begin() + snapshot_.Count &&
+            selectedSnapshot->Valid && selectedSnapshot->Visible &&
+            selectedSnapshot->Targetable;
         // A locked target is a soft lease when fallback is allowed.  Only an
         // explicit preferred/selected target may bypass the score entirely.
         const int manualPreferredId = request.PreferredTargetId != 0
@@ -175,7 +188,12 @@ public:
         const int requiredId = request.RequiredTargetId != 0
             ? request.RequiredTargetId
             : (!request.AllowFallback ? request.LockedTargetId : 0);
-        const bool onlySelected = menu_ && menu_->OnlySelectedTarget();
+        // Keep the manual selection identity through fog, but suspend its hard
+        // lock while it cannot be acted on so OnlySelected does not suppress
+        // every visible fallback target.
+        const bool onlySelected = menu_ && menu_->OnlySelectedTarget() &&
+            selectedActionable;
+        const int requestIncumbentId = IncumbentFor(request);
         const auto providerOrder = BuildProviderOrder();
         const auto player = ::SDK::GameObjects::Player();
 
@@ -252,6 +270,8 @@ public:
                 result.push_back(decision);
                 continue;
             }
+            PopulateRequestDamageFacts(request, workingFacts, player);
+            PopulatePredictionFacts(request, workingFacts);
             const auto purpose = KuroTargetSelectorPolicy::ValidatePurpose(
                 request, workingFacts);
             if (purpose != RejectReason::None) {
@@ -273,7 +293,7 @@ public:
             }
 
             const TargetProfile requestedProfile =
-                KuroTargetSelectorPolicy::ProfileFor(request.Purpose);
+                KuroTargetSelectorPolicy::ProfileFor(request);
             const TargetProfile menuProfile = menu_
                 ? menu_->Profile() : TargetProfile::General;
             const TargetProfile activeProfile = menu_ &&
@@ -283,7 +303,7 @@ public:
                 request,
                 workingFacts,
                 menu_ ? menu_->Priority(facts.NetworkId) : 1,
-                incumbentNetworkId_,
+                requestIncumbentId,
                 decision.Breakdown,
                 activeProfile,
                 menu_ ? menu_->Stickiness() : -1.0f);
@@ -306,7 +326,7 @@ public:
             if (request.AllowFallback && request.LockedTargetId != 0 &&
                 request.LockedTargetId == facts.NetworkId &&
                 request.LockedTargetId != manualPreferredId &&
-                request.LockedTargetId != incumbentNetworkId_) {
+                request.LockedTargetId != requestIncumbentId) {
                 const float softLock = menu_
                     ? std::clamp(menu_->Stickiness() * 0.35f, 0.0f, 70.0f)
                     : 40.0f;
@@ -326,9 +346,28 @@ public:
             }
 
             // Planning reuses the targetability sample captured in the
-            // snapshot.  ValidateExecution keeps the live race-safety gate.
+            // snapshot. Feed candidate-specific prediction back into the
+            // route gate so collision and MinimumHitChance are enforced after
+            // (not before) FsPred has evaluated this hero.
+            TargetRequest finalRequest = request;
+            if (workingFacts.PredictionEvaluated) {
+                finalRequest.Route.PredictionAvailable =
+                    workingFacts.PredictionAvailable;
+                finalRequest.Route.PredictionCollides =
+                    workingFacts.PredictionCollides;
+                finalRequest.Route.PredictionHitChance =
+                    workingFacts.PredictionHitChance;
+                if (workingFacts.PredictionCastPosition.IsValid() &&
+                    !workingFacts.PredictionCastPosition.IsZero()) {
+                    finalRequest.Route.Destination =
+                        workingFacts.PredictionCastPosition;
+                    finalRequest.Route.Prediction =
+                        workingFacts.PredictionCastPosition;
+                }
+            }
+            // ValidateExecution keeps the final live race-safety gate.
             const auto finalGate = KuroTargetActionGate::Evaluate(
-                request, workingFacts.Target, facts.Targetable);
+                finalRequest, workingFacts.Target, facts.Targetable);
             if (!finalGate.Legal) {
                 decision.Rejection = requiredId == facts.NetworkId
                     ? RejectReason::RequiredTargetIllegal
@@ -447,8 +486,14 @@ public:
             return false;
         }
         if (menu_ && menu_->OnlySelectedTarget()) {
-            const int selectedId = menu_->Selected().NetworkId();
-            if (selectedId <= 0 || selectedId != targetId) return false;
+            const auto selected = menu_->Selected();
+            const bool selectedActionable = selected.IsValid() &&
+                selected.NetworkId() > 0 && selected.IsVisible() &&
+                selected.IsTargetable() &&
+                (!selected.IsDead() || selected.IsZombie());
+            if (selectedActionable && selected.NetworkId() != targetId) {
+                return false;
+            }
         }
 
         const auto gate = KuroTargetActionGate::Evaluate(execution, target);
@@ -533,6 +578,64 @@ private:
         bool acquired_ = false;
     };
 
+    struct IncumbentEntry {
+        std::uint64_t Key = 0;
+        int NetworkId = 0;
+    };
+
+    static std::uint64_t IncumbentKey(
+        const ::SDK::KuroTargetSelector::TargetRequest& request) {
+        // FNV-1a-style mixing gives each requester/action family an independent
+        // stickiness lane without retaining borrowed pointers themselves.
+        std::uint64_t key = 1469598103934665603ull;
+        const auto mix = [&key](std::uint64_t value) {
+            key ^= value;
+            key *= 1099511628211ull;
+        };
+        mix(request.RequesterId);
+        mix(static_cast<std::uint64_t>(request.Purpose));
+        mix(static_cast<std::uint64_t>(request.Route.Kind));
+        mix(static_cast<std::uint64_t>(request.Damage.Type));
+        mix(request.HasProfileHint
+            ? static_cast<std::uint64_t>(request.ProfileHint) + 1ull
+            : 0ull);
+        const auto* action = request.Route.ActionSpell
+            ? request.Route.ActionSpell
+            : request.Route.PredictionSpell;
+        mix(static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(action)));
+        return key;
+    }
+
+    int IncumbentFor(
+        const ::SDK::KuroTargetSelector::TargetRequest& request) const {
+        const std::uint64_t key = IncumbentKey(request);
+        const auto found = std::find_if(
+            incumbentLanes_.begin(), incumbentLanes_.end(),
+            [key](const IncumbentEntry& entry) { return entry.Key == key; });
+        return found != incumbentLanes_.end() ? found->NetworkId : 0;
+    }
+
+    void CommitIncumbent(
+        const ::SDK::KuroTargetSelector::TargetRequest& request,
+        int networkId) {
+        if (networkId <= 0) return;
+        const std::uint64_t key = IncumbentKey(request);
+        auto found = std::find_if(
+            incumbentLanes_.begin(), incumbentLanes_.end(),
+            [key](const IncumbentEntry& entry) { return entry.Key == key; });
+        if (found != incumbentLanes_.end()) {
+            found->NetworkId = networkId;
+        } else {
+            if (incumbentLanes_.size() >= 64) {
+                incumbentLanes_.erase(incumbentLanes_.begin());
+            }
+            incumbentLanes_.push_back({ key, networkId });
+        }
+        // Preserve the legacy aggregate state for UI/ABI compatibility only.
+        incumbentNetworkId_ = networkId;
+    }
+
     const std::vector<::SDK::KuroTargetSelector::ProviderRegistry::Entry*>&
     BuildProviderOrder() {
         using namespace ::SDK::KuroTargetSelector;
@@ -555,6 +658,236 @@ private:
             });
         cachedProviderRevision_ = currentRev;
         return cachedProviderOrder_;
+    }
+
+    struct PredictionSample {
+        ::SDK::Vector3 CastPosition = {};
+        ::SDK::Vector3 UnitPosition = {};
+        int HitChance = static_cast<int>(::SDK::HitChance::None);
+        bool Available = false;
+        bool Collides = false;
+    };
+
+    struct PredictionCacheEntry {
+        int NetworkId = 0;
+        std::uint32_t RequesterId = 0;
+        const ::SDK::Spell* Spell = nullptr;
+        ::SDK::SpellType Type = ::SDK::SpellType::None;
+        ::SDK::Vector3 Source = {};
+        ::SDK::Vector3 RangeCheckFrom = {};
+        float Range = 0.0f;
+        float Delay = 0.0f;
+        float Radius = 0.0f;
+        float Speed = 0.0f;
+        float MaxCollisionCount = 0.0f;
+        std::uint32_t CollisionObjectFlags = 0;
+        bool Collision = false;
+        bool AddHitBox = true;
+        bool ChoiceCloserPosition = false;
+        PredictionSample Sample = {};
+    };
+
+    static bool IsPredictionSkillshotType(::SDK::SpellType type) {
+        return ::SDK::IsLineSpellType(type) ||
+               ::SDK::IsCircleSpellType(type) ||
+               ::SDK::IsConeSpellType(type) ||
+               ::SDK::IsArcSpellType(type);
+    }
+
+    static bool SamePredictionFloat(float left, float right) {
+        if (left == right) return true;
+        return std::isfinite(left) && std::isfinite(right) &&
+               std::fabs(left - right) <= 0.00001f;
+    }
+
+    static bool SamePredictionSource(const ::SDK::Vector3& left,
+                                     const ::SDK::Vector3& right) {
+        return SamePredictionFloat(left.x, right.x) &&
+               SamePredictionFloat(left.y, right.y) &&
+               SamePredictionFloat(left.z, right.z);
+    }
+
+    PredictionSample EvaluateCandidatePrediction(
+        const ::SDK::KuroTargetSelector::TargetRequest& request,
+        const ::SDK::KuroTargetSelector::TargetFacts& facts) {
+        using namespace ::SDK::KuroTargetSelector;
+
+        const auto& route = request.Route;
+        const auto* spell = route.PredictionSpell;
+        const ::SDK::Vector3 source = spell &&
+                spell->From.IsValid() && !spell->From.IsZero()
+            ? spell->From
+            : ResolveRequestSource(request, ::SDK::GameObjects::Player());
+        const float range = spell
+            ? spell->CurrentRange()
+            : (request.Range > 0.0f ? request.Range : FLT_MAX);
+        const float delay = spell ? spell->Delay : route.Delay;
+        const float radius = spell
+            ? spell->Width
+            : std::max(0.0f, route.PredictionRadius);
+        const float speed = spell ? spell->Speed : route.ProjectileSpeed;
+        const float maxCollisionCount = spell
+            ? spell->MaxCollisionCount
+            : route.PredictionMaxCollisionCount;
+        const bool collision = spell
+            ? spell->Collision
+            : route.CollisionCheck;
+        const bool addHitBox = spell
+            ? spell->AddHitBox
+            : route.PredictionAddHitBox;
+        const ::SDK::SpellType predictionType = spell
+            ? ::SDK::ToSpellType(spell->Type)
+            : route.PredictionType;
+        const ::SDK::Vector3 predictionFrom = spell ? spell->From : source;
+        const ::SDK::Vector3 rangeCheckFrom = spell
+            ? spell->RangeCheckFrom
+            : source;
+        const bool choiceCloserPosition = spell &&
+            spell->PredictionCloserPosition;
+        const std::uint32_t collisionObjectFlags = spell
+            ? static_cast<std::uint32_t>(spell->CollisionObjects.ToFlags())
+            : 0u;
+
+        const int tick = ::SDK::Variables::TickCount();
+        if (predictionCacheTick_ != tick) {
+            predictionCacheTick_ = tick;
+            predictionCache_.clear();
+        }
+        for (const auto& cached : predictionCache_) {
+            if (cached.NetworkId == facts.NetworkId &&
+                cached.RequesterId == request.RequesterId &&
+                cached.Spell == spell &&
+                cached.Type == predictionType &&
+                cached.Collision == collision &&
+                cached.AddHitBox == addHitBox &&
+                cached.ChoiceCloserPosition == choiceCloserPosition &&
+                cached.CollisionObjectFlags == collisionObjectFlags &&
+                SamePredictionSource(cached.Source, predictionFrom) &&
+                SamePredictionSource(cached.RangeCheckFrom, rangeCheckFrom) &&
+                SamePredictionFloat(cached.Range, range) &&
+                SamePredictionFloat(cached.Delay, delay) &&
+                SamePredictionFloat(cached.Radius, radius) &&
+                SamePredictionFloat(cached.Speed, speed) &&
+                SamePredictionFloat(
+                    cached.MaxCollisionCount, maxCollisionCount)) {
+                return cached.Sample;
+            }
+        }
+
+        ::SDK::PredictionInput input{};
+        input.Unit = facts.Target;
+        input.Delay = std::max(0.0f, delay);
+        input.Radius = radius;
+        input.Speed = speed > 0.0f ? speed : FLT_MAX;
+        input.From = predictionFrom;
+        input.Range = range;
+        input.Collision = collision;
+        input.Spell = spell;
+        input.AoE = false;
+        input.AddHitBox = addHitBox;
+        input.MaxCollisionCount = maxCollisionCount;
+        if (spell) {
+            input.SetType(spell->Type);
+            input.RangeCheckFrom = rangeCheckFrom;
+            input.ChoiceCloserPosition = choiceCloserPosition;
+            input.CollisionObjects = spell->CollisionObjects;
+        } else {
+            input.SetType(route.PredictionType);
+            input.RangeCheckFrom = rangeCheckFrom;
+        }
+        // Keep the runtime Spell pointer on the input so FsPred can apply its
+        // slot calibration, but force single-target evaluation: target
+        // ranking only needs confidence and must not run one AoE search per
+        // candidate.
+        const ::SDK::PredictionOutput output =
+            ::SDK::Prediction::GetPrediction(input);
+
+        PredictionSample sample{};
+        const ::SDK::HitChance rawChance = output.Hitchance;
+        sample.Collides = rawChance == ::SDK::HitChance::Collision;
+        const ::SDK::HitChance originChance = sample.Collides
+            ? output.GetOriginHitchance()
+            : rawChance;
+        sample.HitChance = static_cast<int>(
+            sample.Collides && originChance == ::SDK::HitChance::None
+                ? ::SDK::HitChance::Collision
+                : originChance);
+        sample.Available = sample.Collides ||
+            sample.HitChance >= static_cast<int>(::SDK::HitChance::Low);
+        sample.CastPosition = output.GetCastPosition();
+        sample.UnitPosition = output.GetUnitPosition();
+
+        if (predictionCache_.size() >= 96) {
+            predictionCache_.erase(predictionCache_.begin());
+        }
+        predictionCache_.push_back({
+            facts.NetworkId,
+            request.RequesterId,
+            spell,
+            predictionType,
+            predictionFrom,
+            rangeCheckFrom,
+            range,
+            delay,
+            radius,
+            speed,
+            maxCollisionCount,
+            collisionObjectFlags,
+            collision,
+            addHitBox,
+            choiceCloserPosition,
+            sample
+        });
+        return sample;
+    }
+
+    void PopulatePredictionFacts(
+        const ::SDK::KuroTargetSelector::TargetRequest& request,
+        ::SDK::KuroTargetSelector::TargetFacts& facts) {
+        using namespace ::SDK::KuroTargetSelector;
+
+        facts.PredictionCastPosition = {};
+        facts.PredictionUnitPosition = {};
+        facts.PredictionHitChance = static_cast<int>(::SDK::HitChance::None);
+        facts.PredictionEvaluated = false;
+        facts.PredictionAvailable = false;
+        facts.PredictionCollides = false;
+
+        const auto& route = request.Route;
+        const bool suppliedPrediction =
+            route.PredictionAvailable || route.PredictionCollides ||
+            route.PredictionHitChance !=
+                static_cast<int>(::SDK::HitChance::None);
+        const bool suppliedForCandidate =
+            route.IntendedTargetId == 0 ||
+            route.IntendedTargetId == facts.NetworkId;
+        if (suppliedPrediction && suppliedForCandidate) {
+            facts.PredictionCastPosition =
+                route.Destination.IsValid() && !route.Destination.IsZero()
+                    ? route.Destination
+                    : route.Prediction;
+            facts.PredictionUnitPosition = route.Prediction;
+            facts.PredictionHitChance = route.PredictionHitChance;
+            facts.PredictionEvaluated = true;
+            facts.PredictionAvailable = route.PredictionAvailable;
+            facts.PredictionCollides = route.PredictionCollides;
+            return;
+        }
+
+        if (request.Phase != DecisionPhase::Planning ||
+            (!route.PredictionSpell &&
+             !IsPredictionSkillshotType(route.PredictionType))) {
+            return;
+        }
+
+        const PredictionSample sample =
+            EvaluateCandidatePrediction(request, facts);
+        facts.PredictionCastPosition = sample.CastPosition;
+        facts.PredictionUnitPosition = sample.UnitPosition;
+        facts.PredictionHitChance = sample.HitChance;
+        facts.PredictionEvaluated = true;
+        facts.PredictionAvailable = sample.Available;
+        facts.PredictionCollides = sample.Collides;
     }
 
     static void RestoreCoreFacts(
@@ -636,12 +969,93 @@ private:
         return std::clamp(dealt / sampleDamage, 0.0f, 20.0f);
     }
 
+    static float RawEquivalentDamage(float dealt, float multiplier) {
+        const float safeDealt = SafeNonNegative(dealt);
+        if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
+            return safeDealt;
+        }
+        return SafeNonNegative(safeDealt / multiplier);
+    }
+
     static float EffectiveHealthFromPool(float pool, float multiplier) {
         if (pool <= 0.0f) return 0.0f;
         if (!std::isfinite(multiplier) || multiplier <= 0.0f) {
             return FLT_MAX;
         }
         return pool / multiplier;
+    }
+
+    static void PopulateRequestDamageFacts(
+        const ::SDK::KuroTargetSelector::TargetRequest& request,
+        ::SDK::KuroTargetSelector::TargetFacts& facts,
+        const ::SDK::AIHeroClient& player) {
+        using namespace ::SDK::KuroTargetSelector;
+
+        if (!facts.Targetable || !player.IsValid() ||
+            !facts.Target.IsValid()) {
+            return;
+        }
+
+        const bool concreteAction = request.Route.ActionSpell != nullptr ||
+            request.Route.PredictionSpell != nullptr ||
+            request.Damage.RawDamage > 0.0f ||
+            request.Route.Kind == RouteKind::AutoAttack ||
+            request.Route.Kind == RouteKind::UnitProjectile ||
+            request.Route.Kind == RouteKind::SkillshotProjectile ||
+            request.Route.Kind == RouteKind::ChargedProjectile;
+
+        if (facts.DistanceToSource > 2500.0f && concreteAction) {
+            float physicalMultiplier = 1.0f;
+            float magicalMultiplier = 1.0f;
+            if (request.Damage.Type == ::SDK::DamageType::Physical ||
+                request.Damage.Type == ::SDK::DamageType::Mixed) {
+                physicalMultiplier = DamageMultiplier(
+                    player, facts.Target, ::SDK::DamageType::Physical);
+            }
+            if (request.Damage.Type == ::SDK::DamageType::Magical ||
+                request.Damage.Type == ::SDK::DamageType::Mixed) {
+                magicalMultiplier = DamageMultiplier(
+                    player, facts.Target, ::SDK::DamageType::Magical);
+            }
+            const float mixedMultiplier =
+                physicalMultiplier > 0.0f && magicalMultiplier > 0.0f
+                ? (physicalMultiplier + magicalMultiplier) * 0.5f
+                : std::max(physicalMultiplier, magicalMultiplier);
+            const float health = facts.Health;
+            const float allShield = facts.AllShield;
+            facts.PhysicalEffectiveHealth = EffectiveHealthFromPool(
+                health + allShield + facts.PhysicalShield,
+                physicalMultiplier);
+            facts.MagicalEffectiveHealth = EffectiveHealthFromPool(
+                health + allShield + facts.MagicalShield,
+                magicalMultiplier);
+            facts.MixedEffectiveHealth = EffectiveHealthFromPool(
+                health + allShield +
+                    (facts.PhysicalShield + facts.MagicalShield) * 0.5f,
+                mixedMultiplier);
+            facts.TrueEffectiveHealth = health + allShield;
+
+            if (request.Route.Kind == RouteKind::AutoAttack) {
+                facts.AutoAttackDamage = RawEquivalentDamage(
+                    ::SDK::Damage::GetAutoAttackDamage(
+                        player, facts.Target, true),
+                    physicalMultiplier);
+            }
+            facts.MagicalDamageEstimate = std::max(
+                75.0f, SafeNonNegative(player.AP()));
+        }
+
+        if (request.Route.ActionSpell) {
+            const float dealt = SafeNonNegative(
+                request.Route.ActionSpell->GetDamage(facts.Target));
+            // Spell::GetDamage returns post-mitigation damage, whereas policy
+            // damage is compared with effective health. Convert it back to a
+            // raw-equivalent amount using the request's mitigation sample.
+            const float mitigation =
+                KuroTargetSelectorPolicy::MitigationMultiplierFor(
+                    request, facts);
+            facts.ActionDamageEstimate = SafeNonNegative(dealt * mitigation);
+        }
     }
 
     static void PopulateTargetFacts(
@@ -716,9 +1130,11 @@ private:
         facts.AlliesNearTarget = alliesNear;
         facts.EnemiesNearTarget = enemiesNear;
 
-        // Rejected untargetable or distant identities skip expensive damage simulations
-        // (GetAutoAttackDamage / CalculateDamage) to avoid FPS drops.
-        const bool canEvaluateDamage = facts.Targetable && player.IsValid() && facts.DistanceToSource <= 2500.0f;
+        // The shared snapshot deliberately caps expensive damage simulations.
+        // Concrete long-range requests fill their own missing data lazily in
+        // PopulateRequestDamageFacts().
+        const bool canEvaluateDamage = facts.Targetable && player.IsValid() &&
+            facts.DistanceToSource <= 2500.0f;
         const float physicalMultiplier = canEvaluateDamage
             ? DamageMultiplier(player, target, ::SDK::DamageType::Physical)
             : 1.0f;
@@ -755,13 +1171,15 @@ private:
         facts.AbilityPower = SafeNonNegative(target.AP());
         facts.BoundingRadius = SafeNonNegative(target.BoundingRadius());
         facts.AutoAttackDamage = canEvaluateDamage
-            ? SafeNonNegative(::SDK::Damage::GetAutoAttackDamage(
-                player, target, true))
+            ? RawEquivalentDamage(
+                ::SDK::Damage::GetAutoAttackDamage(player, target, true),
+                physicalMultiplier)
             : 0.0f;
-        facts.MagicalDamageEstimate =
-            canEvaluateDamage && player.AP() > 0.0f
-            ? SafeNonNegative(::SDK::Damage::CalculateDamage(
-                player, target, ::SDK::DamageType::Magical, player.AP()))
+        // Generic magical requests have no spell slot from which to read base
+        // damage. A small raw baseline prevents AP=0 champions from becoming
+        // indistinguishable while concrete actions use exact spell damage.
+        facts.MagicalDamageEstimate = canEvaluateDamage
+            ? std::max(75.0f, SafeNonNegative(player.AP()))
             : 0.0f;
 
         static constexpr std::uint32_t kStunHash = ::SDK::Utils::HashName("stun");
@@ -936,9 +1354,12 @@ private:
     ::SDK::KuroTargetSelector::ProviderRegistry providersRegistry_;
     ::SDK::KuroTargetSelector::TargetSnapshot snapshot_ = {};
     std::vector<::SDK::KuroTargetSelector::TargetDecision> lastDecisions_;
+    std::vector<PredictionCacheEntry> predictionCache_;
+    std::vector<IncumbentEntry> incumbentLanes_;
     std::uint64_t snapshotSequence_ = 0;
     std::uint64_t revision_ = 1;
     int incumbentNetworkId_ = 0;
+    int predictionCacheTick_ = -1;
     bool suspended_ = false;
     bool evaluating_ = false;
 };
