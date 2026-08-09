@@ -19,7 +19,7 @@ public:
     const char* GetInternalId() const override { return "core.fspred"; }
     const char* GetAuthor() const override { return "FsPred"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
-    bool AutoLoadByDefault() const override { return false; }
+    bool AutoLoadByDefault() const override { return true; }
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {

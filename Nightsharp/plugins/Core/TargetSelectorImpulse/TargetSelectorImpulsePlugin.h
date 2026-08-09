@@ -12,7 +12,7 @@ public:
     const char* GetInternalId() const override { return "core.targetselector_impulse"; }
     const char* GetAuthor() const override { return "Impulse"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
-    bool AutoLoadByDefault() const override { return true; }
+    bool AutoLoadByDefault() const override { return false; }
 
     void OnLoad() override {
         if (implementation_) return;

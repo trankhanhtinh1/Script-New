@@ -40,8 +40,8 @@ public:
     }
 
     bool DrawAARange() const { return BoolValue(drawAARange_, true); }
-    int AARangeStyle() const { return ListValue(aaRangeStyle_, 0); }
-    int AARangeTexture() const { return ListValue(aaRangeTexture_, 0); }
+    int AARangeStyle() const { return ListValue(aaRangeStyle_, 1); }
+    int AARangeTexture() const { return ListValue(aaRangeTexture_, 2); }
     int AARangeOpacityPercent() const { return SliderValue(aaRangeOpacity_, 100); }
     int AARangeRotateSpeed() const { return SliderValue(aaRangeRotateSpeed_, 8); }
     int AARangeFadeWidth() const { return SliderValue(aaRangeFadeWidth_, 200); }
@@ -140,8 +140,8 @@ private:
         drawingsMenu_ = menu_->AddSubMenu(new Menu("drawings", "Drawings"));
         if (drawingsMenu_) {
             drawAARange_ = drawingsMenu_->Add(new MenuBool("drawAARange", "Auto-Attack Range", true));
-            aaRangeStyle_ = drawingsMenu_->Add(new MenuList("aaRangeStyle", "AA Range Drawing Style", { "Default (Vector)", "Texture Ring" }, 0));
-            aaRangeTexture_ = drawingsMenu_->Add(new MenuList("aaRangeTexture", "AA Range Texture", { "Demacia Trophy", "Hextech AoE", "Bilgewater Shield", "Olaf Circle" }, 0));
+            aaRangeStyle_ = drawingsMenu_->Add(new MenuList("aaRangeStyle", "AA Range Drawing Style", { "Default (Vector)", "Texture Ring" }, 1));
+            aaRangeTexture_ = drawingsMenu_->Add(new MenuList("aaRangeTexture", "AA Range Texture", { "Demacia Trophy", "Hextech AoE", "Bilgewater (Bigwater) Shield", "Olaf Circle" }, 2));
             aaRangeOpacity_ = drawingsMenu_->Add(new MenuSlider("aaRangeOpacity", "Texture Opacity (%)", 100, 10, 100));
             aaRangeRotateSpeed_ = drawingsMenu_->Add(new MenuSlider("aaRangeRotateSpeed", "Texture Rotation Speed", 8, 1, 20));
             aaRangeFadeWidth_ = drawingsMenu_->Add(new MenuSlider(

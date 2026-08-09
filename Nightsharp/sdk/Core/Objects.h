@@ -21,6 +21,7 @@
 #include "../Data/RuneData.h"
 
 #include <algorithm>
+#include <Windows.h>
 #include <cctype>
 #include <cfloat>
 #include <cmath>
@@ -622,21 +623,64 @@ namespace StaticStringCache {
         int minionClass = 0;
     };
     inline Entry entries[kMaxIndex] = {};
+    inline SRWLOCK lock = SRWLOCK_INIT;
 
-    inline Entry* GetMutable(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
-        return &entries[index];
+    inline bool CopyString(uint32_t index,
+                           bool characterNameFirst,
+                           std::string& out,
+                           bool allowFallback = true) {
+        out.clear();
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return false;
+
+        AcquireSRWLockShared(&lock);
+        const Entry& entry = entries[index];
+        if (entry.valid) {
+            const std::string& primary = characterNameFirst
+                ? entry.characterName
+                : entry.name;
+            const std::string& fallback = characterNameFirst
+                ? entry.name
+                : entry.characterName;
+            if (!primary.empty()) {
+                out = primary;
+            } else if (allowFallback && !fallback.empty()) {
+                out = fallback;
+            }
+        }
+        ReleaseSRWLockShared(&lock);
+        return !out.empty();
     }
 
-    inline const Entry* Get(uint32_t index) {
-        if (index >= static_cast<uint32_t>(kMaxIndex)) return nullptr;
-        return entries[index].valid ? &entries[index] : nullptr;
+    inline int ReadMinionClass(uint32_t index) {
+        if (index >= static_cast<uint32_t>(kMaxIndex)) return 0;
+        AcquireSRWLockShared(&lock);
+        const int value = entries[index].valid
+            ? entries[index].minionClass
+            : 0;
+        ReleaseSRWLockShared(&lock);
+        return value;
+    }
+
+    inline void StoreString(uint32_t index,
+                            bool characterName,
+                            const char* value) {
+        if (index >= static_cast<uint32_t>(kMaxIndex) ||
+            !value || !*value) {
+            return;
+        }
+        AcquireSRWLockExclusive(&lock);
+        Entry& entry = entries[index];
+        if (characterName) {
+            entry.characterName = value;
+        } else {
+            entry.name = value;
+        }
+        entry.valid = true;
+        ReleaseSRWLockExclusive(&lock);
     }
 
     inline void Populate(uintptr_t address, uint32_t index, ::Core::Objects::ObjectType type) {
         if (index >= static_cast<uint32_t>(kMaxIndex) || !address) return;
-        Entry& e = entries[index];
-        e.valid = true;
 
         const bool isMainType = (
             type == ::Core::Objects::ObjectType::AIHeroClient ||
@@ -647,32 +691,50 @@ namespace StaticStringCache {
             // type == ::Core::Objects::ObjectType::HQClient ||
             type == ::Core::Objects::ObjectType::MissileClient);
 
-        if (e.characterName.empty() && isMainType) {
-            char charBuf[96] = {};
-            if (::Core::Objects::ReadCharacterName(address, charBuf, static_cast<int>(sizeof(charBuf))))
-                e.characterName = charBuf;
+        // Never hold the cache lock while reading game memory. A lifecycle
+        // callback may clear the same slot from the game thread while render
+        // code is consuming it, so publish one fully built snapshot below.
+        char charBuf[96] = {};
+        char nameBuf[96] = {};
+        uint32_t team = 0;
+        int minionClass = 0;
+        if (isMainType) {
+            (void)::Core::Objects::ReadCharacterName(
+                address, charBuf, static_cast<int>(sizeof(charBuf)));
+            (void)::Core::Objects::ReadName(
+                address, nameBuf, static_cast<int>(sizeof(nameBuf)));
+            team = ::Core::Objects::ReadTeamValue(address);
         }
-
-        if (e.name.empty() && isMainType) {
-            char nameBuf[96] = {};
-            if (::Core::Objects::ReadName(address, nameBuf, static_cast<int>(sizeof(nameBuf))))
-                e.name = nameBuf;
-        }
-
-        if (e.team == 0 && isMainType) {
-            e.team = ::Core::Objects::ReadTeamValue(address);
-        }
-
-        if (e.minionClass == 0 && isMainType && (
+        if (isMainType && (
             type == ::Core::Objects::ObjectType::AIMinionClient ||
             type == ::Core::Objects::ObjectType::NeutralMinionCampClient)) {
-            e.minionClass = static_cast<int>(::Core::Objects::ReadMinionClass(address));
+            minionClass = static_cast<int>(
+                ::Core::Objects::ReadMinionClass(address));
         }
+
+        AcquireSRWLockExclusive(&lock);
+        Entry& entry = entries[index];
+        entry.valid = true;
+        if (entry.characterName.empty() && charBuf[0]) {
+            entry.characterName = charBuf;
+        }
+        if (entry.name.empty() && nameBuf[0]) {
+            entry.name = nameBuf;
+        }
+        if (entry.team == 0 && team != 0) {
+            entry.team = team;
+        }
+        if (entry.minionClass == 0 && minionClass != 0) {
+            entry.minionClass = minionClass;
+        }
+        ReleaseSRWLockExclusive(&lock);
     }
 
     inline void Clear(uint32_t index) {
         if (index >= static_cast<uint32_t>(kMaxIndex)) return;
+        AcquireSRWLockExclusive(&lock);
         entries[index] = {};
+        ReleaseSRWLockExclusive(&lock);
     }
 }
 
@@ -939,9 +1001,9 @@ public:
 
     const std::string& Name() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (const auto* sc = StaticStringCache::Get(idx)) {
-            if (!sc->name.empty()) return sc->name;
-            if (!sc->characterName.empty()) return sc->characterName;
+        thread_local std::string tls_cachedName;
+        if (StaticStringCache::CopyString(idx, false, tls_cachedName)) {
+            return tls_cachedName;
         }
         const uintptr_t a = Address();
         if (Globals::IsValidPtr(a)) {
@@ -964,9 +1026,9 @@ public:
 
     const std::string& CharacterName() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (const auto* sc = StaticStringCache::Get(idx)) {
-            if (!sc->characterName.empty()) return sc->characterName;
-            if (!sc->name.empty()) return sc->name;
+        thread_local std::string tls_cachedCharacterName;
+        if (StaticStringCache::CopyString(idx, true, tls_cachedCharacterName)) {
+            return tls_cachedCharacterName;
         }
         const uintptr_t a = Address();
         if (Globals::IsValidPtr(a)) {
@@ -1669,10 +1731,9 @@ public:
 
     ::Core::Objects::MinionClass GetMinionClass() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (const auto* sc = StaticStringCache::Get(idx)) {
-            if (sc->minionClass != 0) {
-                return static_cast<::Core::Objects::MinionClass>(sc->minionClass);
-            }
+        const int cachedClass = StaticStringCache::ReadMinionClass(idx);
+        if (cachedClass != 0) {
+            return static_cast<::Core::Objects::MinionClass>(cachedClass);
         }
         const uintptr_t a = Address();
         return a ? ::Core::Objects::ReadMinionClass(a) : ::Core::Objects::MinionClass::Unset;
@@ -1891,8 +1952,9 @@ public:
     int TargetNetworkId() const { return ResolveNetworkIdFromIndex(static_cast<uint32_t>(TargetIndex())); }
     std::string SpellName() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && !sc->name.empty()) return sc->name;
+        std::string cached;
+        if (StaticStringCache::CopyString(idx, false, cached, false)) {
+            return cached;
         }
         const uintptr_t a = Address();
         if (!a) return {};
@@ -1910,17 +1972,15 @@ public:
                 static_cast<int>(sizeof(buf)));
         }
         if (buf[0]) {
-            if (auto* sc = StaticStringCache::GetMutable(idx)) {
-                sc->name = buf;
-                sc->valid = true;
-            }
+            StaticStringCache::StoreString(idx, false, buf);
         }
         return buf;
     }
     std::string MissileName() const {
         const uint32_t idx = static_cast<uint32_t>(handle_.index & 0xFFFFu);
-        if (auto* sc = StaticStringCache::GetMutable(idx)) {
-            if (sc->valid && !sc->characterName.empty()) return sc->characterName;
+        std::string cached;
+        if (StaticStringCache::CopyString(idx, true, cached, false)) {
+            return cached;
         }
         const uintptr_t a = Address();
         if (!a) return {};
@@ -1938,10 +1998,7 @@ public:
                 static_cast<int>(sizeof(buf)));
         }
         if (buf[0]) {
-            if (auto* sc = StaticStringCache::GetMutable(idx)) {
-                sc->characterName = buf;
-                sc->valid = true;
-            }
+            StaticStringCache::StoreString(idx, true, buf);
         }
         return buf;
     }

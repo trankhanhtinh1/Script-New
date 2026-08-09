@@ -79,6 +79,11 @@ static constexpr int kGameReadyMaxPolls = 240;
 static constexpr DWORD kSwapChainPollMs = 500;
 static constexpr int kSwapChainMaxPolls = 240;
 
+static void PublishRuntimePhase(const char* phase) {
+    NightSharpDebug::SetPhase(phase);
+    NightSharpDebug::CrashBridge::PublishPhase(phase);
+}
+
 static bool ReadLocalPlayerForStartup(uintptr_t& outLocalPlayer) {
     outLocalPlayer = 0;
     __try {
@@ -675,10 +680,19 @@ static void Render() {
         !g_pRenderTargetView)
         return;
 
+    // The game can keep invoking Present while its window is deactivated or
+    // minimized. Do not run game-memory readers or build ImGui draw data during
+    // that transition; resume from a clean frame after WM_ACTIVATEAPP.
+    if (!::CoreGame::IsGameFocused() ||
+        (g_gameHwnd && IsIconic(g_gameHwnd))) {
+        PublishRuntimePhase("d3d11hook-render-skip-unfocused");
+        return;
+    }
+
     // Gap 5: Zero Packman detection flag mỗi frame
     RunMainloopCheckSafe();
 
-    NightSharpDebug::SetPhase("d3d11hook-render-begin");
+    PublishRuntimePhase("d3d11hook-render-begin");
     NightSharpDebug::CrashTrace::Record(
         nscrash::TraceTag::D3DUpdate,
         g_bootstrapDone ? 1u : 0u);
@@ -707,19 +721,19 @@ static void Render() {
 
         // Plugin update + render
         {
-            NightSharpDebug::SetPhase("d3d11hook-render-plugin-update");
+            PublishRuntimePhase("d3d11hook-render-plugin-update");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnUpdate");
             Plugins::PluginManager::Get().OnUpdate();
         }
         {
-            NightSharpDebug::SetPhase("d3d11hook-render-plugin-render");
+            PublishRuntimePhase("d3d11hook-render-plugin-render");
             NightSharpPerf::ScopedTimer timer("PluginManager::OnRender");
             Plugins::PluginManager::Get().OnRender();
         }
 
         // SDK Drawing handlers (TargetSelector, Orbwalker, Core Render objects)
         {
-            NightSharpDebug::SetPhase("d3d11hook-render-drawing-dispatch");
+            PublishRuntimePhase("d3d11hook-render-drawing-dispatch");
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchDraw");
             SDK::Drawing::DispatchDraw();
         }
@@ -731,7 +745,7 @@ static void Render() {
 
         // Menu + PermaShow render
         {
-            NightSharpDebug::SetPhase("d3d11hook-render-menu");
+            PublishRuntimePhase("d3d11hook-render-menu");
             NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
             RenderMenuSafe();
         }
@@ -740,11 +754,11 @@ static void Render() {
     NightSharpDebug::SetPhase("d3d11hook-render-status-overlays");
     RenderStatusOverlaysSafe(OverlayStatus::Mode::Internal);
 
-    NightSharpDebug::SetPhase("d3d11hook-imgui-render");
+    PublishRuntimePhase("d3d11hook-imgui-render");
     ImGui::EndFrame();
     ImGui::Render();
 
-    NightSharpDebug::SetPhase("d3d11hook-dx11-submit");
+    PublishRuntimePhase("d3d11hook-dx11-submit");
     g_pd3dContext->OMSetRenderTargets(1, &g_pRenderTargetView, nullptr);
     if (!SDK::Drawing::IsAllDrawingHidden()) {
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -756,7 +770,7 @@ static void Render() {
 
 static void PresentFrameSafe(IDXGISwapChain* pSwapChain) {
     __try {
-        NightSharpDebug::SetPhase("d3d11hook-present-frame");
+        PublishRuntimePhase("d3d11hook-present-frame");
         EnsureImGuiInitialized(pSwapChain);
         Render();
     }
@@ -781,8 +795,14 @@ struct DxgiPresent {
         if (!IsUnloading()) {
             PresentFrameSafe(pSwapChain);
         }
-        NightSharpPerf::ScopedTimer timer("Present");
-        return m_original(pSwapChain, syncInterval, flags);
+        long result = S_OK;
+        {
+            NightSharpPerf::ScopedTimer timer("Present");
+            PublishRuntimePhase("d3d11hook-present-original");
+            result = m_original(pSwapChain, syncInterval, flags);
+        }
+        PublishRuntimePhase("d3d11hook-present-returned");
+        return result;
     }
     static decltype(&Hooked) m_original;
 };
@@ -798,11 +818,41 @@ struct DxgiResizeBuffers {
             return m_original(pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
         }
 
-        CleanupRenderTargetInternal();
-        auto hr = m_original(pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
-        if (!IsUnloading()) {
-            CreateRenderTargetInternal();
+        PublishRuntimePhase("d3d11hook-resize-begin");
+        const bool backendReady =
+            InterlockedCompareExchange(&g_imguiBackendReady, 0, 0) != 0;
+        if (backendReady) {
+            ImGui_ImplDX11_InvalidateDeviceObjects();
         }
+        if (g_pd3dContext) {
+            // ResizeBuffers requires every reference to the old back buffer to
+            // be released, including the immediate context's OM binding.
+            g_pd3dContext->OMSetRenderTargets(0, nullptr, nullptr);
+        }
+        CleanupRenderTargetInternal();
+        PublishRuntimePhase("d3d11hook-resize-original");
+        auto hr = m_original(pSwapChain, bufferCount, width, height, newFormat, swapChainFlags);
+
+        PublishRuntimePhase(SUCCEEDED(hr)
+            ? "d3d11hook-resize-original-returned"
+            : "d3d11hook-resize-original-failed");
+        if (!IsUnloading()) {
+            // On failure the old back buffer normally remains valid; recreate
+            // its RTV as well so the overlay is never left half-initialized.
+            const bool renderTargetReady = CreateRenderTargetInternal();
+            if (backendReady && renderTargetReady) {
+                ImGui_ImplDX11_CreateDeviceObjects();
+            }
+            if (!renderTargetReady || FAILED(hr)) {
+                NightSharpDebug::Logf(
+                    "[D3D11Hook] ResizeBuffers hr=0x%08lX size=%ux%u rtv=%d",
+                    static_cast<unsigned long>(hr),
+                    static_cast<unsigned>(width),
+                    static_cast<unsigned>(height),
+                    renderTargetReady ? 1 : 0);
+            }
+        }
+        PublishRuntimePhase("d3d11hook-resize-complete");
         return hr;
     }
     static decltype(&Hooked) m_original;

@@ -45,15 +45,52 @@ inline std::vector<AIMinionClient> GetAzirSandSoldiers(
 
 inline bool IsCommandableAzirSandSoldier(const AIHeroClient& player,
                                          const GameObject& soldier) {
+    if (!IsAzirPlayer(player) || !soldier.IsValid() || soldier.IsDead() ||
+        soldier.Team() != player.Team() || !IsAzirSandSoldier(soldier)) {
+        return false;
+    }
+
     const float soldierRadius = AIBaseClient(soldier.Handle()).BoundingRadius();
     const float playerRadius = player.BoundingRadius();
-    return IsAzirPlayer(player) && soldier.IsValid() && soldier.IsTargetable() &&
-           soldier.Team() == player.Team() && IsAzirSandSoldier(soldier) &&
-           AzirSoldierRules::IsCommandable(
-               PlanarPoint(player.Position()),
-               PlanarPoint(soldier.Position()),
-               soldierRadius,
-               playerRadius);
+    return AzirSoldierRules::IsCommandable(
+        PlanarPoint(player.Position()),
+        PlanarPoint(soldier.Position()),
+        soldierRadius,
+        playerRadius);
+}
+
+inline float GetAzirSoldierAutoAttackRange(const AIMinionClient& soldier) {
+    if (!soldier.IsValid() || soldier.IsDead()) {
+        return 0.0f;
+    }
+
+    const AIBaseClient soldierBase(soldier.Handle());
+    const float liveRange = soldierBase.AttackRange();
+    const float attackRange = std::isfinite(liveRange) && liveRange > 0.0f
+        ? liveRange
+        : AzirSoldierRules::kPrimaryAttackRange;
+    return attackRange + std::max(0.0f, soldierBase.BoundingRadius());
+}
+
+inline bool HasLiveAzirSandSoldier(const AIHeroClient& player) {
+    if (!IsAzirPlayer(player)) {
+        return false;
+    }
+    for (const auto& soldier : GetAzirSandSoldiers(player)) {
+        if (soldier.IsValid() && !soldier.IsDead()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline float GetDisplayedAutoAttackRange(const AIHeroClient& player) {
+    // The player-side ring represents Azir's command/tether radius while at
+    // least one Sand Soldier exists. The commandability test itself adds both
+    // bounding radii; the visual requested by the menu remains exactly 660.
+    return HasLiveAzirSandSoldier(player)
+        ? AzirSoldierRules::kCommandRadius
+        : GetRealAutoAttackRange(player);
 }
 
 inline bool IsStructureTarget(const AttackableUnit& target) {
@@ -109,12 +146,13 @@ inline int AzirSoldierAttackCount(const AIHeroClient& player,
     const auto playerPoint = PlanarPoint(player.Position());
     const auto targetPoint = PlanarPoint(target.Position());
     const float targetRadius = target.BoundingRadius();
-    const float attackRange = AzirSoldierRules::kPrimaryAttackRange *
-                              std::max(0.0f, rangeScale);
     int count = 0;
     const float playerRadius = player.BoundingRadius();
     for (const auto& soldier : GetAzirSandSoldiers(player)) {
         const float soldierRadius = soldier.BoundingRadius();
+        const float attackRange =
+            GetAzirSoldierAutoAttackRange(soldier) *
+            std::max(0.0f, rangeScale);
         if (!AzirSoldierRules::IsCommandable(
                 playerPoint, PlanarPoint(soldier.Position()), soldierRadius, playerRadius) ||
             !AzirSoldierRules::CanReachPrimaryTarget(

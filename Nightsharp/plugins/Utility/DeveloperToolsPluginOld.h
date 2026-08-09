@@ -95,10 +95,11 @@ public:
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {
+        SetReadCheckpoint("load", "begin");
         s_instance = this;
         enabled_ = true;
         maxRange_ = 400;
-        trackedObjectTicks_.clear();
+        ClearTrackedObjects();
         scanCache_.reserve(256);
         activeObjectsCache_.reserve(128);
         eventLog_.clear();
@@ -164,9 +165,18 @@ public:
         menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
 
         menu_->Attach();
+        NightSharpDebug::Logf(
+            "[DevOldRead] loaded provider=%s rawAll=%d heroes=%d minions=%d missiles=%d",
+            scanProviderIndex_ == 0 ? "ObjectManager" : "GameObjects",
+            scanRawGameObjects_ ? 1 : 0,
+            scanHeroes_ ? 1 : 0,
+            scanMinions_ ? 1 : 0,
+            scanMissiles_ ? 1 : 0);
+        SetReadCheckpoint("load", "complete");
     }
 
     void OnUnload() override {
+        SetReadCheckpoint("unload", "begin");
         SDK::Events::RemoveOnProcessSpell(&DeveloperToolsPluginOld::OnProcessSpellCast);
         SDK::Events::RemoveOnDoCast(&DeveloperToolsPluginOld::OnDoCastEvent);
         SDK::Events::RemoveOnFinishCast(&DeveloperToolsPluginOld::OnFinishCastEvent);
@@ -179,12 +189,14 @@ public:
         SDK::Events::RemoveOnBuffUpdate(&DeveloperToolsPluginOld::OnBuffUpdateEvent);
         SDK::Events::RemoveOnNewPath(&DeveloperToolsPluginOld::OnNewPathEvent);
         SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPluginOld::OnObjectDelete);
+        ClearTrackedObjects();
         DestroyNativeMenu();
         {
             std::lock_guard<std::mutex> lk(eventLogMutex_);
             eventLog_.clear();
         }
         s_instance = nullptr;
+        SetReadCheckpoint("unload", "complete");
     }
 
     void SyncMenuSettings() {
@@ -224,24 +236,16 @@ public:
 
     void OnUpdate() override {
         SyncMenuSettings();
-        if (!enabled_) {
+        if (!enabled_ || !SDK::Game::IsFocused()) {
             pKeyPressedLast_ = false;
             return;
         }
 
-        if (trackedObjectTicks_.size() > 128) {
-            const int now = SDK::Variables::TickCount();
-            for (auto it = trackedObjectTicks_.begin(); it != trackedObjectTicks_.end(); ) {
-                if (now - it->second > 15000) {
-                    it = trackedObjectTicks_.erase(it);
-                } else {
-                    ++it;
-                }
-            }
-        }
+        PruneTrackedObjects(SDK::Variables::TickCount());
 
         bool isDown = (GetAsyncKeyState('P') & 0x8000) != 0;
         if (isDown && !pKeyPressedLast_) {
+            SetReadCheckpoint("copy-hotkey", "cursor-position");
             const Vec3 cursorPos = SDK::Game::CursorPos();
             const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
             const int now = SDK::Variables::TickCount();
@@ -249,31 +253,34 @@ public:
             std::string copyText = "=== DEVELOPER TOOLS OBJECT TABLE ===\n";
             int count = 0;
 
-            PopulateScanCache();
+            PopulateScanCache("copy-hotkey");
 
             for (const auto& obj : scanCache_) {
                 if (!obj.IsValid()) continue;
 
+                SetReadCheckpoint("copy-hotkey", "object-position", &obj);
                 const Vec3 pos = obj.Position();
                 if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
+                SetReadCheckpoint("copy-hotkey", "object-name", &obj);
                 const std::string& name = GetObjectName(obj);
+                SetReadCheckpoint("copy-hotkey", "object-char-name", &obj);
                 const std::string& charName = GetObjectCharacterName(obj);
                 if (IsClutter(obj, name, charName)) continue;
 
+                SetReadCheckpoint("copy-hotkey", "object-type", &obj);
                 const char* typeStr = ObjectTypeToString(obj.Type());
+                SetReadCheckpoint("copy-hotkey", "object-network-id", &obj);
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-                const char* teamStr = TeamToString(obj);
+                SetReadCheckpoint("copy-hotkey", "object-team", &obj);
+                const char* teamStr = TeamToString("copy-hotkey", obj);
                 char statusBuf[256];
-                GetStatusString(obj, statusBuf, sizeof(statusBuf));
+                GetStatusString("copy-hotkey", obj, statusBuf, sizeof(statusBuf));
 
-                float age = 0.0f;
-                auto it = trackedObjectTicks_.find(netId);
-                if (it != trackedObjectTicks_.end()) {
-                    age = static_cast<float>(now - it->second) / 1000.0f;
-                }
+                const float age = TrackedObjectAge(netId, now, false);
 
                 char lineBuf[512];
+                SetReadCheckpoint("copy-hotkey", "object-address", &obj);
                 std::snprintf(lineBuf, sizeof(lineBuf),
                               "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
                               ++count, name.c_str(), charName.c_str(), netId,
@@ -289,33 +296,39 @@ public:
             } else {
                 NightSharpDebug::Logf("[Dev] No objects in range to copy!");
             }
+            SetReadCheckpoint("copy-hotkey", "complete");
         }
         pKeyPressedLast_ = isDown;
     }
 
     void OnRender() override {
         SyncMenuSettings();
-        if (!enabled_ || !SDK::Drawing::IsEnabled()) {
+        if (!enabled_ || !SDK::Game::IsFocused() ||
+            !SDK::Drawing::IsEnabled()) {
             return;
         }
 
+        SetReadCheckpoint("render", "cursor-position");
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
         const int now = SDK::Variables::TickCount();
 
-        PopulateScanCache();
+        PopulateScanCache("render");
 
         for (const auto& obj : scanCache_) {
             if (!obj.IsValid()) {
                 continue;
             }
 
+            SetReadCheckpoint("render", "object-position", &obj);
             const Vec3 pos = obj.Position();
             if (pos.DistanceSqr(cursorPos) >= rangeSqr) {
                 continue;
             }
 
+            SetReadCheckpoint("render", "object-name", &obj);
             const std::string& name = GetObjectName(obj);
+            SetReadCheckpoint("render", "object-char-name", &obj);
             const std::string& charName = GetObjectCharacterName(obj);
 
             if (IsClutter(obj, name, charName)) {
@@ -323,16 +336,12 @@ public:
             }
 
             // Track age
+            SetReadCheckpoint("render", "object-network-id", &obj);
             const std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-            float age = 0.0f;
-            auto it = trackedObjectTicks_.find(netId);
-            if (it == trackedObjectTicks_.end()) {
-                trackedObjectTicks_[netId] = now;
-            } else {
-                age = static_cast<float>(now - it->second) / 1000.0f;
-            }
+            const float age = TrackedObjectAge(netId, now, true);
 
             Vec2 screen = {};
+            SetReadCheckpoint("render", "world-to-screen", &obj);
             if (!SDK::Drawing::WorldToScreen(pos, screen) || !screen.IsValid()) {
                 continue;
             }
@@ -350,6 +359,7 @@ public:
             currentY += stepY;
 
             // 2. Object Type
+            SetReadCheckpoint("render", "object-type", &obj);
             const char* typeStr = ObjectTypeToString(obj.Type());
             SDK::Drawing::DrawText(Vec2(screen.x, currentY), typeStr, textColor, false, true);
             currentY += stepY;
@@ -373,50 +383,66 @@ public:
             currentY += stepY;
 
             // 6. AIBaseClient Info (Health)
+            SetReadCheckpoint("render", "object-kind-health", &obj);
             if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
+                SetReadCheckpoint("render", "aibase-handle", &obj);
                 SDK::AIBaseClient aiObj(obj.Handle());
                 if (aiObj.IsValid()) {
+                    SetReadCheckpoint("render", "aibase-health", &obj);
+                    const float health = aiObj.Health();
+                    SetReadCheckpoint("render", "aibase-max-health", &obj);
+                    const float maxHealth = aiObj.MaxHealth();
+                    SetReadCheckpoint("render", "aibase-health-percent", &obj);
+                    const float healthPercent = aiObj.HealthPercent();
                     char hpTxt[128];
                     std::snprintf(hpTxt, sizeof(hpTxt), "Health: %.1f/%.1f (%.1f%%)",
-                                  aiObj.Health(), aiObj.MaxHealth(), aiObj.HealthPercent());
+                                  health, maxHealth, healthPercent);
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), hpTxt, textColor, false, true);
                     currentY += stepY;
                 }
             }
 
             // 7. AIHeroClient Info (Spells & Buffs)
+            SetReadCheckpoint("render", "object-kind-hero", &obj);
             if (obj.IsHero()) {
+                SetReadCheckpoint("render", "hero-handle", &obj);
                 SDK::AIHeroClient hero(obj.Handle());
                 if (hero.IsValid()) {
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), "Spells:", textColor, false, true);
                     currentY += stepY;
 
                     char qTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-q", &obj);
                     std::snprintf(qTxt, sizeof(qTxt), "(Q): %s", hero.GetSpell(SDK::SpellSlot::Q).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), qTxt, textColor, false, true);
                     currentY += stepY;
 
                     char wTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-w", &obj);
                     std::snprintf(wTxt, sizeof(wTxt), "(W): %s", hero.GetSpell(SDK::SpellSlot::W).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), wTxt, textColor, false, true);
                     currentY += stepY;
 
                     char eTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-e", &obj);
                     std::snprintf(eTxt, sizeof(eTxt), "(E): %s", hero.GetSpell(SDK::SpellSlot::E).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), eTxt, textColor, false, true);
                     currentY += stepY;
 
                     char rTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-r", &obj);
                     std::snprintf(rTxt, sizeof(rTxt), "(R): %s", hero.GetSpell(SDK::SpellSlot::R).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), rTxt, textColor, false, true);
                     currentY += stepY;
 
                     char dTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-d", &obj);
                     std::snprintf(dTxt, sizeof(dTxt), "(D): %s", hero.GetSpell(SDK::SpellSlot::Summoner1).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), dTxt, textColor, false, true);
                     currentY += stepY;
 
                     char fTxt[128];
+                    SetReadCheckpoint("render", "hero-spell-f", &obj);
                     std::snprintf(fTxt, sizeof(fTxt), "(F): %s", hero.GetSpell(SDK::SpellSlot::Summoner2).Name().c_str());
                     SDK::Drawing::DrawText(Vec2(screen.x, currentY), fTxt, textColor, false, true);
                     currentY += stepY;
@@ -430,6 +456,7 @@ public:
                     };
                     for (int invIdx = CoreItem::kItemSlotStart;
                          invIdx <= CoreItem::kTrinketSlot; ++invIdx) {
+                        SetReadCheckpoint("render", "hero-item-slot", &obj, invIdx);
                         const CoreItem::ItemSlot item = CoreItem::ReadSlot(obj.Address(), invIdx);
                         char itemTxt[256];
                         if (item.hasItem && item.id > 0) {
@@ -456,16 +483,20 @@ public:
 
                     // Enumerate Buffs
                     uintptr_t buffs[256] = {};
+                    SetReadCheckpoint("render", "hero-buff-enumerate", &obj);
                     const int count = ::CoreBuffs::Enumerate(obj.Address(), buffs, 256);
+                    SetReadCheckpoint("render", "hero-buff-game-time", &obj);
                     const float gameTime = ::CoreBuffs::ResolveGameTime();
 
                     bool printedBuffHeader = false;
                     for (int i = 0; i < count; ++i) {
                         const ::CoreBuffs::BuffRef buff{ buffs[i] };
+                        SetReadCheckpoint("render", "hero-buff-active", &obj, i);
                         if (!buff.IsActive(gameTime)) {
                             continue;
                         }
                         char buffName[96] = {};
+                        SetReadCheckpoint("render", "hero-buff-name", &obj, i);
                         if (buff.ReadName(buffName, sizeof(buffName)) && buffName[0]) {
                             if (!printedBuffHeader) {
                                 SDK::Drawing::DrawText(Vec2(screen.x, currentY), "Buffs:", textColor, false, true);
@@ -473,6 +504,7 @@ public:
                                 printedBuffHeader = true;
                             }
                             char buffTxt[128] = {};
+                            SetReadCheckpoint("render", "hero-buff-stacks", &obj, i);
                             std::snprintf(buffTxt, sizeof(buffTxt), "%dx %s", buff.GetStacks(), buffName);
                             SDK::Drawing::DrawText(Vec2(screen.x, currentY), buffTxt, textColor, false, true);
                             currentY += stepY;
@@ -482,10 +514,12 @@ public:
             }
 
             // 8. Missile Info
+            SetReadCheckpoint("render", "object-kind-missile", &obj);
             if (obj.IsMissile()) {
                 float speed = 0.0f;
                 float mRange = 0.0f;
-                GetMissileSpeedAndRange(obj, speed, mRange);
+                SetReadCheckpoint("render", "missile-data", &obj);
+                GetMissileSpeedAndRange("render", obj, speed, mRange);
 
                 char speedTxt[128];
                 std::snprintf(speedTxt, sizeof(speedTxt), "Missile Speed: %.1f", speed);
@@ -498,9 +532,15 @@ public:
                 currentY += stepY;
             }
         }
+        SetReadCheckpoint("render", "complete");
     }
 
     void OnMenu() override {
+        SetReadCheckpoint("menu", "begin");
+        if (!SDK::Game::IsFocused()) {
+            SetReadCheckpoint("menu", "skip-unfocused");
+            return;
+        }
         if (ImGui::Checkbox("Enable Developer Tools", &enabled_)) {
             if (menuEnabled_) menuEnabled_->SetValue(enabled_);
         }
@@ -579,19 +619,23 @@ public:
         ImGui::Separator();
         ImGui::Text("Active Objects Near Cursor (On Screen):");
 
-        PopulateScanCache();
+        PopulateScanCache("menu");
 
         activeObjectsCache_.clear();
+        SetReadCheckpoint("menu", "cursor-position");
         const Vec3 cursorPos = SDK::Game::CursorPos();
         const float rangeSqr = static_cast<float>(maxRange_ * maxRange_);
 
         for (const auto& obj : scanCache_) {
             if (!obj.IsValid()) continue;
 
+            SetReadCheckpoint("menu-filter", "object-position", &obj);
             const Vec3 pos = obj.Position();
             if (pos.DistanceSqr(cursorPos) >= rangeSqr) continue;
 
+            SetReadCheckpoint("menu-filter", "object-name", &obj);
             const std::string& name = GetObjectName(obj);
+            SetReadCheckpoint("menu-filter", "object-char-name", &obj);
             const std::string& charName = GetObjectCharacterName(obj);
 
             if (IsClutter(obj, name, charName)) continue;
@@ -601,6 +645,7 @@ public:
 
         if (activeObjectsCache_.empty()) {
             ImGui::Text("No objects near cursor.");
+            SetReadCheckpoint("menu", "complete-empty");
             return;
         }
 
@@ -611,22 +656,25 @@ public:
             int count = 0;
             const int now = SDK::Variables::TickCount();
             for (const auto& obj : activeObjectsCache_) {
+                SetReadCheckpoint("menu-copy", "object-name", &obj);
                 const std::string& name = GetObjectName(obj);
+                SetReadCheckpoint("menu-copy", "object-char-name", &obj);
                 const std::string& charName = GetObjectCharacterName(obj);
+                SetReadCheckpoint("menu-copy", "object-type", &obj);
                 const char* typeStr = ObjectTypeToString(obj.Type());
+                SetReadCheckpoint("menu-copy", "object-network-id", &obj);
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-                const char* teamStr = TeamToString(obj);
+                SetReadCheckpoint("menu-copy", "object-team", &obj);
+                const char* teamStr = TeamToString("menu-copy", obj);
                 char statusBuf[256];
-                GetStatusString(obj, statusBuf, sizeof(statusBuf));
+                GetStatusString("menu-copy", obj, statusBuf, sizeof(statusBuf));
 
-                float age = 0.0f;
-                auto it = trackedObjectTicks_.find(netId);
-                if (it != trackedObjectTicks_.end()) {
-                    age = static_cast<float>(now - it->second) / 1000.0f;
-                }
+                const float age = TrackedObjectAge(netId, now, false);
 
+                SetReadCheckpoint("menu-copy", "object-position", &obj);
                 const Vec3 pos = obj.Position();
                 char lineBuf[512];
+                SetReadCheckpoint("menu-copy", "object-address", &obj);
                 std::snprintf(lineBuf, sizeof(lineBuf),
                               "[%d] Name: %s | CharName: %s | NetId: %u | Addr: 0x%llX | Type: %s | Team: %s | Status: %s | Age: %.1fs | Pos: (%.1f, %.1f, %.1f)\n",
                               ++count, name.c_str(), charName.c_str(), netId,
@@ -655,20 +703,22 @@ public:
 
             const int now = SDK::Variables::TickCount();
             for (const auto& obj : activeObjectsCache_) {
+                SetReadCheckpoint("menu-table", "object-name", &obj);
                 const std::string& name = GetObjectName(obj);
+                SetReadCheckpoint("menu-table", "object-char-name", &obj);
                 const std::string& charName = GetObjectCharacterName(obj);
+                SetReadCheckpoint("menu-table", "object-type", &obj);
                 const char* typeStr = ObjectTypeToString(obj.Type());
-                const char* teamStr = TeamToString(obj);
+                SetReadCheckpoint("menu-table", "object-team", &obj);
+                const char* teamStr = TeamToString("menu-table", obj);
                 char statusBuf[256];
-                GetStatusString(obj, statusBuf, sizeof(statusBuf));
+                GetStatusString("menu-table", obj, statusBuf, sizeof(statusBuf));
+                SetReadCheckpoint("menu-table", "object-position", &obj);
                 float dist = obj.Position().Distance(cursorPos);
 
+                SetReadCheckpoint("menu-table", "object-network-id", &obj);
                 std::uint32_t netId = static_cast<std::uint32_t>(obj.NetworkId());
-                float age = 0.0f;
-                auto it = trackedObjectTicks_.find(netId);
-                if (it != trackedObjectTicks_.end()) {
-                    age = static_cast<float>(now - it->second) / 1000.0f;
-                }
+                const float age = TrackedObjectAge(netId, now, false);
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
@@ -698,6 +748,7 @@ public:
             }
             ImGui::EndTable();
         }
+        SetReadCheckpoint("menu", "complete");
     }
 
     void DrawPlayerInventorySection() {
@@ -706,6 +757,7 @@ public:
             return;
         }
 
+        SetReadCheckpoint("menu-inventory", "player");
         const auto player = SDK::ObjectManager::Player();
         if (!player.IsValid()) {
             ImGui::TextDisabled("Player not available.");
@@ -726,6 +778,7 @@ public:
 
             for (int invIdx = CoreItem::kItemSlotStart;
                  invIdx <= CoreItem::kTrinketSlot; ++invIdx) {
+                SetReadCheckpoint("menu-inventory", "item-slot", &player, invIdx);
                 const CoreItem::ItemSlot item = CoreItem::ReadSlot(player.Address(), invIdx);
 
                 ImGui::TableNextRow();
@@ -760,6 +813,7 @@ public:
 
                 ImGui::TableNextColumn();
                 if (item.hasItem && item.id > 0) {
+                    SetReadCheckpoint("menu-inventory", "item-ready", &player, invIdx);
                     const bool ready = SDK::CanUseItem(player, item.id);
                     ImGui::TextUnformatted(ready ? "Ready" : "CD");
                 } else {
@@ -768,6 +822,7 @@ public:
             }
             ImGui::EndTable();
         }
+        SetReadCheckpoint("menu-inventory", "complete", &player);
     }
 
     void DrawEventLoggerSection() {
@@ -945,10 +1000,12 @@ private:
     bool scanTurrets_ = false;
     bool scanMissiles_ = true;
     bool filterClutter_ = true;
+    std::mutex trackedObjectMutex_;
     std::unordered_map<std::uint32_t, int> trackedObjectTicks_;
     bool pKeyPressedLast_ = false;
     mutable std::vector<SDK::GameObject> scanCache_;
     mutable std::vector<SDK::GameObject> activeObjectsCache_;
+    mutable DWORD lastScanDebugLogTick_ = 0;
     static inline DeveloperToolsPluginOld* s_instance = nullptr;
 
     // Event logger state. Handlers fire on the game thread, the ImGui panel
@@ -976,6 +1033,48 @@ private:
     std::mutex eventLogMutex_;
     std::vector<std::string> eventLog_;
 
+    static void SetReadCheckpoint(const char* scope,
+                                  const char* operation,
+                                  const SDK::GameObject* object = nullptr,
+                                  int detail = -1) {
+        char phase[128] = {};
+        const char* safeScope = (scope && *scope) ? scope : "unknown";
+        const char* safeOperation = (operation && *operation) ? operation : "unknown";
+        if (object && detail >= 0) {
+            std::snprintf(phase, sizeof(phase),
+                          "devold:%s:%s:n%u:i%u:d%d",
+                          safeScope,
+                          safeOperation,
+                          object->CachedNetworkId(),
+                          object->CachedIndex(),
+                          detail);
+        } else if (object) {
+            std::snprintf(phase, sizeof(phase),
+                          "devold:%s:%s:n%u:i%u",
+                          safeScope,
+                          safeOperation,
+                          object->CachedNetworkId(),
+                          object->CachedIndex());
+        } else if (detail >= 0) {
+            std::snprintf(phase, sizeof(phase),
+                          "devold:%s:%s:d%d",
+                          safeScope,
+                          safeOperation,
+                          detail);
+        } else {
+            std::snprintf(phase, sizeof(phase),
+                          "devold:%s:%s",
+                          safeScope,
+                          safeOperation);
+        }
+
+        // SetPhase keeps the in-process crash context current. PublishPhase
+        // mirrors the same checkpoint to the external crash monitor without
+        // writing a disk log for every object read.
+        NightSharpDebug::SetPhase(phase);
+        NightSharpDebug::CrashBridge::PublishPhase(phase);
+    }
+
     template <typename T>
     void AddUniqueObjectsFromSource(std::vector<SDK::GameObject>& dest, const std::vector<T>& source) const {
         for (const auto& obj : source) {
@@ -999,21 +1098,41 @@ private:
         }
     }
 
-    void PopulateScanCache() const {
+    void PopulateScanCache(const char* scope) const {
+        const DWORD scanStartedAt = GetTickCount();
+        const bool logThisScan = lastScanDebugLogTick_ == 0 ||
+            scanStartedAt - lastScanDebugLogTick_ >= 1000;
+        if (logThisScan) {
+            lastScanDebugLogTick_ = scanStartedAt;
+            NightSharpDebug::Logf(
+                "[DevOldRead] scan-begin tick=%lu scope=%s provider=%s rawAll=%d heroes=%d minions=%d missiles=%d",
+                static_cast<unsigned long>(scanStartedAt),
+                (scope && *scope) ? scope : "unknown",
+                scanProviderIndex_ == 0 ? "ObjectManager" : "GameObjects",
+                scanRawGameObjects_ ? 1 : 0,
+                scanHeroes_ ? 1 : 0,
+                scanMinions_ ? 1 : 0,
+                scanMissiles_ ? 1 : 0);
+        }
+
+        SetReadCheckpoint(scope, "scan-clear");
         scanCache_.clear();
         if (scanProviderIndex_ == 0) {
             // Using SDK::ObjectManager::Get
             if (scanRawGameObjects_) {
+                SetReadCheckpoint(scope, "scan-raw-objects");
                 for (const auto& obj : SDK::ObjectManager::Get<SDK::GameObject>()) {
                     if (obj.IsValid()) scanCache_.push_back(obj);
                 }
             } else {
                 if (scanHeroes_) {
+                    SetReadCheckpoint(scope, "scan-raw-heroes");
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::AIHeroClient>()) {
                         if (obj.IsValid()) scanCache_.push_back(obj);
                     }
                 }
                 if (scanMinions_) {
+                    SetReadCheckpoint(scope, "scan-raw-minions");
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::AIMinionClient>()) {
                         if (obj.IsValid()) scanCache_.push_back(obj);
                     }
@@ -1024,6 +1143,7 @@ private:
                 //     }
                 // }
                 if (scanMissiles_) {
+                    SetReadCheckpoint(scope, "scan-raw-missiles");
                     for (const auto& obj : SDK::ObjectManager::Get<SDK::MissileClient>()) {
                         if (obj.IsValid()) scanCache_.push_back(obj);
                     }
@@ -1031,6 +1151,7 @@ private:
             }
         } else {
             // Using SDK::GameObjects Facade
+            SetReadCheckpoint(scope, "scan-facade-lock");
             std::lock_guard<std::recursive_mutex> lk(SDK::GameObjects::detail::g_mutex);
 
             bool anySpecificListSelected = false;
@@ -1044,6 +1165,7 @@ private:
             if (anySpecificListSelected) {
                 for (const auto& opt : listOptions_) {
                     if (opt.Enabled) {
+                        SetReadCheckpoint(scope, opt.Name);
                         switch (opt.Type) {
                         case GameObjectListType::AllGameObjects:
                             AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::GameObjectsList);
@@ -1195,6 +1317,7 @@ private:
                     }
                 }
             } else {
+                SetReadCheckpoint(scope, "scan-facade-default");
                 if (scanRawGameObjects_) {
                     AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::GameObjectsList);
                 } else {
@@ -1219,6 +1342,17 @@ private:
                 }
             }
         }
+
+        SetReadCheckpoint(scope, "scan-complete");
+        if (logThisScan) {
+            const DWORD scanFinishedAt = GetTickCount();
+            NightSharpDebug::Logf(
+                "[DevOldRead] scan-end tick=%lu scope=%s objects=%zu elapsedMs=%lu",
+                static_cast<unsigned long>(scanStartedAt),
+                (scope && *scope) ? scope : "unknown",
+                scanCache_.size(),
+                static_cast<unsigned long>(scanFinishedAt - scanStartedAt));
+        }
     }
 
     bool IsClutter(const SDK::GameObject& obj, const std::string& name, const std::string& charName) const {
@@ -1236,9 +1370,55 @@ private:
         return false;
     }
 
+    void ClearTrackedObjects() {
+        std::lock_guard<std::mutex> lk(trackedObjectMutex_);
+        trackedObjectTicks_.clear();
+    }
+
+    void PruneTrackedObjects(int now) {
+        std::lock_guard<std::mutex> lk(trackedObjectMutex_);
+        if (trackedObjectTicks_.size() <= 128) {
+            return;
+        }
+        for (auto it = trackedObjectTicks_.begin();
+             it != trackedObjectTicks_.end();) {
+            if (now - it->second > 15000) {
+                it = trackedObjectTicks_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    float TrackedObjectAge(std::uint32_t networkId,
+                           int now,
+                           bool createIfMissing) {
+        if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+            return 0.0f;
+        }
+        std::lock_guard<std::mutex> lk(trackedObjectMutex_);
+        const auto it = trackedObjectTicks_.find(networkId);
+        if (it == trackedObjectTicks_.end()) {
+            if (createIfMissing) {
+                trackedObjectTicks_.emplace(networkId, now);
+            }
+            return 0.0f;
+        }
+        return static_cast<float>(now - it->second) / 1000.0f;
+    }
+
+    void ForgetTrackedObject(std::uint32_t networkId) {
+        if (networkId == 0 || networkId == 0xFFFFFFFFu) {
+            return;
+        }
+        std::lock_guard<std::mutex> lk(trackedObjectMutex_);
+        trackedObjectTicks_.erase(networkId);
+    }
+
     static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args) {
         if (s_instance && args.Sender.NetworkId != 0) {
-            s_instance->trackedObjectTicks_.erase(static_cast<std::uint32_t>(args.Sender.NetworkId));
+            s_instance->ForgetTrackedObject(
+                static_cast<std::uint32_t>(args.Sender.NetworkId));
         }
     }
 
@@ -1663,30 +1843,44 @@ private:
         return object.CharacterName();
     }
 
-    static void GetMissileSpeedAndRange(const SDK::GameObject& obj, float& speed, float& range) {
+    static void GetMissileSpeedAndRange(const char* scope,
+                                        const SDK::GameObject& obj,
+                                        float& speed,
+                                        float& range) {
         speed = 0.0f;
         range = 0.0f;
 
+        SetReadCheckpoint(scope, "missile-address", &obj);
         const uintptr_t a = obj.Address();
         if (!a) return;
 
+        SetReadCheckpoint(scope, "missile-spell-data", &obj);
         const uintptr_t spellData = Globals::Read<uintptr_t>(a + Offset::MissileClient::SpellDataPtr);
         if (!Globals::IsValidPtr(spellData)) return;
 
+        SetReadCheckpoint(scope, "missile-spell-object", &obj);
         const uintptr_t spellDataObj = Globals::Read<uintptr_t>(spellData + 0x00);
         if (!Globals::IsValidPtr(spellDataObj)) return;
 
+        SetReadCheckpoint(scope, "missile-resource", &obj);
         const uintptr_t resource = Globals::Read<uintptr_t>(spellDataObj + 0x60); // Offset::SpellDataLayout::DataResource
         if (!Globals::IsValidPtr(resource)) return;
 
+        SetReadCheckpoint(scope, "missile-range", &obj);
         range = Globals::Read<float>(resource + 0x478); // Offset::SpellDataResourceLayout::ResCastRange
+        SetReadCheckpoint(scope, "missile-speed", &obj);
         speed = Globals::Read<float>(resource + 0x518); // Offset::SpellDataResourceLayout::ResMissileSpeed
+        SetReadCheckpoint(scope, "missile-complete", &obj);
     }
 
-    static const char* TeamToString(const SDK::GameObject& obj) {
+    static const char* TeamToString(const char* scope, const SDK::GameObject& obj) {
+        SetReadCheckpoint(scope, "team-valid", &obj);
         if (!obj.IsValid()) return "Unknown";
+        SetReadCheckpoint(scope, "team-is-ally", &obj);
         if (obj.IsAlly()) return "Ally";
+        SetReadCheckpoint(scope, "team-is-enemy", &obj);
         if (obj.IsEnemy()) return "Enemy";
+        SetReadCheckpoint(scope, "team-value", &obj);
         const auto team = obj.Team();
         if (team == SDK::GameObjectTeam::Neutral) return "Neutral";
         if (team == SDK::GameObjectTeam::Order) return "Blue (100)";
@@ -1694,26 +1888,43 @@ private:
         return "Unknown";
     }
 
-    static void GetStatusString(const SDK::GameObject& obj, char* buf, size_t maxLen) {
+    static void GetStatusString(const char* scope,
+                                const SDK::GameObject& obj,
+                                char* buf,
+                                size_t maxLen) {
+        SetReadCheckpoint(scope, "status-valid", &obj);
         if (!obj.IsValid()) {
             std::snprintf(buf, maxLen, "Unknown");
             return;
         }
         int len = 0;
+        SetReadCheckpoint(scope, "status-is-dead", &obj);
         if (obj.IsDead()) len += std::snprintf(buf + len, maxLen - len, "Dead");
         else len += std::snprintf(buf + len, maxLen - len, "Alive");
 
+        SetReadCheckpoint(scope, "status-is-visible", &obj);
         if (!obj.IsVisible()) len += std::snprintf(buf + len, maxLen - len, ", Fog");
+        SetReadCheckpoint(scope, "status-is-targetable", &obj);
         if (!obj.IsTargetable()) len += std::snprintf(buf + len, maxLen - len, ", Untargetable");
+        SetReadCheckpoint(scope, "status-is-invulnerable", &obj);
         if (obj.IsInvulnerable()) len += std::snprintf(buf + len, maxLen - len, ", Invulnerable");
 
+        SetReadCheckpoint(scope, "status-object-kind", &obj);
         if (obj.IsHero() || obj.IsMinion() || obj.IsTurret()) {
+            SetReadCheckpoint(scope, "status-aibase-handle", &obj);
             SDK::AIBaseClient ai(obj.Handle());
             if (ai.IsValid()) {
+                SetReadCheckpoint(scope, "status-health", &obj);
+                const float health = ai.Health();
+                SetReadCheckpoint(scope, "status-max-health", &obj);
+                const float maxHealth = ai.MaxHealth();
+                SetReadCheckpoint(scope, "status-health-percent", &obj);
+                const float healthPercent = ai.HealthPercent();
                 len += std::snprintf(buf + len, maxLen - len, ", HP:%.0f/%.0f(%.0f%%)",
-                                     ai.Health(), ai.MaxHealth(), ai.HealthPercent());
+                                     health, maxHealth, healthPercent);
             }
         }
+        SetReadCheckpoint(scope, "status-complete", &obj);
     }
 
     static const char* ObjectTypeToString(::Core::Objects::ObjectType type) {

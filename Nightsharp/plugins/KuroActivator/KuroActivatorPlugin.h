@@ -32,7 +32,7 @@ public:
     const char* GetInternalId() const override { return "utility.kuro_activator"; }
     const char* GetAuthor() const override { return "NightSharp"; }
     Plugins::PluginCategory GetCategory() const override { return Plugins::PluginCategory::Utility; }
-    bool AutoLoadByDefault() const override { return false; }
+    bool AutoLoadByDefault() const override { return true; }
     bool CanLoad() const override { return CoreRuntime::EnsureInitialized(); }
 
     void OnLoad() override {

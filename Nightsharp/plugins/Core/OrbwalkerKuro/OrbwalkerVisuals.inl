@@ -124,67 +124,32 @@ inline TextureRingData* EnsureRingTextureLoaded(int index) {
     return nullptr;
 }
 
-inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player) {
-    const float range = GetRealAutoAttackRange(player);
-    if (range <= 0.0f) return;
-
-    const int textureIdx = std::clamp<int>(this->menu_.AARangeTexture(), 0, 3);
-    TextureRingData* ringData = EnsureRingTextureLoaded(textureIdx);
-    if (!ringData || !ringData->loaded || !ringData->texture.Texture) {
-        return;
-    }
-
-    auto* draw = Drawing::GetDrawList(true);
-    if (!draw) return;
-
-    const Vector3 center = player.Position();
-    const float quadRadius = range / ringData->ringRadiusRatio;
-
-    const bool ready = this->CanAttack();
-    const bool windingUp = this->IsWindingUp();
-
+inline ImU32 AutoAttackRangeStateColor(bool ready,
+                                       bool windingUp,
+                                       int opacityPercent) {
     ImU32 color = IM_COL32(0, 230, 180, 255);
     if (windingUp) {
         color = IM_COL32(255, 180, 20, 255);
     } else if (!ready) {
         color = IM_COL32(255, 80, 80, 220);
     }
+    const int alpha = std::clamp(opacityPercent * 255 / 100, 0, 255);
+    return (color & 0x00FFFFFFu) | (static_cast<ImU32>(alpha) << 24);
+}
 
-    const int opacityPercent = this->menu_.AARangeOpacityPercent();
-    const int alpha = std::clamp<int>(opacityPercent * 255 / 100, 0, 255);
-    color = (color & 0x00FFFFFF) | (static_cast<ImU32>(alpha) << 24);
-
-    // Calculate facing movement direction angle
-    Vector3 moveDir = player.Direction();
-    if (moveDir.LengthSqr() < 0.001f) {
-        moveDir = player.ServerPosition() - player.Position();
+inline bool DrawWorldTextureRing(const Vector3& center,
+                                 float range,
+                                 TextureRingData* ringData,
+                                 ImU32 color,
+                                 float angle) {
+    if (range <= 0.0f || !ringData || !ringData->loaded ||
+        !ringData->texture.Texture) {
+        return false;
     }
+    auto* draw = Drawing::GetDrawList(true);
+    if (!draw) return false;
 
-    float targetAngle = this->context_.visualTextureAngle;
-    if (moveDir.LengthSqr2D() > 0.001f) {
-        targetAngle = std::atan2(moveDir.z, moveDir.x);
-    }
-
-    // Smooth angle lerp using shortest rotational path
-    constexpr float kPi = 3.14159265358979323846f;
-    constexpr float kTwoPi = 6.28318530717958647692f;
-    float diff = targetAngle - this->context_.visualTextureAngle;
-    while (diff > kPi) diff -= kTwoPi;
-    while (diff < -kPi) diff += kTwoPi;
-
-    const int now = Tick();
-    float dt = 0.016f;
-    if (this->context_.visualLastDrawTick > 0 && now > this->context_.visualLastDrawTick) {
-        dt = std::clamp<float>(static_cast<float>(now - this->context_.visualLastDrawTick) / 1000.0f, 0.001f, 0.1f);
-    }
-    this->context_.visualLastDrawTick = now;
-
-    const float speed = static_cast<float>(std::clamp<int>(this->menu_.AARangeRotateSpeed(), 1, 20));
-    const float lerpFactor = std::clamp<float>(dt * speed, 0.01f, 1.0f);
-
-    this->context_.visualTextureAngle += diff * lerpFactor;
-
-    const float angle = this->context_.visualTextureAngle;
+    const float quadRadius = range / ringData->ringRadiusRatio;
     const float cosA = std::cos(angle);
     const float sinA = std::sin(angle);
 
@@ -237,6 +202,61 @@ inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player
             }
         }
     }
+    return true;
+}
+
+inline void OrbwalkerBase::DrawAutoAttackRangeTexture(const AIHeroClient& player) {
+    const float range = OrbwalkingDetail::GetDisplayedAutoAttackRange(player);
+    if (range <= 0.0f) return;
+
+    const int textureIdx = std::clamp<int>(this->menu_.AARangeTexture(), 0, 3);
+    TextureRingData* ringData = EnsureRingTextureLoaded(textureIdx);
+    if (!ringData || !ringData->loaded || !ringData->texture.Texture) {
+        return;
+    }
+
+    Vector3 moveDir = player.Direction();
+    if (moveDir.LengthSqr() < 0.001f) {
+        moveDir = player.ServerPosition() - player.Position();
+    }
+
+    float targetAngle = this->context_.visualTextureAngle;
+    if (moveDir.LengthSqr2D() > 0.001f) {
+        targetAngle = std::atan2(moveDir.z, moveDir.x);
+    }
+
+    constexpr float kPi = 3.14159265358979323846f;
+    constexpr float kTwoPi = 6.28318530717958647692f;
+    float diff = targetAngle - this->context_.visualTextureAngle;
+    while (diff > kPi) diff -= kTwoPi;
+    while (diff < -kPi) diff += kTwoPi;
+
+    const int now = Tick();
+    float dt = 0.016f;
+    if (this->context_.visualLastDrawTick > 0 &&
+        now > this->context_.visualLastDrawTick) {
+        dt = std::clamp<float>(
+            static_cast<float>(now - this->context_.visualLastDrawTick) / 1000.0f,
+            0.001f,
+            0.1f);
+    }
+    this->context_.visualLastDrawTick = now;
+
+    const float speed = static_cast<float>(
+        std::clamp<int>(this->menu_.AARangeRotateSpeed(), 1, 20));
+    const float lerpFactor = std::clamp<float>(dt * speed, 0.01f, 1.0f);
+    this->context_.visualTextureAngle += diff * lerpFactor;
+
+    const ImU32 color = AutoAttackRangeStateColor(
+        this->CanAttack(),
+        this->IsWindingUp(),
+        this->menu_.AARangeOpacityPercent());
+    (void)DrawWorldTextureRing(
+        player.Position(),
+        range,
+        ringData,
+        color,
+        this->context_.visualTextureAngle);
 }
 
 inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
@@ -253,7 +273,7 @@ inline void OrbwalkerBase::DrawAutoAttackRangeFade(const AIHeroClient& player) {
         }
     }
 
-    const float outerRadius = GetRealAutoAttackRange(player);
+    const float outerRadius = OrbwalkingDetail::GetDisplayedAutoAttackRange(player);
     const float fadeWidth = std::min(
         outerRadius,
         static_cast<float>(std::max(1, menu_.AARangeFadeWidth())));
@@ -435,58 +455,40 @@ inline void OrbwalkerBase::DrawAzirSoldierRanges(const AIHeroClient& player) {
         return;
     }
 
-    bool hasCommandableSoldier = false;
+    const bool ready = CanAttack();
+    const bool windingUp = IsWindingUp();
+    const int textureIdx = std::clamp(menu_.AARangeTexture(), 0, 3);
+    TextureRingData* ringData = menu_.AARangeStyle() == 1
+        ? EnsureRingTextureLoaded(textureIdx)
+        : nullptr;
+
     for (const auto& soldier : OrbwalkingDetail::GetAzirSandSoldiers(player)) {
-        if (!soldier.IsValid() || !soldier.IsTargetable()) {
+        if (!soldier.IsValid() || soldier.IsDead()) {
             continue;
         }
 
         const bool isCommandable = OrbwalkingDetail::IsCommandableAzirSandSoldier(player, soldier);
         const Vector3 pos = soldier.Position();
-
-        // 1. Draw Ring right at soldier base position
-        const float ringRadius = soldier.BoundingRadius() > 0.0f ? soldier.BoundingRadius() : 50.0f;
-        const ImU32 ringColor = isCommandable ? 0xFF00FFFFu : 0x88888888u; // Gold-Cyan ring when active, gray when out of range
-        Drawing::DrawCircle(
-            pos,
-            ringRadius,
-            ringColor,
-            2.5f,
-            32);
-
-        if (isCommandable) {
-            hasCommandableSoldier = true;
-
-            // 2. Draw Auto-Attack Range around soldier (375 range)
-            Drawing::DrawCircle(
-                pos,
-                AzirSoldierRules::kPrimaryAttackRange,
-                0xFF00E5FFu, // Gold/Cyan AA range
-                2.0f,
-                64);
-
-            // 3. Draw tether line from Azir to soldier
-            Drawing::DrawLine(
-                player.Position(), pos, 0xAA00E5FFu, 1.5f);
-        } else {
-            // Out of command range (dimmed circle)
-            Drawing::DrawCircle(
-                pos,
-                AzirSoldierRules::kPrimaryAttackRange,
-                0x55888888u,
-                1.0f,
-                32);
+        const float range = OrbwalkingDetail::GetAzirSoldierAutoAttackRange(soldier);
+        if (!pos.IsValid() || range <= 0.0f) {
+            continue;
         }
-    }
 
-    // 4. Draw Azir W tether command radius (660 range) around Azir
-    if (hasCommandableSoldier) {
-        Drawing::DrawCircle(
-            player.Position(),
-            AzirSoldierRules::kCommandRadius,
-            0x4400E5FFu,
-            1.25f,
-            72);
+        const int opacity = isCommandable
+            ? menu_.AARangeOpacityPercent()
+            : std::min(menu_.AARangeOpacityPercent(), 30);
+        const ImU32 color = isCommandable
+            ? AutoAttackRangeStateColor(ready, windingUp, opacity)
+            : IM_COL32(135, 135, 135, opacity * 255 / 100);
+
+        if (!DrawWorldTextureRing(
+                pos,
+                range,
+                ringData,
+                color,
+                context_.visualTextureAngle)) {
+            Drawing::DrawCircle(pos, range, color, 2.0f, 64);
+        }
     }
 }
 

@@ -119,7 +119,7 @@ public:
                 continue;
             }
 
-            const float radius = hero.BoundingRadius() * 0.5f;
+            const float radius = hero.BoundingRadius();
             const TextureSlot& slot =
                 slots_[static_cast<std::size_t>(crestIndex)];
             if (slot.State != TextureState::Ready ||

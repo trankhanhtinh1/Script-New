@@ -85,6 +85,81 @@ void ApplyDebugAutoLoadOverrides() {
     }
 }
 
+void ApplyPreferredProviderPolicy() {
+    struct ProviderPolicy {
+        const char* Name;
+        const char* PreferredId;
+        const char* AlternativeIds[4];
+    };
+
+    static constexpr ProviderPolicy kPolicies[] = {
+        {
+            "orbwalker",
+            "core.orbwalker_kuro",
+            { "orbwalker", "core.orbwalker_7up", "core.ensoulsharp_orb", nullptr }
+        },
+        {
+            "target-selector",
+            "core.kuro_target_selector",
+            { "targetselector", "core.targetselector_impulse", nullptr, nullptr }
+        },
+        {
+            "prediction",
+            "core.fspred",
+            { "core.zdprediction", nullptr, nullptr, nullptr }
+        },
+        {
+            "evade",
+            "core.kuroevade",
+            { "core.zdevade", nullptr, nullptr, nullptr }
+        },
+        {
+            "activator",
+            "utility.kuro_activator",
+            { "core.awareness_activator", nullptr, nullptr, nullptr }
+        },
+    };
+
+    bool configChanged = false;
+    for (const auto& policy : kPolicies) {
+        const int preferredIdx =
+            PluginRegistry::FindByInternalId(policy.PreferredId);
+        if (preferredIdx < 0 ||
+            !PluginRegistry::Plugins[preferredIdx].AlwaysLoad) {
+            // An explicit saved choice may disable the preferred provider in
+            // favor of an alternative. Only resolve actual conflicts.
+            continue;
+        }
+
+        for (const char* alternativeId : policy.AlternativeIds) {
+            if (!alternativeId) {
+                continue;
+            }
+            const int alternativeIdx =
+                PluginRegistry::FindByInternalId(alternativeId);
+            if (alternativeIdx < 0 ||
+                !PluginRegistry::Plugins[alternativeIdx].AlwaysLoad) {
+                continue;
+            }
+
+            auto& alternative = PluginRegistry::Plugins[alternativeIdx];
+            NightSharpDebug::Logf(
+                "[PluginBootstrap] Preferred %s provider=%s; disabling duplicate id=%s",
+                policy.Name,
+                policy.PreferredId,
+                alternativeId);
+            alternative.AlwaysLoad = false;
+            alternative.Loaded = false;
+            configChanged = configChanged ||
+                alternative.Kind != PluginRegistry::PluginKind::SDK;
+        }
+    }
+
+    if (configChanged) {
+        PluginRegistry::SaveConfig();
+    }
+}
+
 } // namespace
 
 void EnsureRegistered() {
@@ -99,14 +174,14 @@ void EnsureRegistered() {
     // Initialize default SDK Wrappers.
     NightSharpDebug::Logf("[PluginBootstrap] Initialize SDK Wrappers begin");
     ::SDK::SdkWrappers::Initialize();
-    const int orbwalkerRegistryIdx = PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+    const int orbwalkerRegistryIdx = PluginRegistry::Register("Orbwalker", "orbwalker", PluginRegistry::PluginKind::SDK, false, PluginRegistry::PluginCategory::Core);
     // Load/Unload trên row "Orbwalker" giờ thật sự bật/tắt orbwalker SDK;
     // OrbwalkerKuroPlugin cũng dùng chính runtime này để override nó.
     PluginRegistry::BindRuntime(orbwalkerRegistryIdx,
                                 nullptr,
                                 &::SDK::SdkWrappers::ResumeSdkOrbwalkerRuntime,
                                 &::SDK::SdkWrappers::SuspendSdkOrbwalkerRuntime);
-    const int targetSelectorRegistryIdx = PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, true, PluginRegistry::PluginCategory::Core);
+    const int targetSelectorRegistryIdx = PluginRegistry::Register("Target Selector", "targetselector", PluginRegistry::PluginKind::SDK, false, PluginRegistry::PluginCategory::Core);
     PluginRegistry::BindRuntime(targetSelectorRegistryIdx,
                                 nullptr,
                                 &::SDK::SdkWrappers::ResumeSdkTargetSelectorRuntime,
@@ -176,6 +251,7 @@ void EnsureRegistered() {
     NightSharpDebug::Logf("[PluginBootstrap] LoadConfig begin");
     PluginRegistry::LoadConfig();
     NightSharpDebug::Logf("[PluginBootstrap] LoadConfig complete");
+    ApplyPreferredProviderPolicy();
     ApplyDebugAutoLoadOverrides();
 
     // Install config persistence AFTER the registry is populated (so champion
