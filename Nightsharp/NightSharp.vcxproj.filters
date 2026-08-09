@@ -625,9 +625,6 @@
     <Filter Include="Plugins\Utility">
       <UniqueIdentifier>{250EA8A9-EF5D-1946-AE05-CEA506516D80}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Plugins\Utility\DeveloperTools">
-      <UniqueIdentifier>{0FE6CC70-4F67-FA7F-8A0F-365EDDCC0178}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Plugins\ZDEvade">
       <UniqueIdentifier>{F7A041B1-3273-0C47-BA23-181DA02B6A3E}</UniqueIdentifier>
     </Filter>
@@ -3316,27 +3313,6 @@
     </ClInclude>
     <ClInclude Include="Plugins\Utility\AttackRangeDrawPlugin.h">
       <Filter>Plugins\Utility</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\EventLoggerTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\IDeveloperTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\NavigationTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\ObjectDetectorTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\PlayerBuffInspectorTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\SpellItemInspectorTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\Utility\DeveloperTools\StatsInspectorTab.h">
-      <Filter>Plugins\Utility\DeveloperTools</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\Utility\DeveloperToolsPlugin.h">
       <Filter>Plugins\Utility</Filter>
