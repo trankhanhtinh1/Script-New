@@ -187,9 +187,11 @@ inline void OrbwalkerBase::OnGameUpdate() {
 
     if (EvadeOwnsActions(now)) {
         ExpirePendingAttack();
-        if (menu_.CoordinateKuroEvade() &&
-            Plugins::KuroCombatCoordination::Coordinator::
-                AllowsStationaryAttacks(now)) {
+        // KuroEvade always owns movement here, but its danger + delayed-route
+        // policy decides whether a fresh attack is allowed. This keeps the
+        // menu threshold meaningful without starting a windup that the evade
+        // engine would have to cancel one frame later.
+        if (!EvadeBlocksAttack(now)) {
 
             const AttackableUnit stationaryTarget =
                 CanAttack() ? GetTarget() : AttackableUnit();

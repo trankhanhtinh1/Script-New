@@ -30,6 +30,17 @@ public:
             return;
         }
 
+        // Kuro is the preferred implementation for the KuroEvade bridge.
+        // If 7UP was enabled manually or by an older saved config, switch it
+        // off before attaching Kuro so both implementations cannot issue
+        // competing attack/move orders.
+        const int alternateOrbwalker =
+            PluginRegistry::FindByInternalId("core.orbwalker_7up");
+        if (alternateOrbwalker >= 0 &&
+            PluginRegistry::Plugins[alternateOrbwalker].Loaded) {
+            PluginRegistry::UnloadPlugin(alternateOrbwalker);
+        }
+
         // Build menu con xong hết rồi mới Attach — ConfigStore áp giá trị đã
         // lưu cho cả subtree đúng lúc Attach (xem ConfigStore::OnMenuAttached).
         DestroyMenu();

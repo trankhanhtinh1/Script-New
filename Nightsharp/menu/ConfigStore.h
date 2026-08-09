@@ -383,6 +383,19 @@ namespace ConfigStore {
         g_applying = false;
     }
 
+    // Dynamic plugin menus may discover champions/allies after attachment.
+    // Reapplying the whole root at that point overwrites live edits that are
+    // still inside the save debounce. Load only the freshly rebuilt subtree.
+    inline void ApplyLoadedSubtree(Menu* subtree, Menu* root) {
+        if (!subtree || !root) return;
+        IniDoc doc;
+        if (!ReadDoc(RootFilePath(root), doc)) return;
+        g_applying = true;
+        ForEachItem(subtree, root,
+            [&](MenuItem* it, Menu* r) { ApplyItem(it, r, doc); });
+        g_applying = false;
+    }
+
     inline void SaveAllRoots() {
         auto& mm = MenuManager::Instance();
         for (int i = 0; i < mm.Menus.size(); ++i) SaveRoot(mm.Menus[i]);

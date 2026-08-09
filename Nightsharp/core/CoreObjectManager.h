@@ -48,6 +48,14 @@ namespace TypeCache {
     constexpr int kBuckets = 512; // must be power of 2
     struct Slot { uintptr_t address = 0; ObjectType type = ObjectType::Unknown; };
     inline Slot g_slots[kBuckets] = {};
+    inline SRWLOCK g_lock = SRWLOCK_INIT;
+
+    inline constexpr bool IsCacheable(ObjectType type) {
+        // GameObject is only a temporary fallback while the typed managers are
+        // unavailable. Caching it permanently prevents a later Hero/Minion
+        // inference from ever upgrading the handle.
+        return type != ObjectType::Unknown && type != ObjectType::GameObject;
+    }
 
     inline int Bucket(uintptr_t address) {
         // Shift by 4 to discard alignment bits; mask to bucket count.
@@ -57,25 +65,36 @@ namespace TypeCache {
     // Returns Unknown when address is not cached.
     inline ObjectType Lookup(uintptr_t address) {
         const int b = Bucket(address);
-        return (g_slots[b].address == address) ? g_slots[b].type : ObjectType::Unknown;
+        AcquireSRWLockShared(&g_lock);
+        const Slot slot = g_slots[b];
+        ReleaseSRWLockShared(&g_lock);
+        return slot.address == address && IsCacheable(slot.type)
+            ? slot.type
+            : ObjectType::Unknown;
     }
 
-    // Unknown types are not stored (Unknown is the "empty" sentinel).
+    // Unknown and generic fallback types are not stored.
     inline void Store(uintptr_t address, ObjectType type) {
-        if (type == ObjectType::Unknown) return;
+        if (!IsCacheable(type)) return;
         const int b = Bucket(address);
+        AcquireSRWLockExclusive(&g_lock);
         g_slots[b] = {address, type};
+        ReleaseSRWLockExclusive(&g_lock);
     }
 
     // Invalidate a single entry (e.g. on object death if hooked).
     inline void Invalidate(uintptr_t address) {
         const int b = Bucket(address);
+        AcquireSRWLockExclusive(&g_lock);
         if (g_slots[b].address == address) g_slots[b] = {};
+        ReleaseSRWLockExclusive(&g_lock);
     }
 
     // Full clear — call on major reinitialisation.
     inline void InvalidateAll() {
+        AcquireSRWLockExclusive(&g_lock);
         for (auto& s : g_slots) s = {};
+        ReleaseSRWLockExclusive(&g_lock);
     }
 } // namespace TypeCache
 
@@ -184,7 +203,7 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
     int written = 0;
     for (std::uint32_t i = 0; i < view.count && written < maxOut; ++i) {
         const uintptr_t entry = Globals::Read<uintptr_t>(view.items + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
-        if (!IsLiveEntry(entry)) {
+        if (!LooksLikeGameObject(entry)) {
             continue;
         }
 
@@ -219,7 +238,7 @@ inline int EnumerateAllIncludingStructures(uintptr_t* out, int maxOut) {
     for (std::uint32_t i = 0; i < view.count && written < maxOut; ++i) {
         const uintptr_t entry =
             Globals::Read<uintptr_t>(view.items + static_cast<uintptr_t>(i) * sizeof(uintptr_t));
-        if (!IsLiveEntry(entry)) {
+        if (!LooksLikeGameObject(entry)) {
             continue;
         }
         out[written++] = entry;
@@ -583,11 +602,21 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
         return ObjectType::MissileClient;
     }
 
-    const auto snapshot =
-        Core::Objects::ReadSnapshot(object, ObjectType::GameObject);
-    const char* name = snapshot.characterName[0]
-        ? snapshot.characterName
-        : snapshot.name;
+    // Lifecycle classification only needs the two static names. Do not build a
+    // full ObjectSnapshot here: its invalid-radius fallback calls the native
+    // GetBoundingRadius function, which is unsafe for generic/stale entries in
+    // ObjectManager and was the last operation reached by seed before the AV.
+    char characterName[96] = {};
+    char objectName[96] = {};
+    (void)Core::Objects::ReadCharacterName(
+        object,
+        characterName,
+        static_cast<int>(sizeof(characterName)));
+    (void)Core::Objects::ReadName(
+        object,
+        objectName,
+        static_cast<int>(sizeof(objectName)));
+    const char* name = characterName[0] ? characterName : objectName;
 
     ObjectType resolved = type;
     if (Core::Objects::ContainsInsensitive(name, "barracksdampener") ||

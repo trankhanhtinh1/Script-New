@@ -134,10 +134,11 @@ inline void SetStrictEvadeActive(bool active) {
     RecomputeAggregates();
 }
 
-// KuroEvade follows the source menu semantics: spell interception remains
-// active while evading, while auto-attacks are only blocked above the
-// configured danger level. Legacy callers of SetStrictEvadeActive retain the
-// original all-or-nothing behavior.
+// KuroEvade publishes spell intervention and attack ownership separately:
+// it always owns movement during intervention, while its configured danger
+// threshold and delayed-route check decide whether fresh attacks are blocked.
+// Legacy callers of SetStrictEvadeActive retain the original all-or-nothing
+// behavior.
 inline void SetEvadeInterventionState(bool active, bool blockAttacks) {
     OwnerState& legacy = OwnerStates[LegacyOwner];
     legacy.active = active;

@@ -1005,7 +1005,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     }
 
     ReadAttackTimingsFromMemory(player);
-    const int farmDelay = menu_.FastLaneClear() ? 0 : menu_.DelayFarm();
+    const int farmDelay = menu_.DelayFarm();
     const int lastHitWindowHorizonMs = std::clamp(
         static_cast<int>(OrbwalkingDetail::kLaneClearWaitCycles *
             (context_.attackDelayMs + context_.attackWindupMs)),
@@ -1086,7 +1086,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
     // branch had already returned, so LaneClear consumed its next attack even
     // while a lane minion was about to enter the last-hit window.
     if (mode == OrbwalkingMode::LaneClear) {
-        if (!menu_.FastLaneClear()) {
+        if (menu_.ShouldWaitEnabled()) {
             const bool shouldWait = OrbwalkingDetail::HasSoonKillableMinion(
                 player,
                 minionLists.laneMinions,
@@ -1228,7 +1228,9 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 }
 
 inline bool OrbwalkerBase::ShouldWait() {
-    if (menu_.FastLaneClear()) {
+    if (!menu_.ShouldWaitEnabled()) {
+        context_.cachedShouldWait = false;
+        context_.cachedShouldWaitTick = Tick();
         return false;
     }
     const int now = Tick();

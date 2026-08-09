@@ -2017,10 +2017,18 @@ public:
     const char* GetInternalId() const override { return "core.orbwalker_7up"; }
     const char* GetAuthor() const override { return "7UP"; }
     PluginCategory GetCategory() const override { return PluginCategory::Core; }
-    bool AutoLoadByDefault() const override { return true; }
+    bool AutoLoadByDefault() const override { return false; }
 
     void OnLoad() override {
         if (m_orbwalker) return;
+        // Only one implementation may own the shared orbwalker event bus.
+        // Kuro is the default integration partner for KuroEvade, so an old
+        // persisted 7UP auto-load flag must not override it later in LoadAuto.
+        if (PluginRegistry::IsLoaded("core.orbwalker_kuro", false)) {
+            NightSharpDebug::Logf(
+                "[Orbwalker7UP] load skipped: OrbwalkerKuro is active");
+            return;
+        }
         DestroyMenu();
         m_menu = new ::SDK::Menu(GetInternalId(), GetName(), true);
         m_orbwalker = new ::Orbwalker7UP::Orbwalker7UPImpl(m_menu);
@@ -2029,6 +2037,8 @@ public:
         ::SDK::Orbwalker::SetOrbwalker(kImplementationName);
         SetSdkOrbwalkerLoaded(false);
     }
+
+    bool LoadSucceeded() const override { return m_orbwalker != nullptr; }
 
     void OnUnload() override {
         if (!m_orbwalker) return;

@@ -63,7 +63,7 @@ public:
     int DelayFarm() const { return SliderValue(delayFarm_, 30); }
     bool UseTreTrauLogic() const { return ListValue(movementLogic_, 0) == 1; }
     bool CoordinateKuroEvade() const { return BoolValue(coordinateKuroEvade_, true); }
-    int EvadeHandoffGrace() const { return SliderValue(evadeHandoffGrace_, 55); }
+    int EvadeHandoffGrace() const { return SliderValue(evadeHandoffGrace_, 30); }
 
     bool PrioritizeFarm() const { return BoolValue(prioritizeFarm_, true); }
     bool PrioritizeMinions() const { return BoolValue(prioritizeMinions_, false); }
@@ -88,7 +88,7 @@ public:
         }
         return IsKeyActive(lastHitKey_, 'X')
             ? OrbwalkingMode::LastHit
-            : (IsKeyActive(laneClearKey_, 'V') || IsKeyActive(fastLaneClearKey_, 'U'))
+            : IsKeyActive(laneClearKey_, 'V')
             ? OrbwalkingMode::LaneClear
             : IsKeyActive(hybridKey_, 'C')
             ? OrbwalkingMode::Hybrid
@@ -97,11 +97,12 @@ public:
             : OrbwalkingMode::None;
     }
 
-    bool FastLaneClear() const { return IsKeyActive(fastLaneClearKey_, 'U'); }
-    bool IsFastLaneClearKeyPressed() const { return fastLaneClearKey_ && fastLaneClearKey_->Active; }
+    // Fast Lane Clear is only a toggle for the lane-clear wait gate. It must
+    // never become an orbwalking mode or activate Lane Clear by itself.
+    bool ShouldWaitEnabled() const { return !IsKeyActive(fastLaneClearKey_, 'U'); }
 
     bool IsComboKeyPressed() const { return comboKey_ && comboKey_->Active; }
-    bool IsLaneClearKeyPressed() const { return (laneClearKey_ && laneClearKey_->Active) || (fastLaneClearKey_ && fastLaneClearKey_->Active); }
+    bool IsLaneClearKeyPressed() const { return laneClearKey_ && laneClearKey_->Active; }
     bool IsLastHitKeyPressed() const { return lastHitKey_ && lastHitKey_->Active; }
     bool IsHybridKeyPressed() const { return hybridKey_ && hybridKey_->Active; }
 
@@ -168,7 +169,7 @@ private:
             coordinateKuroEvade_ = movementMenu_->Add(new MenuBool(
                 "coordinateKuroEvade", "Let KuroEvade Own Actions While Dodging", true));
             evadeHandoffGrace_ = movementMenu_->Add(new MenuSlider(
-                "evadeHandoffGrace", "Movement Handoff Grace (ms)", 55, 0, 150));
+                "evadeHandoffGrace", "Evade handoff grace (ms)", 30, 0, 150));
 
             movementMenu_->Add(new MenuSeparator("separatorMovement", "Movement"));
             movementRandomize_ = movementMenu_->Add(new MenuBool("movementRandomize", "Randomize Location", true));
@@ -220,7 +221,8 @@ private:
         menu_->Add(new MenuSeparator("separatorKeys", "Key Bindings"));
         lastHitKey_ = menu_->Add(new MenuKeyBind("lasthitKey", "Last Hit", 'X', KeyBindType::Press));
         laneClearKey_ = menu_->Add(new MenuKeyBind("laneclearKey", "Lane Clear", 'V', KeyBindType::Press));
-        fastLaneClearKey_ = menu_->Add(new MenuKeyBind("fastLaneClearKey", "Fast Lane Clear", 'U', KeyBindType::Toggle));
+        fastLaneClearKey_ = menu_->Add(new MenuKeyBind(
+            "fastLaneClearKey", "Fast Lane Clear (disable ShouldWait)", 'U', KeyBindType::Toggle));
         hybridKey_ = menu_->Add(new MenuKeyBind("hybridKey", "Hybrid", 'C', KeyBindType::Press));
         comboKey_ = menu_->Add(new MenuKeyBind("comboKey", "Combo", VK_SPACE, KeyBindType::Press));
 

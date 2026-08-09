@@ -17,12 +17,15 @@ enum class EvadePhase {
 
 class Coordinator final {
 public:
-    static void Publish(EvadePhase phase, int now) {
+    static void Publish(EvadePhase phase,
+                        int now,
+                        bool blockNewAttacks = true) {
         if (phase != EvadePhase::Idle) {
             if (s_phase == EvadePhase::Idle) {
                 ++s_generation;
             }
             s_phase = phase;
+            s_blockNewAttacks = blockNewAttacks;
             s_lastPublishTick = now;
             return;
         }
@@ -31,6 +34,7 @@ public:
             s_releaseTick = now;
         }
         s_phase = EvadePhase::Idle;
+        s_blockNewAttacks = false;
         s_lastPublishTick = now;
     }
 
@@ -38,6 +42,7 @@ public:
         s_phase = EvadePhase::Idle;
         s_lastPublishTick = 0;
         s_releaseTick = 0;
+        s_blockNewAttacks = false;
         ++s_generation;
     }
 
@@ -54,7 +59,7 @@ public:
 
     static bool BlocksNewAttacks(int now, int handoffGraceMs) {
         if (EvadeOwnsActions(now)) {
-            return s_phase != EvadePhase::SafePositionHold;
+            return s_blockNewAttacks;
         }
 
         // A short attack grace prevents a fresh attack order from replacing
@@ -104,6 +109,7 @@ private:
     static inline int s_lastPublishTick = 0;
     static inline int s_releaseTick = 0;
     static inline int s_generation = 0;
+    static inline bool s_blockNewAttacks = false;
 };
 
 } // namespace Plugins::KuroCombatCoordination

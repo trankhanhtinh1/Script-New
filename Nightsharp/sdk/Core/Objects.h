@@ -719,6 +719,16 @@ public:
     ::Core::Objects::ObjectType Type() const {
         if (handle_.type == ::Core::Objects::ObjectType::Unknown && IsValid()) {
             handle_.type = ::Core::ObjectManager::InferType(handle_.address);
+        } else if (handle_.type == ::Core::Objects::ObjectType::GameObject &&
+                   IsValid()) {
+            // Do not rescan every typed manager from arbitrary plugin threads.
+            // Seed/create classification publishes a specific cache entry; an
+            // older generic handle can then upgrade with this lock-safe lookup.
+            const auto upgraded =
+                ::Core::ObjectManager::TypeCache::Lookup(handle_.address);
+            if (upgraded != ::Core::Objects::ObjectType::Unknown) {
+                handle_.type = upgraded;
+            }
         }
         return handle_.type;
     }

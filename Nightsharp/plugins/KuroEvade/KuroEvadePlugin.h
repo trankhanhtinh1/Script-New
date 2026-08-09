@@ -75,7 +75,6 @@ public:
         m_evadeIntervening = false;
         m_loadedChampions.clear();
         DestroyMenu();
-        KuroEvade::SourceEvadeEngine::RestoreOrbwalkerMove();
         KuroCombatCoordination::Coordinator::Reset();
         CoreEvadeState::SetStrictEvadeActive(false);
         CoreEvadeState::SetSpellBlockPredicate(nullptr);
@@ -87,21 +86,25 @@ public:
     }
 
     void OnRender() override {
-        if (!DrawSpells() || !ImGui::GetCurrentContext()) {
+        if (!ImGui::GetCurrentContext()) {
             return;
         }
 
-        KuroEvade::SpellDrawer::Draw(
-            m_detector.Skillshots(), m_spellVisuals, DrawingStyleSnapshot());
-        if (Enabled() && DrawEvadeRoute() && m_evadeIntervening && m_evade.HasMoveTarget()) {
-            const auto player = GameObjects::Player();
-            if (player.IsValid()) {
-                KuroEvade::SpellDrawer::DrawRoute(
-                    player.Position().To2D(),
-                    m_evade.MoveTarget(),
-                    RouteColor(),
-                    m_evade.IsWaitingForWindup());
+        if (DrawSpells()) {
+            KuroEvade::SpellDrawer::Draw(
+                m_detector.Skillshots(), m_spellVisuals, DrawingStyleSnapshot());
+            if (Enabled() && DrawEvadeRoute() && m_evadeIntervening &&
+                m_evade.HasMoveTarget()) {
+                const auto player = GameObjects::Player();
+                if (player.IsValid()) {
+                    KuroEvade::SpellDrawer::DrawRoute(
+                        player.Position().To2D(),
+                        m_evade.MoveTarget(),
+                        RouteColor(),
+                        m_evade.IsWaitingForWindup());
+                }
             }
+            KuroEvade::RenderObjects::Render();
         }
 
         if ((m_showEvadeStatusMenu && m_showEvadeStatusMenu->Value) ||
@@ -118,11 +121,9 @@ public:
                 m_evadeIntervening) {
                 draw->AddText(ImVec2(base.x, base.y + 22.0f),
                               IM_COL32(255, 210, 80, 255),
-                              "Right click is blocked while evading");
+                              "Evade is controlling movement");
             }
         }
-
-        KuroEvade::RenderObjects::Render();
     }
 
     void OnMenu() override {
@@ -136,7 +137,7 @@ public:
                     static_cast<int>(m_detector.Skillshots().size()));
         ImGui::Text("Spell menu entries: %d", m_spellMenuEntries);
         ImGui::Text("Evade spell entries: %d", m_evadeSpellMenuEntries);
-        ImGui::Text("Recommended config: %s", RecommendedConfigName());
+        ImGui::Text("Settings profile: %s", RecommendedConfigName());
         ImGui::Text("Visual threats: %d", RelevantVisualCount());
         ImGui::Text("Orbwalker sync: %s",
                     KuroCombatCoordination::Coordinator::PhaseName(
@@ -227,24 +228,22 @@ private:
 
     Menu* m_menu = nullptr;
     MenuBool* m_focusOnEvadeMenu = nullptr;
-    MenuBool* m_onlyEvadeWhileCanMenu = nullptr;
+    MenuBool* m_dangerousOnlyModeMenu = nullptr;
     MenuBool* m_enhanceDetectMenu = nullptr;
-    MenuList* m_recommendedConfigMenu = nullptr;
     MenuSlider* m_skillshotsExtraRadiusMenu = nullptr;
     MenuSlider* m_skillshotsExtraRangeMenu = nullptr;
     MenuSlider* m_extraEvadeDistanceMenu = nullptr;
-    // Config.cs keeps these source controls instantiated but commented out of
-    // the visible menu. Presets still update their backing values.
-    int m_gridSize = 10;
-    int m_pathFindingDistance = 300;
-    int m_pathFindingDistance2 = 100;
-    int m_diagonalEvadePointsCount = 7;
-    int m_diagonalEvadePointsStep = 20;
-    int m_crossingTimeOffset = 250;
-    int m_evadingFirstTimeOffset = 250;
-    int m_evadingSecondTimeOffset = 80;
-    int m_evadingRouteChangeTimeOffset = 250;
-    int m_evadePointChangeInterval = 250;
+    MenuSlider* m_pathFindingDistanceMenu = nullptr;
+    MenuSlider* m_pathFindingDistance2Menu = nullptr;
+    MenuSlider* m_diagonalEvadePointsCountMenu = nullptr;
+    MenuSlider* m_diagonalEvadePointsStepMenu = nullptr;
+    MenuSlider* m_crossingTimeOffsetMenu = nullptr;
+    MenuSlider* m_evadingFirstTimeOffsetMenu = nullptr;
+    MenuSlider* m_evadingSecondTimeOffsetMenu = nullptr;
+    MenuSlider* m_evadePointChangeIntervalMenu = nullptr;
+    MenuSlider* m_pathOnlyHoldMaxMenu = nullptr;
+    MenuSlider* m_enemyAvoidanceMenu = nullptr;
+    MenuBool* m_preferPathHoldMenu = nullptr;
 
     MenuBool* m_smoothEvadeSpellMenu = nullptr;
     MenuBool* m_improveMoveMenu = nullptr;
@@ -286,6 +285,7 @@ private:
     Menu* m_spellsMenu = nullptr;
     Menu* m_evadeSpellsMenu = nullptr;
     Menu* m_allyShieldMenu = nullptr;
+    MenuBool* m_allyShieldEnabledMenu = nullptr;
     KuroEvade::Benchmarking::Benchmark m_benchmark;
     KuroEvade::Benchmarking::BenchmarkResult m_benchmarkResult;
 
@@ -319,6 +319,7 @@ private:
     std::unordered_set<std::string> m_loadedChampions;
     bool m_visualInterventionState = false;
     bool m_currentDangerousThreat = false;
+    bool m_rightButtonDownPassed = false;
     int m_currentDangerLevel = 0;
     int m_lastVisualUpdateTick = 0;
 
@@ -398,12 +399,58 @@ private:
         if (!s_instance || !args.Process) {
             return;
         }
+        // Once Evade has handed control back, the current orbwalker move is a
+        // newer intent than a retained right-click. While intervention is
+        // active, keep the manual command so generated blocked moves cannot
+        // erase it every frame.
+        if (!s_instance->m_evade.IsIntervening()) {
+            s_instance->m_evade.SupersedeBlockedCommand();
+        }
         const auto settings = s_instance->SettingsSnapshot();
         if (s_instance->m_evade.ShouldBlockMove(
                 args.Position.To2D(), settings,
-                s_instance->m_detector.Skillshots())) {
+                s_instance->m_detector.Skillshots(), false)) {
             args.Process = false;
         }
+    }
+
+    static int ResolveRightClickTarget(const Vec2& cursor) {
+        if (cursor.IsZero() || !cursor.IsValid()) {
+            return 0;
+        }
+
+        int bestNetworkId = 0;
+        float bestDistanceSqr = FLT_MAX;
+        const auto consider = [&](const auto& rawUnit, bool requireEnemy) {
+            const SDK::AIBaseClient unit(rawUnit.Handle());
+            if (!unit.IsValid() || unit.IsDead() || !unit.IsTargetable() ||
+                (requireEnemy && !unit.IsEnemy())) {
+                return;
+            }
+            const Vec2 position = unit.ServerPosition().To2D();
+            if (position.IsZero() || !position.IsValid()) {
+                return;
+            }
+            const float pickRadius = std::max(
+                45.0f, unit.BoundingRadius() + 25.0f);
+            const float distanceSqr = cursor.DistanceSqr(position);
+            if (distanceSqr <= pickRadius * pickRadius &&
+                distanceSqr < bestDistanceSqr) {
+                bestDistanceSqr = distanceSqr;
+                bestNetworkId = unit.NetworkId();
+            }
+        };
+
+        for (const auto& enemy : SDK::GameObjects::EnemyHeroesFrame()) {
+            consider(enemy, true);
+        }
+        for (const auto& minion : SDK::GameObjects::EnemyMinionsFrame()) {
+            consider(minion, true);
+        }
+        for (const auto& monster : SDK::GameObjects::JungleFrame()) {
+            consider(monster, false);
+        }
+        return bestNetworkId;
     }
 
     static void OnWndProcStatic(SDK::Game::WndEventArgs& args) {
@@ -411,29 +458,42 @@ private:
             return;
         }
 
-        if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONUP || args.Msg == WM_RBUTTONDBLCLK) {
-            if (s_instance->Enabled() && s_instance->m_evadeIntervening) {
-                args.Process = false;
-                return;
-            }
-
-            if (args.Msg == WM_RBUTTONDOWN || args.Msg == WM_RBUTTONDBLCLK) {
-                const auto player = GameObjects::Player();
-                if (player.IsValid() && !player.IsDead()) {
-                    const auto settings = s_instance->SettingsSnapshot();
-                    if (settings.Enabled) {
-                        const Vec2 to = SDK::Game::CursorPos().To2D();
-                        if (s_instance->m_evade.ShouldBlockMove(
-                                to, settings,
-                                s_instance->m_detector.Skillshots())) {
-                            args.Process = false;
-                            return;
-                        }
+        if (args.Msg == WM_RBUTTONDOWN ||
+            args.Msg == WM_RBUTTONDBLCLK) {
+            s_instance->m_rightButtonDownPassed = false;
+            // Ask the path interceptor before consuming the click. It stores
+            // the latest manual destination when blocked, allowing that exact
+            // user command to resume after evasion instead of replaying an
+            // orbwalker-generated cursor move.
+            const auto player = GameObjects::Player();
+            if (player.IsValid() && !player.IsDead()) {
+                const auto settings = s_instance->SettingsSnapshot();
+                if (settings.Enabled) {
+                    const Vec2 to = SDK::Game::CursorPos().To2D();
+                    const int targetNetworkId = ResolveRightClickTarget(to);
+                    if (s_instance->m_evade.ShouldBlockMove(
+                            to, settings,
+                            s_instance->m_detector.Skillshots(), true,
+                            targetNetworkId)) {
+                        args.Process = false;
+                        return;
                     }
                 }
             }
+            // Never pass only half of a mouse-button pair. Swallowing the UP
+            // after a verified-safe DOWN can leave the game believing RMB is
+            // still held and create a new source of continuous path changes.
+            s_instance->m_rightButtonDownPassed = true;
+        } else if (args.Msg == WM_RBUTTONUP &&
+                   s_instance->m_rightButtonDownPassed) {
+            s_instance->m_rightButtonDownPassed = false;
+        } else if (args.Msg == WM_RBUTTONUP) {
+            if (s_instance->Enabled() &&
+                s_instance->m_evadeIntervening) {
+                args.Process = false;
+                return;
+            }
         }
-
         if (s_instance->DevMode() && args.Msg == WM_KEYDOWN &&
             (args.LParam & (1u << 30)) == 0) {
             if (s_instance->m_benchmarkLineKeyMenu &&
@@ -474,11 +534,56 @@ private:
     ImU32 RouteColor() const { return MissileColor(); }
 
     const char* RecommendedConfigName() const {
-        switch (m_recommendedConfigMenu ? m_recommendedConfigMenu->Index : 0) {
-        case 1: return "Configs 2";
-        case 2: return "Configs 3";
-        default: return "Configs 1";
+        for (int index = 0; index < 4; ++index) {
+            const auto values = KuroEvade::EvadeConfig::Recommended(index);
+            const bool matches =
+                m_skillshotsExtraRadiusMenu &&
+                    m_skillshotsExtraRadiusMenu->Value == values.SkillShotsExtraRadius &&
+                m_skillshotsExtraRangeMenu &&
+                    m_skillshotsExtraRangeMenu->Value == values.SkillShotsExtraRange &&
+                m_extraEvadeDistanceMenu &&
+                    m_extraEvadeDistanceMenu->Value == values.ExtraEvadeDistance &&
+                m_pathFindingDistanceMenu &&
+                    m_pathFindingDistanceMenu->Value == values.PathFindingDistance &&
+                m_pathFindingDistance2Menu &&
+                    m_pathFindingDistance2Menu->Value == values.PathFindingDistance2 &&
+                m_diagonalEvadePointsCountMenu &&
+                    m_diagonalEvadePointsCountMenu->Value == values.DiagonalEvadePointsCount &&
+                m_diagonalEvadePointsStepMenu &&
+                    m_diagonalEvadePointsStepMenu->Value == values.DiagonalEvadePointsStep &&
+                m_crossingTimeOffsetMenu &&
+                    m_crossingTimeOffsetMenu->Value == values.CrossingTimeOffset &&
+                m_evadingFirstTimeOffsetMenu &&
+                    m_evadingFirstTimeOffsetMenu->Value == values.EvadingFirstTimeOffset &&
+                m_evadingSecondTimeOffsetMenu &&
+                    m_evadingSecondTimeOffsetMenu->Value == values.EvadingSecondTimeOffset &&
+                m_evadePointChangeIntervalMenu &&
+                    m_evadePointChangeIntervalMenu->Value == values.EvadePointChangeInterval &&
+                m_pathOnlyHoldMaxMenu &&
+                    m_pathOnlyHoldMaxMenu->Value == values.PathOnlyHoldMaxMs &&
+                m_enemyAvoidanceMenu &&
+                    m_enemyAvoidanceMenu->Value == values.EnemyAvoidance &&
+                m_allowAaLevelMenu &&
+                    m_allowAaLevelMenu->Value == values.AllowAutoAttackDangerLevel &&
+                m_blockSpellsMenu &&
+                    m_blockSpellsMenu->Index == values.BlockSpells &&
+                m_focusOnEvadeMenu &&
+                    m_focusOnEvadeMenu->Value == values.FocusOnEvade &&
+                m_dangerousOnlyModeMenu &&
+                    m_dangerousOnlyModeMenu->Value == values.OnlyDangerous &&
+                m_improveMoveMenu && m_improveMoveMenu->Value &&
+                m_useCurrentPathMenu && m_useCurrentPathMenu->Value &&
+                m_preferPathHoldMenu && m_preferPathHoldMenu->Value &&
+                m_lowEvadeSmoothMenu && !m_lowEvadeSmoothMenu->Value;
+            if (!matches) continue;
+            switch (index) {
+            case 1: return "Safe / High Ping";
+            case 2: return "Smooth / Low Ping";
+            case 3: return "Combat / Dangerous Only";
+            default: return "Balanced";
+            }
         }
+        return "Custom / saved settings";
     }
 
     KuroEvade::SpellDrawStyle DrawingStyleSnapshot() const {
@@ -513,14 +618,17 @@ private:
     KuroEvade::EvadeSettings SettingsSnapshot() const {
         KuroEvade::EvadeSettings settings;
         settings.Enabled = Enabled();
-        settings.OnlyDangerous = m_onlyDangerousMenu && m_onlyDangerousMenu->Active;
+        settings.OnlyDangerous =
+            (m_dangerousOnlyModeMenu && m_dangerousOnlyModeMenu->Value) ||
+            (m_onlyDangerousMenu && m_onlyDangerousMenu->Active);
         settings.FocusOnEvade = !m_focusOnEvadeMenu || m_focusOnEvadeMenu->Value;
-        settings.OnlyEvadeWhileCan = m_onlyEvadeWhileCanMenu && m_onlyEvadeWhileCanMenu->Value;
         settings.EnhanceDetect = !m_enhanceDetectMenu || m_enhanceDetectMenu->Value;
         settings.SmoothEvadeSpell = !m_smoothEvadeSpellMenu || m_smoothEvadeSpellMenu->Value;
         settings.ImproveMove = !m_improveMoveMenu || m_improveMoveMenu->Value;
         settings.LowEvadeSmooth = m_lowEvadeSmoothMenu && m_lowEvadeSmoothMenu->Value;
         settings.UseCurrentPath = !m_useCurrentPathMenu || m_useCurrentPathMenu->Value;
+        settings.PreferPathHold =
+            !m_preferPathHoldMenu || m_preferPathHoldMenu->Value;
         settings.TestOnAllies = SameTeam();
         settings.EnableCollision = m_enableCollisionMenu && m_enableCollisionMenu->Value;
         settings.MinionCollision = m_minionCollisionMenu && m_minionCollisionMenu->Value;
@@ -532,21 +640,32 @@ private:
         settings.DisableFow = m_disableFowMenu && m_disableFowMenu->Value;
         settings.DisableEvadeForOlafR = !m_disableOlafRMenu || m_disableOlafRMenu->Value;
         settings.BlockSpells = m_blockSpellsMenu ? m_blockSpellsMenu->Index : 1;
-        settings.AllowAutoAttackDangerLevel = m_allowAaLevelMenu ? m_allowAaLevelMenu->Value : 4;
+        settings.AllowAutoAttackDangerLevel =
+            m_allowAaLevelMenu ? m_allowAaLevelMenu->Value : 3;
         settings.BorderWidth = m_borderMenu ? m_borderMenu->Value : 2;
         settings.SkillShotsExtraRadius = m_skillshotsExtraRadiusMenu ? m_skillshotsExtraRadiusMenu->Value : 0;
         settings.SkillShotsExtraRange = m_skillshotsExtraRangeMenu ? m_skillshotsExtraRangeMenu->Value : 0;
-        settings.GridSize = m_gridSize;
         settings.ExtraEvadeDistance = m_extraEvadeDistanceMenu ? m_extraEvadeDistanceMenu->Value : 25;
-        settings.PathFindingDistance = m_pathFindingDistance;
-        settings.PathFindingDistance2 = m_pathFindingDistance2;
-        settings.DiagonalEvadePointsCount = m_diagonalEvadePointsCount;
-        settings.DiagonalEvadePointsStep = m_diagonalEvadePointsStep;
-        settings.CrossingTimeOffset = m_crossingTimeOffset;
-        settings.EvadingFirstTimeOffset = m_evadingFirstTimeOffset;
-        settings.EvadingSecondTimeOffset = m_evadingSecondTimeOffset;
-        settings.EvadingRouteChangeTimeOffset = m_evadingRouteChangeTimeOffset;
-        settings.EvadePointChangeInterval = m_evadePointChangeInterval;
+        settings.PathFindingDistance = m_pathFindingDistanceMenu
+            ? m_pathFindingDistanceMenu->Value : 300;
+        settings.PathFindingDistance2 = m_pathFindingDistance2Menu
+            ? m_pathFindingDistance2Menu->Value : 100;
+        settings.DiagonalEvadePointsCount = m_diagonalEvadePointsCountMenu
+            ? m_diagonalEvadePointsCountMenu->Value : 7;
+        settings.DiagonalEvadePointsStep = m_diagonalEvadePointsStepMenu
+            ? m_diagonalEvadePointsStepMenu->Value : 20;
+        settings.CrossingTimeOffset = m_crossingTimeOffsetMenu
+            ? m_crossingTimeOffsetMenu->Value : 190;
+        settings.EvadingFirstTimeOffset = m_evadingFirstTimeOffsetMenu
+            ? m_evadingFirstTimeOffsetMenu->Value : 180;
+        settings.EvadingSecondTimeOffset = m_evadingSecondTimeOffsetMenu
+            ? m_evadingSecondTimeOffsetMenu->Value : 80;
+        settings.EvadePointChangeInterval = m_evadePointChangeIntervalMenu
+            ? m_evadePointChangeIntervalMenu->Value : 240;
+        settings.PathOnlyHoldMaxMs = m_pathOnlyHoldMaxMenu
+            ? m_pathOnlyHoldMaxMenu->Value : 240;
+        settings.EnemyAvoidance = m_enemyAvoidanceMenu
+            ? m_enemyAvoidanceMenu->Value : 35;
         settings.EnabledColor = EnabledColor();
         settings.DisabledColor = DisabledColor();
         settings.MissileColor = MissileColor();
@@ -681,7 +800,9 @@ private:
             RebuildSpellsMenu();
             RebuildEvadeSpellsMenu();
             RebuildAllyShieldMenu();
-            ::ConfigStore::ApplyLoaded(m_menu);
+            ::ConfigStore::ApplyLoadedSubtree(m_spellsMenu, m_menu);
+            ::ConfigStore::ApplyLoadedSubtree(m_evadeSpellsMenu, m_menu);
+            ::ConfigStore::ApplyLoadedSubtree(m_allyShieldMenu, m_menu);
         }
 
         const auto settings = SettingsSnapshot();
@@ -699,23 +820,6 @@ private:
         }
         m_detector.Update();
         ApplySpellMenuValues();
-        m_currentDangerousThreat = false;
-        m_currentDangerLevel = 0;
-        if (player.IsValid()) {
-            const Vec2 position = player.Position().To2D();
-            for (const auto& skillshot : m_detector.Skillshots()) {
-                if (!skillshot ||
-                    !KuroEvade::SourceEvader::ShouldConsider(skillshot, settings) ||
-                    !skillshot->ContainsStatic(
-                        position, player.BoundingRadius(), settings)) {
-                    continue;
-                }
-                m_currentDangerLevel = std::max(
-                    m_currentDangerLevel, skillshot->Data.DangerValue);
-                m_currentDangerousThreat = m_currentDangerousThreat ||
-                    skillshot->Data.IsDangerous;
-            }
-        }
         std::vector<Vec2> observedPath;
         if (player.IsValid()) {
             observedPath.push_back(player.Position().To2D());
@@ -739,11 +843,17 @@ private:
                 return ResolveEvadeSpellConfig(data);
             },
             [this](const SDK::AIBaseClient& ally) {
+                if (!m_allyShieldEnabledMenu ||
+                    !m_allyShieldEnabledMenu->Value) {
+                    return false;
+                }
                 const auto it = m_allyShieldOptions.find(ally.NetworkId());
                 return it == m_allyShieldOptions.end() ||
                     !it->second || it->second->Value;
             },
             m_lastEvent, sizeof(m_lastEvent));
+        m_currentDangerLevel = m_evade.CurrentDangerLevel();
+        m_currentDangerousThreat = m_evade.HasDangerousThreat();
         const auto phase = !m_evadeIntervening
             ? KuroCombatCoordination::EvadePhase::Idle
             : m_evade.IsHoldingPosition()
@@ -753,12 +863,20 @@ private:
                 : m_evade.IsMovementBlocking()
                     ? KuroCombatCoordination::EvadePhase::PathRecovery
                     : KuroCombatCoordination::EvadePhase::Dodging;
-        KuroCombatCoordination::Coordinator::Publish(
-            phase, SDK::Variables::TickCount());
         const bool lucianPassive = player.IsValid() &&
             player.HasBuff("LucianPassiveBuff");
-        const bool blockAttacks = m_evadeIntervening && !lucianPassive &&
-            m_currentDangerLevel > settings.AllowAutoAttackDangerLevel;
+        // Use one attack policy for OrbwalkerKuro and CoreControl callers. The
+        // danger slider is a ceiling, while the engine also verifies that a
+        // fresh attack's full windup still leaves a safe delayed route. This
+        // prevents low-danger attacks from repeatedly cancelling dodge moves.
+        const bool activePhase =
+            phase != KuroCombatCoordination::EvadePhase::Idle;
+        const bool blockAttacks = activePhase &&
+            (!m_evade.CanStartNewAttack() ||
+             (!lucianPassive && m_currentDangerLevel >
+                  settings.AllowAutoAttackDangerLevel));
+        KuroCombatCoordination::Coordinator::Publish(
+            phase, SDK::Variables::TickCount(), blockAttacks);
         CoreEvadeState::SetEvadeInterventionState(
             m_evadeIntervening, blockAttacks);
         UpdateSpellVisuals(settings, observedPath, m_evadeIntervening);
@@ -855,12 +973,14 @@ private:
             m_benchmarkResult.EndExplosionEntries);
     }
 
-    static void OnRecommendedConfigChangedStatic(MenuItem* sender, void* userData) {
+    static void OnPresetButtonStatic(MenuButton* sender, void* userData) {
         auto* self = static_cast<KuroEvadePlugin*>(userData);
-        auto* list = sender ? sender->As<MenuList>() : nullptr;
-        if (self && list) {
-            self->ApplyRecommendedConfig(list->Index);
-        }
+        if (!self || !sender) return;
+        const std::string name = sender->Name.c_str();
+        if (name == "PresetSafe") self->ApplyRecommendedConfig(1);
+        else if (name == "PresetSmooth") self->ApplyRecommendedConfig(2);
+        else if (name == "PresetCombat") self->ApplyRecommendedConfig(3);
+        else self->ApplyRecommendedConfig(0);
     }
 
     static void OnEnabledChangedStatic(MenuItem* sender, void* userData) {
@@ -875,6 +995,7 @@ private:
         m_evade.Shutdown();
         m_evadeIntervening = false;
         m_currentDangerousThreat = false;
+        m_rightButtonDownPassed = false;
         m_currentDangerLevel = 0;
         KuroCombatCoordination::Coordinator::Publish(
             KuroCombatCoordination::EvadePhase::Idle,
@@ -886,56 +1007,119 @@ private:
         const auto values = KuroEvade::EvadeConfig::Recommended(index);
         if (m_skillshotsExtraRadiusMenu) m_skillshotsExtraRadiusMenu->Set(values.SkillShotsExtraRadius);
         if (m_skillshotsExtraRangeMenu) m_skillshotsExtraRangeMenu->Set(values.SkillShotsExtraRange);
-        m_gridSize = values.GridSize;
         if (m_extraEvadeDistanceMenu) m_extraEvadeDistanceMenu->Set(values.ExtraEvadeDistance);
-        m_pathFindingDistance = values.PathFindingDistance;
-        m_pathFindingDistance2 = values.PathFindingDistance2;
-        m_diagonalEvadePointsCount = values.DiagonalEvadePointsCount;
-        m_diagonalEvadePointsStep = values.DiagonalEvadePointsStep;
-        m_crossingTimeOffset = values.CrossingTimeOffset;
-        m_evadingFirstTimeOffset = values.EvadingFirstTimeOffset;
-        m_evadingSecondTimeOffset = values.EvadingSecondTimeOffset;
-        m_evadingRouteChangeTimeOffset = values.EvadingRouteChangeTimeOffset;
-        m_evadePointChangeInterval = values.EvadePointChangeInterval;
+        if (m_pathFindingDistanceMenu) m_pathFindingDistanceMenu->Set(values.PathFindingDistance);
+        if (m_pathFindingDistance2Menu) m_pathFindingDistance2Menu->Set(values.PathFindingDistance2);
+        if (m_diagonalEvadePointsCountMenu) m_diagonalEvadePointsCountMenu->Set(values.DiagonalEvadePointsCount);
+        if (m_diagonalEvadePointsStepMenu) m_diagonalEvadePointsStepMenu->Set(values.DiagonalEvadePointsStep);
+        if (m_crossingTimeOffsetMenu) m_crossingTimeOffsetMenu->Set(values.CrossingTimeOffset);
+        if (m_evadingFirstTimeOffsetMenu) m_evadingFirstTimeOffsetMenu->Set(values.EvadingFirstTimeOffset);
+        if (m_evadingSecondTimeOffsetMenu) m_evadingSecondTimeOffsetMenu->Set(values.EvadingSecondTimeOffset);
+        if (m_evadePointChangeIntervalMenu) m_evadePointChangeIntervalMenu->Set(values.EvadePointChangeInterval);
+        if (m_pathOnlyHoldMaxMenu) m_pathOnlyHoldMaxMenu->Set(values.PathOnlyHoldMaxMs);
+        if (m_enemyAvoidanceMenu) m_enemyAvoidanceMenu->Set(values.EnemyAvoidance);
+        if (m_allowAaLevelMenu) m_allowAaLevelMenu->Set(values.AllowAutoAttackDangerLevel);
+        if (m_blockSpellsMenu) m_blockSpellsMenu->Set(values.BlockSpells);
+        if (m_focusOnEvadeMenu) m_focusOnEvadeMenu->Set(values.FocusOnEvade);
+        if (m_dangerousOnlyModeMenu) m_dangerousOnlyModeMenu->Set(values.OnlyDangerous);
+        if (m_improveMoveMenu) m_improveMoveMenu->Set(true);
+        if (m_useCurrentPathMenu) m_useCurrentPathMenu->Set(true);
+        if (m_preferPathHoldMenu) m_preferPathHoldMenu->Set(true);
+        if (m_lowEvadeSmoothMenu) m_lowEvadeSmoothMenu->Set(false);
+        if (m_enableCollisionMenu) m_enableCollisionMenu->Set(true);
+        if (m_minionCollisionMenu) m_minionCollisionMenu->Set(true);
+        if (m_heroCollisionMenu) m_heroCollisionMenu->Set(true);
+        if (m_yasuoCollisionMenu) m_yasuoCollisionMenu->Set(true);
+        if (m_disableFowMenu) m_disableFowMenu->Set(false);
     }
 
     void CreateMenu() {
         DestroyMenu();
-        m_gridSize = 10;
-        m_pathFindingDistance = 300;
-        m_pathFindingDistance2 = 100;
-        m_diagonalEvadePointsCount = 7;
-        m_diagonalEvadePointsStep = 20;
-        m_crossingTimeOffset = 250;
-        m_evadingFirstTimeOffset = 250;
-        m_evadingSecondTimeOffset = 80;
-        m_evadingRouteChangeTimeOffset = 250;
-        m_evadePointChangeInterval = 250;
         m_menu = new Menu(GetInternalId(), GetName(), true);
 
-        m_focusOnEvadeMenu = m_menu->Add(new MenuBool("FocusOnEvade", "Focus on Evade", true));
-        m_onlyEvadeWhileCanMenu = m_menu->Add(new MenuBool("OnlyEvadeWhileCan", "Only Evade if can", false));
-        m_enhanceDetectMenu = m_menu->Add(new MenuBool("EnchanceDetect", "EnchanceDetect", true));
+        m_enabledMenu = m_menu->Add(new MenuKeyBind(
+            "Enabled", "Evade enabled", 'K', KeyBindType::Toggle, true));
+        m_enabledMenu->ValueChanged = &KuroEvadePlugin::OnEnabledChangedStatic;
+        m_enabledMenu->ValueChangedUd = this;
+        m_enabledMenu->AddPermashow("Evade");
+        m_dangerousOnlyModeMenu = m_menu->Add(new MenuBool(
+            "DangerousOnlyMode", "Dodge dangerous skillshots only", false));
+        // New id deliberately avoids importing the old default X binding,
+        // which conflicts with OrbwalkerKuro Last Hit.
+        m_onlyDangerousMenu = m_menu->Add(new MenuKeyBind(
+            "DangerousOnlyHold", "Temporarily dodge dangerous only", 0,
+            KeyBindType::Press, false));
+        m_onlyDangerousMenu->AddPermashow("Evade danger-only");
 
-        auto* configs = m_menu->AddSubMenu(new Menu("Configs Evade", "Configs"));
-        m_recommendedConfigMenu = configs->Add(new MenuList(
-            "Recommand", "Recommand Configs", { "Configs 1", "Configs 2", "Configs 3" }, 0));
-        m_recommendedConfigMenu->ValueChanged = &KuroEvadePlugin::OnRecommendedConfigChangedStatic;
-        m_recommendedConfigMenu->ValueChangedUd = this;
-        m_skillshotsExtraRadiusMenu = configs->Add(new MenuSlider(
-            "SkillShotsExtraRadius", "SkillShots Extra Radius", 0, 0, 30));
-        m_skillshotsExtraRangeMenu = configs->Add(new MenuSlider(
-            "SkillShotsExtraRange", "SkillShots Extra Range", 0, 0, 50));
-        m_extraEvadeDistanceMenu = configs->Add(new MenuSlider(
-            "ExtraEvadeDistance", "Extra Evade Distance", 25, 0, 100));
+        auto* presets = m_menu->AddSubMenu(new Menu("Presets", "Presets"));
+        presets->Add(new MenuButton(
+            "PresetBalanced", "Balanced (recommended)", "Apply",
+            &KuroEvadePlugin::OnPresetButtonStatic, this));
+        presets->Add(new MenuButton(
+            "PresetSafe", "Safe / High Ping", "Apply",
+            &KuroEvadePlugin::OnPresetButtonStatic, this));
+        presets->Add(new MenuButton(
+            "PresetSmooth", "Smooth / Low Ping", "Apply",
+            &KuroEvadePlugin::OnPresetButtonStatic, this));
+        presets->Add(new MenuButton(
+            "PresetCombat", "Combat / Dangerous Only", "Apply",
+            &KuroEvadePlugin::OnPresetButtonStatic, this));
 
-        // Keep the same root ordering as Config.cs. The remaining preset
-        // values are intentionally hidden there and live in backing fields.
-        BuildEvadeSpellMenu();
-        BuildSpellMenu();
-        BuildAllyShieldMenu();
+        auto* movement = m_menu->AddSubMenu(new Menu(
+            "MovementBehavior", "Movement & Behavior"));
+        m_focusOnEvadeMenu = movement->Add(new MenuBool(
+            "FocusOnEvade", "Lock movement intent while dodging", true));
+        m_improveMoveMenu = movement->Add(new MenuBool(
+            "ImproveMove", "Use analytical route planner", true));
+        m_useCurrentPathMenu = movement->Add(new MenuBool(
+            "UseCurrentPath", "Accept verified safe manual clicks", true));
+        m_preferPathHoldMenu = movement->Add(new MenuBool(
+            "PreferPathHold", "Briefly wait for path-only threats", true));
+        m_pathOnlyHoldMaxMenu = movement->Add(new MenuSlider(
+            "PathOnlyHoldMax", "Maximum path wait (ms)", 240, 80, 500));
+        m_enemyAvoidanceMenu = movement->Add(new MenuSlider(
+            "EnemyAvoidance", "Avoid moving closer to enemies", 35, 0, 100));
+        m_lowEvadeSmoothMenu = movement->Add(new MenuBool(
+            "LowEvadeSmooth", "Delay movement after stopping safely", false));
 
-        auto* blocker = m_menu->AddSubMenu(new Menu("Spell Blocker", "Spell Blocker"));
+        auto* timing = m_menu->AddSubMenu(new Menu(
+            "SafetyTiming", "Safety & Timing"));
+        m_skillshotsExtraRadiusMenu = timing->Add(new MenuSlider(
+            "SkillShotsExtraRadius", "Extra hitbox radius", 8, 0, 30));
+        m_skillshotsExtraRangeMenu = timing->Add(new MenuSlider(
+            "SkillShotsExtraRange", "Extra skillshot range", 10, 0, 50));
+        m_extraEvadeDistanceMenu = timing->Add(new MenuSlider(
+            "ExtraEvadeDistance", "Evade edge buffer", 20, 0, 100));
+        m_crossingTimeOffsetMenu = timing->Add(new MenuSlider(
+            "CrossingTimeOffset", "Route safety margin (ms)", 190, 0, 500));
+        m_evadingFirstTimeOffsetMenu = timing->Add(new MenuSlider(
+            "EvadingFirstTimeOffset", "Candidate safety margin (ms)", 180, 0, 500));
+        m_evadingSecondTimeOffsetMenu = timing->Add(new MenuSlider(
+            "EvadingSecondTimeOffset", "Fallback safety margin (ms)", 80, 0, 300));
+        m_evadePointChangeIntervalMenu = timing->Add(new MenuSlider(
+            "EvadePointChangeInterval", "Route replan interval (ms)", 240, 120, 500));
+
+        auto* legacy = timing->AddSubMenu(new Menu(
+            "LegacyPlanner", "Advanced: legacy planner"));
+        m_pathFindingDistanceMenu = legacy->Add(new MenuSlider(
+            "PathFindingDistance", "Outer scan distance", 300, 100, 500));
+        m_pathFindingDistance2Menu = legacy->Add(new MenuSlider(
+            "PathFindingDistance2", "Inner scan distance", 100, 50, 300));
+        m_diagonalEvadePointsCountMenu = legacy->Add(new MenuSlider(
+            "DiagonalEvadePointsCount", "Diagonal samples", 7, 0, 15));
+        m_diagonalEvadePointsStepMenu = legacy->Add(new MenuSlider(
+            "DiagonalEvadePointsStep", "Diagonal sample step", 20, 5, 50));
+
+        auto* combat = m_menu->AddSubMenu(new Menu(
+            "CombatIntegration", "Combat Integration"));
+        m_allowAaLevelMenu = combat->Add(new MenuSlider(
+            "AllowAaLevel", "Max danger for attacks (safe windup only)",
+            3, 0, 5));
+        m_blockSpellsMenu = combat->Add(new MenuList(
+            "BlockSpells", "Block spells while evading",
+            { "No", "Only dangerous", "Always" }, 1));
+        auto* blocker = combat->AddSubMenu(new Menu(
+            "SpellBlocker", "Spell slots allowed to block"));
         m_spellBlockerQMenu = blocker->Add(new MenuBool("spellBlockerQ", "Q",
             KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::Q))));
         m_spellBlockerWMenu = blocker->Add(new MenuBool("spellBlockerW", "W",
@@ -945,43 +1129,49 @@ private:
         m_spellBlockerRMenu = blocker->Add(new MenuBool("spellBlockerR", "R",
             KuroEvade::Database::SpellBlocker::ShouldBlockForPlayer(static_cast<int>(SDK::SpellSlot::R))));
 
+        BuildEvadeSpellMenu();
+        BuildSpellMenu();
+        BuildAllyShieldMenu();
+
         auto* collision = m_menu->AddSubMenu(new Menu("Collision", "Collision"));
+        m_enableCollisionMenu = collision->Add(new MenuBool(
+            "EnableCollision", "Enable collision prediction", true));
         m_minionCollisionMenu = collision->Add(new MenuBool("MinionCollision", "Minion collision", true));
         m_heroCollisionMenu = collision->Add(new MenuBool("HeroCollision", "Hero collision", true));
         m_yasuoCollisionMenu = collision->Add(new MenuBool(
             "YasuoCollision", "Projectile barriers (Yasuo/Samira/Mel)", true));
-        m_enableCollisionMenu = collision->Add(new MenuBool("EnableCollision", "Enabled", true));
 
         auto* drawings = m_menu->AddSubMenu(new Menu("Drawings", "Drawings"));
+        m_enableDrawingsMenu = drawings->Add(new MenuBool(
+            "EnableDrawings", "Draw skillshots and route", true));
+        m_showEvadeStatusMenu = drawings->Add(new MenuBool(
+            "ShowEvadeStatus", "Show evade status", true));
+        m_drawWarningMessageMenu = drawings->Add(new MenuBool(
+            "DrawWarningMsg", "Show movement ownership warning", true));
         m_enabledColorMenu = drawings->Add(new MenuColor("EnabledColor", "Enabled spell color", 1.0f, 1.0f, 1.0f, 1.0f));
         m_disabledColorMenu = drawings->Add(new MenuColor("DisabledColor", "Disabled spell color", 1.0f, 0.0f, 0.0f, 1.0f));
         m_missileColorMenu = drawings->Add(new MenuColor("MissileColor", "Missile color", 0.20f, 0.80f, 0.20f, 1.0f));
         m_borderMenu = drawings->Add(new MenuSlider("Border", "Border Width", 2, 1, 10));
         m_useCircleTextureMenu = drawings->Add(new MenuBool("UseCircleTexture", "Use PNG Texture for Circle Skillshots", true));
         m_circleTextureIndexMenu = drawings->Add(new MenuList("CircleTextureStyle", "Circle Texture Style", { "AOE Default", "AOE Gold", "Circular Indicator" }, 0));
-        m_enableDrawingsMenu = drawings->Add(new MenuBool("EnableDrawings", "Enabled", true));
-        m_drawWarningMessageMenu = drawings->Add(new MenuBool(
-            "DrawWarningMsg", "Draw Right Click warning msg", true));
 
-        auto* misc = m_menu->AddSubMenu(new Menu("Misc", "Misc"));
-        m_blockSpellsMenu = misc->Add(new MenuList("BlockSpells", "Block spells while evading",
-            { "No", "Only dangerous", "Always" }, 1));
-        m_allowAaLevelMenu = misc->Add(new MenuSlider(
-            "AllowAaLevel", "Allow auto-attacks danger level", 4, 1, 5));
-        m_disableFowMenu = misc->Add(new MenuBool(
-            "DisableFow", "Disable fog of war dodging", false));
-        m_showEvadeStatusMenu = misc->Add(new MenuBool(
-            "ShowEvadeStatus", "Show Evade Status", false));
+        auto* detection = m_menu->AddSubMenu(new Menu(
+            "Detection", "Detection & Exceptions"));
+        m_enhanceDetectMenu = detection->Add(new MenuBool(
+            "EnhanceDetect", "Enhanced detection", true));
+        m_disableFowMenu = detection->Add(new MenuBool(
+            "DisableFow", "Ignore skillshots detected in fog", false));
         const auto player = GameObjects::Player();
         const std::string playerName = GetHeroCharacterName(player);
         const SDK::ChampionId playerId =
             SDK::ChampionIdFromName(playerName.c_str());
         if (player.IsValid() && playerId == SDK::ChampionId::Olaf) {
-            m_disableOlafRMenu = misc->Add(new MenuBool(
-                "DisableEvadeForOlafR", "Automatic disable Evade when Olaf's ulti is active!", true));
+            m_disableOlafRMenu = detection->Add(new MenuBool(
+                "DisableEvadeForOlafR", "Disable evade during Olaf R", true));
         }
 
-        auto* benchmark = m_menu->AddSubMenu(new Menu("Benchmarking", "Evade Bench"));
+        auto* benchmark = m_menu->AddSubMenu(new Menu(
+            "Benchmarking", "Diagnostics / Benchmark"));
         m_devModeMenu = benchmark->Add(new MenuBool("devMode", "Enable Benchmark", false));
         m_devSameTeamMenu = benchmark->Add(new MenuBool("TestOnAllies", "Test On Allies", false));
         m_benchmarkLineKeyMenu = benchmark->Add(new MenuKeyBind(
@@ -991,15 +1181,6 @@ private:
         m_benchmarkRunKeyMenu = benchmark->Add(new MenuKeyBind(
             "RunPlanner", "Run Planner Benchmark", 'B', KeyBindType::Press, false));
 
-        m_enabledMenu = m_menu->Add(new MenuKeyBind(
-            "Enabled", "Enabled", 'K', KeyBindType::Toggle, false));
-        m_enabledMenu->ValueChanged = &KuroEvadePlugin::OnEnabledChangedStatic;
-        m_enabledMenu->ValueChangedUd = this;
-        m_enabledMenu->AddPermashow("Evade");
-        m_onlyDangerousMenu = m_menu->Add(new MenuKeyBind(
-            "OnlyDangerous", "Dodge only dangerous", 0,
-            KeyBindType::Press, false));
-        m_onlyDangerousMenu->AddPermashow();
         m_menu->Attach();
     }
 
@@ -1250,19 +1431,16 @@ private:
         if (championId == SDK::ChampionId::Unknown) {
             return;
         }
-        bool first = true;
         for (const auto* data :
              KuroEvade::Database::EvadeSpellDatabase::ForChampion(
                  championId, true)) {
-            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
-            first = false;
+            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data);
         }
     }
 
     void AddEvadeSpellMenuEntry(
             Menu* parent,
-            const KuroEvade::Database::EvadeSpellData& data,
-            bool addMovementControls = false) {
+            const KuroEvade::Database::EvadeSpellData& data) {
         if (!parent) {
             return;
         }
@@ -1277,14 +1455,6 @@ private:
         auto* spellMenu = parent->AddSubMenu(new Menu(menuId.c_str(), display.c_str()));
 
         EvadeSpellMenuOption option;
-        if (addMovementControls) {
-            m_improveMoveMenu = spellMenu->Add(new MenuBool(
-                "ImproveMove", "Improve Move", true));
-            m_useCurrentPathMenu = spellMenu->Add(new MenuBool(
-                "UseCurrentPath", "Use Current Path", true));
-            m_lowEvadeSmoothMenu = spellMenu->Add(new MenuBool(
-                "LowEvadeSmooth", "Delay Walking for Humanity", false));
-        }
         option.Danger = spellMenu->Add(new MenuSlider(
             "DangerLevel", "Danger level", std::clamp(data.DangerLevel, 1, 5), 1, 5));
         if (std::find(data.ValidTargets.begin(), data.ValidTargets.end(),
@@ -1300,7 +1470,10 @@ private:
 
     void BuildAllyShieldMenu() {
         m_allyShieldOptions.clear();
-        m_allyShieldMenu = m_menu->AddSubMenu(new Menu("Ally shielding", "Shield"));
+        m_allyShieldMenu = m_menu->AddSubMenu(new Menu(
+            "AllyShielding", "Ally Shielding"));
+        m_allyShieldEnabledMenu = m_allyShieldMenu->Add(new MenuBool(
+            "Enabled", "Protect allies automatically", false));
         for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
             if (!ally.IsValid() || ally.IsMe()) {
                 continue;
@@ -1336,9 +1509,6 @@ private:
 
         m_evadeSpellOptions.clear();
         m_evadeSpellMenuEntries = 0;
-        m_improveMoveMenu = nullptr;
-        m_useCurrentPathMenu = nullptr;
-        m_lowEvadeSmoothMenu = nullptr;
 
         m_smoothEvadeSpellMenu = m_evadeSpellsMenu->Add(new MenuBool(
             "SmoothEvadeSpell", "Use 'Smooth Evade Spell'", true));
@@ -1354,12 +1524,10 @@ private:
         if (championId == SDK::ChampionId::Unknown) {
             return;
         }
-        bool first = true;
         for (const auto* data :
              KuroEvade::Database::EvadeSpellDatabase::ForChampion(
                  championId, true)) {
-            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data, first);
-            first = false;
+            AddEvadeSpellMenuEntry(m_evadeSpellsMenu, *data);
         }
     }
 
@@ -1370,6 +1538,8 @@ private:
         }
         m_allyShieldMenu->Components.clear();
         m_allyShieldOptions.clear();
+        m_allyShieldEnabledMenu = m_allyShieldMenu->Add(new MenuBool(
+            "Enabled", "Protect allies automatically", false));
         for (const auto& ally : SDK::GameObjects::AllyHeroes()) {
             if (!ally.IsValid() || ally.IsMe()) continue;
             const std::string name = GetHeroCharacterName(ally);
@@ -1389,12 +1559,22 @@ private:
         delete m_menu;
         m_menu = nullptr;
         m_focusOnEvadeMenu = nullptr;
-        m_onlyEvadeWhileCanMenu = nullptr;
+        m_dangerousOnlyModeMenu = nullptr;
         m_enhanceDetectMenu = nullptr;
-        m_recommendedConfigMenu = nullptr;
         m_skillshotsExtraRadiusMenu = nullptr;
         m_skillshotsExtraRangeMenu = nullptr;
         m_extraEvadeDistanceMenu = nullptr;
+        m_pathFindingDistanceMenu = nullptr;
+        m_pathFindingDistance2Menu = nullptr;
+        m_diagonalEvadePointsCountMenu = nullptr;
+        m_diagonalEvadePointsStepMenu = nullptr;
+        m_crossingTimeOffsetMenu = nullptr;
+        m_evadingFirstTimeOffsetMenu = nullptr;
+        m_evadingSecondTimeOffsetMenu = nullptr;
+        m_evadePointChangeIntervalMenu = nullptr;
+        m_pathOnlyHoldMaxMenu = nullptr;
+        m_enemyAvoidanceMenu = nullptr;
+        m_preferPathHoldMenu = nullptr;
         m_smoothEvadeSpellMenu = nullptr;
         m_improveMoveMenu = nullptr;
         m_useCurrentPathMenu = nullptr;
@@ -1413,6 +1593,8 @@ private:
         m_borderMenu = nullptr;
         m_enableDrawingsMenu = nullptr;
         m_drawWarningMessageMenu = nullptr;
+        m_useCircleTextureMenu = nullptr;
+        m_circleTextureIndexMenu = nullptr;
         m_blockSpellsMenu = nullptr;
         m_allowAaLevelMenu = nullptr;
         m_disableFowMenu = nullptr;
@@ -1428,6 +1610,7 @@ private:
         m_spellsMenu = nullptr;
         m_evadeSpellsMenu = nullptr;
         m_allyShieldMenu = nullptr;
+        m_allyShieldEnabledMenu = nullptr;
         m_spellOptions.clear();
         m_spellMenuEntries = 0;
         m_evadeSpellOptions.clear();
@@ -1437,6 +1620,7 @@ private:
         m_lastVisualUpdateTick = 0;
         m_visualInterventionState = false;
         m_currentDangerousThreat = false;
+        m_rightButtonDownPassed = false;
         m_currentDangerLevel = 0;
     }
 };

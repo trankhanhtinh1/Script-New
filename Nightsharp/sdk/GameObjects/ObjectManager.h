@@ -84,17 +84,19 @@ namespace detail {
     template <typename T>
     inline std::vector<T> EnumerateSpecificManager() {
         std::vector<T> result;
-        uintptr_t entries[8192] = {};
+        // This path can run from the native update hook. Keep the 64 KiB
+        // manager scratch buffer off that thread's stack.
+        std::vector<uintptr_t> entries(8192);
         int count = 0;
         if constexpr (std::is_same_v<T, AIHeroClient>) {
-            count = ::Core::ObjectManager::EnumerateHeroes(entries, 8192);
+            count = ::Core::ObjectManager::EnumerateHeroes(entries.data(), 8192);
         } else if constexpr (std::is_same_v<T, AIMinionClient>) {
-            count = ::Core::ObjectManager::EnumerateMinions(entries, 8192);
+            count = ::Core::ObjectManager::EnumerateMinions(entries.data(), 8192);
         // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
         // } else if constexpr (std::is_same_v<T, AITurretClient>) {
         //     count = ::Core::ObjectManager::EnumerateTurrets(entries, 8192);
         } else if constexpr (std::is_same_v<T, MissileClient>) {
-            count = ::Core::ObjectManager::EnumerateMissiles(entries, 8192);
+            count = ::Core::ObjectManager::EnumerateMissiles(entries.data(), 8192);
         }
 
         result.reserve(count > 0 ? static_cast<std::size_t>(count) : 0);
@@ -107,11 +109,27 @@ namespace detail {
     template <typename T>
     inline std::vector<T> EnumerateAllObjects() {
         std::vector<T> result;
-        uintptr_t entries[16384] = {};
-        const int count = ::Core::ObjectManager::EnumerateAll(entries, 16384);
+        // GetUncached<GameObject>() is also used by the seed retry callback.
+        // A 128 KiB automatic buffer here, combined with seed scratch space,
+        // is unsafe on a hook stack; use heap-backed scratch storage instead.
+        std::vector<uintptr_t> entries(16384);
+        const int count =
+            ::Core::ObjectManager::EnumerateAll(entries.data(), 16384);
         result.reserve(count > 0 ? static_cast<std::size_t>(count) : 0);
         for (int i = 0; i < count; ++i) {
-            AddIfMatches(result, entries[i]);
+            if constexpr (std::is_same_v<T, GameObject>) {
+                // EnumerateAll already ran lifecycle inference to filter the
+                // unsupported structures. Reuse its specific cache result and
+                // leave an uncached fallback generic, avoiding a second full
+                // manager scan for every raw object in the seed.
+                auto type = ::Core::ObjectManager::TypeCache::Lookup(entries[i]);
+                if (type == ::Core::Objects::ObjectType::Unknown) {
+                    type = ::Core::Objects::ObjectType::GameObject;
+                }
+                result.push_back(Make<T>(entries[i], type));
+            } else {
+                AddIfMatches(result, entries[i]);
+            }
         }
         return result;
     }
@@ -159,7 +177,7 @@ inline std::vector<T> GetUncached() {
 // Per-thread, per-frame memo over the raw manager enumeration.
 //
 // Each GetUncached<T>() does a FULL native manager scan (EnumerateX into an
-// 8K/16K stack buffer) + per-object type inference + a heap vector allocation.
+// 8K/16K heap scratch buffer) + per-object type inference + a result allocation.
 // The prediction, collision, target-selection and champion combo paths all call
 // Get<T>() many times inside a single game frame (e.g. every skillshot
 // GetPrediction() runs collision which re-scans Get<AIMinionClient>() /

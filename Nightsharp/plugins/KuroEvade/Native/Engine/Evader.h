@@ -21,6 +21,8 @@ struct SourcePositionInfo {
     int DangerCount = 0;
     int PathThreatCount = 0;
     int PathDangerLevel = 0;
+    int PathDangerScore = 0;
+    float EarliestPathHitTime = FLT_MAX;
     float Clearance = -FLT_MAX;
     float WallClearance = 0.0f;
     float WallPenalty = 0.0f;
@@ -114,9 +116,11 @@ public:
             const EvadeSettings& settings,
             int* highestDanger = nullptr,
             float* lowestHitTime = nullptr,
-            SourceSkillshotList* threats = nullptr) {
+            SourceSkillshotList* threats = nullptr,
+            int* totalDanger = nullptr) {
         int count = 0;
         int danger = 0;
+        int dangerScore = 0;
         float firstHit = FLT_MAX;
         if (threats) {
             threats->clear();
@@ -133,7 +137,9 @@ public:
             }
 
             ++count;
-            danger = std::max(danger, DangerValue(*skillshot));
+            const int threatDanger = DangerValue(*skillshot);
+            danger = std::max(danger, threatDanger);
+            dangerScore += threatDanger;
             const float hitTime = result.Intersection.Valid
                 ? static_cast<float>(result.Intersection.Time)
                 : skillshot->HitTime(
@@ -149,6 +155,9 @@ public:
         }
         if (lowestHitTime) {
             *lowestHitTime = firstHit;
+        }
+        if (totalDanger) {
+            *totalDanger = dangerScore;
         }
         return count;
     }
@@ -204,6 +213,8 @@ public:
         const float radius = std::max(1.0f, player.BoundingRadius());
         const float speed = std::max(50.0f, player.MoveSpeed());
         const float height = player.ServerPosition().y;
+        const float heroEnemyDistance =
+            DistanceToNearestVisibleEnemy(hero);
         const float navigationProbeDistance = std::max(140.0f, radius + 100.0f);
         const SourceGeometry::NavigationProbe heroNavigation =
             SourceGeometry::ProbeNavigation(
@@ -252,7 +263,8 @@ public:
         for (const Vec2& candidate : raw) {
             SourcePositionInfo info = Evaluate(
                 candidate, player, hero, desired, radius, speed,
-                height, heroNavigation, skillshots, settings, movementDelay);
+                height, heroNavigation, heroEnemyDistance,
+                skillshots, settings, movementDelay);
             if (!info.Navigable || info.DistanceToPlayer < radius) {
                 continue;
             }
@@ -278,6 +290,14 @@ public:
                 if (lhs.PathDangerLevel != rhs.PathDangerLevel) {
                     return lhs.PathDangerLevel < rhs.PathDangerLevel;
                 }
+                if (lhs.PathDangerScore != rhs.PathDangerScore) {
+                    return lhs.PathDangerScore < rhs.PathDangerScore;
+                }
+                if (std::abs(lhs.EarliestPathHitTime -
+                             rhs.EarliestPathHitTime) > 1.0f) {
+                    return lhs.EarliestPathHitTime >
+                        rhs.EarliestPathHitTime;
+                }
                 if (lhs.SafePoint != rhs.SafePoint) {
                     return lhs.SafePoint > rhs.SafePoint;
                 }
@@ -288,10 +308,17 @@ public:
                 // wins over its inner pocket. The inner pocket remains a
                 // fallback only when terrain/timing makes the outside invalid.
                 if (lhs.OuterRingExits != rhs.OuterRingExits) {
-                    return lhs.OuterRingExits > rhs.OuterRingExits;
-                }
-                if (lhs.InnerRingShelters != rhs.InnerRingShelters) {
-                    return lhs.InnerRingShelters < rhs.InnerRingShelters;
+                    const bool lhsOuter = lhs.OuterRingExits >
+                        rhs.OuterRingExits;
+                    const SourcePositionInfo& outer = lhsOuter ? lhs : rhs;
+                    const SourcePositionInfo& other = lhsOuter ? rhs : lhs;
+                    // Prefer the topologically safer outer exit only while it
+                    // remains a reasonable detour. A very distant outer route
+                    // must compete on score with the short inner shelter.
+                    if (outer.DistanceToPlayer <=
+                        other.DistanceToPlayer + 120.0f) {
+                        return lhsOuter;
+                    }
                 }
                 if (lhs.DangerCount != rhs.DangerCount) {
                     return lhs.DangerCount < rhs.DangerCount;
@@ -327,7 +354,8 @@ public:
         return Evaluate(
             candidate, player, hero, desired, radius,
             std::max(50.0f, player.MoveSpeed()), height,
-            heroNavigation, skillshots, settings, movementDelay);
+            heroNavigation, DistanceToNearestVisibleEnemy(hero),
+            skillshots, settings, movementDelay);
     }
 
     static float LowestHitTime(const Vec2& point,
@@ -758,8 +786,8 @@ private:
 
         // Weak quadratic terms retain cursor intent and select short exits;
         // threat and wall derivatives remain dominant near danger.
-        const float desiredWeight = settings.FocusOnEvade ? 0.006f : 0.018f;
-        const float travelWeight = settings.FocusOnEvade ? 0.006f : 0.003f;
+        const float desiredWeight = settings.FocusOnEvade ? 0.0035f : 0.016f;
+        const float travelWeight = settings.FocusOnEvade ? 0.009f : 0.004f;
         const Vec2 desiredDelta = point - desired;
         const Vec2 travelDelta = point - hero;
         result.Potential += 0.5f * desiredWeight * desiredDelta.LengthSqr();
@@ -819,7 +847,8 @@ private:
                 const Vec2 next = current + descent * trialLength;
                 if (SourceGeometry::IsNavigable(next, height) &&
                     SourceGeometry::SegmentIsNavigable(
-                        current, next, height, 20.0f)) {
+                        current, next, height, 20.0f,
+                        std::max(10.0f, radius * 0.55f))) {
                     const PotentialDifferential nextField = PotentialAt(
                         next, hero, desired, radius, height,
                         skillshots, settings);
@@ -856,6 +885,21 @@ private:
             }
         }
         return result == FLT_MAX ? 10000.0f : result;
+    }
+
+    static float DistanceToNearestVisibleEnemy(const Vec2& point) {
+        float result = FLT_MAX;
+        for (const auto& enemy : SDK::GameObjects::EnemyHeroesFrame()) {
+            if (!enemy.IsValid() || enemy.IsDead() || !enemy.IsVisible()) {
+                continue;
+            }
+            const Vec2 position = enemy.ServerPosition().To2D();
+            if (position.IsZero() || !position.IsValid()) {
+                continue;
+            }
+            result = std::min(result, point.Distance(position));
+        }
+        return result;
     }
 
     static void ApplyRingPreference(
@@ -896,6 +940,7 @@ private:
                                        float speed,
                                        float height,
                                        const SourceGeometry::NavigationProbe& heroNavigation,
+                                       float heroEnemyDistance,
                                        const SourceSkillshotList& skillshots,
                                        const EvadeSettings& settings,
                                        int movementDelay) {
@@ -903,15 +948,20 @@ private:
         info.Position = candidate;
         info.DistanceToCursor = candidate.Distance(desired);
         info.DistanceToPlayer = candidate.Distance(hero);
+        info.DistanceToEnemies = DistanceToNearestVisibleEnemy(candidate);
         info.PathLength = info.DistanceToPlayer;
         info.Navigable = SourceGeometry::IsNavigable(candidate, height) &&
-            SourceGeometry::SegmentIsNavigable(hero, candidate, height, 25.0f);
+            SourceGeometry::SegmentIsNavigable(
+                hero, candidate, height, 25.0f,
+                std::max(12.0f, radius * 0.65f));
         info.SafePoint = IsSafePoint(candidate, radius, skillshots, settings,
                                      &info.DangerLevel, &info.DangerCount);
         info.PathThreatCount = CountPathThreats(
             { hero, candidate }, FirstOffset(settings), speed,
             std::max(0, movementDelay), radius,
-            skillshots, settings, &info.PathDangerLevel);
+            skillshots, settings, &info.PathDangerLevel,
+            &info.EarliestPathHitTime, nullptr,
+            &info.PathDangerScore);
         info.SafePath = info.Navigable && info.PathThreatCount == 0;
         info.Clearance = ClearanceAt(candidate, radius, skillshots, settings);
         ApplyRingPreference(
@@ -933,17 +983,43 @@ private:
                 (radius + 80.0f - heroNavigation.Clearance) * 3.0f;
         }
 
-        // Cursor intent remains the primary tie-breaker, with explicit costs
-        // for wall pinning and unnecessarily long exits. More spell clearance
-        // is rewarded only within a bounded range so the hero does not flee.
-        const float goalWeight = settings.FocusOnEvade ? 0.35f : 1.0f;
+        // Safety and threat coverage are sorted before this score. Within an
+        // equally safe tier, prefer a short exit and avoid stepping toward a
+        // visible enemy just because the live cursor happens to be there.
+        float enemyApproachPenalty = 0.0f;
+        if (heroEnemyDistance < FLT_MAX && info.DistanceToEnemies < FLT_MAX) {
+            const float approach = std::max(
+                0.0f, heroEnemyDistance - info.DistanceToEnemies);
+            const float closeZone = std::max(
+                0.0f, radius + 425.0f - info.DistanceToEnemies);
+            const float enemyAvoidance = std::clamp(
+                static_cast<float>(settings.EnemyAvoidance) / 35.0f,
+                0.0f, 3.0f);
+            enemyApproachPenalty =
+                (approach * 1.20f + closeZone * 0.30f) * enemyAvoidance;
+        }
+        const float preferredClearance = std::clamp(
+            static_cast<float>(settings.ExtraEvadeDistance) + 65.0f,
+            65.0f, 135.0f);
+        const float excessClearance = std::max(
+            0.0f, info.Clearance - preferredClearance);
+        const float preferredTravel = std::max(
+            150.0f,
+            radius + static_cast<float>(settings.ExtraEvadeDistance) + 95.0f);
+        const float excessTravel = std::max(
+            0.0f, info.DistanceToPlayer - preferredTravel);
+        const float goalWeight = settings.FocusOnEvade ? 0.20f : 0.85f;
+        const float travelWeight = settings.FocusOnEvade ? 0.24f : 0.14f;
         info.Score = info.DistanceToCursor * goalWeight +
-            info.DistanceToPlayer * 0.08f +
+            info.DistanceToPlayer * travelWeight +
             info.WallPenalty * info.WallPenalty * 0.10f -
-            std::clamp(info.Clearance, -100.0f, 300.0f) * 0.22f +
+            std::clamp(info.Clearance, -60.0f, preferredClearance) * 0.10f +
+            excessClearance * 0.18f +
+            excessTravel * 0.45f +
+            enemyApproachPenalty +
             wallDirectionPenalty +
-            static_cast<float>(info.InnerRingShelters) * 2000.0f -
-            static_cast<float>(info.OuterRingExits) * 350.0f;
+            static_cast<float>(info.InnerRingShelters) * 300.0f -
+            static_cast<float>(info.OuterRingExits) * 100.0f;
         return info;
     }
 };

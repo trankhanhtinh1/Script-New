@@ -452,7 +452,8 @@ private:
              !IsSelfProtectiveTarget(data));
         if (travelsPath) {
             if (!SourceGeometry::SegmentIsNavigable(
-                    hero, landing, player.ServerPosition().y, 25.0f)) {
+                    hero, landing, player.ServerPosition().y, 25.0f,
+                    std::max(10.0f, player.BoundingRadius() * 0.55f))) {
                 return INT_MAX;
             }
             const float dashSpeed = data.Speed > 0.0f
@@ -593,7 +594,8 @@ private:
             const Vec2 hero = player.ServerPosition().To2D();
             if (bestPosition.IsZero() ||
                 !SourceGeometry::SegmentIsNavigable(
-                    hero, bestPosition, player.ServerPosition().y, 25.0f)) {
+                    hero, bestPosition, player.ServerPosition().y, 25.0f,
+                    std::max(10.0f, player.BoundingRadius() * 0.55f))) {
                 return baselineThreats;
             }
             return SourceEvader::CountPathThreats(

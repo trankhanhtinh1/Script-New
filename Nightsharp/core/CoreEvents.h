@@ -1435,6 +1435,9 @@ inline ObjectEventArgs DecodeObjectLifecycleEvent(const RawEventArgs& raw) {
         // Delete hooks can run after the native object has been destroyed.
         // Preserve identity/metadata, never forward the raw game pointer.
         object = static_cast<uintptr_t>(raw.Rcx);
+        // TypeCache is keyed by address. Clear it while the delete event still
+        // carries that address so pool reuse cannot inherit the old type.
+        ::Core::ObjectManager::TypeCache::Invalidate(object);
         args.Sender = raw.Object.IsValid()
             ? raw.Object
             : detail::ReadObjectIdentity(object);

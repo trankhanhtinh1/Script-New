@@ -130,6 +130,9 @@ void EnsureRegistered() {
 #if NIGHTSHARP_ENABLE_SAMPLE_PLUGINS
     NightSharpDebug::Logf("[PluginBootstrap] Register core plugins begin");
     // Registration::RegisterAwarenessActivator(PluginManager::Get());
+    // KuroEvade must publish its phase and intercept movement before the
+    // orbwalker runs in the same update/event frame.
+    Registration::RegisterKuroEvade(PluginManager::Get());
     PluginManager::Get().Register<OrbwalkerKuroPlugin>();
     Registration::RegisterOrbwalker7UP(PluginManager::Get());
     Registration::RegisterKuroTargetSelector(PluginManager::Get());
@@ -162,7 +165,6 @@ void EnsureRegistered() {
     Registration::RegisterKuroAIO(PluginManager::Get());
     Registration::RegisterSharpShooterAIO(PluginManager::Get());
     Registration::RegisterZiblldev9898(PluginManager::Get());
-    Registration::RegisterKuroEvade(PluginManager::Get());
     Registration::RegisterZDEvade(PluginManager::Get());
     Registration::RegisterKuroActivator(PluginManager::Get());
     NightSharpDebug::Logf("[PluginBootstrap] Register champion test plugins complete");

@@ -340,13 +340,26 @@ inline bool IsNavigable(const Vec2& point, float height) {
 inline bool SegmentIsNavigable(const Vec2& start,
                                const Vec2& end,
                                float height,
-                               float step = 35.0f) {
+                               float step = 35.0f,
+                               float clearance = 0.0f) {
     const float distance = start.Distance(end);
     const int samples = std::max(1, static_cast<int>(std::ceil(distance / std::max(10.0f, step))));
+    const Vec2 direction = (end - start).Normalized();
+    const Vec2 lateral = Perpendicular(direction);
+    clearance = std::max(0.0f, clearance);
     for (int i = 1; i <= samples; ++i) {
         const Vec2 point = start + (end - start) *
             (static_cast<float>(i) / static_cast<float>(samples));
         if (!IsNavigable(point, height)) {
+            return false;
+        }
+        // A centre-line-only probe accepts routes whose champion footprint
+        // clips a wall corner. Sample the capsule sides and its leading edge;
+        // longitudinal samples already cover the rear edge of each step.
+        if (clearance > Epsilon && !direction.IsZero() &&
+            (!IsNavigable(point + lateral * clearance, height) ||
+             !IsNavigable(point - lateral * clearance, height) ||
+             !IsNavigable(point + direction * clearance, height))) {
             return false;
         }
     }

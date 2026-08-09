@@ -11,6 +11,7 @@
 #include "../Enumerations/ChampionId.h"
 #include "../Utils/HashUtils.h"
 #include "../../CrashTrace.h"
+#include "../../DebugLog.h"
 #include "../../SectionProfiler.h"
 
 #include <Windows.h>
@@ -95,6 +96,8 @@ namespace detail {
     inline ChampionId PlayerChampionIdObject = ChampionId::Unknown;
     inline bool PlayerChampionIdCached = false;
     inline bool Initialized = false;
+    inline bool SeedRetryPending = true;
+    inline bool SeedInProgress = false;
 
 
     // ------------------------- string helpers ------------------------------
@@ -346,11 +349,34 @@ namespace detail {
         return false;
     }
 
+    inline bool IsGenericObjectType(::Core::Objects::ObjectType type) {
+        return type == ::Core::Objects::ObjectType::Unknown ||
+               type == ::Core::Objects::ObjectType::GameObject;
+    }
+
     template <typename T>
     inline void PushUniqueByNetworkId(std::vector<T>& vec, const T& obj) {
         const int netId = static_cast<int>(obj.CachedNetworkId());
-        if (netId != 0 && ContainsByNetworkId(vec, netId)) {
-            return;
+        if (netId != 0) {
+            for (auto& existing : vec) {
+                if (static_cast<int>(existing.CachedNetworkId()) != netId) {
+                    continue;
+                }
+
+                const auto existingType = existing.Handle().type;
+                const auto incomingType = obj.Handle().type;
+                if (!IsGenericObjectType(existingType) ||
+                    IsGenericObjectType(incomingType)) {
+                    // Refresh the address/identity for an existing typed entry,
+                    // but never downgrade it because of a later generic hint.
+                    if (!IsGenericObjectType(incomingType)) {
+                        existing = obj;
+                    }
+                } else {
+                    existing = obj;
+                }
+                return;
+            }
         }
         vec.push_back(obj);
     }
@@ -363,11 +389,32 @@ namespace detail {
         }), vec.end());
     }
 
+    inline bool HasLiveIdentity(const GameObject& object) {
+        const auto handle = object.Handle();
+        if (!handle.HasAddress() || !handle.HasIdentity()) {
+            return false;
+        }
+
+        // Identity-aware without walking the game's mutable NetworkId tree.
+        // Globals::Read is SEH-guarded; a freed address or a pool-reused slot
+        // fails closed instead of dereferencing native tree nodes repeatedly.
+        if (::Core::Objects::ReadNetworkId(handle.address) != handle.networkId) {
+            return false;
+        }
+        return handle.index == 0 || handle.index == 0xFFFFFFFFu ||
+               ::Core::Objects::ReadIndex(handle.address) == handle.index;
+    }
+
     template <typename T>
     inline void CleanInvalid(std::vector<T>& vec) {
         if (vec.empty()) return;
         vec.erase(std::remove_if(vec.begin(), vec.end(), [](const T& obj) {
-            return !obj.IsValid();
+            const GameObject base(obj.Handle());
+            if (HasLiveIdentity(base)) {
+                return false;
+            }
+            ::Core::ObjectManager::TypeCache::Invalidate(base.Handle().address);
+            return true;
         }), vec.end());
     }
 
@@ -427,53 +474,109 @@ namespace detail {
         CleanInvalid(MissilesList);
     }
 
-    inline void OnObjectAdd(const GameObject& object) {
+    inline void OnObjectAdd(const GameObject& object,
+                            bool runCleanup = true,
+                            bool populateStaticCache = true,
+                            bool inferGeneric = true,
+                            bool queryDynamicState = true) {
         Lock lk(g_mutex);
         static DWORD s_lastCleanTick = 0;
         const DWORD now = GetTickCount();
-        if (now - s_lastCleanTick > 100) {
+        if (runCleanup && now - s_lastCleanTick > 100) {
             s_lastCleanTick = now;
             CleanInvalidObjects();
         }
 
         if (!object.IsValid()) return;
 
-        PopulateStatic(object);
-
-        const int netId = object.NetworkId();
-        if (netId != 0 && ContainsByNetworkId(GameObjectsList, netId)) {
+        auto classifiedHandle = object.Handle();
+        if (!classifiedHandle.HasIdentity()) {
             return;
         }
-        PushUniqueByNetworkId(GameObjectsList, object);
 
-        if (::Core::Objects::IsAttackable(object.Type())) {
-            PushUniqueByNetworkId(AttackableUnitsList, AttackableUnit(object.Handle()));
+        auto classifiedType = classifiedHandle.type;
+        if (IsGenericObjectType(classifiedType)) {
+            auto upgraded =
+                ::Core::ObjectManager::TypeCache::Lookup(classifiedHandle.address);
+            if (upgraded == ::Core::Objects::ObjectType::Unknown && inferGeneric) {
+                upgraded =
+                    ::Core::ObjectManager::InferType(classifiedHandle.address);
+            }
+            if (!IsGenericObjectType(upgraded)) {
+                classifiedType = upgraded;
+                classifiedHandle.type = upgraded;
+            }
+        }
+        GameObject classifiedObject(classifiedHandle);
+        const int netId = static_cast<int>(classifiedHandle.networkId);
+
+        bool replacedExisting = false;
+        for (auto& existing : GameObjectsList) {
+            if (static_cast<int>(existing.CachedNetworkId()) != netId) {
+                continue;
+            }
+
+            const auto existingType = existing.Handle().type;
+            if (!IsGenericObjectType(existingType) &&
+                IsGenericObjectType(classifiedType)) {
+                // Preserve an already-specific classification when a generic
+                // lifecycle hint for the same object arrives later.
+                classifiedObject = existing;
+                classifiedType = existingType;
+                classifiedHandle = existing.Handle();
+            } else {
+                // Replace the base entry with the freshest handle. In
+                // particular this upgrades a seed-time GameObject fallback to
+                // AIHeroClient/AIMinionClient instead of returning early.
+                existing = classifiedObject;
+            }
+            replacedExisting = true;
+            break;
+        }
+        if (!replacedExisting) {
+            GameObjectsList.push_back(classifiedObject);
+        }
+
+        ::Core::ObjectManager::TypeCache::Store(
+            classifiedHandle.address,
+            classifiedType);
+        if (populateStaticCache) {
+            PopulateStatic(classifiedObject);
+        }
+
+        if (::Core::Objects::IsAttackable(classifiedType)) {
+            PushUniqueByNetworkId(
+                AttackableUnitsList,
+                AttackableUnit(classifiedObject.Handle()));
         }
 
         const int myTeam = PlayerTeam();
-        const int team = TeamValue(object);
+        const int team = TeamValue(classifiedObject);
         const bool ally = myTeam != 0 && team == myTeam;
         const bool enemy = team != 0 && team != 300 && !ally;
 
-        const ::Core::Objects::ObjectType type = object.Type();
+        const ::Core::Objects::ObjectType type = classifiedType;
 
         switch (type) {
         case ::Core::Objects::ObjectType::AIHeroClient: {
-            const AIHeroClient hero(object.Handle());
+            const AIHeroClient hero(classifiedObject.Handle());
             PushUniqueByNetworkId(HeroesList, hero);
             if (ally) {
                 PushUniqueByNetworkId(AllyHeroesList, hero);
-                PushUniqueByNetworkId(AllyList, AIBaseClient(object.Handle()));
+                PushUniqueByNetworkId(AllyList, AIBaseClient(classifiedObject.Handle()));
             } else if (enemy) {
                 PushUniqueByNetworkId(EnemyHeroesList, hero);
-                PushUniqueByNetworkId(EnemyList, AIBaseClient(object.Handle()));
+                PushUniqueByNetworkId(EnemyList, AIBaseClient(classifiedObject.Handle()));
             }
             break;
         }
         case ::Core::Objects::ObjectType::AIMinionClient:
         case ::Core::Objects::ObjectType::NeutralMinionCampClient: {
-            const AIMinionClient minion(object.Handle());
-            if (minion.IsDead()) break;
+            const AIMinionClient minion(classifiedObject.Handle());
+            // Bulk seed runs inside the native update callback. IsDead() calls
+            // the game's IsAlive function, so defer that dynamic query there;
+            // create events and regular consumers retain the normal behavior.
+            if (queryDynamicState && minion.IsDead()) break;
 
             const std::string name = BestNameOf(minion);
 
@@ -533,11 +636,11 @@ namespace detail {
                 if (enemy) {
                     PushUniqueByNetworkId(EnemyMinionsList, minion);
                     PushUniqueByNetworkId(EnemyLaneMinionsList, minion);
-                    PushUniqueByNetworkId(EnemyList, AIBaseClient(object.Handle()));
+                    PushUniqueByNetworkId(EnemyList, AIBaseClient(classifiedObject.Handle()));
                 } else {
                     PushUniqueByNetworkId(AllyMinionsList, minion);
                     PushUniqueByNetworkId(AllyLaneMinionsList, minion);
-                    PushUniqueByNetworkId(AllyList, AIBaseClient(object.Handle()));
+                    PushUniqueByNetworkId(AllyList, AIBaseClient(classifiedObject.Handle()));
                 }
                 break;
             }
@@ -547,28 +650,28 @@ namespace detail {
         }
         // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
         // case ::Core::Objects::ObjectType::AITurretClient: {
-        //     const AITurretClient turret(object.Handle());
+        //     const AITurretClient turret(classifiedObject.Handle());
         //     PushUniqueByNetworkId(TurretsList, turret);
         //     if (ally) PushUniqueByNetworkId(AllyTurretsList, turret);
         //     else if (enemy) PushUniqueByNetworkId(EnemyTurretsList, turret);
         //     break;
         // }
         // case ::Core::Objects::ObjectType::BarracksDampenerClient: {
-        //     const BarracksDampenerClient inhib(object.Handle());
+        //     const BarracksDampenerClient inhib(classifiedObject.Handle());
         //     PushUniqueByNetworkId(InhibitorsList, inhib);
         //     if (ally) PushUniqueByNetworkId(AllyInhibitorsList, inhib);
         //     else if (enemy) PushUniqueByNetworkId(EnemyInhibitorsList, inhib);
         //     break;
         // }
         // case ::Core::Objects::ObjectType::HQClient: {
-        //     const HQClient nexus(object.Handle());
+        //     const HQClient nexus(classifiedObject.Handle());
         //     PushUniqueByNetworkId(NexusList, nexus);
         //     if (ally) AllyNexusObject = nexus;
         //     else if (enemy) EnemyNexusObject = nexus;
         //     break;
         // }
         case ::Core::Objects::ObjectType::MissileClient: {
-            const MissileClient missile(object.Handle());
+            const MissileClient missile(classifiedObject.Handle());
             PushUniqueByNetworkId(MissilesList, missile);
             break;
         }
@@ -738,13 +841,203 @@ namespace detail {
         ParticleEmittersList.clear();
         MissilesList.clear();
         PlayerObject = {};
+        PlayerChampionIdObject = ChampionId::Unknown;
+        PlayerChampionIdCached = false;
     }
 
-    inline void SeedAllGameObjects() {
+    inline bool SeedManagersReady() {
+        const auto& ctx = CoreRuntime::GetContext();
+        return Globals::IsValidPtr(ctx.objectManager) &&
+               Globals::IsValidPtr(ctx.localPlayer) &&
+               Globals::IsValidPtr(ctx.heroManager) &&
+               Globals::IsValidPtr(ctx.minionManager);
+    }
+
+    inline bool TryBeginSeed() {
         Lock lk(g_mutex);
-        Clear();
-        for (const auto& obj : SDK::ObjectManager::Get<GameObject>()) {
-            OnObjectAdd(obj);
+        if (!SeedRetryPending || SeedInProgress) {
+            return false;
+        }
+        SeedRetryPending = false;
+        SeedInProgress = true;
+        return true;
+    }
+
+    inline void FinishSeed(bool complete) {
+        Lock lk(g_mutex);
+        SeedInProgress = false;
+        SeedRetryPending = !complete;
+    }
+
+    inline bool SeedAllGameObjectsImpl() {
+        if (!SeedManagersReady()) {
+            const auto& ctx = CoreRuntime::GetContext();
+            static DWORD s_lastDeferredLogTick = 0;
+            const DWORD now = GetTickCount();
+            if (now - s_lastDeferredLogTick >= 1000) {
+                s_lastDeferredLogTick = now;
+                NightSharpDebug::Logf(
+                    "[GameObjects] Seed deferred managers object=%d player=%d heroes=%d minions=%d",
+                    Globals::IsValidPtr(ctx.objectManager) ? 1 : 0,
+                    Globals::IsValidPtr(ctx.localPlayer) ? 1 : 0,
+                    Globals::IsValidPtr(ctx.heroManager) ? 1 : 0,
+                    Globals::IsValidPtr(ctx.minionManager) ? 1 : 0);
+            }
+            return false;
+        }
+
+        const AIHeroClient player = SDK::ObjectManager::Player();
+        const auto playerHandle = player.Handle();
+
+        // Keep manager scratch buffers off the native update-hook stack.
+        std::vector<uintptr_t> heroEntries(128);
+        const int rawHeroManagerCount = ::Core::ObjectManager::EnumerateHeroes(
+            heroEntries.data(),
+            static_cast<int>(heroEntries.size()));
+        std::vector<uintptr_t> minionEntries(8192);
+        const int rawMinionManagerCount = ::Core::ObjectManager::EnumerateMinions(
+            minionEntries.data(),
+            static_cast<int>(minionEntries.size()));
+
+        std::vector<GameObject> managerHeroes;
+        managerHeroes.reserve(rawHeroManagerCount > 0
+            ? static_cast<std::size_t>(rawHeroManagerCount)
+            : 0);
+        for (int i = 0; i < rawHeroManagerCount; ++i) {
+            auto handle = ::Core::ObjectManager::MakeHandle(
+                heroEntries[static_cast<std::size_t>(i)],
+                ::Core::Objects::ObjectType::AIHeroClient);
+            if (handle.HasAddress() && handle.HasIdentity()) {
+                managerHeroes.emplace_back(handle);
+            }
+        }
+
+        std::vector<GameObject> managerMinions;
+        managerMinions.reserve(rawMinionManagerCount > 0
+            ? static_cast<std::size_t>(rawMinionManagerCount)
+            : 0);
+        for (int i = 0; i < rawMinionManagerCount; ++i) {
+            auto handle = ::Core::ObjectManager::MakeHandle(
+                minionEntries[static_cast<std::size_t>(i)],
+                ::Core::Objects::ObjectType::AIMinionClient);
+            if (handle.HasAddress() && handle.HasIdentity()) {
+                managerMinions.emplace_back(handle);
+            }
+        }
+
+        const int expectedHeroCount = static_cast<int>(managerHeroes.size());
+        const int expectedMinionCount = static_cast<int>(managerMinions.size());
+
+        if (!playerHandle.HasAddress() || !playerHandle.HasIdentity() ||
+            expectedHeroCount <= 0) {
+            NightSharpDebug::Logf(
+                "[GameObjects] Seed deferred player=%d expectedHeroes=%d expectedMinions=%d",
+                playerHandle.HasAddress() && playerHandle.HasIdentity() ? 1 : 0,
+                expectedHeroCount,
+                expectedMinionCount);
+            return false;
+        }
+
+        // A seed is a one-shot bootstrap operation, so it must not inherit a
+        // possibly empty per-frame ObjectManager::Get<T>() memo.
+        NightSharpDebug::Logf(
+            "[GameObjects] Seed begin managerHeroes=%d managerMinions=%d",
+            expectedHeroCount,
+            expectedMinionCount);
+        const auto rawObjects = SDK::ObjectManager::GetUncached<GameObject>();
+        NightSharpDebug::Logf(
+            "[GameObjects] Seed raw enumeration complete count=%zu",
+            rawObjects.size());
+        if (rawObjects.empty()) {
+            NightSharpDebug::Logf(
+                "[GameObjects] Seed raw=0 heroes=0/%d minions=0/%d player=0 complete=0",
+                expectedHeroCount,
+                expectedMinionCount);
+            return false;
+        }
+
+        std::size_t seededHeroCount = 0;
+        std::size_t seededMinionCount = 0;
+        bool playerSeeded = false;
+        bool complete = false;
+        {
+            Lock lk(g_mutex);
+            Clear();
+            PlayerObject = player;
+
+            for (const auto& obj : rawObjects) {
+                // GetUncached already classified the raw object. Do not repeat
+                // manager scans or mutate StaticStringCache from the game hook.
+                OnObjectAdd(obj, false, false, false, false);
+            }
+
+            // The raw pass remains authoritative for all objects. Typed manager
+            // entries then reconcile/upgrade duplicate NetworkIds, guaranteeing
+            // heroes/minions are not lost because a generic handle arrived first.
+            for (const auto& hero : managerHeroes) {
+                OnObjectAdd(hero, false, false, false, false);
+            }
+            for (const auto& minion : managerMinions) {
+                OnObjectAdd(minion, false, false, false, false);
+            }
+
+            seededHeroCount = HeroesList.size();
+            for (const auto& seeded : GameObjectsList) {
+                const auto type = seeded.Handle().type;
+                if (type == ::Core::Objects::ObjectType::AIMinionClient ||
+                    type == ::Core::Objects::ObjectType::NeutralMinionCampClient) {
+                    ++seededMinionCount;
+                }
+            }
+            playerSeeded = ContainsByNetworkId(
+                HeroesList,
+                static_cast<int>(playerHandle.networkId));
+            complete = playerSeeded &&
+                       seededHeroCount >= static_cast<std::size_t>(expectedHeroCount);
+        }
+
+        NightSharpDebug::Logf(
+            "[GameObjects] Seed raw=%zu heroes=%zu minions=%zu expectedHeroes=%d expectedMinions=%d player=%d complete=%d",
+            rawObjects.size(),
+            seededHeroCount,
+            seededMinionCount,
+            expectedHeroCount,
+            expectedMinionCount,
+            playerSeeded ? 1 : 0,
+            complete ? 1 : 0);
+        return complete;
+    }
+
+    inline bool SeedAllGameObjects() {
+        if (!TryBeginSeed()) {
+            return false;
+        }
+
+        bool complete = false;
+        try {
+            complete = SeedAllGameObjectsImpl();
+        } catch (...) {
+            NightSharpDebug::Logf(
+                "[GameObjects] Seed aborted by C++ exception; retrying next frame");
+        }
+        FinishSeed(complete);
+        return complete;
+    }
+
+    inline bool SeedNeedsRetry() {
+        Lock lk(g_mutex);
+        return SeedRetryPending;
+    }
+
+    inline void ResetSeedState() {
+        Lock lk(g_mutex);
+        SeedRetryPending = true;
+        SeedInProgress = false;
+    }
+
+    inline void RetrySeedOnNextUpdate() {
+        if (SeedNeedsRetry()) {
+            (void)SeedAllGameObjects();
         }
     }
 
@@ -775,6 +1068,7 @@ namespace detail {
     inline std::vector<LifecycleHandler> CreateHandlers;
     inline std::vector<LifecycleHandler> DeleteHandlers;
     inline bool NativeLifecycleHooked = false;
+    inline bool NativeUpdateHooked = false;
 
     inline GameObject ObjectFromArgs(const SDK::Events::ObjectEventArgs& args) {
         ::Core::Objects::ObjectHandle handle{};
@@ -832,6 +1126,11 @@ namespace detail {
         DispatchLifecycle("GameObjects::OnDelete", DeleteHandlers, args);
     }
 
+    inline void OnNativeGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
+        NS_PROFILE("GameObjects::SeedRetry");
+        RetrySeedOnNextUpdate();
+    }
+
     // Subscribe our forwarders to the (deferred, update-tick) native lifecycle
     // events exactly once. Kept out from under g_mutex while calling into
     // SDK::Events so the two subsystems' locks never nest.
@@ -842,20 +1141,32 @@ namespace detail {
                 return;
             }
             NativeLifecycleHooked = true;
+            NativeUpdateHooked = true;
+            SeedRetryPending = true;
+            SeedInProgress = false;
         }
+        SDK::Events::AddOnGameUpdate(&OnNativeGameUpdate);
         SDK::Events::AddOnCreateObject(&OnNativeObjectCreate);
         SDK::Events::AddOnDeleteObject(&OnNativeObjectDelete);
-        SeedAllGameObjects();
+        (void)SeedAllGameObjects();
     }
 
     inline void ReleaseNativeLifecycleHook() {
         bool wasHooked = false;
+        bool wasUpdateHooked = false;
         {
             Lock lk(g_mutex);
             wasHooked = NativeLifecycleHooked;
+            wasUpdateHooked = NativeUpdateHooked;
             NativeLifecycleHooked = false;
+            NativeUpdateHooked = false;
+            SeedRetryPending = true;
+            SeedInProgress = false;
             CreateHandlers.clear();
             DeleteHandlers.clear();
+        }
+        if (wasUpdateHooked) {
+            SDK::Events::RemoveOnGameUpdate(&OnNativeGameUpdate);
         }
         if (wasHooked) {
             SDK::Events::RemoveOnCreateObject(&OnNativeObjectCreate);
@@ -870,6 +1181,8 @@ inline void Initialize() {
     if (detail::Initialized) {
         return;
     }
+    ::Core::ObjectManager::TypeCache::InvalidateAll();
+    detail::ResetSeedState();
     detail::Initialized = true;
     SDK::GameObject::WarmPlayerTeamCache();
     // EnsoulSharp-style: keep the lists event-fresh. Delivery is deferred to the
@@ -880,6 +1193,7 @@ inline void Initialize() {
 inline void Shutdown() {
     detail::ReleaseNativeLifecycleHook();
     detail::Clear();
+    ::Core::ObjectManager::TypeCache::InvalidateAll();
     detail::Initialized = false;
 }
 
