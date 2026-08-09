@@ -127,6 +127,8 @@ public:
     // ── Position value helpers ──
     static float GetPositionValue(const Vec2& pos) {
         float value = EvadeMath::Dist(pos, SDK::Game::CursorPos().To2D());
+        // REMOVED: Turret object usage disabled by user request.
+        /*
         for (const auto& turret : SDK::ObjectManager::EnemyTurrets()) {
             if (!turret.IsValid() || turret.IsDead()) continue;
             const Vec2 turretPos = turret.Position().To2D();
@@ -134,6 +136,7 @@ public:
             const float dist = EvadeMath::Dist(pos, turretPos);
             if (kTurretRange > dist) value += 5.0f * (kTurretRange - dist);
         }
+        */
         return value;
     }
 

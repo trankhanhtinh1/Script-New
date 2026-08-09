@@ -517,6 +517,8 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         return cacheTarget(context_.forceTarget);
     }
 
+    // REMOVED: Turret/structure targeting disabled by user request.
+    /*
     if (mode == OrbwalkingMode::LaneClear &&
         (!menu_.PrioritizeMinions() || minions.empty())) {
         for (const auto& turret : GameObjects::EnemyTurrets()) {
@@ -546,6 +548,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             return cacheTarget(nexusTarget);
         }
     }
+    */
 
     if (mode != OrbwalkingMode::LastHit) {
         const AttackableUnit target = getHeroTarget();
@@ -575,6 +578,8 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         }
     }
 
+    // REMOVED: Turret farm logic disabled by user request.
+    /*
     if (farmMode) {
         std::vector<AIMinionClient> turretMinions;
         turretMinions.reserve(minions.size());
@@ -612,6 +617,7 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             }
         }
     }
+    */
 
     if (mode == OrbwalkingMode::LaneClear) {
         const int predictionTime = static_cast<int>(

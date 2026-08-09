@@ -1143,17 +1143,12 @@ inline std::vector<AIMinionClient> Pets() { return detail::Snapshot(detail::Pets
 inline std::vector<AIMinionClient> AllyPets() { return detail::Snapshot(detail::AllyPetsList); }
 inline std::vector<AIMinionClient> EnemyPets() { return detail::Snapshot(detail::EnemyPetsList); }
 
+// REMOVED: Turret object contents disabled by user request. Keep API names.
+inline std::vector<AITurretClient> Turrets() { return {}; }
+inline std::vector<AITurretClient> AllyTurrets() { return {}; }
+inline std::vector<AITurretClient> EnemyTurrets() { return {}; }
+
 // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-// inline std::vector<AITurretClient> Turrets() {
-//     return detail::Snapshot(detail::TurretsList);
-// }
-// inline std::vector<AITurretClient> AllyTurrets() {
-//     return detail::Snapshot(detail::AllyTurretsList);
-// }
-// inline std::vector<AITurretClient> EnemyTurrets() {
-//     return detail::Snapshot(detail::EnemyTurretsList);
-// }
-//
 // inline std::vector<BarracksDampenerClient> Inhibitors() {
 //     return detail::Snapshot(detail::InhibitorsList);
 // }
@@ -1176,14 +1171,15 @@ inline std::vector<AIMinionClient> EnemyPets() { return detail::Snapshot(detail:
 //     return detail::EnemyNexusObject;
 // }
 //
-// // Compatibility aliases (previous API); same snapshot data.
-// inline std::vector<AITurretClient> ScanTurrets() { return Turrets(); }
+// Compatibility aliases (previous API); same snapshot data.
+inline std::vector<AITurretClient> ScanTurrets() { return {}; }
 // inline std::vector<BarracksDampenerClient> ScanInhibitors() { return Inhibitors(); }
 // inline std::vector<HQClient> ScanNexuses() { return Nexuses(); }
 
-// inline std::vector<ShopClient> Shops() { return detail::Snapshot(detail::ShopsList); }
-// inline std::vector<ShopClient> AllyShops() { return detail::Snapshot(detail::AllyShopsList); }
-// inline std::vector<ShopClient> EnemyShops() { return detail::Snapshot(detail::EnemyShopsList); }
+// REMOVED: Shop object contents disabled by user request. Keep API names.
+inline std::vector<ShopClient> Shops() { return {}; }
+inline std::vector<ShopClient> AllyShops() { return {}; }
+inline std::vector<ShopClient> EnemyShops() { return {}; }
 
 inline std::vector<Obj_SpawnPoint> SpawnPoints() { return detail::Snapshot(detail::SpawnPointsList); }
 inline std::vector<Obj_SpawnPoint> AllySpawnPoints() { return detail::Snapshot(detail::AllySpawnPointsList); }
@@ -1290,10 +1286,13 @@ namespace SDK::ObjectManager {
     inline std::vector<AIMinionClient> EpicJungle() { return SDK::GameObjects::EpicJungle(); }
     inline std::vector<AIMinionClient> Plants() { return SDK::GameObjects::Plants(); }
     inline std::vector<AIMinionClient> Wards() { return SDK::GameObjects::Wards(); }
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // inline std::vector<AITurretClient> Turrets() { return SDK::GameObjects::Turrets(); }
-    // inline std::vector<AITurretClient> AllyTurrets() { return SDK::GameObjects::AllyTurrets(); }
-    // inline std::vector<AITurretClient> EnemyTurrets() { return SDK::GameObjects::EnemyTurrets(); }
+    // REMOVED: Turret object contents disabled by user request. Keep API names.
+    inline std::vector<AITurretClient> Turrets() { return {}; }
+    inline std::vector<AITurretClient> AllyTurrets() { return {}; }
+    inline std::vector<AITurretClient> EnemyTurrets() { return {}; }
+    inline std::vector<ShopClient> Shops() { return {}; }
+    inline std::vector<ShopClient> AllyShops() { return {}; }
+    inline std::vector<ShopClient> EnemyShops() { return {}; }
     // inline std::vector<BarracksDampenerClient> EnemyInhibitors() { return SDK::GameObjects::EnemyInhibitors(); }
     // inline HQClient EnemyNexus() { return SDK::GameObjects::EnemyNexus(); }
     inline std::vector<MissileClient> Missiles() { return SDK::GameObjects::Missiles(); }

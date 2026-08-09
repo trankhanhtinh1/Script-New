@@ -1183,6 +1183,10 @@ private:
 
     UnderTurretResult GetUnderTurretTarget(
         const std::vector<SDK::AIMinionClient>& minions) const {
+        (void)minions;
+        // REMOVED: Turret farm logic disabled by user request.
+        return {};
+        /*
         std::vector<SDK::AIMinionClient> turretMinions;
         for (const auto& minion : minions) {
             if (minion.IsMinion() && minion.IsUnderAllyTurret()) {
@@ -1347,6 +1351,7 @@ private:
         }
 
         return result;
+        */
     }
 
     SDK::AttackableUnit GetTarget(SDK::OrbwalkingMode mode) {
@@ -1378,6 +1383,8 @@ private:
             return forceTarget_;
         }
 
+        // REMOVED: Turret/structure targeting disabled by user request.
+        /*
         if (mode == SDK::OrbwalkingMode::LaneClear &&
             (!PrioritizeMinions() || minions.empty())) {
             for (const auto& turret : SDK::GameObjects::EnemyTurrets()) {
@@ -1398,6 +1405,7 @@ private:
                 return nexusTarget;
             }
         }
+        */
 
         if (mode != SDK::OrbwalkingMode::LastHit) {
             const SDK::AttackableUnit hero = GetHeroTarget();

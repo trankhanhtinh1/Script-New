@@ -1831,10 +1831,12 @@ class AITurretClient : public AIBaseClient {
 public:
     AITurretClient() = default;
     explicit AITurretClient(uintptr_t address)
-        : AIBaseClient(address, ::Core::Objects::ObjectType::AITurretClient) {}
+        : AIBaseClient() {
+        (void)address;
+    }
     explicit AITurretClient(::Core::Objects::ObjectHandle handle)
-        : AIBaseClient(handle) {
-        handle_.type = ::Core::Objects::ObjectType::AITurretClient;
+        : AIBaseClient() {
+        (void)handle;
     }
 
     // Lane turret families (outer / inner / inhib / nexus) on Summoner's
@@ -1842,18 +1844,18 @@ public:
     // anywhere in CharacterName; the precise tier comes from the Name
     // ("Turret_T1_R_03_A" = bot outer, etc.) but for orbwalker target
     // selection only the Lane/Fountain/Other split matters.
-    bool IsLaneTurret() const {}
+    bool IsLaneTurret() const { return false; }
 
     // Fountain / nexus shrine turrets. Untargetable when a friendly hero
     // is in fountain — orbwalker MUST never target these even when the
     // game reports them as enemy & targetable, because attacking them
     // immediately puts the player in the fountain laser's range.
-    bool IsFountainTurret() const {}
+    bool IsFountainTurret() const { return false; }
 
     // Shuriman / Azir-style summoned tower (sand soldier or special map
     // event). These are NOT real lane structures — they spawn from
     // gameplay scripts and orbwalker should treat them as champion-pet.
-    bool IsShurimaTurret() const {}
+    bool IsShurimaTurret() const { return false; }
 };
 
 
@@ -2045,10 +2047,12 @@ class ShopClient : public GameObject {
 public:
     ShopClient() = default;
     explicit ShopClient(uintptr_t address)
-        : GameObject(address, ::Core::Objects::ObjectType::ShopClient) {}
+        : GameObject() {
+        (void)address;
+    }
     explicit ShopClient(::Core::Objects::ObjectHandle handle)
-        : GameObject(handle) {
-        handle_.type = ::Core::Objects::ObjectType::ShopClient;
+        : GameObject() {
+        (void)handle;
     }
 };
 

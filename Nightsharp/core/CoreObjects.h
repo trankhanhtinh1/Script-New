@@ -160,7 +160,8 @@ inline bool IsAttackable(ObjectType type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
     //case ObjectType::AITurretClient:
-    case ObjectType::AITurretCommon:
+    // REMOVED: Turret/Shop disabled by user request.
+    // case ObjectType::AITurretCommon:
     case ObjectType::AnimatedBuildingClient:
     case ObjectType::Barracks:
     //case ObjectType::BarracksDampenerClient:
@@ -169,7 +170,7 @@ inline bool IsAttackable(ObjectType type) {
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
     case ObjectType::Pawn:
-    case ObjectType::Turret:
+    // case ObjectType::Turret:
         return true;
     default:
         return false;
@@ -181,7 +182,8 @@ inline bool IsAIBase(ObjectType type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
     //case ObjectType::AITurretClient:
-    case ObjectType::AITurretCommon:
+    // REMOVED: Turret/Shop disabled by user request.
+    // case ObjectType::AITurretCommon:
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
     case ObjectType::Pawn:

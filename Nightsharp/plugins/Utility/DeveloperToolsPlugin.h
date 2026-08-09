@@ -171,7 +171,7 @@ public:
     bool scanRawGameObjects_ = true;
     bool scanHeroes_ = true;
     bool scanMinions_ = true;
-    bool scanTurrets_ = true;
+    bool scanTurrets_ = false;
     bool scanMissiles_ = true;
     bool filterClutter_ = true;
     std::unordered_map<std::uint32_t, int> trackedObjectTicks_;
@@ -1249,7 +1249,8 @@ inline void DeveloperToolsPlugin::OnLoad() {
     menuScanAll_ = filters->Add(new SDK::UI::MenuBool("ScanAll", "Scan All GameObjects", scanRawGameObjects_));
     menuScanHeroes_ = filters->Add(new SDK::UI::MenuBool("ScanHeroes", "Heroes (AIHeroClient)", scanHeroes_));
     menuScanMinions_ = filters->Add(new SDK::UI::MenuBool("ScanMinions", "Minions & Pets", scanMinions_));
-    menuScanTurrets_ = filters->Add(new SDK::UI::MenuBool("ScanTurrets", "Turrets", scanTurrets_));
+    // REMOVED: Turret scan disabled by user request.
+    // menuScanTurrets_ = filters->Add(new SDK::UI::MenuBool("ScanTurrets", "Turrets", scanTurrets_));
     menuScanMissiles_ = filters->Add(new SDK::UI::MenuBool("ScanMissiles", "Missiles", scanMissiles_));
     menuFilterClutter_ = filters->Add(new SDK::UI::MenuBool("FilterClutter", "Filter Clutter (FX, MoveTo)", filterClutter_));
 
@@ -1829,7 +1830,9 @@ inline void DeveloperToolsPlugin::SyncMenuSettings() {
     if (menuScanAll_) scanRawGameObjects_ = menuScanAll_->Value;
     if (menuScanHeroes_) scanHeroes_ = menuScanHeroes_->Value;
     if (menuScanMinions_) scanMinions_ = menuScanMinions_->Value;
-    if (menuScanTurrets_) scanTurrets_ = menuScanTurrets_->Value;
+    // REMOVED: Turret scan disabled by user request.
+    // if (menuScanTurrets_) scanTurrets_ = menuScanTurrets_->Value;
+    scanTurrets_ = false;
     if (menuScanMissiles_) scanMissiles_ = menuScanMissiles_->Value;
     if (menuFilterClutter_) filterClutter_ = menuFilterClutter_->Value;
 
