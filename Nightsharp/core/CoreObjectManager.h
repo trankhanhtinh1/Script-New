@@ -100,7 +100,9 @@ inline uintptr_t GetManagerAddress(ManagerKind kind) {
     case ManagerKind::Objects: return ctx.objectManager;
     case ManagerKind::Heroes: return ctx.heroManager;
     case ManagerKind::Minions: return ctx.minionManager;
-    case ManagerKind::Turrets: return ctx.turretManager;
+    case ManagerKind::Turrets:
+        // REMOVED: Turret object manager disabled by user request.
+        return 0;
     case ManagerKind::Missiles: return ctx.missileManager;
     default: return 0;
     }
@@ -302,7 +304,10 @@ inline int EnumerateMinions(uintptr_t* out, int maxOut) {
 }
 
 inline int EnumerateTurrets(uintptr_t* out, int maxOut) {
-    return Enumerate(ManagerKind::Turrets, out, maxOut);
+    (void)out;
+    (void)maxOut;
+    // REMOVED: Turret object enumeration disabled by user request.
+    return 0;
 }
 
 inline int EnumerateMissiles(uintptr_t* out, int maxOut) {
@@ -544,8 +549,9 @@ inline ObjectType InferType(uintptr_t object) {
         result = ObjectType::AIHeroClient;
     } else if (ManagerContains(ManagerKind::Minions, object)) {
         result = ObjectType::AIMinionClient;
-    } else if (ManagerContains(ManagerKind::Turrets, object)) {
-        //result = ObjectType::AITurretClient;
+    // REMOVED: Turret object inference disabled by user request.
+    // } else if (ManagerContains(ManagerKind::Turrets, object)) {
+    //     result = ObjectType::AITurretClient;
     } else if (ManagerContains(ManagerKind::Missiles, object)) {
         result = ObjectType::MissileClient;
     }

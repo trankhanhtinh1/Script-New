@@ -88,95 +88,38 @@ namespace detail {
     }
 } // namespace detail
 
-// REMOVED: Turret/Inhibitor/Nexus disabled by user request
-/*inline bool AddOnTurretAttack(TurretHandler handler) {
-    if (!handler) {
-        return false;
-    }
+// REMOVED: Turret event contents disabled by user request. Keep API names.
+inline bool AddOnTurretAttack(TurretHandler handler) {
+    (void)handler;
+    return false;
+}
 
-    SDK::Events::Initialize();
-    if (!SDK::Events::detail::EnsureDoCastRawSubscribed()) {
-        return false;
-    }
+inline bool RemoveOnTurretAttack(TurretHandler handler) {
+    (void)handler;
+    return false;
+}
 
-    const bool hadHandlers = detail::TurretHandlers.HasHandlers();
-    const bool added = detail::TurretHandlers.Add(handler);
-    if (added && !hadHandlers) {
-        ++SDK::Events::detail::TurretConsumerRefs;
-    } else if (!added && !hadHandlers) {
-        SDK::Events::detail::ReleaseDoCastRawIfUnused();
-    }
-    return added;
-}*/
-
-// REMOVED: Turret/Inhibitor/Nexus disabled by user request
-/*inline bool RemoveOnTurretAttack(TurretHandler handler) {
-    const bool removed = detail::TurretHandlers.Remove(handler);
-    if (removed && !detail::TurretHandlers.HasHandlers()) {
-        if (SDK::Events::detail::TurretConsumerRefs > 0) {
-            --SDK::Events::detail::TurretConsumerRefs;
-        }
-        SDK::Events::detail::ReleaseDoCastRawIfUnused();
-    }
-    return removed;
-}*/
-
-// REMOVED: Turret/Inhibitor/Nexus disabled by user request
-/*inline bool OnTurretAttack(TurretHandler handler) {
-    return AddOnTurretAttack(handler);
-}*/
+inline bool OnTurretAttack(TurretHandler handler) {
+    (void)handler;
+    return false;
+}
 
 } // namespace SDK::Events::Turret
 
 namespace SDK::Events {
-    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-    /*
+    // REMOVED: Turret event contents disabled by user request. Keep API names.
     inline bool AddOnTurretAttack(Turret::TurretHandler handler) { return Turret::AddOnTurretAttack(handler); }
     inline bool RemoveOnTurretAttack(Turret::TurretHandler handler) { return Turret::RemoveOnTurretAttack(handler); }
     inline bool OnTurretAttack(Turret::TurretHandler handler) { return Turret::OnTurretAttack(handler); }
-    */
 
 namespace detail {
-// REMOVED: Turret/Inhibitor/Nexus disabled by user request
-/*inline void EventTurret(const ProcessSpellEventArgs& args) {
-        if (args.Sender.Type != ::Core::Objects::ObjectType::AITurretClient ||
-            !args.IsAutoAttack ||
-            args.TargetNetworkId == 0 ||
-            args.TargetNetworkId == 0xFFFFFFFFu) {
-            return;
-        }
-
-        const uint32_t key = Turret::detail::KeyFor(args.Sender);
-        auto* turret = Turret::detail::Find(key, true);
-        if (!turret) {
-            return;
-        }
-
-        const AITurretClient turretObject(args.Sender.Ptr);
-        const AttackableUnit target =
-            ObjectManager::GetUnitByNetworkId<AttackableUnit>(
-                static_cast<int>(args.TargetNetworkId));
-
-        turret->Turret = args.Sender.Ptr;
-        turret->NetworkId = key;
-        turret->TargetNetworkId = args.TargetNetworkId;
-        turret->AttackStart = Turret::detail::TickCount();
-        turret->AttackDelay = CoreControl::GetAttackWindupMs(args.Sender.Ptr);
-        if (target.IsValid()) {
-            const float missileSpeed = Turret::detail::ResolveMissileSpeed(args);
-            turret->AttackDelay +=
-                turretObject.Distance(target) / missileSpeed * 1000.0f;
-        }
-        turret->AttackEnd = static_cast<int>(
-            turret->AttackStart + std::max(0.0f, turret->AttackDelay));
-        turret->IsWindingUp = turretObject.Spellbook().IsWindingUp();
-        turret->Raw = args;
-
-        Turret::detail::TurretHandlers.Fire(*turret);
-    }*/
+    // REMOVED: Turret event contents disabled by user request. Keep function name.
+    inline void EventTurret(const ProcessSpellEventArgs& args) {
+        (void)args;
+    }
 
     inline void EventTurretConstruct() {
-        Turret::detail::SeedFromGameObjects();
+        // REMOVED: Turret event seeding disabled by user request.
     }
 } // namespace detail
 } // namespace SDK::Events

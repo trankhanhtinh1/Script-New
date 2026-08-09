@@ -479,7 +479,15 @@ static void Combo() {
                     if (!W.IsReady() || target.DistanceToPlayer() > 850.0f) {
                         const auto pred = Q.GetPrediction(target);
                         if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                            Q.StartCharging();
+                            // FIX(source): the parameterless StartCharging() opens the
+                            // charge at SourcePosition(), i.e. Xerath himself, so the
+                            // charge aims at the player until something re-aims it. The
+                            // only re-aim is TryShootChargedQ, which bails out on a
+                            // collision or a hitchance miss and then sends nothing, so
+                            // the charge keeps that self-aimed direction and the shot
+                            // leaves nowhere near the enemy. Seed it with the
+                            // prediction that was just validated instead.
+                            Q.StartCharging(pred.GetCastPosition());
                         }
                     }
                 }
@@ -639,7 +647,9 @@ static void KillSteal() {
                             if (!W.IsReady() || target1.DistanceToPlayer() > 850.0f) {
                                 const auto pred = Q.GetPrediction(target1);
                                 if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                                    Q.StartCharging();
+                                    // FIX(source): see the combo branch — the
+                                    // parameterless overload aims the charge at Xerath.
+                                    Q.StartCharging(pred.GetCastPosition());
                                 }
                             }
                         } else {
@@ -706,7 +716,9 @@ static void Harass() {
                     if (!W.IsReady() || target.DistanceToPlayer() > 850.0f) {
                         const auto pred = Q.GetPrediction(target);
                         if (HitchanceAtLeast(pred.Hitchance, HitChance::High)) {
-                            Q.StartCharging();
+                            // FIX(source): see the combo branch — the parameterless
+                            // overload aims the charge at Xerath, not the enemy.
+                            Q.StartCharging(pred.GetCastPosition());
                         }
                     }
                 }
@@ -759,7 +771,8 @@ static void LaneClear() {
                     const auto qFarmLocation = Q.GetLineFarmLocation(minions);
                     if (qFarmLocation.Position.IsValid() &&
                         qFarmLocation.MinionsHit >= Slider(LaneClearMenu, "MinQ", 3)) {
-                        Q.StartCharging();
+                        // FIX(source): aim the charge at the farm line, not at Xerath.
+                        Q.StartCharging(Vector3::From2D(qFarmLocation.Position));
                     }
                 }
             }
@@ -854,7 +867,8 @@ static void JungleClear() {
                 }
 
                 if (ValidTarget(mob, chargedMax)) {
-                    Q.StartCharging();
+                    // FIX(source): aim the charge at the jungle mob, not at Xerath.
+                    Q.StartCharging(mob.Position());
                 }
             }
         }

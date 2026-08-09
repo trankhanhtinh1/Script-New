@@ -145,8 +145,9 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
     const uintptr_t senderPtr = args.Sender.Ptr;
     const bool isMinion = ::Core::ObjectManager::ManagerContains(
         ::Core::ObjectManager::ManagerKind::Minions, senderPtr);
-    const bool isTurret = !isMinion && ::Core::ObjectManager::ManagerContains(
-        ::Core::ObjectManager::ManagerKind::Turrets, senderPtr);
+    // REMOVED: Turret object lookup disabled by user request.
+    // const bool isTurret = !isMinion && ::Core::ObjectManager::ManagerContains(
+    //     ::Core::ObjectManager::ManagerKind::Turrets, senderPtr);
 
     // Stamp the REAL type on the wrapper so downstream Type() checks work
     // (turret damage override, GetAggroTurret/HasTurretAggro/HasMinionAggro).
@@ -158,7 +159,7 @@ inline void OnDoCast(const Events::ProcessSpellEventArgs& args) {
         ::Core::Objects::ObjectType::AIMinionClient);
 
     if (!sender.IsValid()) { ++Diag.rejSender; return; }
-    if (!sender.IsAlly() || (!isMinion && !isTurret)) {
+    if (!sender.IsAlly() || !isMinion) {
         ++Diag.rejAllyOrType;
         return;
     }

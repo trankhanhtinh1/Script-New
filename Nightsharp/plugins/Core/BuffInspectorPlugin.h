@@ -79,8 +79,9 @@ public:
         ImGui::Checkbox("Heroes", &m_scanHeroes);
         ImGui::SameLine();
         ImGui::Checkbox("Minions", &m_scanMinions);
-        ImGui::SameLine();
-        ImGui::Checkbox("Turrets", &m_scanTurrets);
+        // REMOVED: Turret scan disabled by user request.
+        // ImGui::SameLine();
+        // ImGui::Checkbox("Turrets", &m_scanTurrets);
         ImGui::SameLine();
         ImGui::Checkbox("All Objects", &m_scanAllObjects);
 
@@ -251,9 +252,10 @@ private:
         case ::Core::ObjectManager::ManagerKind::Minions:
             read = ::Core::ObjectManager::EnumerateMinions(buffer, 1024);
             break;
-        case ::Core::ObjectManager::ManagerKind::Turrets:
-            read = ::Core::ObjectManager::EnumerateTurrets(buffer, 1024);
-            break;
+        // REMOVED: Turret scan disabled by user request.
+        // case ::Core::ObjectManager::ManagerKind::Turrets:
+        //     read = ::Core::ObjectManager::EnumerateTurrets(buffer, 1024);
+        //     break;
         default:
             break;
         }
@@ -445,9 +447,10 @@ private:
         if (m_scanMinions) {
             AddManagerOwners(owners, ownerCount, ::Core::ObjectManager::ManagerKind::Minions);
         }
-        if (m_scanTurrets) {
-            AddManagerOwners(owners, ownerCount, ::Core::ObjectManager::ManagerKind::Turrets);
-        }
+        // REMOVED: Turret scan disabled by user request.
+        // if (m_scanTurrets) {
+        //     AddManagerOwners(owners, ownerCount, ::Core::ObjectManager::ManagerKind::Turrets);
+        // }
         if (m_scanAllObjects) {
             AddManagerOwners(owners, ownerCount, ::Core::ObjectManager::ManagerKind::Objects);
         }

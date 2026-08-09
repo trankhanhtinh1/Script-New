@@ -839,9 +839,10 @@ private:
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::AllyIgnoredMinionsList);
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::EnemyIgnoredMinionsList);
                     }
-                    if (plugin_->scanTurrets_) {
-                        //plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
-                    }
+                    // REMOVED: Turret scan disabled by user request.
+                    // if (plugin_->scanTurrets_) {
+                    //     plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::TurretsList);
+                    // }
                     if (plugin_->scanMissiles_) {
                         plugin_->AddUniqueObjectsFromSource(scanCache_, SDK::GameObjects::detail::MissilesList);
                     }
