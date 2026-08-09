@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -176,6 +177,16 @@ inline int CommittedEnemyUntil = 0;
 inline int IncomingLineThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 
+// Akshan's controller has several deliberately rich geometry solvers.  Keep
+// their cadence independent from render/update FPS so a 144/240 Hz client does
+// not repeat identical object, prediction and terrain work every game tick.
+inline int LastTrackedQScanTick = 0;
+inline int LastQCoachRefreshTick = 0;
+inline int LastScoundrelScanTick = 0;
+inline int LastKillSecureScanTick = 0;
+inline int LastFarmEvaluationTick = 0;
+inline int LastRChannelEvaluationTick = 0;
+
 inline constexpr float kQCastRange = 850.0f;
 inline constexpr float kQScriptRange = 750.0f;
 inline constexpr float kQExtension = 500.0f;
@@ -232,7 +243,10 @@ inline bool SafePoint(const Vector3& position,
                       const AIHeroClient& target,
                       bool lethal,
                       bool escape,
-                      int enemyAllowance = -1) {
+                      int enemyAllowance = -1,
+                      int* enemyCountOut = nullptr,
+                      int* allyCountOut = nullptr,
+                      bool checkControlHazards = true) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !position.IsValid() || position.IsZero() ||
         SDK::NavMesh::IsWall(position)) {
@@ -243,6 +257,8 @@ inline bool SafePoint(const Vector3& position,
         : Slider(SwingMenu, "MaxCommitEnemies", 2);
     const int enemies = Engine::CountEnemiesAt(position, 650.0f);
     const int allies = Engine::CountAlliesAt(position, 700.0f);
+    if (enemyCountOut) *enemyCountOut = enemies;
+    if (allyCountOut) *allyCountOut = allies;
     if (!lethal && enemies > std::max(1, maximumEnemies) &&
         allies + (escape ? 1 : 0) < enemies) {
         return false;
@@ -251,17 +267,30 @@ inline bool SafePoint(const Vector3& position,
         !(lethal && Bool(SwingMenu, "AllowLethalDive", false))) {
         return false;
     }
-    if (!escape && Bool(SwingMenu, "RespectLockdown", true) &&
+    if (checkControlHazards && !escape &&
+        Bool(SwingMenu, "RespectLockdown", true) &&
         ControllerHelpers::HasReadyPointClickThreatAt(position)) {
         return false;
     }
-    if (!lethal && HasDashStopperAt(position)) return false;
+    if (checkControlHazards && !lethal && HasDashStopperAt(position)) {
+        return false;
+    }
     if (target.IsValid() && !escape &&
         position.Distance2D(target.Position()) < 130.0f &&
         player.HealthPercent() < 55.0f) {
         return false;
     }
     return true;
+}
+
+inline bool PassesSwingControlHazards(const Vector3& position,
+                                      bool lethal,
+                                      bool escape) {
+    if (!escape && Bool(SwingMenu, "RespectLockdown", true) &&
+        ControllerHelpers::HasReadyPointClickThreatAt(position)) {
+        return false;
+    }
+    return lethal || !HasDashStopperAt(position);
 }
 
 inline int PassiveStacks(const AIBaseClient& target) {
@@ -418,8 +447,8 @@ inline Posture DeterminePosture(const AIHeroClient& selected) {
         return Posture::Escape;
     }
     if (RChannelActive || RReleaseAvailable()) return Posture::Channeling;
-    const AIHeroClient scoundrel = FindScoundrelTarget();
-    if (Engine::ValidEnemy(scoundrel) && ScoundrelStacks(scoundrel) > 0 &&
+    const AIHeroClient scoundrel = HeroByNetworkId(ScoundrelTargetId);
+    if (Engine::ValidEnemy(scoundrel, kRRange) && ScoundrelVictimCount > 0 &&
         scoundrel.HealthPercent() <= Slider(RogueMenu, "CleanupHP", 52)) {
         return Posture::ScoundrelCleanup;
     }
@@ -449,6 +478,9 @@ inline bool IsQReturnName(const char* spellName, const char* missileName) {
 inline void RefreshTrackedQ() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
+    const int now = Now();
+    if (LastTrackedQScanTick > 0 && now - LastTrackedQScanTick < 40) return;
+    LastTrackedQScanTick = now;
     bool found = false;
     for (const auto& missile : GameObjects::Missiles()) {
         if (!missile.IsValid() ||
@@ -602,6 +634,11 @@ inline QAimPlan BestQAim(const AIHeroClient& target,
 }
 
 inline void RefreshQReturnCoach(const AIHeroClient& fallback) {
+    const int now = Now();
+    if (LastQCoachRefreshTick > 0 && now - LastQCoachRefreshTick < 40) {
+        return;
+    }
+    LastQCoachRefreshTick = now;
     QReturnCoachPoint = {};
     QReturnCoachScore = 0.0f;
     if (!QActive || !QReturning || !QMissilePosition.IsValid() ||
@@ -696,7 +733,7 @@ inline bool TryAutomaticW(const AIHeroClient& selected, Mode mode) {
         now - LastCombatTick < Slider(RogueMenu, "OutOfCombatMs", 2600)) {
         return false;
     }
-    AIHeroClient scoundrel = FindScoundrelTarget(5500.0f);
+    AIHeroClient scoundrel = HeroByNetworkId(ScoundrelTargetId);
     if (!Engine::ValidEnemy(scoundrel)) return false;
     const Vector3 towardTarget = Direction2D(player.Position(), scoundrel.Position());
     const Vector3 towardCursor = Direction2D(player.Position(), Game::CursorPos());
@@ -740,6 +777,9 @@ struct SwingPlan {
 inline int LastSwingPlanTick = 0;
 inline int LastSwingPlanTargetId = 0;
 inline SwingPurpose LastSwingPlanPurpose = SwingPurpose::None;
+inline bool LastSwingPlanLethal = false;
+inline Vector3 LastSwingPlanSource = {};
+inline Vector3 LastSwingPlanCursor = {};
 inline SwingPlan CachedSwingPlan = {};
 
 inline bool FindWallAnchor(const Vector3& source,
@@ -801,13 +841,16 @@ inline int NearbyNonTargetUnits(const AIHeroClient& target,
 inline Vector3 BestDismountFrom(const Vector3& swingPosition,
                                 const AIHeroClient& target,
                                 SwingPurpose purpose,
-                                bool lethal) {
+                                bool lethal,
+                                int* enemyCountOut = nullptr,
+                                int* allyCountOut = nullptr) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
+    const Vector3 cursor = Game::CursorPos();
     std::array<Vector3, 11> candidates = {};
     std::size_t count = 0;
     candidates[count++] = SwingDismountPoint(
-        swingPosition, Game::CursorPos(), kE3Range);
+        swingPosition, cursor, kE3Range);
     if (target.IsValid()) {
         candidates[count++] = SwingDismountPoint(
             swingPosition, target.Position(), kE3Range);
@@ -824,16 +867,30 @@ inline Vector3 BestDismountFrom(const Vector3& swingPosition,
             swingPosition.z + std::sin(angle) * kE3Range,
         };
     }
-    Vector3 best = {};
-    float bestScore = -FLT_MAX;
+    struct ScoredDismount {
+        Vector3 Position = {};
+        float Score = -FLT_MAX;
+        int Enemies = 0;
+        int Allies = 0;
+    };
+    std::array<ScoredDismount, 11> scored = {};
+    std::size_t scoredCount = 0;
     for (std::size_t i = 0; i < count; ++i) {
         Vector3 candidate = candidates[i];
         candidate.y = SDK::NavMesh::GetHeightForPosition(candidate);
         const bool escape = purpose == SwingPurpose::Escape;
-        if (!SafePoint(candidate, target, lethal, escape)) continue;
-        float score = -candidate.Distance2D(Game::CursorPos()) * 0.22f;
-        score += static_cast<float>(Engine::CountAlliesAt(candidate, 700.0f)) * 150.0f;
-        score -= static_cast<float>(Engine::CountEnemiesAt(candidate, 650.0f)) * 210.0f;
+        int enemies = 0;
+        int allies = 0;
+        // Rank cheap geometry/team-count candidates first.  Spellbook/buff
+        // hazard queries are intentionally deferred until the final ordering,
+        // instead of being repeated for every point of every sampled orbit.
+        if (!SafePoint(candidate, target, lethal, escape, -1,
+                       &enemies, &allies, false)) {
+            continue;
+        }
+        float score = -candidate.Distance2D(cursor) * 0.22f;
+        score += static_cast<float>(allies) * 150.0f;
+        score -= static_cast<float>(enemies) * 210.0f;
         if (target.IsValid()) {
             const float distance = candidate.Distance2D(target.Position());
             if (escape) score += distance * 0.62f;
@@ -842,26 +899,39 @@ inline Vector3 BestDismountFrom(const Vector3& swingPosition,
         if (purpose == SwingPurpose::RReposition) {
             score += candidate.Distance2D(player.Position()) * 0.16f;
         }
-        if (score > bestScore) {
-            bestScore = score;
-            best = candidate;
+        scored[scoredCount++] = { candidate, score, enemies, allies };
+    }
+    std::sort(scored.begin(), scored.begin() + scoredCount,
+        [](const ScoredDismount& left, const ScoredDismount& right) {
+            return left.Score > right.Score;
+        });
+    const bool escape = purpose == SwingPurpose::Escape;
+    const std::size_t hazardCandidates = std::min<std::size_t>(scoredCount, 4);
+    for (std::size_t i = 0; i < hazardCandidates; ++i) {
+        if (PassesSwingControlHazards(scored[i].Position, lethal, escape)) {
+            if (enemyCountOut) *enemyCountOut = scored[i].Enemies;
+            if (allyCountOut) *allyCountOut = scored[i].Allies;
+            return scored[i].Position;
         }
     }
-    return best;
+    return {};
 }
 
 inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
                                   SwingPurpose purpose,
                                   bool lethal) {
     SwingPlan best{};
+    const int planningStarted = Now();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
     const Vector3 source = player.Position();
+    const Vector3 cursor = Game::CursorPos();
     const bool escape = purpose == SwingPurpose::Escape;
     const bool damagePlan = purpose == SwingPurpose::Damage ||
                             purpose == SwingPurpose::ResetCleanup;
     if (!escape && !Engine::ValidEnemy(target)) return best;
-    if (damagePlan && !HasPriorityMark(target) &&
+    const bool priorityMarked = target.IsValid() && HasPriorityMark(target);
+    if (damagePlan && !priorityMarked &&
         NearbyNonTargetUnits(target) > 0) {
         // E fires at the nearest visible unit unless a recent Akshan hit marks
         // the intended champion.  Never spend the swing into a minion lottery.
@@ -873,7 +943,8 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
     const Vector3 targetFuture = target.IsValid()
         ? PredictPosition(target, 1.25f) : targetStart;
     std::vector<Vector3> anchorDirections;
-    const Vector3 cursorDirection = Direction2D(source, Game::CursorPos());
+    anchorDirections.reserve(24);
+    const Vector3 cursorDirection = Direction2D(source, cursor);
     AddUniqueDirection(anchorDirections, cursorDirection);
     if (target.IsValid()) {
         const Vector3 toTarget = Direction2D(source, targetStart);
@@ -883,7 +954,10 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
         AddUniqueDirection(anchorDirections, Rotate2D(toTarget, 0.75f * kPi));
         AddUniqueDirection(anchorDirections, Rotate2D(toTarget, -0.75f * kPi));
     }
-    constexpr int radialSamples = 48;
+    // Sixteen radial probes plus cursor/target-biased probes cover terrain at
+    // 22.5 degree intervals.  The former 48-probe sweep repeated thousands of
+    // orbit and safety reads and was the source of 100-540 ms update spikes.
+    constexpr int radialSamples = 16;
     for (int i = 0; i < radialSamples; ++i) {
         const float angle = 2.0f * kPi * static_cast<float>(i) /
                             static_cast<float>(radialSamples);
@@ -892,6 +966,7 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
     }
 
     std::vector<Vector3> anchors;
+    anchors.reserve(anchorDirections.size());
     for (const auto& direction : anchorDirections) {
         Vector3 anchor = {};
         if (!FindWallAnchor(source, direction, anchor)) continue;
@@ -905,9 +980,39 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
         if (!duplicate) anchors.push_back(anchor);
     }
 
+    struct CollisionUnit {
+        int NetworkId = 0;
+        Vector3 Position = {};
+        float Radius = 25.0f;
+    };
+    std::vector<CollisionUnit> collisionUnits;
+    collisionUnits.reserve(GameObjects::EnemyHeroesFrame().size());
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
+        if (!Engine::ValidEnemy(enemy)) continue;
+        collisionUnits.push_back({
+            static_cast<int>(enemy.NetworkId()), enemy.Position(),
+            std::max(25.0f, enemy.BoundingRadius()) + 50.0f,
+        });
+    }
+
+    struct Trajectory {
+        Vector3 Anchor = {};
+        Vector3 LastSafe = {};
+        SwingDirection Direction = SwingDirection::Clockwise;
+        float SafeDuration = 0.0f;
+        float Closest = FLT_MAX;
+        int Shots = 0;
+        bool CollidedTarget = false;
+        float BaseScore = -FLT_MAX;
+    };
+    std::vector<Trajectory> trajectories;
+    trajectories.reserve(anchors.size() * 2);
     const float horizon = purpose == SwingPurpose::Jungle
         ? 5.0f : static_cast<float>(Slider(SwingMenu, "MaxSwingMs", 2200)) / 1000.0f;
-    constexpr float step = 0.05f;
+    constexpr float step = 0.075f;
+    bool simulationBudgetReached = false;
+    const int targetId = target.IsValid()
+        ? static_cast<int>(target.NetworkId()) : 0;
     for (const auto& anchor : anchors) {
         const float radius = SwingRadius(source, anchor);
         if (radius < 115.0f || radius > kERange + 25.0f) continue;
@@ -928,16 +1033,14 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
                     break;
                 }
                 bool otherCollision = false;
-                for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                    if (!Engine::ValidEnemy(enemy)) continue;
-                    const bool intended = target.IsValid() &&
-                        enemy.NetworkId() == target.NetworkId();
+                for (const auto& enemy : collisionUnits) {
+                    const bool intended = targetId != 0 &&
+                        enemy.NetworkId == targetId;
                     const Vector3 enemyPosition = intended
                         ? targetStart + (targetFuture - targetStart) *
                             std::clamp(time / 1.25f, 0.0f, 1.0f)
-                        : enemy.Position();
-                    const float collision = std::max(25.0f, enemy.BoundingRadius()) + 50.0f;
-                    if (position.Distance2D(enemyPosition) <= collision) {
+                        : enemy.Position;
+                    if (position.Distance2D(enemyPosition) <= enemy.Radius) {
                         if (intended) collidedTarget = true;
                         else otherCollision = true;
                         break;
@@ -968,46 +1071,80 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
                 ? EstimatedSwingShots(
                     exposureDuration, 0.20f, true, true)
                 : 0;
-            Vector3 dismount = BestDismountFrom(
-                lastSafe, target, purpose, lethal);
-            if (dismount.IsZero()) continue;
-
-            float score = 0.0f;
+            float baseScore = 0.0f;
             if (damagePlan) {
-                score += static_cast<float>(shots) * 145.0f;
-                score -= closest * 0.18f;
-                score += std::min(radius, 650.0f) * 0.24f;
-                if (collidedTarget) score -= 120.0f;
-                if (HasPriorityMark(target)) score += 210.0f;
+                baseScore += static_cast<float>(shots) * 145.0f;
+                baseScore -= closest * 0.18f;
+                baseScore += std::min(radius, 650.0f) * 0.24f;
+                if (collidedTarget) baseScore -= 120.0f;
+                if (priorityMarked) baseScore += 210.0f;
             } else if (escape) {
-                score += lastSafe.Distance2D(targetStart) * 0.52f;
-                score -= dismount.Distance2D(Game::CursorPos()) * 0.28f;
-                score += safeDuration * 90.0f;
+                baseScore += lastSafe.Distance2D(targetStart) * 0.52f;
+                baseScore += safeDuration * 90.0f;
             } else if (purpose == SwingPurpose::RReposition) {
-                const auto oldLine = ProjectPointToSegment2D(
-                    dismount, source, targetStart);
-                score += oldLine.Distance * 1.15f;
-                score -= dismount.Distance2D(Game::CursorPos()) * 0.10f;
-                score += safeDuration * 55.0f;
+                baseScore += safeDuration * 55.0f;
             } else {
-                score += static_cast<float>(shots) * 100.0f;
-                score += safeDuration * 65.0f;
+                baseScore += static_cast<float>(shots) * 100.0f;
+                baseScore += safeDuration * 65.0f;
             }
-            score += static_cast<float>(Engine::CountAlliesAt(dismount, 700.0f)) * 90.0f;
-            score -= static_cast<float>(Engine::CountEnemiesAt(dismount, 650.0f)) * 145.0f;
-            if (score > best.Score) {
-                best.Valid = true;
-                best.Anchor = anchor;
-                best.E2Cursor = E2CursorForDirection(source, anchor, direction);
-                best.Dismount = dismount;
-                best.Direction = direction;
-                best.DurationSeconds = std::clamp(
-                    safeDuration - (collidedTarget ? 0.10f : 0.0f),
-                    0.52f, horizon);
-                best.ClosestTargetDistance = closest;
-                best.ExpectedShots = shots;
-                best.Score = score;
+            trajectories.push_back({
+                anchor, lastSafe, direction, safeDuration, closest,
+                shots, collidedTarget, baseScore,
+            });
+
+            // This is a soft real-time budget: finish the current trajectory,
+            // retain deterministic candidates already found, then defer the
+            // next refresh instead of stalling the game thread for hundreds
+            // of milliseconds in a single update callback.
+            if (trajectories.size() >= 2 && Now() - planningStarted >= 8) {
+                simulationBudgetReached = true;
+                break;
             }
+        }
+        if (simulationBudgetReached) break;
+    }
+
+    std::sort(trajectories.begin(), trajectories.end(),
+        [](const Trajectory& left, const Trajectory& right) {
+            return left.BaseScore > right.BaseScore;
+        });
+    const std::size_t finalCandidates = std::min<std::size_t>(
+        trajectories.size(), 6);
+    for (std::size_t i = 0; i < finalCandidates; ++i) {
+        if (i > 0 && Now() - planningStarted >= 14) break;
+        const auto& trajectory = trajectories[i];
+        int enemiesAtDismount = 0;
+        int alliesAtDismount = 0;
+        const Vector3 dismount = BestDismountFrom(
+            trajectory.LastSafe, target, purpose, lethal,
+            &enemiesAtDismount, &alliesAtDismount);
+        if (dismount.IsZero()) continue;
+
+        float score = trajectory.BaseScore;
+        if (escape) {
+            score -= dismount.Distance2D(cursor) * 0.28f;
+        } else if (purpose == SwingPurpose::RReposition) {
+            const auto oldLine = ProjectPointToSegment2D(
+                dismount, source, targetStart);
+            score += oldLine.Distance * 1.15f;
+            score -= dismount.Distance2D(cursor) * 0.10f;
+        }
+        score += static_cast<float>(alliesAtDismount) * 90.0f;
+        score -= static_cast<float>(enemiesAtDismount) * 145.0f;
+        if (score > best.Score) {
+            best.Valid = true;
+            best.Anchor = trajectory.Anchor;
+            best.E2Cursor = E2CursorForDirection(
+                source, trajectory.Anchor, trajectory.Direction);
+            best.Dismount = dismount;
+            best.Direction = trajectory.Direction;
+            best.DurationSeconds = std::clamp(
+                trajectory.SafeDuration -
+                    (trajectory.CollidedTarget ? 0.10f : 0.0f),
+                0.52f, horizon);
+            best.ClosestTargetDistance = trajectory.Closest;
+            best.ExpectedShots = trajectory.Shots;
+            best.Score = score;
         }
     }
     return best;
@@ -1016,19 +1153,34 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
 inline SwingPlan GetSwingPlan(const AIHeroClient& target,
                               SwingPurpose purpose,
                               bool lethal,
-                              bool forceRefresh = false) {
+                              bool urgent = false) {
+    const int now = Now();
     const int targetId = target.IsValid()
         ? static_cast<int>(target.NetworkId()) : 0;
-    if (!forceRefresh && LastSwingPlanTick > 0 &&
-        Now() - LastSwingPlanTick < 260 &&
-        LastSwingPlanTargetId == targetId &&
-        LastSwingPlanPurpose == purpose) {
-        return CachedSwingPlan;
+    const auto player = GameObjects::Player();
+    const Vector3 source = player.IsValid() ? player.Position() : Vector3{};
+    const Vector3 cursor = Game::CursorPos();
+    const int age = LastSwingPlanTick > 0 ? now - LastSwingPlanTick : INT_MAX;
+    const bool sameContext = LastSwingPlanTargetId == targetId &&
+        LastSwingPlanPurpose == purpose && (!LastSwingPlanLethal || lethal);
+    if (LastSwingPlanTick > 0 && sameContext) {
+        const int maximumAge = urgent ? 360 : 650;
+        const bool sourceStable = age < 160 || LastSwingPlanSource.IsZero() ||
+            source.Distance2D(LastSwingPlanSource) <= 90.0f;
+        const bool cursorStable = purpose != SwingPurpose::Escape || age < 120 ||
+            LastSwingPlanCursor.IsZero() ||
+            cursor.Distance2D(LastSwingPlanCursor) <= 160.0f;
+        if (age < maximumAge && sourceStable && cursorStable) {
+            return CachedSwingPlan;
+        }
     }
     CachedSwingPlan = ComputeSwingPlan(target, purpose, lethal);
     LastSwingPlanTick = Now();
     LastSwingPlanTargetId = targetId;
     LastSwingPlanPurpose = purpose;
+    LastSwingPlanLethal = lethal;
+    LastSwingPlanSource = source;
+    LastSwingPlanCursor = cursor;
     return CachedSwingPlan;
 }
 
@@ -1432,6 +1584,7 @@ inline void ClearRState() {
     RMinionBulletsLost = 0;
     RTrackedTargetPosition = {};
     RLastOpenSource = {};
+    LastRChannelEvaluationTick = 0;
     if (ActiveSequence == Sequence::ComeuppanceChannel ||
         ActiveSequence == Sequence::RAngleSwing) {
         ActiveSequence = Sequence::None;
@@ -1448,8 +1601,16 @@ inline bool HandleRChannel(const AIHeroClient& fallback, Mode mode) {
     if (!Engine::ValidEnemy(target)) target = fallback;
     if (!Engine::ValidEnemy(target)) return true;
 
+    const int now = Now();
+    if (!EHookAttached() && !ESwinging() &&
+        LastRChannelEvaluationTick > 0 &&
+        now - LastRChannelEvaluationTick < 24) {
+        return true;
+    }
+    LastRChannelEvaluationTick = now;
+
     const auto player = GameObjects::Player();
-    const int elapsedMs = std::max(0, Now() - RChannelStartTick);
+    const int elapsedMs = std::max(0, now - RChannelStartTick);
     RObservedBullets = StoredRBullets(
         SpellRank(3), static_cast<float>(elapsedMs) / 1000.0f);
     RTrackedTargetPosition = PredictPosition(target, 0.12f);
@@ -1520,8 +1681,8 @@ inline AIHeroClient ResolveCombatTarget(const AIHeroClient& selected) {
     AIHeroClient planned = HeroByNetworkId(PlannedSwingTargetId);
     if (Engine::ValidEnemy(planned)) return planned;
     if (CurrentPosture == Posture::ScoundrelCleanup) {
-        AIHeroClient scoundrel = FindScoundrelTarget(5000.0f);
-        if (Engine::ValidEnemy(scoundrel)) return scoundrel;
+        AIHeroClient scoundrel = HeroByNetworkId(ScoundrelTargetId);
+        if (Engine::ValidEnemy(scoundrel, 5000.0f)) return scoundrel;
     }
     return Engine::SelectTarget(5000.0f);
 }
@@ -1557,6 +1718,11 @@ inline float ShortCombatDamage(const AIHeroClient& target,
 
 inline bool TryKillSecure(const AIHeroClient& preferred, Mode mode) {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
+    const int now = Now();
+    if (LastKillSecureScanTick > 0 && now - LastKillSecureScanTick < 40) {
+        return false;
+    }
+    LastKillSecureScanTick = now;
     std::vector<AIHeroClient> enemies;
     if (Engine::ValidEnemy(preferred)) enemies.push_back(preferred);
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -1593,6 +1759,15 @@ inline bool TryKillSecure(const AIHeroClient& preferred, Mode mode) {
         if (EFirstCastReady() && HasPriorityMark(enemy)) {
             const SwingPurpose purpose = ScoundrelStacks(enemy) > 0
                 ? SwingPurpose::ResetCleanup : SwingPurpose::Damage;
+            const float maximumSwingSeconds =
+                static_cast<float>(Slider(SwingMenu, "MaxSwingMs", 2200)) /
+                1000.0f;
+            const int maximumPossibleShots = EstimatedSwingShots(
+                maximumSwingSeconds, 0.20f, true, true);
+            if (!LethalWith(enemy, EShotDamage(enemy) *
+                                   static_cast<float>(maximumPossibleShots))) {
+                continue;
+            }
             const SwingPlan plan = GetSwingPlan(enemy, purpose, true);
             const float damage = EShotDamage(enemy) *
                 static_cast<float>(std::max(1, plan.ExpectedShots));
@@ -1812,6 +1987,11 @@ inline bool TryFarm(bool lastHitOnly) {
         Slider(FarmMenu, "FarmMana", 48)) {
         return false;
     }
+    const int now = Now();
+    if (LastFarmEvaluationTick > 0 && now - LastFarmEvaluationTick < 45) {
+        return false;
+    }
+    LastFarmEvaluationTick = now;
     const FarmQPlan plan = BestFarmQ(units, lastHitOnly);
     if (ControllerHelpers::ProjectileWallBlocksFromPlayer(
             plan.CastPosition, kQWidth * 0.5f)) {
@@ -1887,6 +2067,9 @@ inline void ClearSwingState() {
     LastSwingPlanTick = 0;
     LastSwingPlanTargetId = 0;
     LastSwingPlanPurpose = SwingPurpose::None;
+    LastSwingPlanLethal = false;
+    LastSwingPlanSource = {};
+    LastSwingPlanCursor = {};
     if (ActiveSequence == Sequence::HookPending ||
         ActiveSequence == Sequence::DamageSwing ||
         ActiveSequence == Sequence::EscapeSwing ||
@@ -1924,13 +2107,16 @@ inline void RefreshState() {
         WCamouflaged = false;
     }
 
-    AIHeroClient scoundrel = FindScoundrelTarget(5500.0f);
-    if (Engine::ValidEnemy(scoundrel)) {
-        ScoundrelTargetId = static_cast<int>(scoundrel.NetworkId());
-        ScoundrelVictimCount = ScoundrelStacks(scoundrel);
-    } else {
-        ScoundrelTargetId = 0;
-        ScoundrelVictimCount = 0;
+    if (LastScoundrelScanTick <= 0 || now - LastScoundrelScanTick >= 180) {
+        LastScoundrelScanTick = now;
+        AIHeroClient scoundrel = FindScoundrelTarget(5500.0f);
+        if (Engine::ValidEnemy(scoundrel)) {
+            ScoundrelTargetId = static_cast<int>(scoundrel.NetworkId());
+            ScoundrelVictimCount = ScoundrelStacks(scoundrel);
+        } else {
+            ScoundrelTargetId = 0;
+            ScoundrelVictimCount = 0;
+        }
     }
 
     if (ESwinging()) {
@@ -2582,6 +2768,9 @@ inline void OnLoad() {
     LastSwingPlanTick = 0;
     LastSwingPlanTargetId = 0;
     LastSwingPlanPurpose = SwingPurpose::None;
+    LastSwingPlanLethal = false;
+    LastSwingPlanSource = {};
+    LastSwingPlanCursor = {};
     CachedSwingPlan = {};
     ClearRState();
     GapcloserTargetId = 0;
@@ -2591,6 +2780,12 @@ inline void OnLoad() {
     CommittedEnemyUntil = 0;
     IncomingLineThreatUntil = 0;
     IncomingHardCCUntil = 0;
+    LastTrackedQScanTick = 0;
+    LastQCoachRefreshTick = 0;
+    LastScoundrelScanTick = 0;
+    LastKillSecureScanTick = 0;
+    LastFarmEvaluationTick = 0;
+    LastRChannelEvaluationTick = 0;
     RefreshState();
 }
 
