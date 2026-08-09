@@ -35,6 +35,110 @@ inline std::optional<float> ProjectileTravelTime(float distance,
     }
     return distance / projectileSpeed;
 }
+
+struct PathProjectionResult {
+    Vec3 Position{};
+    float DistanceSquared = FLT_MAX;
+    bool HasProjection = false;
+};
+
+inline PathProjectionResult ProjectPositionOnPath(
+    const Vec3& position,
+    std::span<const Vec3> path) {
+    PathProjectionResult result{};
+    if (!position.IsValid() || path.size() < 2) {
+        return result;
+    }
+
+    Vec3 previous{};
+    bool hasPrevious = false;
+    for (const Vec3& point : path) {
+        if (!point.IsValid()) {
+            hasPrevious = false;
+            continue;
+        }
+        if (!hasPrevious) {
+            previous = point;
+            hasPrevious = true;
+            continue;
+        }
+
+        const float segmentX = point.x - previous.x;
+        const float segmentZ = point.z - previous.z;
+        const float segmentLengthSquared =
+            segmentX * segmentX + segmentZ * segmentZ;
+        if (segmentLengthSquared <= 1.0e-6f) {
+            previous = point;
+            continue;
+        }
+
+        const float projection = std::clamp(
+            ((position.x - previous.x) * segmentX +
+             (position.z - previous.z) * segmentZ) /
+                segmentLengthSquared,
+            0.0f,
+            1.0f);
+        const Vec3 projected{
+            previous.x + segmentX * projection,
+            previous.y + (point.y - previous.y) * projection,
+            previous.z + segmentZ * projection
+        };
+        const float distanceSquared =
+            position.DistanceSqr2D(projected);
+        if (!result.HasProjection ||
+            distanceSquared < result.DistanceSquared) {
+            result.Position = projected;
+            result.DistanceSquared = distanceSquared;
+            result.HasProjection = true;
+        }
+        previous = point;
+    }
+    return result;
+}
+
+inline Vec3 SelectHybridUnitPosition(
+    const Vec3& serverPosition,
+    const Vec3& clientPosition,
+    bool isMoving,
+    bool isCasting,
+    bool isDashing,
+    std::span<const Vec3> path) {
+    const bool hasServerPosition =
+        serverPosition.IsValid() && !serverPosition.IsZero();
+    const bool hasClientPosition =
+        clientPosition.IsValid() && !clientPosition.IsZero();
+
+    if (!isMoving || isCasting || isDashing) {
+        return hasServerPosition
+            ? serverPosition
+            : (hasClientPosition ? clientPosition : Vec3{});
+    }
+    if (!hasClientPosition) {
+        return hasServerPosition ? serverPosition : Vec3{};
+    }
+
+    const PathProjectionResult projected =
+        ProjectPositionOnPath(clientPosition, path);
+    return projected.HasProjection ? projected.Position : clientPosition;
+}
+
+inline Vec3 SelectCastOrigin(
+    const Vec3& explicitOrigin,
+    const Vec3& playerClientPosition,
+    const Vec3& playerServerPosition) {
+    if (explicitOrigin.IsValid() && !explicitOrigin.IsZero()) {
+        return explicitOrigin;
+    }
+    if (playerClientPosition.IsValid() &&
+        !playerClientPosition.IsZero()) {
+        return playerClientPosition;
+    }
+    return playerServerPosition.IsValid() &&
+           !playerServerPosition.IsZero()
+        ? playerServerPosition
+        : Vec3{};
+}
+
 inline bool ArrivesDuringDash(float arrivalSeconds,
                               float remainingDashSeconds,
                               int toleranceMilliseconds = 80) {

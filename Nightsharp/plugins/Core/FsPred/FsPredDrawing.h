@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FsPredCrestAssets.inl"
+#include "FsPredEngine.h"
 #include "FsPredUnitTracker.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/UI/Drawing.h"
@@ -51,8 +52,12 @@ inline constexpr std::uint32_t CrestFallbackColor(int index) {
 
 class CrestDrawing {
 public:
-    void Update() {
-        UnitTracker::RefreshCachedMotionStates();
+    void Update(
+        const AntiBaitWeights& weights,
+        bool antiBaitEnabled) {
+        UnitTracker::RefreshCachedMotionStates(
+            weights,
+            antiBaitEnabled);
 
         std::array<bool, kCrestCount> needed{};
         for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
@@ -172,6 +177,69 @@ public:
                 ImVec2(1.0f, 1.0f),
                 ImVec2(0.0f, 1.0f),
                 IM_COL32_WHITE);
+        }
+    }
+
+    void RenderPredictedPositions(
+        const FsPredEngine& engine) const {
+        if (!SDK::Drawing::IsEnabled()) {
+            return;
+        }
+
+        const int now = SDK::Variables::TickCount();
+        for (const FsPredDebugPrediction& record :
+             engine.DebugPredictions()) {
+            const int age = now - record.Tick;
+            if (record.NetworkId == 0 ||
+                age < 0 ||
+                age > 250 ||
+                !record.CastPosition.IsValid() ||
+                record.CastPosition.IsZero() ||
+                !record.UnitPosition.IsValid() ||
+                record.UnitPosition.IsZero()) {
+                continue;
+            }
+
+            const int crestIndex =
+                CrestIndexForMotionState(record.Hitchance);
+            const std::uint32_t color = crestIndex >= 0
+                ? CrestFallbackColor(crestIndex)
+                : 0xFFE85D5Du;
+            SDK::Drawing::DrawLine(
+                record.UnitPosition,
+                record.CastPosition,
+                color,
+                1.5f,
+                true);
+            SDK::Drawing::DrawCircle(
+                record.UnitPosition,
+                24.0f,
+                0xFFF2D95Cu,
+                1.5f,
+                28,
+                true);
+            SDK::Drawing::DrawCircle(
+                record.CastPosition,
+                30.0f,
+                color,
+                2.0f,
+                32,
+                true);
+
+            const char* slotLabel = "?";
+            switch (record.SlotIndex) {
+            case 0: slotLabel = "Q"; break;
+            case 1: slotLabel = "W"; break;
+            case 2: slotLabel = "E"; break;
+            case 3: slotLabel = "R"; break;
+            default: break;
+            }
+            SDK::Drawing::DrawText(
+                record.CastPosition,
+                slotLabel,
+                color,
+                true,
+                true);
         }
     }
 

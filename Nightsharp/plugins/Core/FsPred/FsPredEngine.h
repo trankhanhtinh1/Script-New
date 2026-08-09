@@ -3,11 +3,13 @@
 #include "FsPredAoe.h"
 #include "FsPredAimMath.h"
 #include "FsPredMotionState.h"
+#include "FsPredPolicy.h"
 #include "FsPredUnitTracker.h"
 
 #include "../../../sdk/Extensions/AIBaseClientExtensions.h"
 #include "../../../sdk/GameObjects/GameObjects.h"
 #include "../../../sdk/Math/Prediction/Movement.h"
+#include "../../../sdk/Wrappers/Spells/Spell.h"
 #include "../../../sdk/Math/Collision.h"
 #include "../../../sdk/Utils/MathUtils.h"
 #include "../../../core/CoreNavGrid.h"
@@ -24,11 +26,13 @@
 
 namespace Plugins::FsPred {
 
-struct FsPredConfig {
-    int maxRangePercent = 100;
-    int extraDelayMs = 10;
-    bool recheckHitchance = true;
-    bool useDefaultSdk = false;
+struct FsPredDebugPrediction {
+    std::uint32_t NetworkId = 0;
+    int SlotIndex = -1;
+    int Tick = 0;
+    SDK::Vector3 CastPosition{};
+    SDK::Vector3 UnitPosition{};
+    SDK::HitChance Hitchance = SDK::HitChance::None;
 };
 
 class FsPredEngine final : public SDK::Prediction::IPrediction {
@@ -36,11 +40,24 @@ public:
     FsPredEngine() = default;
 
     void SetConfig(const FsPredConfig& config) {
+        if (!config.RecordDebugPredictions &&
+            config_.RecordDebugPredictions) {
+            ClearDebugPredictions();
+        }
         config_ = config;
     }
 
     const FsPredConfig& Config() const {
         return config_;
+    }
+
+    const std::array<FsPredDebugPrediction, 40>&
+    DebugPredictions() const {
+        return debugPredictions_;
+    }
+
+    void ClearDebugPredictions() {
+        debugPredictions_ = {};
     }
 
     SDK::PredictionOutput GetPrediction(SDK::PredictionInput input) override {
@@ -59,17 +76,26 @@ public:
         }
         UnitTracker::Update();
 
-        if (config_.useDefaultSdk) {
+        if (config_.UseDefaultSdk) {
             if (auto* sdkPred = SDK::Prediction::GetSDKPrediction()) {
                 return sdkPred->GetPrediction(input, ft, checkCollision);
             }
         }
 
-        const int maxRangePercent = std::clamp(config_.maxRangePercent, 0, 100);
-        if (maxRangePercent < 100 &&
+        ResolveImplicitCastOrigin(input);
+        const int slotIndex = input.Spell
+            ? ChampionSlotIndex(input.Spell->Slot)
+            : -1;
+        const ResolvedPredictionPolicy policy =
+            ResolvePredictionPolicy(config_, slotIndex);
+        ApplyInputCalibration(input, policy.Calibration);
+
+        const int hardRangePercent =
+            std::clamp(config_.HardRangePercent, 0, 100);
+        if (hardRangePercent < 100 &&
             input.Range > 0.0f &&
             input.Range != FLT_MAX) {
-            input.Range *= static_cast<float>(maxRangePercent) / 100.0f;
+            input.Range *= static_cast<float>(hardRangePercent) / 100.0f;
         }
 
         const SDK::Vector3 unitPosition = ServerPositionOrPosition(input.Unit);
@@ -84,26 +110,31 @@ public:
         input.Delay = AimMath::EffectiveDelay(
             input.Delay,
             SDK::Game::Ping(),
-            config_.extraDelayMs,
+            config_.GlobalExtraDelayMs,
             ft);
 
         SDK::PredictionOutput output;
         if (ft && input.AoE) {
             output = AoePrediction::GetPrediction(
                 input,
-                [this](SDK::PredictionInput candidate, bool, bool) {
+                [this, policy](
+                    SDK::PredictionInput candidate,
+                    bool,
+                    bool) {
                     return this->GetPredictionInternal(
                         candidate,
-                        false,
-                        false);
-                });
+                        policy);
+                },
+                policy.Weights.AoeSecondaryMinimum);
         } else {
-            output = GetPredictionInternal(input, ft, false);
+            output = GetPredictionInternal(input, policy);
         }
-        return FinalizePrediction(
+        output = FinalizePrediction(
             std::move(output),
             input,
             checkCollision);
+        RecordDebugPrediction(output, input, slotIndex);
+        return output;
     }
 
 private:
@@ -112,18 +143,65 @@ private:
         if (!unit.IsValid()) {
             return {};
         }
+
         const SDK::Vector3 serverPosition = unit.ServerPosition();
-        return serverPosition.IsValid() && !serverPosition.IsZero()
-            ? serverPosition
-            : unit.Position();
+        const SDK::Vector3 clientPosition = unit.Position();
+        const bool isCasting =
+            unit.Spellbook().IsWindingUp() ||
+            unit.Spellbook().IsCastingSpell() ||
+            unit.Spellbook().IsChanneling();
+        const bool isDashing = SDK::Extensions::IsDashing(unit);
+        const bool isMoving = unit.IsMoving();
+        if (!isMoving || isCasting || isDashing) {
+            return AimMath::SelectHybridUnitPosition(
+                serverPosition,
+                clientPosition,
+                isMoving,
+                isCasting,
+                isDashing,
+                std::span<const SDK::Vector3>{});
+        }
+
+        const auto& path = unit.CachedWaypoints();
+        return AimMath::SelectHybridUnitPosition(
+            serverPosition,
+            clientPosition,
+            isMoving,
+            false,
+            false,
+            std::span<const SDK::Vector3>(path.data(), path.size()));
+    }
+
+    static void ResolveImplicitCastOrigin(
+        SDK::PredictionInput& input) {
+        if (input.From.IsValid() && !input.From.IsZero()) {
+            return;
+        }
+
+        const SDK::AIHeroClient player = SDK::GameObjects::Player();
+        if (!player.IsValid()) {
+            return;
+        }
+        input.From = AimMath::SelectCastOrigin(
+            input.From,
+            player.Position(),
+            player.ServerPosition());
+    }
+
+    static void ApplyInputCalibration(
+        SDK::PredictionInput& input,
+        const SlotCalibration& calibration) {
+        const SpellCalibrationValues calibrated = ApplySlotCalibration(
+            { input.Delay, input.Speed, input.Radius },
+            calibration);
+        input.Delay = calibrated.DelaySeconds;
+        input.Speed = calibrated.Speed;
+        input.Radius = calibrated.Radius;
     }
 
     SDK::PredictionOutput GetPredictionInternal(
         SDK::PredictionInput input,
-        bool ft,
-        bool checkCollision) {
-        (void)ft;
-        (void)checkCollision;
+        const ResolvedPredictionPolicy& policy) {
         SDK::PredictionOutput output;
         output.Input = input;
 
@@ -143,11 +221,14 @@ private:
             output = GetStandardPrediction(input);
         }
 
-
         if ((output.Hitchance == SDK::HitChance::High ||
              output.Hitchance == SDK::HitChance::VeryHigh) &&
-            config_.recheckHitchance) {
-            output = WayPointAnalysis(std::move(output), input);
+            config_.RecheckHitchance &&
+            policy.AntiBaitEnabled) {
+            output = WayPointAnalysis(
+                std::move(output),
+                input,
+                policy);
         }
         return output;
     }
@@ -176,6 +257,51 @@ private:
             output.Hitchance = SDK::HitChance::Collision;
         }
         return output;
+    }
+
+    void RecordDebugPrediction(
+        const SDK::PredictionOutput& output,
+        const SDK::PredictionInput& input,
+        int slotIndex) {
+        if (!config_.RecordDebugPredictions ||
+            !input.Unit.IsValid() ||
+            !output.GetCastPosition().IsValid() ||
+            output.GetCastPosition().IsZero() ||
+            !output.GetUnitPosition().IsValid() ||
+            output.GetUnitPosition().IsZero()) {
+            return;
+        }
+
+        const std::uint32_t networkId = input.Unit.NetworkId();
+        FsPredDebugPrediction* selected = nullptr;
+        for (auto& record : debugPredictions_) {
+            if (record.NetworkId == networkId &&
+                record.SlotIndex == slotIndex) {
+                selected = &record;
+                break;
+            }
+            if (!selected && record.NetworkId == 0) {
+                selected = &record;
+            }
+        }
+        if (!selected) {
+            selected = &*std::min_element(
+                debugPredictions_.begin(),
+                debugPredictions_.end(),
+                [](const FsPredDebugPrediction& left,
+                   const FsPredDebugPrediction& right) {
+                    return left.Tick < right.Tick;
+                });
+        }
+
+        *selected = {
+            networkId,
+            slotIndex,
+            SDK::Variables::TickCount(),
+            output.GetCastPosition(),
+            output.GetUnitPosition(),
+            output.Hitchance
+        };
     }
 
     struct PathCursor {
@@ -423,11 +549,12 @@ private:
         output.Input = input;
         const SDK::Vector3 serverPosition =
             ServerPositionOrPosition(input.Unit);
+        const bool isDashing = SDK::Extensions::IsDashing(input.Unit);
 
         speed = std::abs(speed + 1.0f) < 0.0001f
             ? input.Unit.MoveSpeed()
             : speed;
-        if (!SDK::Extensions::IsDashing(input.Unit) &&
+        if (!isDashing &&
             serverPosition.DistanceSqr2D(input.ResolveFrom()) <
                 250.0f * 250.0f) {
             speed *= 1.5f;
@@ -436,6 +563,15 @@ private:
             output.SetUnitPosition(serverPosition);
             output.SetCastPosition(serverPosition);
             output.Hitchance = SDK::HitChance::Medium;
+            return output;
+        }
+
+        // A completed short click can leave the old nav suffix visible for one
+        // frame. Never consume that stale route after movement has stopped.
+        if (!isDashing && !input.Unit.IsMoving()) {
+            output.SetUnitPosition(serverPosition);
+            output.SetCastPosition(serverPosition);
+            output.Hitchance = SDK::HitChance::High;
             return output;
         }
 
@@ -452,7 +588,7 @@ private:
             return output;
         }
 
-        if (!SDK::Extensions::IsDashing(input.Unit) &&
+        if (!isDashing &&
             (input.Unit.Spellbook().IsWindingUp() ||
              input.Unit.Spellbook().IsCastingSpell() ||
              input.Unit.Spellbook().IsChanneling())) {
@@ -549,19 +685,33 @@ private:
                         contactTime >= segmentStartTime &&
                         contactTime <=
                             segmentStartTime + segmentDuration) {
-                        if (contactPosition.DistanceSqr(segmentEnd) <
-                            20.0f * 20.0f) {
-                            break;
+                        const float contactProgress =
+                            (contactPosition - cursor.Position).Dot(direction);
+                        constexpr float kSegmentTolerance = 1.0e-2f;
+                        if (std::isfinite(contactProgress) &&
+                            contactProgress >= -kSegmentTolerance &&
+                            contactProgress <=
+                                segmentLength + kSegmentTolerance) {
+                            const SDK::Vector2 boundedContact =
+                                cursor.Position +
+                                direction * std::clamp(
+                                    contactProgress,
+                                    0.0f,
+                                    segmentLength);
+                            if (boundedContact.DistanceSqr(segmentEnd) <
+                                20.0f * 20.0f) {
+                                break;
+                            }
+                            output.SetCastPosition(SDK::Vector3::From2D(
+                                boundedContact,
+                                serverPosition.y));
+                            output.SetUnitPosition(SDK::Vector3::From2D(
+                                boundedContact -
+                                    direction * realRadius,
+                                serverPosition.y));
+                            output.Hitchance = SDK::HitChance::High;
+                            return output;
                         }
-                        output.SetCastPosition(SDK::Vector3::From2D(
-                            contactPosition,
-                            serverPosition.y));
-                        output.SetUnitPosition(SDK::Vector3::From2D(
-                            contactPosition -
-                                direction * realRadius,
-                            serverPosition.y));
-                        output.Hitchance = SDK::HitChance::High;
-                        return output;
                     }
 
                     segmentStartTime += segmentDuration;
@@ -578,37 +728,161 @@ private:
         return output;
     }
 
+    static float TerrainEscapeOpenFraction(
+        const SDK::PredictionInput& input,
+        const SDK::Vector3& impactPosition,
+        const PredictionHorizonFacts& horizon,
+        const AntiBaitWeights& weights) {
+        if (!weights.TerrainCorridorBoost ||
+            !impactPosition.IsValid() ||
+            impactPosition.IsZero() ||
+            !std::isfinite(horizon.ArrivalSeconds) ||
+            !std::isfinite(horizon.MoveSpeed) ||
+            horizon.MoveSpeed <= 0.0f) {
+            return 1.0f;
+        }
+
+        const float reactionSeconds =
+            static_cast<float>(std::clamp(
+                weights.ReactionFloorMs,
+                100,
+                250)) / 1000.0f;
+        const float steeringDistance =
+            std::max(0.0f, horizon.ArrivalSeconds - reactionSeconds) *
+            horizon.MoveSpeed;
+        const float requiredEscape = std::max(
+            100.0f,
+            std::max(0.0f, horizon.EffectiveRadius) * 1.25f);
+        if (steeringDistance < requiredEscape) {
+            return 1.0f;
+        }
+        const float sampleDistance = std::min(
+            steeringDistance,
+            std::max(300.0f, requiredEscape));
+
+        const CoreNavGrid::GridRef grid = CoreNavGrid::Get();
+        if (!grid.IsValid()) {
+            return 1.0f;
+        }
+
+        const auto blocked = [&](const SDK::Vector2& direction) {
+            const SDK::Vector3 endpoint = SDK::Vector3::From2D(
+                impactPosition.To2D() + direction * sampleDistance,
+                impactPosition.y);
+            return grid.IsWallBetween(
+                       impactPosition,
+                       endpoint,
+                       15.0f) ||
+                   !grid.IsWalkable(endpoint);
+        };
+
+        int sampleCount = 0;
+        int blockedCount = 0;
+        if (SDK::IsCircleSpellType(input.Type)) {
+            constexpr float kDiagonal = 0.70710678118f;
+            const std::array<SDK::Vector2, 8> kDirections{
+                SDK::Vector2{ 1.0f, 0.0f },
+                SDK::Vector2{ kDiagonal, kDiagonal },
+                SDK::Vector2{ 0.0f, 1.0f },
+                SDK::Vector2{ -kDiagonal, kDiagonal },
+                SDK::Vector2{ -1.0f, 0.0f },
+                SDK::Vector2{ -kDiagonal, -kDiagonal },
+                SDK::Vector2{ 0.0f, -1.0f },
+                SDK::Vector2{ kDiagonal, -kDiagonal }
+            };
+            sampleCount = static_cast<int>(kDirections.size());
+            for (const SDK::Vector2& direction : kDirections) {
+                if (blocked(direction)) {
+                    ++blockedCount;
+                }
+            }
+        } else if (SDK::IsLineSpellType(input.Type) ||
+                   SDK::IsConeSpellType(input.Type)) {
+            const SDK::Vector2 projectileDirection =
+                (impactPosition - input.ResolveFrom()).To2D().Normalized();
+            if (projectileDirection.IsZero()) {
+                return 1.0f;
+            }
+            const SDK::Vector2 lateral{
+                -projectileDirection.y,
+                projectileDirection.x
+            };
+            sampleCount = 2;
+            blockedCount =
+                static_cast<int>(blocked(lateral)) +
+                static_cast<int>(blocked(lateral * -1.0f));
+        } else {
+            return 1.0f;
+        }
+        return EscapeOpenFraction(sampleCount, blockedCount);
+    }
+
     static SDK::PredictionOutput WayPointAnalysis(
         SDK::PredictionOutput result,
-        const SDK::PredictionInput& input) {
+        const SDK::PredictionInput& input,
+        const ResolvedPredictionPolicy& policy) {
         if (!input.Unit.IsHero() ||
             input.Radius == 1.0f ||
             result.Hitchance < SDK::HitChance::Low) {
             return result;
         }
 
-        // Motion confidence is geometry-free: only Hitchance changes here.
-        MotionFacts facts = UnitTracker::GetMotionFacts(input.Unit);
-        facts.NearPathEnd = false;
-        SDK::HitChance confidence = ClassifyMotion(facts);
+        // Recheck confidence without mutating the already bounded geometry.
+        const MotionFacts facts = UnitTracker::GetMotionFacts(input.Unit);
+        SDK::HitChance confidence = ClassifyMotion(
+            facts,
+            policy.Weights,
+            policy.AntiBaitEnabled);
+        const SDK::Vector3 serverPosition =
+            ServerPositionOrPosition(input.Unit);
+        const SDK::Vector3 castPosition = result.GetCastPosition();
+        const float projectileDistance =
+            input.ResolveFrom().Distance2D(castPosition);
+        const auto projectileTravel = AimMath::ProjectileTravelTime(
+            projectileDistance,
+            input.Speed);
         const float arrival = ProjectileArrivalTime(
             input,
             result.GetUnitPosition());
+        const float effectiveRadius = input.RealRadius();
 
         if (facts.IsCasting &&
             (!std::isfinite(arrival) || arrival > 0.30f)) {
             confidence = std::min(confidence, SDK::HitChance::Medium);
         }
 
+        PredictionHorizonFacts horizon{};
+        horizon.ArrivalSeconds = arrival;
+        horizon.ProjectileTravelSeconds = projectileTravel.value_or(
+            std::numeric_limits<float>::infinity());
+        horizon.CastDistance =
+            input.ResolveRangeCheckFrom().Distance2D(castPosition);
+        horizon.SpellRange = input.Range;
+        horizon.MoveSpeed = input.Unit.MoveSpeed();
+        horizon.EffectiveRadius = effectiveRadius;
+        const float openEscapeFraction = TerrainEscapeOpenFraction(
+            input,
+            result.GetUnitPosition(),
+            horizon,
+            policy.Weights);
+        confidence = ApplyPredictionHorizonConfidence(
+            confidence,
+            facts,
+            horizon,
+            policy.Weights,
+            policy.AntiBaitEnabled,
+            policy.IgnoreMaxRangePenalty,
+            openEscapeFraction);
+
         const auto& path = input.Unit.CachedWaypoints();
         if (!path.empty()) {
             const SDK::Vector3 endpoint =
                 LastValidPathPosition(
-                    ServerPositionOrPosition(input.Unit),
+                    serverPosition,
                     std::span<const SDK::Vector3>(path.data(), path.size()));
             const float endpointThreshold =
-                75.0f + std::max(0.0f, input.RealRadius());
-            if (ServerPositionOrPosition(input.Unit).DistanceSqr2D(endpoint) <=
+                75.0f + std::max(0.0f, effectiveRadius);
+            if (serverPosition.DistanceSqr2D(endpoint) <=
                 endpointThreshold * endpointThreshold) {
                 confidence = std::min(
                     confidence,
@@ -750,6 +1024,7 @@ private:
     }
 
     FsPredConfig config_;
+    std::array<FsPredDebugPrediction, 40> debugPredictions_{};
 };
 
 } // namespace Plugins::FsPred

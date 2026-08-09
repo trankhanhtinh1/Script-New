@@ -40,15 +40,25 @@ public:
     template <typename PredictionEvaluator>
     static SDK::PredictionOutput GetPrediction(
         const SDK::PredictionInput& input,
-        PredictionEvaluator&& predEvaluator) {
+        PredictionEvaluator&& predEvaluator,
+        SDK::HitChance secondaryMinimum) {
         NS_PROFILE("FsPred.AoE");
         switch (AoeMath::ResolveShapeDispatch(input.Type)) {
         case AoeMath::ShapeDispatch::Line:
-            return Line::GetPrediction(input, predEvaluator);
+            return Line::GetPrediction(
+                input,
+                predEvaluator,
+                secondaryMinimum);
         case AoeMath::ShapeDispatch::Circle:
-            return Circle::GetPrediction(input, predEvaluator);
+            return Circle::GetPrediction(
+                input,
+                predEvaluator,
+                secondaryMinimum);
         case AoeMath::ShapeDispatch::Cone:
-            return Cone::GetPrediction(input, predEvaluator);
+            return Cone::GetPrediction(
+                input,
+                predEvaluator,
+                secondaryMinimum);
         case AoeMath::ShapeDispatch::SingleTargetFallback:
         default:
             return predEvaluator(input, false, true);
@@ -93,7 +103,8 @@ private:
     static TargetSet BuildTargets(
         const SDK::PredictionInput& input,
         const SDK::PredictionOutput& primaryPrediction,
-        PredictionEvaluator& predEvaluator) {
+        PredictionEvaluator& predEvaluator,
+        SDK::HitChance secondaryMinimum) {
         TargetSet targets{};
         if (!input.Unit.IsValid()) {
             return targets;
@@ -144,7 +155,7 @@ private:
             targetInput.AoE = false;
             const SDK::PredictionOutput predicted =
                 predEvaluator(targetInput, false, false);
-            if (predicted.Hitchance >= SDK::HitChance::High) {
+            if (predicted.Hitchance >= secondaryMinimum) {
                 addTarget(hero, predicted.GetUnitPosition().To2D());
             }
         }
@@ -420,11 +431,15 @@ private:
         template <typename PredictionEvaluator>
         static SDK::PredictionOutput GetPrediction(
             const SDK::PredictionInput& input,
-            PredictionEvaluator& predEvaluator) {
+            PredictionEvaluator& predEvaluator,
+            SDK::HitChance secondaryMinimum) {
             const SDK::PredictionOutput primary =
                 predEvaluator(input, false, true);
-            const TargetSet targets =
-                BuildTargets(input, primary, predEvaluator);
+            const TargetSet targets = BuildTargets(
+                input,
+                primary,
+                predEvaluator,
+                secondaryMinimum);
             if (targets.Count < 2) {
                 return primary;
             }
@@ -485,11 +500,15 @@ private:
         template <typename PredictionEvaluator>
         static SDK::PredictionOutput GetPrediction(
             const SDK::PredictionInput& input,
-            PredictionEvaluator& predEvaluator) {
+            PredictionEvaluator& predEvaluator,
+            SDK::HitChance secondaryMinimum) {
             const SDK::PredictionOutput primary =
                 predEvaluator(input, false, true);
-            const TargetSet targets =
-                BuildTargets(input, primary, predEvaluator);
+            const TargetSet targets = BuildTargets(
+                input,
+                primary,
+                predEvaluator,
+                secondaryMinimum);
             if (targets.Count < 2 || !std::isfinite(input.Range) ||
                 input.Range <= 0.0f || input.Range == FLT_MAX) {
                 return primary;
@@ -569,11 +588,15 @@ private:
         template <typename PredictionEvaluator>
         static SDK::PredictionOutput GetPrediction(
             const SDK::PredictionInput& input,
-            PredictionEvaluator& predEvaluator) {
+            PredictionEvaluator& predEvaluator,
+            SDK::HitChance secondaryMinimum) {
             const SDK::PredictionOutput primary =
                 predEvaluator(input, false, true);
-            const TargetSet targets =
-                BuildTargets(input, primary, predEvaluator);
+            const TargetSet targets = BuildTargets(
+                input,
+                primary,
+                predEvaluator,
+                secondaryMinimum);
             if (targets.Count < 2 || !std::isfinite(input.Range) ||
                 input.Range <= 0.0f || input.Range == FLT_MAX) {
                 return primary;

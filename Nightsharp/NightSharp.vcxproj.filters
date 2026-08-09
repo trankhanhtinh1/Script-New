@@ -580,11 +580,11 @@
     <Filter Include="Plugins\EzEvade">
       <UniqueIdentifier>{A09C5CD7-04AE-F82F-9B86-7E0F523E36B4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Plugins\EzEvade\Draw">
+      <UniqueIdentifier>{C91AA78C-B107-52A9-D7E7-9E4EB1909F06}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Plugins\EzEvade\Spells">
       <UniqueIdentifier>{64659F90-9001-12B5-369A-CFA30FD75670}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Plugins\EzEvade\Draw">
-      <UniqueIdentifier>{B1E5C0F7-3A2D-4F61-9C7E-1D2B7E8F1A3C}</UniqueIdentifier>
     </Filter>
     <Filter Include="Plugins\KuroActivator">
       <UniqueIdentifier>{2C75296D-7D75-FA58-A3D4-528D2F578ED3}</UniqueIdentifier>
@@ -2975,6 +2975,9 @@
     <ClInclude Include="Plugins\Core\FsPred\FsPredPlugin.h">
       <Filter>Plugins\Core\FsPred</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\Core\FsPred\FsPredPolicy.h">
+      <Filter>Plugins\Core\FsPred</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\Core\FsPred\FsPredUnitTracker.h">
       <Filter>Plugins\Core\FsPred</Filter>
     </ClInclude>
@@ -3080,20 +3083,20 @@
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulsePlugin.h">
       <Filter>Plugins\Core\TargetSelectorImpulse</Filter>
     </ClInclude>
-    <ClInclude Include="Plugins\EzEvade\EzEvade.h">
-      <Filter>Plugins\EzEvade</Filter>
-    </ClInclude>
-    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h">
-      <Filter>Plugins\EzEvade\Draw</Filter>
-    </ClInclude>
     <ClInclude Include="Plugins\EzEvade\Draw\RenderCircle.h">
       <Filter>Plugins\EzEvade\Draw</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\EzEvade\Draw\RenderLine.h">
       <Filter>Plugins\EzEvade\Draw</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h">
+      <Filter>Plugins\EzEvade\Draw</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\EzEvade\Draw\RenderText.h">
       <Filter>Plugins\EzEvade\Draw</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\EzEvade.h">
+      <Filter>Plugins\EzEvade</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h">
       <Filter>Plugins\EzEvade\Spells</Filter>
@@ -3761,6 +3764,9 @@
     <ClInclude Include="SDK\Facade.h">
       <Filter>SDK</Filter>
     </ClInclude>
+    <ClInclude Include="SDK\GameObjects\FrameSnapshot.h">
+      <Filter>SDK\GameObjects</Filter>
+    </ClInclude>
     <ClInclude Include="SDK\GameObjects\GameObjects.h">
       <Filter>SDK\GameObjects</Filter>
     </ClInclude>
@@ -3782,9 +3788,6 @@
     <ClInclude Include="SDK\Math\Collision.h">
       <Filter>SDK\Math</Filter>
     </ClInclude>
-    <ClInclude Include="SDK\Math\MovingProjectileCollision.h">
-      <Filter>SDK\Math</Filter>
-    </ClInclude>
     <ClInclude Include="SDK\Math\ConvexHull.h">
       <Filter>SDK\Math</Filter>
     </ClInclude>
@@ -3792,6 +3795,9 @@
       <Filter>SDK\Math</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Math\HealthPrediction.h">
+      <Filter>SDK\Math</Filter>
+    </ClInclude>
+    <ClInclude Include="SDK\Math\MovingProjectileCollision.h">
       <Filter>SDK\Math</Filter>
     </ClInclude>
     <ClInclude Include="SDK\Math\Polygons\ArcPoly.h">

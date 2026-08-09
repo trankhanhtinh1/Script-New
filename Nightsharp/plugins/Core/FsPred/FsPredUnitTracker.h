@@ -120,7 +120,9 @@ public:
         return BuildMotionFacts(unit, FindSlot(unit.NetworkId()));
     }
 
-    static void RefreshCachedMotionStates() {
+    static void RefreshCachedMotionStates(
+        const AntiBaitWeights& weights,
+        bool antiBaitEnabled) {
         Update();
         for (const auto& hero : SDK::GameObjects::EnemyHeroesFrame()) {
             if (!hero.IsValid()) {
@@ -130,8 +132,10 @@ public:
             if (!info) {
                 continue;
             }
-            info->CachedMotionState =
-                ClassifyMotion(BuildMotionFacts(hero, info));
+            info->CachedMotionState = ClassifyMotion(
+                BuildMotionFacts(hero, info),
+                weights,
+                antiBaitEnabled);
             info->HasCachedMotionState = true;
         }
     }
@@ -199,9 +203,7 @@ private:
             const auto reversal = LatestReversal(*info, tick);
             facts.ReversalAngleDegrees = reversal.AngleDegrees;
             facts.ReversalAgeMs = reversal.AgeMs;
-            facts.HasStableHeading =
-                info->LastIntent.HasDestination &&
-                reversal.AngleDegrees <= kReversalAngleDeg;
+            facts.HasStableHeading = info->LastIntent.HasHeading;
         }
 
         const auto& path = unit.CachedWaypoints();
@@ -224,8 +226,6 @@ private:
 
     static constexpr std::size_t kMaxEnemySlots = 10;
     static constexpr std::size_t kPathEventCapacity = 6;
-    static constexpr float kReversalWindowMs = 400.0f;
-    static constexpr float kReversalAngleDeg = 100.0f;
 
     static UnitTrackerInfo* FindSlot(std::uint32_t networkId) {
         if (networkId == 0 || networkId == 0xFFFFFFFFu) {
@@ -348,7 +348,7 @@ private:
             }
 
             const double age = static_cast<double>(tick - current.Tick);
-            if (age < 0.0 || age > kReversalWindowMs) {
+            if (age < 0.0 || age > kEvasiveTurnWindowMs) {
                 continue;
             }
             const float dot = std::clamp(
@@ -380,7 +380,8 @@ private:
         RecordPathIntent(
             info,
             ExtractStablePathIntent(
-                std::span<const ::Vec3>(args.Path, count)),
+                std::span<const ::Vec3>(args.Path, count),
+                args.Sender.Position),
             tick);
     }
 

@@ -885,6 +885,7 @@
     <ClInclude Include="Plugins\Core\FsPred\FsPredEngine.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredMotionState.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredPlugin.h" />
+    <ClInclude Include="Plugins\Core\FsPred\FsPredPolicy.h" />
     <ClInclude Include="Plugins\Core\FsPred\FsPredUnitTracker.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetActionGate.h" />
     <ClInclude Include="Plugins\Core\KuroTargetSelector\KuroTargetSelector.h" />
@@ -920,11 +921,11 @@
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\ImpulsePriorityData.h" />
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulse.h" />
     <ClInclude Include="Plugins\Core\TargetSelectorImpulse\TargetSelectorImpulsePlugin.h" />
-    <ClInclude Include="Plugins\EzEvade\EzEvade.h" />
-    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h" />
     <ClInclude Include="Plugins\EzEvade\Draw\RenderCircle.h" />
     <ClInclude Include="Plugins\EzEvade\Draw\RenderLine.h" />
+    <ClInclude Include="Plugins\EzEvade\Draw\RenderObject.h" />
     <ClInclude Include="Plugins\EzEvade\Draw\RenderText.h" />
+    <ClInclude Include="Plugins\EzEvade\EzEvade.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h" />
     <ClInclude Include="Plugins\IPlugin.h" />
@@ -1147,6 +1148,7 @@
     <ClInclude Include="SDK\Extensions\Extensions.h" />
     <ClInclude Include="SDK\Extensions\Unit.h" />
     <ClInclude Include="SDK\Facade.h" />
+    <ClInclude Include="SDK\GameObjects\FrameSnapshot.h" />
     <ClInclude Include="SDK\GameObjects\GameObjects.h" />
     <ClInclude Include="SDK\GameObjects\InventorySlot.h" />
     <ClInclude Include="SDK\GameObjects\ObjectManager.h" />
@@ -1154,10 +1156,10 @@
     <ClInclude Include="SDK\GameObjects\YasuoWallTracker.h" />
     <ClInclude Include="SDK\Lifecycle.h" />
     <ClInclude Include="SDK\Math\Collision.h" />
-    <ClInclude Include="SDK\Math\MovingProjectileCollision.h" />
     <ClInclude Include="SDK\Math\ConvexHull.h" />
     <ClInclude Include="SDK\Math\Geometry.h" />
     <ClInclude Include="SDK\Math\HealthPrediction.h" />
+    <ClInclude Include="SDK\Math\MovingProjectileCollision.h" />
     <ClInclude Include="SDK\Math\Polygons\ArcPoly.h" />
     <ClInclude Include="SDK\Math\Polygons\CirclePoly.h" />
     <ClInclude Include="SDK\Math\Polygons\LinePoly.h" />
