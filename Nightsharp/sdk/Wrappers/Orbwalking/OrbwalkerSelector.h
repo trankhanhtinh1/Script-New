@@ -138,18 +138,6 @@ public:
             }
         }
 
-        if (mode == OrbwalkingMode::LaneClear &&
-            Bool(prioritizeMenu_, "SpecialMinion", false) &&
-            !waitForFarm) {
-            FarmDebugBreadcrumb("before-priority-special", minions.size());
-            AttackableUnit special = GetSpecialMinion();
-            FarmDebugBreadcrumb("after-priority-special", minions.size(), special);
-            if (special.IsValid()) {
-                FarmDebugLogTargetDecision("return:priority-special-minion", special, minions.size(), waitForFarm, true);
-                return special;
-            }
-        }
-
         if (mode == OrbwalkingMode::Harass ||
             mode == OrbwalkingMode::LaneClear ||
             mode == OrbwalkingMode::LastHit) {
@@ -180,16 +168,6 @@ public:
             if (laneClear.IsValid()) {
                 FarmDebugLogTargetDecision("return:lane-clear", laneClear, minions.size(), waitForFarm, true);
                 return laneClear;
-            }
-        }
-
-        if (mode == OrbwalkingMode::LaneClear && !waitForFarm) {
-            FarmDebugBreadcrumb("before-special", minions.size());
-            AttackableUnit special = GetSpecialMinion();
-            FarmDebugBreadcrumb("after-special", minions.size(), special);
-            if (special.IsValid()) {
-                FarmDebugLogTargetDecision("return:special-minion", special, minions.size(), waitForFarm, true);
-                return special;
             }
         }
 
@@ -242,14 +220,6 @@ protected:
 
         for (const auto& minion : GameObjects::EnemyMinions()) {
             appendIfValid(minion);
-        }
-        if (Bool(attackableMenu_, "SpecialMinions", true)) {
-            for (const auto& minion : GameObjects::EnemySpecialMinions()) {
-                appendIfValid(minion);
-            }
-            for (const auto& pet : GameObjects::EnemyPets()) {
-                appendIfValid(pet);
-            }
         }
         if (Bool(attackableMenu_, "Wards", true)) {
             for (const auto& ward : GameObjects::EnemyWards()) {
@@ -386,8 +356,6 @@ protected:
         };
 
         AttackableUnit result = scan(GameObjects::EnemyMinions());
-        if (result.IsValid()) return result;
-        result = scan(GameObjects::EnemySpecialMinions());
         if (result.IsValid()) return result;
         result = scan(GameObjects::EnemyIgnoredMinions());
         if (result.IsValid()) return result;
@@ -608,46 +576,6 @@ protected:
             }
         }
         */
-        return {};
-    }
-
-    AttackableUnit GetSpecialMinion() const {
-        std::vector<AIMinionClient> candidates;
-        if (Bool(attackableMenu_, "SpecialMinions", true)) {
-            for (const auto& minion : GameObjects::EnemySpecialMinions()) {
-                if (OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion))) {
-                    candidates.push_back(minion);
-                }
-            }
-            for (const auto& pet : GameObjects::EnemyPets()) {
-                if (OrbwalkingDetail::IsValidAttackTarget(pet, GetAutoAttackRange(pet))) {
-                    candidates.push_back(pet);
-                }
-            }
-        }
-        std::stable_sort(candidates.begin(), candidates.end(), [](const AIMinionClient& a, const AIMinionClient& b) {
-            return a.MaxHealth() > b.MaxHealth();
-        });
-        if (!candidates.empty()) {
-            return AttackableUnit(candidates.front().Handle());
-        }
-
-        if (Bool(attackableMenu_, "Wards", true)) {
-            for (const auto& ward : GameObjects::EnemyWards()) {
-                if (OrbwalkingDetail::IsValidAttackTarget(ward, GetAutoAttackRange(ward))) {
-                    return AttackableUnit(ward.Handle());
-                }
-            }
-        }
-
-        if (Bool(attackableMenu_, "JunglePlant", false)) {
-            for (const auto& plant : GameObjects::JunglePlants()) {
-                if (OrbwalkingDetail::IsValidAttackTarget(plant, GetAutoAttackRange(plant))) {
-                    return AttackableUnit(plant.Handle());
-                }
-            }
-        }
-
         return {};
     }
 

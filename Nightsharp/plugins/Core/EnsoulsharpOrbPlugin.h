@@ -454,11 +454,9 @@ private:
     SDK::MenuBool* prioritizeMinions_ = nullptr;
     SDK::MenuBool* prioritizeSmallJungle_ = nullptr;
     SDK::MenuBool* prioritizeWards_ = nullptr;
-    SDK::MenuBool* prioritizeSpecialMinions_ = nullptr;
     SDK::MenuBool* attackWards_ = nullptr;
     SDK::MenuBool* attackBarrels_ = nullptr;
     SDK::MenuBool* attackClones_ = nullptr;
-    SDK::MenuBool* attackSpecialMinions_ = nullptr;
     SDK::MenuBool* miscMissile_ = nullptr;
     SDK::MenuBool* miscAttackSpeed_ = nullptr;
     SDK::MenuKeyBind* lastHitKey_ = nullptr;
@@ -542,13 +540,11 @@ private:
             prioritizeMinions_ = EnsureBool(advancedMenu_, "prioritizeMinions", "Minions Over Objectives", false);
             prioritizeSmallJungle_ = EnsureBool(advancedMenu_, "prioritizeSmallJungle", "Small Jungle", false);
             prioritizeWards_ = EnsureBool(advancedMenu_, "prioritizeWards", "Wards", false);
-            prioritizeSpecialMinions_ = EnsureBool(advancedMenu_, "prioritizeSpecialMinions", "Special Minions", false);
 
             EnsureSeparator(advancedMenu_, "separatorAttack", "Attack");
             attackWards_ = EnsureBool(advancedMenu_, "attackWards", "Wards", false);
             attackBarrels_ = EnsureBool(advancedMenu_, "attackBarrels", "Barrels", false);
             attackClones_ = EnsureBool(advancedMenu_, "attackClones", "Clones", false);
-            attackSpecialMinions_ = EnsureBool(advancedMenu_, "attackSpecialMinions", "Special Minions", true);
 
             EnsureSeparator(advancedMenu_, "separatorMisc", "Miscellaneous");
             miscMissile_ = EnsureBool(advancedMenu_, "miscMissile", "Use Missile Checks", true);
@@ -599,11 +595,9 @@ private:
         prioritizeMinions_ = nullptr;
         prioritizeSmallJungle_ = nullptr;
         prioritizeWards_ = nullptr;
-        prioritizeSpecialMinions_ = nullptr;
         attackWards_ = nullptr;
         attackBarrels_ = nullptr;
         attackClones_ = nullptr;
-        attackSpecialMinions_ = nullptr;
         miscMissile_ = nullptr;
         miscAttackSpeed_ = nullptr;
         lastHitKey_ = nullptr;
@@ -705,11 +699,9 @@ private:
     bool PrioritizeMinions() const { return BoolValue(prioritizeMinions_, false); }
     bool PrioritizeSmallJungle() const { return BoolValue(prioritizeSmallJungle_, false); }
     bool PrioritizeWards() const { return BoolValue(prioritizeWards_, false); }
-    bool PrioritizeSpecialMinions() const { return BoolValue(prioritizeSpecialMinions_, false); }
     bool AttackWards() const { return BoolValue(attackWards_, false); }
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
-    bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
     bool MiscMissile() const { return BoolValue(miscMissile_, true); }
 
     static int Tick() {
@@ -874,22 +866,6 @@ private:
         }
     }
 
-    static bool IsSpecialMinionName(const SDK::AIMinionClient& minion) {
-        const std::string name = minion.CharacterName();
-        return EqualsIgnoreCase(name, "annietibbers") ||
-               EqualsIgnoreCase(name, "elisespiderling") ||
-               EqualsIgnoreCase(name, "heimertyellow") ||
-               EqualsIgnoreCase(name, "heimertblue") ||
-               EqualsIgnoreCase(name, "ivernminion") ||
-               EqualsIgnoreCase(name, "malzaharvoidling") ||
-               EqualsIgnoreCase(name, "shacobox") ||
-               EqualsIgnoreCase(name, "teemomushroom") ||
-               EqualsIgnoreCase(name, "yorickghoulmelee") ||
-               EqualsIgnoreCase(name, "yorickbigghoul") ||
-               EqualsIgnoreCase(name, "zyrathornplant") ||
-               EqualsIgnoreCase(name, "zyragraspingplant");
-    }
-
     static bool IsCloneName(const SDK::AIMinionClient& minion) {
         const std::string name = minion.CharacterName();
         return EqualsIgnoreCase(name, "leblanc") ||
@@ -949,12 +925,9 @@ private:
         const bool includeOrdinaryMinions = mode != SDK::OrbwalkingMode::Combo;
         const bool attackWards = AttackWards();
         const bool attackClones = AttackClones();
-        const bool attackSpecialMinions = AttackSpecialMinions();
         const bool prioritizeWards = PrioritizeWards();
-        const bool prioritizeSpecialMinions = PrioritizeSpecialMinions();
 
         std::vector<SDK::AIMinionClient> ordinaryList;
-        std::vector<SDK::AIMinionClient> specialList;
         std::vector<SDK::AIMinionClient> cloneList;
         std::vector<SDK::AIMinionClient> wardList;
         std::vector<SDK::AIMinionClient> finalList;
@@ -966,18 +939,8 @@ private:
 
             if (includeOrdinaryMinions && minion.IsMinion()) {
                 AddUniqueMinion(ordinaryList, minion);
-            } else if (attackSpecialMinions && IsSpecialMinionName(minion)) {
-                AddUniqueMinion(specialList, minion);
             } else if (attackClones && IsCloneName(minion)) {
                 AddUniqueMinion(cloneList, minion);
-            }
-        }
-
-        if (attackSpecialMinions) {
-            for (const auto& minion : SDK::GameObjects::EnemySpecialMinions()) {
-                if (IsValidMinionTarget(minion, AutoAttackRange(minion))) {
-                    AddUniqueMinion(specialList, minion);
-                }
             }
         }
 
@@ -1019,22 +982,11 @@ private:
             }
         };
 
-        if (attackWards && prioritizeWards &&
-            attackSpecialMinions && prioritizeSpecialMinions) {
-            append(wardList);
-            append(specialList);
-            append(ordinaryList);
-        } else if (attackSpecialMinions && prioritizeSpecialMinions) {
-            append(specialList);
-            append(ordinaryList);
-            append(wardList);
-        } else if (attackWards && prioritizeWards) {
+        if (attackWards && prioritizeWards) {
             append(wardList);
             append(ordinaryList);
-            append(specialList);
         } else {
             append(ordinaryList);
-            append(specialList);
             append(wardList);
         }
 

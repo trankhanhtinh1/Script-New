@@ -38,15 +38,15 @@ namespace VTable {
 // have a COMPLETELY DIFFERENT vtable. Mirrors how EnsoulSharp classifies via
 // runtime type. Confirmed against the game's own exact type-check functions in
 // IDA (each does `obj->vtable[1]() == &classDescriptor`):
-//   * IsBarracksDampenerClient = sub_2C51D0 → descriptor qword_1F32BA0,
-//     factory sub_E07A00 → ctor sub_E0C8D0 → vtable 0x1ABF6F8.
+//   * IsBarracksDampenerClient = sub_2C51D0 â†’ descriptor qword_1F32BA0,
+//     factory sub_E07A00 â†’ ctor sub_E0C8D0 â†’ vtable 0x1ABF6F8.
 // IMPORTANT (fixed Jul 2026): the inhibitor vtable is 0x1ABF6F8, NOT 0x1AC01B8.
 // 0x1AC01B8 is the sibling `Barracks` class (descriptor qword_1F32A80, ctor
-// sub_E0C300) — the MINION-SPAWN barracks that sits next to the nexus. Matching
+// sub_E0C300) â€” the MINION-SPAWN barracks that sits next to the nexus. Matching
 // it drew the "inhibitor" at the minion spawn point (near fountain) instead of
 // the destroyable crystal, which broke orbwalker targeting. Both classes share
 // GetName@0x68 and GetPosition@0x25C, so only the vtable RVA needed correcting.
-// NOTE: patch-specific — re-dump these RVAs when the client updates.
+// NOTE: patch-specific â€” re-dump these RVAs when the client updates.
 namespace StructureVTable {
     //constexpr auto AITurretClient         = 0x19F6120;
     //constexpr auto BarracksDampenerClient = 0x1ABF6F8; // real inhibitor (was 0x1AC01B8 = Barracks spawner)
@@ -62,7 +62,7 @@ namespace StructureVTable {
         constexpr auto MissileManagerNodeObject = 0x28;
         // NetworkId red-black tree (MSVC std::map style), verified
         // on IDA 13337 in sub_560700 (insertion) and sub_2F6930 (destructor
-        // unregister) — both walk the tree headed at `manager + 0x38`.
+        // unregister) â€” both walk the tree headed at `manager + 0x38`.
         // Header is the sentinel; header->parent (+0x08) holds the root.
         // Node layout: left=+0x00, parent=+0x08, right=+0x10, color=+0x18,
         // is_nil=+0x19, key(uint32)=+0x20, value(object ptr)=+0x28.
@@ -70,7 +70,7 @@ namespace StructureVTable {
         // for the same NetworkId std::map header.
         constexpr auto NetworkIdTree = 0x38;
         constexpr auto MissileManagerNetworkIdTree = 0x8;
-        constexpr auto NetworkIdTreeRootSlot = 0x8; // header->parent → root
+        constexpr auto NetworkIdTreeRootSlot = 0x8; // header->parent â†’ root
         constexpr auto NetworkIdTreeNodeLeft = 0x0;
         constexpr auto NetworkIdTreeNodeParent = 0x8;
         constexpr auto NetworkIdTreeNodeRight = 0x10;
@@ -93,10 +93,10 @@ namespace GameRuntime {
     constexpr auto MySpellState = 0x1F1AC60; // 48 8B 0D ? ? ? ? 48 85 C9 0F 84 ? ? ? ? 49 8B D6 E8 ? ? ? ? B8 ? ? ? ? E9 ? ? ? ? 49 8B CE E8 ? ? ? ? B8 ? ? ? ? E9 ? ? ? ? 41 8B 4E
     // Cursor world position (Vec3: x,y as qword + z as dword = 12 bytes).
     // Verified on IDA 13337 (current dump): 4+ constructors use this as the
-    // canonical cursor world pos source — sub_1F18A0 (UnderMouseObject struct),
+    // canonical cursor world pos source â€” sub_1F18A0 (UnderMouseObject struct),
     // sub_258980, sub_259140, sub_BF7D0, sub_BF810, sub_BF880 all copy
     // qword_1F76630 (x,y) + dword_1F76638 (z) as the cursor position.
-    // Old 0x1F75578 was a 24-byte zero buffer — wrong since patch 15.x.
+    // Old 0x1F75578 was a 24-byte zero buffer â€” wrong since patch 15.x.
     constexpr auto CursorPosRaw = 0x1F8FD40; //F2 0F 10 05 ? ? ? ? F2 41 0F 11 40 ? 8B 05 ? ? ? ? 0F 10 44 24 || 48 8D 0D ? ? ? ? E8 ? ? ? ? 48 89 84 24 ? ? ? ? 4C 8B D0
     // Global MouseInput pointer. sub_5AC6F0 reads screen X/Y from +0x0C/+0x10.
     // Verified still valid on IDA 13337 (current dump): 3/4 pattern matches
@@ -154,7 +154,7 @@ namespace DrawingRuntime {
     // = this). sub_307E10 reads *(statsManager+0x30) tree, finds node by
     // teamId, double-dereferences vector begin to get StatBlock*.
     // sub_2EF5E0 (hero destructor) removes hero netId from the same tree.
-    // Old global 0x1E9D180 had 0 xrefs — moved to 0x1ED6E60.
+    // Old global 0x1E9D180 had 0 xrefs â€” moved to 0x1ED6E60.
     constexpr auto StatsManager = 0x1EEFD00; //4C 8B 0D ? ? ? ? 8B 83 || 48 8B 1D ? ? ? ? 48 8D B0 || 48 8B 1D ? ? ? ? 48 8B CE FF 50
 } // namespace DrawingRuntime
 
@@ -267,9 +267,9 @@ namespace HudInputLayout {
     constexpr auto SelectedObjNetId = 0x64; //44 89 79 ? 49 8D 95
 } // namespace HudInputLayout
 
-// ─────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TacticalMap (minimap) layout
-// ─────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // TacticalMap is the minimap struct accessed via the Hud. Provides world->
 // minimap projection. ScaleX/ScaleY combined with NegMinimapX/Y give the
 // per-axis transform from world coordinates to minimap pixel coordinates.
@@ -344,7 +344,7 @@ namespace ControlRuntime {
     // at all, and Hooks::OnUpdateChargeableSpell hooked the wrong function.
     constexpr auto UpdateChargeableSpell = 0x98C360; //E8 ? ? ? ? 48 8B 46 ? F3 0F 10 35 || E8 ? ? ? ? 45 33 ED BB ? ? ? ? 4C 89 6F || E8 ? ? ? ? 48 C7 47 ? 00 00 00 00 F3 0F 10 05
 
-    // sub_98EA10(spellbook, Vector3f* position) — opcode 1195 (mov eax, 4ABh in the
+    // sub_98EA10(spellbook, Vector3f* position) â€” opcode 1195 (mov eax, 4ABh in the
     // prologue), a bare "where the charge is currently aimed" packet holding one
     // Vec3. While a charge is open the client's charge tick (sub_BEDE90) calls this
     // EVERY frame with the HUD cursor world position (hud->input + 0x34), so the
@@ -353,7 +353,7 @@ namespace ControlRuntime {
     // server's view of the aim on target for the duration of the charge.
     constexpr auto UpdateChargeAim = 0x98CA40; // E8 ? ? ? ? 48 8B 0D ? ? ? ? 48 8B 49 ? E8 ? ? ? ? F3 0F 58 05 ? ? ? ? F3 0F 11 86 || 40 53 48 83 EC ? B8 ? ? ? ? 48 C7 44 24 ? 00 00 00 00
 
-    // ─────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Cast spell pipeline (verified IDB 13337 via EnsoulSharp.dll ILSpy map).
     // EnsoulSharp's managed Spellbook.CastSpell(...) forwards to the native
     // SpellbookClient.CastSpell, which on this build is the programmatic
@@ -370,8 +370,8 @@ namespace ControlRuntime {
     constexpr auto InitChargeState        = 0xBE86A0; // stores SpellInput at HudSpellState+0x38 E8 ? ? ? ? 48 39 77 ? 75 ? 4C 89 6F || E8 ? ? ? ? F3 0F 11 77 ? 48 8B 74 24
     constexpr auto ReleaseActiveCharge    = 0xBC7BD0; // resolves slot and sends release E8 ? ? ? ? E9 ? ? ? ? 44 3B FB
     constexpr auto GetPlayerClient        = 0x280BB0; // charge sender uses return value + SpellBookOffset E8 ? ? ? ? 48 3B F0 75 ? 48 8B 05 || E8 ? ? ? ? 41 0F B6 4E ? 4C 8B F8
-    // Cast dispatch helpers (offsets corrected against IDB 13337 decompile —
-    // see CastSpellSafe_Reverse_13337.md §7-§10 for full reverse notes).
+    // Cast dispatch helpers (offsets corrected against IDB 13337 decompile â€”
+    // see CastSpellSafe_Reverse_13337.md Â§7-Â§10 for full reverse notes).
     constexpr auto FindOwnerSlot          = 0xBD1220; //E9 ? ? ? ? 48 8B 51 ? 48 85 D2 || E8 ? ? ? ? 4C 8B E0 48 85 C0 0F 84 ? ? ? ? 48 8B C8
     constexpr auto GetOwnerSlotIndex      = 0xBD1310; //E8 ? ? ? ? 33 FF 4C 8D 0D || E8 ? ? ? ? 49 8D 4F ? 8B E8
     constexpr auto NormalCastGate         = 0x2FCD90; //E8 ? ? ? ? 84 C0 0F 84 ? ? ? ? 48 8B CE E8 ? ? ? ? 84 C0 74 || 83 FA ? 77 ? 48 63 C2 48 83 C0
@@ -385,7 +385,7 @@ namespace ControlRuntime {
     constexpr auto RangeCheck             = 0x314820; //E8 ? ? ? ? 84 C0 74 ? 4C 8B C7 49 8B D4 || 48 83 EC ? 48 8B 49 ? ? ? ? FF 90 ? ? ? ? 85 C0
     constexpr auto ExecuteTargetCast      = 0x33BB90; //E8 ? ? ? ? 8B 84 24 ? ? ? ? 49 8D 8F || 48 89 5C 24 ? 48 89 74 24 ? 57 48 83 EC ? 48 83 C2
 
-    // ── Pre-cast gate + position priming (REQUIRED before CastSpellSafe) ───
+    // â”€â”€ Pre-cast gate + position priming (REQUIRED before CastSpellSafe) â”€â”€â”€
     // Native callers run CanCastCheck (sub_C12220) before CastSpellSafe.
     // It resolves the target/current cursor and primes internal HUD cast state.
     constexpr auto CanCastCheck           = 0xBFAEB0; //E8 ? ? ? ? 84 C0 74 ? 48 8B 53 ? 48 8B CB E8 || E8 ? ? ? ? 84 C0 0F 84 ? ? ? ? 48 8B D3 48 8B CF
@@ -397,11 +397,11 @@ namespace ControlRuntime {
     // arg3 is the hotkey/cast mode (2 = Smart/Quick Cast).
     // arg4 is key state (1 = press, 2 = release).
     constexpr auto HudSpellHandler        = 0xBD41C0; //E8 ? ? ? ? B0 ? 48 83 C4 ? C3 44 8B C2 E8 || E8 ? ? ? ? ? ? ? 48 8B CE FF 90 ? ? ? ? 48 8B 5C 24
-    // ── Two-position (vector) cast — Viktor E / EnsoulSharp CastSpell(start,end) ─
+    // â”€â”€ Two-position (vector) cast â€” Viktor E / EnsoulSharp CastSpell(start,end) â”€
     // sub_97A980(book, slotObj, slot, Vector3f* start, Vector3f* end, visionIdx):
     // sibling of the normal cast builder sub_97A0B0, but takes TWO explicit world
     // positions and emits an opcode-271 cast packet directly, WITHOUT calling
-    // CanCastCheck — so it accepts vector spells the CastSpellSafe/HUD paths
+    // CanCastCheck â€” so it accepts vector spells the CastSpellSafe/HUD paths
     // reject. Only x/z are serialized. Confirmed IDB 13337 via caller sub_9D70C0
     // (book=player+0x3108, slotObj=GetSpellSlot(book,slot)) and the shared packet
     // builder sub_9651F0. This is the native entry EnsoulSharp's managed
@@ -497,7 +497,7 @@ namespace NavGridRuntime {
     // IDA 13337: 0x1243760 is a path-neighbor expansion helper that calls
     // sub_124AEA0; CoreNavGrid reads cell flags directly instead of calling it.
     constexpr auto GetCollisionFlags = 0x1288340; //E8 ? ? ? ? 84 C0 75 ? 48 8B 4D ? 48 85 C9 || E8 ? ? ? ? 84 C0 0F 85 ? ? ? ? 48 8B 4D ? 48 85 C9 0F 84
-    constexpr auto GetAiManager = 0x283190; // inner AiManager pointer resolver 73 20 90 0F B6 0C 02 lấy offset tại đầu hàm sub_xxxxx
+    constexpr auto GetAiManager = 0x283190; // inner AiManager pointer resolver 73 20 90 0F B6 0C 02 láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
 } // namespace NavGridRuntime
 
 namespace SpellRuntime {
@@ -576,7 +576,7 @@ namespace SpellBookLayout {
         constexpr uintptr_t OnUpdateChargeableSpell = ControlRuntime::UpdateChargeableSpell;
         constexpr uintptr_t OnBuffAdd               = 0x21F730; //E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 4C 8B B4 24 ? ? ? ? 4C 8B AC 24 ? ? ? ? 4C 8B A4 24 ? ? ? ? 48 85 FF
         constexpr uintptr_t OnBuffRemove            = 0x21F7C0; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8B AC 24 ? ? ? ? 48 8B 8C 24
-        constexpr uintptr_t OnBuffUpdate            = 0x21F220; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8B 74 24 ? 48 8B 74 24
+        constexpr uintptr_t OnBuffUpdate            = 0; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8B 74 24 ? 48 8B 74 24
         // AssignNetworkId: writes networkId to obj+0xBC, inserts into
         // ObjectManager tree, then calls post-init vfunc. Hook this instead
         // of the raw tree-insert so the object is fully ready when event fires.
@@ -587,28 +587,28 @@ namespace SpellBookLayout {
         // sub_28F220(GameObject* this) fires GameEventId.OnDelete (event ID = 465/0x1D1)
         // via sub_4BC670(eventObj, 0, &data). RCX = GameObject* (this pointer).
         // IDA sig: 48 89 5C 24 ? 55 56 57 48 83 EC 40 48 8B 01 48 8D 54 24
-        constexpr uintptr_t OnDelete                = 0x2942D0; //OnDelete 74 ? ? ? E8 ? ? ? ? 48 83 C3 ? 48 3B DF 75 ? 48 8B CE lấy offset tại đầu hàm sub_xxxxx
+        constexpr uintptr_t OnDelete                = 0x2942D0; //OnDelete 74 ? ? ? E8 ? ? ? ? 48 83 C3 ? 48 3B DF 75 ? 48 8B CE láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
         constexpr uintptr_t OnMissileDelete         = 0x9633A0; //E8 ? ? ? ? 48 8B 5C 24 ? 41 F6 C6
         constexpr uintptr_t OnDamage                = 0x29F860; //48 8D 05 ? ? ? ? 44 89 75 ? 48 89 45 ? 48 8D 4C 24 ? 8B 44 24
-        constexpr uintptr_t OnDoCast                = 0x9835E0; //48 8B 0D ? ? ? ? 48 8B 49 ? E8 ? ? ? ? 80 BF ? ? ? ? 00 0F 28 F8 75 lấy offset tại đầu hàm sub_xxxxx
+        constexpr uintptr_t OnDoCast                = 0x9835E0; //48 8B 0D ? ? ? ? 48 8B 49 ? E8 ? ? ? ? 80 BF ? ? ? ? 00 0F 28 F8 75 láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
         constexpr uintptr_t OnFinishCast            = 0x2A0250; //48 89 5C 24 ? 57 48 83 EC ? 48 8B F9 48 8B DA 8B 8A
         constexpr uintptr_t OnGameUpdate            = 0x562AD0; //OnUpdate E8 ? ? ? ? 41 0F B6 4E ? 49 8B 86
-        constexpr uintptr_t OnLevelUp               = 0x294EF0; //4C 89 BC 24 ? ? ? ? 8B FA lấy offset tại đầu hàm sub_xxxxx
+        constexpr uintptr_t OnLevelUp               = 0x294EF0; //4C 89 BC 24 ? ? ? ? 8B FA láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
         // Packet callback for ids 0x11D/0x1F1. RCX is AIBaseClient and the
         // internal animation-name view is at RDX+0x18.
-        constexpr uintptr_t OnPlayAnimation         = 0x29A350; //48 8B 4B ? E8 ? ? ? ? 4C 8D 44 24 lấy offset tại đầu hàm
+        constexpr uintptr_t OnPlayAnimation         = 0x29A350; //48 8B 4B ? E8 ? ? ? ? 4C 8D 44 24 láº¥y offset táº¡i Ä‘áº§u hÃ m
         constexpr uintptr_t OnProcessSpell          = 0x989920; //OnProcessSpellCast E8 ? ? ? ? 85 C0 40 0F 94 C7 85 C0 || E8 ? ? ? ? 4C 8B 83 ? ? ? ? 8B F0
         constexpr uintptr_t OnSpellImpact           = 0x981D20; //E8 ? ? ? ? E9 ? ? ? ? 48 8B D3 48 89 B4 24 || E8 ? ? ? ? 83 BC 24 ? ? ? ? 00 48 8B B4 24
-        constexpr uintptr_t OnStopCast              = 0x989C30; //75 ? 8B 99 ? ? ? ? 8B 91 lấy offset tại đầu hàm sub_xxxxx
-        constexpr uintptr_t OnStealth               = 0x29EEC0; //75 ? 48 8B D7 48 8D 4F lấy offset tại đầu hàm sub_xxxxx
+        constexpr uintptr_t OnStopCast              = 0x989C30; //75 ? 8B 99 ? ? ? ? 8B 91 láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
+        constexpr uintptr_t OnStealth               = 0x29EEC0; //75 ? 48 8B D7 48 8D 4F láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
         constexpr uintptr_t OnSurrender             = 0; // FIXME: 0xE8D423 was wrong (string builder, not surrender handler). Needs re-verification.
-        constexpr uintptr_t ProcessWorldEvent       = 0x6DFD60; //0F 87 ? ? ? ? 48 8D 35 ? ? ? ? 48 98 0F B6 84 06 ? ? ? ? 8B 8C 86 ? ? ? ? 48 03 CE FF E1 41 8B 46 lấy offset tại đầu hàm sub_xxxxx
+        constexpr uintptr_t ProcessWorldEvent       = 0x6DFD60; //0F 87 ? ? ? ? 48 8D 35 ? ? ? ? 48 98 0F B6 84 06 ? ? ? ? 8B 8C 86 ? ? ? ? 48 03 CE FF E1 41 8B 46 láº¥y offset táº¡i Ä‘áº§u hÃ m sub_xxxxx
 
-        // ─────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // EnsoulSharp-derived event hooks (verified against EnsoulSharp.dll
         // via ILSpy + cross-referenced in IDB 13337). These map the managed
         // .NET wrapper events to their underlying native game functions.
-        // ─────────────────────────────────────────────────────────────────
+        // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         //
         // OnNewPath  (EnsoulSharp: AIBaseClient.OnNewPath)
         //   sub_562E60 is the common path packet consumer:
@@ -635,7 +635,7 @@ namespace SpellBookLayout {
         // OnIntegerPropertyChange (EnsoulSharp: GameObject.OnIntegerPropertyChange)
         //   Native signature: void(GameObject*, sbyte* propertyName,
         //                           int oldValue, int newValue)
-        //   Not a standalone function — EnsoulSharp (like EloBuddy's
+        //   Not a standalone function â€” EnsoulSharp (like EloBuddy's
         //   EventHandler<62>) fires this from inside the CRepl32Info packet
         //   update handler after each replicated integer property changes.
         //   Hook CRepl32InfoUpdatePacket and diff the replicated int fields.
@@ -645,7 +645,7 @@ namespace SpellBookLayout {
 
 
     // =========================================================================
-    // SpellCastInfo layout — read by OnStopCast / OnFinishCast / channel poller
+    // SpellCastInfo layout â€” read by OnStopCast / OnFinishCast / channel poller
     // =========================================================================
     // Obtained at runtime as:  *( hero + SpellRuntime::ActiveSpellCast )
     // (which resolves to  hero->spellBook->activeSpellCast  -- a pointer that
@@ -681,7 +681,7 @@ namespace SpellBookLayout {
     } // namespace SpellCastInfoLayout
 
     // =========================================================================
-    // AIBaseClient layout — REMOVED (fully covered by `All` / `AttackableUnit`
+    // AIBaseClient layout â€” REMOVED (fully covered by `All` / `AttackableUnit`
     //                                / `AIHeroClient` below).
     // =========================================================================
     // The old `AIBaseClientLayout` namespace was a Nightsharp-specific blob
@@ -726,7 +726,7 @@ namespace SpellBookLayout {
         constexpr auto Velocity = 0x318; //C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C6 85 ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 85 ? ? ? ? ? ? ? ? C7 45
     }
     // =========================================================================
-    // VERIFIED offset block — imported from old source/core/Offsets.generated.h
+    // VERIFIED offset block â€” imported from old source/core/Offsets.generated.h
     // =========================================================================
     // These namespaces mirror the ones that shipped with the legacy
     // (pre-hook) NightSharp source tree. Field offsets below are retained only
@@ -735,10 +735,10 @@ namespace SpellBookLayout {
     // Any offset that already existed above (e.g. SpellCastInfoLayout) was
     // kept untouched so the hook code that already reads through it keeps
     // working. The previously-present `AIBaseClientLayout` namespace was
-    // retired entirely — every field it defined is covered by the per-class
+    // retired entirely â€” every field it defined is covered by the per-class
     // layouts (`All` / `AttackableUnit` / `AIHeroClient`) below.
 
-    // ── NavGrid internals ─────────────────────────────────────────────────
+    // â”€â”€ NavGrid internals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     namespace NavGridLayout {
         constexpr auto NavGridMgr      = 0x8;
         constexpr auto MinX            = 0xEC;
@@ -776,7 +776,7 @@ namespace SpellBookLayout {
         constexpr auto HalfCellSize      = 0x0718;
     } // namespace NavGridCellLayout
 
-    // ── Current spell objects ─────────────────────────────────────────────
+    // â”€â”€ Current spell objects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     namespace SpellSlotLayout {
         constexpr auto SlotLevel             = 0x28; //8B 4B ? 48 8B 40 ? 8B 84 88 ? ? ? ? 85 C0 7E ? F3 0F 10 4B
         constexpr auto SlotLevelAlt          = 0x28;
@@ -863,7 +863,7 @@ namespace SpellBookLayout {
         constexpr auto ResImgIconName   = 0x280;
     } // namespace SpellDataResourceLayout
 
-    // ── Extended SpellCastInfo layout (event-received version) ───────────
+    // â”€â”€ Extended SpellCastInfo layout (event-received version) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Current verification: the missile-create path copies event CastInfo
     // field-by-field into missile CastInfoBase (0x2A0). The position fields
     // (StartPos/EndPos/CastPos) use the SAME offsets as SpellCastInfoLayout
@@ -871,7 +871,7 @@ namespace SpellBookLayout {
     //
     // CRITICAL FIX (Jul/2026): SrcIndex was 0x98 (wrong), actually 0xA0.
     //   Confirmed by 7+ functions calling FindObject(CastInfo+0xA0).
-    // TargetIndex at 0x9C was wrong — 0x9C is a float field (DesignerCastTime).
+    // TargetIndex at 0x9C was wrong â€” 0x9C is a float field (DesignerCastTime).
     //   The actual target is in a vector-like array:
     //     +0x110 = pointer to target entry array (each entry 32 bytes)
     //     +0x118 = entry count
@@ -893,11 +893,11 @@ namespace SpellBookLayout {
         constexpr auto IsAuto           = 0x141;
         constexpr auto Slot             = 0x14C;
         // IDA 13337: sub_975A00 = movss xmm0,[rcx+0x98]; ret
-        // (xref from sub_9BAEE0 cùng sub_9B5920 — pattern castTime = Extra + Designer)
+        // (xref from sub_9BAEE0 cÃ¹ng sub_9B5920 â€” pattern castTime = Extra + Designer)
         constexpr auto ExtraTimeForCast = 0x98; // F3 0F 10 81 98 00 00 00 C3
         // IDA 13337: sub_9B5920 = movss xmm0,[rcx+0x9C]; ret (DesignerCastTime)
         constexpr auto DesignerCastTime = 0x9C; // F3 0F 10 81 9C 00 00 00 C3
-        //F3 0F 10 81 ?? 00 00 00 C3 sử dụng cho cả 2
+        //F3 0F 10 81 ?? 00 00 00 C3 sá»­ dá»¥ng cho cáº£ 2
         // IDA 13337 hotfix path sub_982120 reads the same logical fields here.
         constexpr auto IsSpecialAttackAlt = 0x149;
         constexpr auto IsAutoAlt          = 0x14A;
@@ -907,13 +907,13 @@ namespace SpellBookLayout {
 
     // (EventSpellCastInfoLayout removed Apr 25/2026 - duplicate of SpellCastInfoEventLayout above; old schema)
 
-    // ── Inventory / items ────────────────────────────────────────────────
+    // â”€â”€ Inventory / items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Current inventory layout:
-    //   hero + InventoryComponent → component object
-    //   component + SlotArray     → 45 slot pointers, 8 bytes each
-    //   slot + ItemNode           → item node ptr (null = empty)
-    //   node + ItemData           → item-data ptr
-    //   item-data + DataItemId    → item ID
+    //   hero + InventoryComponent â†’ component object
+    //   component + SlotArray     â†’ 45 slot pointers, 8 bytes each
+    //   slot + ItemNode           â†’ item node ptr (null = empty)
+    //   node + ItemData           â†’ item-data ptr
+    //   item-data + DataItemId    â†’ item ID
     namespace ItemRuntime {
         constexpr auto InventoryComponent = 0x4DD8;
         constexpr auto SlotArray          = 0x50;
@@ -932,7 +932,7 @@ namespace SpellBookLayout {
         constexpr auto DataAtkSpeedMult   = 0x20C;
     } // namespace ItemRuntime
 
-    // ── Object type / classification ─────────────────────────────────────
+    // â”€â”€ Object type / classification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Native object-classification offsets removed; object typing now uses
     // manager lists plus lightweight replicated fields/name scans.
 
@@ -970,7 +970,7 @@ namespace SpellBookLayout {
     //   HasBuffOfType      -> CoreBuffs::HasBuffType / HasActiveBuffType (read BuffEntry.Type field)
     //   GetGoldRedirectTgt -> niche (gangplank passive), no consumer
 
-    // ── Animation system ─────────────────────────────────────────────────
+    // â”€â”€ Animation system â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     namespace AnimationLayout {
         constexpr auto CharacterData         = 0x4050;
         constexpr auto Component             = 0x4498;
@@ -988,15 +988,15 @@ namespace SpellBookLayout {
         constexpr auto VariantState          = 0x18;
     } // namespace AnimationLayout
 
-    // ── Per-class object layouts ─────────────────────────────────────────
-    // `All` = fields present on EVERY game object (minion, hero, turret…).
+    // â”€â”€ Per-class object layouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // `All` = fields present on EVERY game object (minion, hero, turretâ€¦).
     // `AttackableUnit` = anything with an HP bar (adds on top of `All`).
     // `AIHeroClient` = champion-only fields (adds on top of AttackableUnit).
     //
     // These three namespaces are the CANONICAL source for per-object field
     // offsets. The dead state is queried by Core::Objects::IsDead() via the
     // native IsAlive RVA (ControlRuntime::IsAlive = 0x2B0CE0), inverted.
-    // Do NOT call the native IsDead RVA (0x287230) — it decrypts an
+    // Do NOT call the native IsDead RVA (0x287230) â€” it decrypts an
     // encrypted blob and crashes the game on 26.6. All::Dead (0x11B) is
     // kept as a diagnostic field only; it is NOT authoritative across
     // spawn/respawn transitions.
@@ -1022,8 +1022,8 @@ namespace SpellBookLayout {
         constexpr auto PositionX           = Position;
         constexpr auto PositionY           = 0x240;
         constexpr auto PositionZ           = 0x244;
-        constexpr auto Dead                = 0x11B; //tìm thủ công qua CE
-        constexpr auto Visible             = 0x2E8;   // GameObject visible flag. tìm thủ công qua CE
+        constexpr auto Dead                = 0x11B; //tÃ¬m thá»§ cÃ´ng qua CE
+        constexpr auto Visible             = 0x2E8;   // GameObject visible flag. tÃ¬m thá»§ cÃ´ng qua CE
         // No byte access at legacy +0x5A0 exists in the current object code.
         // IsInvulnerable is resolved through native/buff logic; no raw field exists.
         // RecallState (legacy 0xF48) was discovered to be a std::vector data
@@ -1165,8 +1165,8 @@ namespace SpellBookLayout {
     } // namespace MissileEventLayout
 
 
-    // ── Hack / bypass plumbing (old source SDK used these for zoom,
-    //    skin change, DirectInput hook, etc.) ──────────────────────────
+    // â”€â”€ Hack / bypass plumbing (old source SDK used these for zoom,
+    //    skin change, DirectInput hook, etc.) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // GadgetRuntime::ThreadTrampoline removed Apr 25/2026 - replaced by CoreEventHook::FindSpoofGadget (dynamic byte-pattern 'FF 23' search)
 
     namespace DirectInputRuntime {
@@ -1222,7 +1222,7 @@ namespace SpellBookLayout {
         constexpr auto CharacterStackSkin       = 0x20;
         constexpr auto CharacterStackGear       = 0x84;  // base_skin.gear (int8)
 
-        // ── Encrypted skin id on the hero object (NEW May 2026) ──
+        // â”€â”€ Encrypted skin id on the hero object (NEW May 2026) â”€â”€
         // Pattern `88 86 ?? ?? 00 00 48 89 45 ?? 0F B6 45 A8 88 86 ?? 13`
         // Field is xor_value<int>; keep it synchronized with base_skin.skin.
         // R3nzSkin AIBaseCommon::change_skin writes BOTH this AND
@@ -1239,7 +1239,7 @@ namespace SpellBookLayout {
         constexpr auto SkinParam2     = 0x1490;
     } // namespace SkinRuntime
 
-    // ── Legacy alias namespaces (Phase 2 finalization Apr 26/2026) ───────────
+    // â”€â”€ Legacy alias namespaces (Phase 2 finalization Apr 26/2026) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Pre-Phase-1.7 SDK code under `sdk/GameObjects/*` and `sdk/Wrappers/*`
     // resolves offsets through `Offset::Global::*` and `Offset::Function::*`.
     // Phase 1.7 renamed the canonical namespaces (GameObjectsRuntime,
@@ -1248,7 +1248,7 @@ namespace SpellBookLayout {
     // expose flat constexpr aliases here so the SDK chain compiles cleanly
     // while we migrate gradually.
     //
-    // These are pure compile-time aliases (constexpr) — zero runtime cost,
+    // These are pure compile-time aliases (constexpr) â€” zero runtime cost,
     // single source of truth (the Runtime namespaces above).
     namespace Global {
         constexpr auto GameTime       = GameRuntime::GameTime;

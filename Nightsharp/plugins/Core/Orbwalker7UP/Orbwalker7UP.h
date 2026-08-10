@@ -190,7 +190,6 @@ private:
     float GetBasicAttackMissileSpeed();                           // C# line 395-402
     bool  CanAttackWithWindWall(const AttackableUnit& target);    // C# line 403-472
     std::vector<AIMinionClient> GetMinions(float range = 0.0f);   // C# line 473-487
-    AttackableUnit GetSpecialMinion(OrbwalkingMode mode);         // C# line 488-518
     bool ShouldWait(const std::vector<AIMinionClient>& minions);  // C# line 519-536
     bool CanTurretFarm(const std::vector<AIMinionClient>& minions); // C# line 537-565
     bool IsSupportMode();                                          // C# line 566-595
@@ -491,17 +490,6 @@ inline AttackableUnit Orbwalker7UPImpl::GetTarget() {
         }
     }
 
-    // === Nhánh 7: SpecialMinion enabled, non-Combo, !ShouldWait → special minion ===
-    // C# line 1181-1188
-    if (BoolValue(prioritizeMenu_ ? prioritizeMenu_->Get<MenuBool>("SpecialMinion") : nullptr, false) &&
-        activeMode != OrbwalkingMode::Combo && !ShouldWait(minions)) {
-        const AttackableUnit specialMinion = GetSpecialMinion(activeMode);
-        if (specialMinion.IsValid() &&
-            Extensions::InCurrentAutoAttackRange(specialMinion, 0.0f, true)) {
-            return specialMinion;
-        }
-    }
-
     // === Nhánh 8: Harass/LaneClear/LastHit → jungle monsters ===
     // C# line 1190-1213
     if (activeMode == OrbwalkingMode::Harass ||
@@ -700,14 +688,6 @@ inline AttackableUnit Orbwalker7UPImpl::GetTarget() {
 
     // === Nhánh 11: !ShouldWait, non-Combo → special minion fallback ===
     // C# line 1314-1321
-    if (!ShouldWait(minions) && activeMode != OrbwalkingMode::Combo) {
-        const AttackableUnit specialMinion2 = GetSpecialMinion(activeMode);
-        if (specialMinion2.IsValid() &&
-            Extensions::InCurrentAutoAttackRange(specialMinion2, 0.0f, true)) {
-            return specialMinion2;
-        }
-    }
-
     // C# line 1325: return attackableUnit (null hoặc jungle target từ nhánh 8)
     return attackableUnit;
 }
@@ -1083,13 +1063,11 @@ inline void Orbwalker7UPImpl::Init(Menu* parentMenu) {
     attackMenu_ = menu_->AddSubMenu(new Menu("Attackable", "Attackable Unit", false));
     attackMenu_->Add(new MenuBool("Barrels", "Barrels", true));
     attackMenu_->Add(new MenuBool("JunglePlant", "Jungle Plant", false));
-    attackMenu_->Add(new MenuBool("SpecialMinions", "Pets", true));
     attackMenu_->Add(new MenuBool("Wards", "Wards", true));
 
     // PrioritizeMenu (C# line 104-108)
     prioritizeMenu_ = menu_->AddSubMenu(new Menu("Prioritize", "Prioritize", false));
     prioritizeMenu_->Add(new MenuBool("FarmOverHarass", "Farm Over Harass", true));
-    prioritizeMenu_->Add(new MenuBool("SpecialMinion", "Special Minion", false));
     prioritizeMenu_->Add(new MenuBool("SmallJungle", "Small Jungle", false));
     prioritizeMenu_->Add(new MenuBool("Turret", "Turret", true));
 
@@ -1513,47 +1491,6 @@ inline std::vector<AIMinionClient> Orbwalker7UPImpl::GetMinions(float range) {
         list.push_back(j);
     }
     return list;
-}
-inline AttackableUnit Orbwalker7UPImpl::GetSpecialMinion(OrbwalkingMode mode) {
-    // Port 1-1 từ C# line 488-518
-    if (!initialize_) {
-        return AttackableUnit();
-    }
-    if (attackMenu_ == nullptr) {
-        return AttackableUnit();
-    }
-    std::vector<AIMinionClient> list;
-
-    // C# `AttackMenu["SpecialMinions"].Enabled` -> BoolValue helper
-    if (BoolValue(attackMenu_->Get<MenuBool>("SpecialMinions"), true)) {
-        // C# `s.InCurrentAutoAttackRange(0f, true) && s.IsPet(true)`
-        // IsPet(true) = PetList.Contains(name) || CloneList.Contains(name)
-        //   -> SDK: minion.IsPet() || minion.IsClone()
-        for (const auto& s : GameObjects::EnemyMinions()) {
-            if (!Extensions::InCurrentAutoAttackRange(s, 0.0f, true)) continue;
-            if (!(s.IsPet() || s.IsClone())) continue;
-            list.push_back(s);
-        }
-    }
-    if (BoolValue(attackMenu_->Get<MenuBool>("Wards"), true) &&
-        mode != OrbwalkingMode::Combo) {
-        for (const auto& w : GameObjects::EnemyWards()) {
-            if (!Extensions::InCurrentAutoAttackRange(w, 0.0f, true)) continue;
-            list.push_back(w);
-        }
-    }
-    if (BoolValue(attackMenu_->Get<MenuBool>("JunglePlant"), false) &&
-        mode != OrbwalkingMode::Combo) {
-        for (const auto& p : GameObjects::JunglePlants()) {
-            if (!Extensions::InCurrentAutoAttackRange(p, 0.0f, true)) continue;
-            list.push_back(p);
-        }
-    }
-    // list.FirstOrDefault<AIMinionClient>() -> list.empty() ? AttackableUnit() : list[0]
-    if (list.empty()) {
-        return AttackableUnit();
-    }
-    return AttackableUnit(list.front().Handle());
 }
 inline bool Orbwalker7UPImpl::ShouldWait(const std::vector<AIMinionClient>& minions) {
     // Port 1-1 từ C# line 519-536
