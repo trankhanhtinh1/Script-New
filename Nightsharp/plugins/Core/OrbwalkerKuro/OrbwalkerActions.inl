@@ -480,7 +480,7 @@ inline void OrbwalkerBase::ExpirePendingAttack() {
         context_.hasConfirmedAttack = false;
     }
     if (!shouldExpire) {
-        context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs);
+        context_.attackPauseTick = std::max(context_.attackPauseTick, now + kAttackRetryDelayMs + menu_.AttackEarlyWindow());
     }
 }
 
@@ -490,7 +490,7 @@ inline int OrbwalkerBase::PendingAttackTimeoutMs() {
     const int eventGrace = kPendingEventGraceMs + oneWayPing;
     const int windupGate = static_cast<int>(
         context_.attackWindupMs + kMoveSafetyMs + static_cast<float>(oneWayPing));
-    return std::max(eventGrace, windupGate + kAttackRetryDelayMs);
+    return std::max(eventGrace, windupGate + kAttackRetryDelayMs + menu_.AttackEarlyWindow());
 }
 
 inline int OrbwalkerBase::DoCastMoveGateTimeoutMs() {
