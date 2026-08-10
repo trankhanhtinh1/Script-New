@@ -814,7 +814,10 @@ static Vector2 GetLastWallPoint(const Vector2& from, const Vector2& to, float st
 static bool InMiddleWall(const Vector2& firstwall, const Vector2& lastwall) {
     Vector2 midwall = (firstwall + lastwall) / 2.0f;
     Vector2 point = midwall.Extend(SDK::Game::CursorPosition().To2D(), 50.0f);
-    for (int i = 0; i <= 350; i += 10) {
+    // This probe is only a yes/no gate.  Fifteen-degree samples retain the
+    // wall-jump corridor check while avoiding 36 collision-grid reads every
+    // update when the key is held.
+    for (int i = 0; i <= 350; i += 15) {
         Vector2 testpoint = RotateAround(point, midwall, static_cast<float>(i) * (3.14159265f / 180.0f));
         CollisionFlags flags = NavMesh::GetCollisionFlags(testpoint.x, testpoint.y);
         if (!HasFlag(flags, CollisionFlags::Wall) && !HasFlag(flags, CollisionFlags::Building)) {
@@ -854,12 +857,17 @@ static void RunWallJump() {
                 }
                 if (NavMesh::IsWall(dest) && SDK::Prediction::GetPrediction(player, 0.5f).GetUnitPosition().To2D().Distance(playerPos2D) <= 10.0f && Q.IsReady()) {
                     Vector2 pos = playerPos2D.Extend(cursorPos2D, 100.0f);
-                    for (int i = 0; i <= 359; ++i) {
+                    // A one-degree sweep performed up to 360 times and
+                    // continued casting after a valid point was found.  A
+                    // four-degree broad sweep is sufficient for the 400-unit
+                    // Q dash; stop after the first valid escape point.
+                    for (int i = 0; i < 360; i += 4) {
                         float angleRad = static_cast<float>(i) * (3.14159265f / 180.0f);
                         Vector2 pos1 = RotateAround(pos, playerPos2D, angleRad);
                         Vector2 pos2 = playerPos2D.Extend(pos1, 400.0f);
                         if (InTheCone(pos1, playerPos2D, cursorPos2D, 60.0) && NavMesh::IsWall(Vector3::From2D(pos1)) && !NavMesh::IsWall(Vector3::From2D(pos2))) {
                             Q.Cast(Vector3::From2D(pos2));
+                            break;
                         }
                     }
                 }

@@ -225,6 +225,24 @@ inline Vector3 RCenter = {};
 inline Vector3 RRelocateCenter = {};
 inline StormPlan LastStormPlan = {};
 
+// BuildStormPlan evaluates many candidate centers and performs a NavMesh wall
+// query for each one.  Several posture branches can request the same plan in
+// one update, so keep a bounded, movement-aware cache of the result.
+struct StormPlanCacheEntry {
+    int Tick = 0;
+    int TargetId = 0;
+    StormPurpose Purpose = StormPurpose::None;
+    bool StormActive = false;
+    Vector3 Origin = {};
+    Vector3 TargetPosition = {};
+    Vector3 ForcedCenter = {};
+    Vector3 CursorPosition = {};
+    StormPlan Plan = {};
+};
+
+inline std::array<StormPlanCacheEntry, 8> StormPlanCaches = {};
+inline std::size_t StormPlanCacheCursor = 0;
+
 inline std::array<ChillMark, 24> ChillMarks = {};
 inline bool RebirthReady = false;
 inline bool RebirthCooldown = false;
@@ -869,22 +887,42 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
     StormPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
+    const Vector3 origin = player.Position();
+    const bool selectedValid = Engine::ValidEnemy(selected);
+    const int selectedId = selectedValid
+        ? static_cast<int>(selected.NetworkId()) : 0;
+    const Vector3 selectedPosition = selectedValid
+        ? selected.Position() : Vector3{};
+    const Vector3 cursor = Game::CursorPos();
+    const int now = Now();
+    for (const StormPlanCacheEntry& entry : StormPlanCaches) {
+        if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 72 ||
+            entry.TargetId != selectedId || entry.Purpose != purpose ||
+            entry.StormActive != RActive ||
+            entry.Origin.Distance2D(origin) > 24.0f ||
+            entry.TargetPosition.Distance2D(selectedPosition) > 24.0f ||
+            entry.ForcedCenter.Distance2D(forcedCenter) > 24.0f ||
+            entry.CursorPosition.Distance2D(cursor) > 24.0f) {
+            continue;
+        }
+        return entry.Plan;
+    }
 
     std::vector<Vector3> candidates;
     if (forcedCenter.IsValid() && !forcedCenter.IsZero()) {
         AddUniqueStormCandidate(candidates, forcedCenter);
     }
-    if (Engine::ValidEnemy(selected)) {
+    if (selectedValid) {
         const Vector3 velocity = TargetVelocity(selected, 0.35f);
-        AddUniqueStormCandidate(candidates, selected.Position());
+        AddUniqueStormCandidate(candidates, selectedPosition);
         AddUniqueStormCandidate(candidates, PredictPosition(selected, 0.25f));
         AddUniqueStormCandidate(candidates, LeadStormCenter(
-            selected.Position(), velocity, 0.48f,
+            selectedPosition, velocity, 0.48f,
             static_cast<float>(Slider(StormMenu, "MaximumLead", 190))));
         if (selected.PathEnd().IsValid() && !selected.PathEnd().IsZero()) {
             AddUniqueStormCandidate(
                 candidates,
-                selected.Position().Extend(selected.PathEnd(), 150.0f));
+                selectedPosition.Extend(selected.PathEnd(), 150.0f));
         }
     }
     if (GapcloserTargetId != 0 && GapcloserExpireTick >= Now()) {
@@ -909,7 +947,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
         candidate.y = SDK::NavMesh::GetHeightForPosition(candidate);
         if (!candidate.IsValid() || candidate.IsZero() ||
             SDK::NavMesh::IsWall(candidate) ||
-            player.Position().Distance2D(candidate) >
+            origin.Distance2D(candidate) >
                 kStormCastRange + 35.0f) {
             continue;
         }
@@ -918,8 +956,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
         float score = immediate * 150.0f + full * 210.0f;
         StormPlan plan{};
         plan.Center = candidate;
-        plan.TargetId = Engine::ValidEnemy(selected)
-            ? static_cast<int>(selected.NetworkId()) : 0;
+        plan.TargetId = selectedId;
         plan.Purpose = purpose;
         for (const auto& enemy : enemies) {
             if (!Engine::ValidEnemy(enemy)) continue;
@@ -934,8 +971,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
             }
             ++plan.HitCount;
             if (TargetPriority(enemy) >= 1.75f) ++plan.PriorityHits;
-            if (Engine::ValidEnemy(selected) &&
-                enemy.NetworkId() == selected.NetworkId()) {
+            if (selectedValid && enemy.NetworkId() == selectedId) {
                 plan.IncludesSelected = true;
             }
             if (static_cast<int>(enemy.NetworkId()) == PeelThreatId) {
@@ -947,7 +983,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
         score += plan.IncludesSelected ? 145.0f : 0.0f;
         score += plan.IncludesProtectedThreat ? 210.0f : 0.0f;
         score += CountAlliedFollowup(candidate, 850.0f) * 45.0f;
-        score -= candidate.Distance2D(Game::CursorPos()) *
+        score -= candidate.Distance2D(cursor) *
                  (purpose == StormPurpose::Disengage ? 0.02f : 0.055f);
         if (Engine::UnderEnemyTurret(candidate) &&
             purpose != StormPurpose::Peel &&
@@ -963,6 +999,19 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
             best = plan;
         }
     }
+    StormPlanCacheEntry& cache =
+        StormPlanCaches[StormPlanCacheCursor % StormPlanCaches.size()];
+    StormPlanCacheCursor =
+        (StormPlanCacheCursor + 1) % StormPlanCaches.size();
+    cache.Tick = now;
+    cache.TargetId = selectedId;
+    cache.Purpose = purpose;
+    cache.StormActive = RActive;
+    cache.Origin = origin;
+    cache.TargetPosition = selectedPosition;
+    cache.ForcedCenter = forcedCenter;
+    cache.CursorPosition = cursor;
+    cache.Plan = best;
     return best;
 }
 
@@ -2833,6 +2882,8 @@ inline void OnLoad() {
     ClearStormState(false);
     RCastTick = 0;
     LastStormPlan = {};
+    StormPlanCaches.fill({});
+    StormPlanCacheCursor = 0;
     ChillMarks.fill({});
     RebirthReady = RebirthCooldown = EggActive = false;
     EggUntilTick = RebirthCooldownUntil = 0;
@@ -2850,6 +2901,8 @@ inline void OnLoad() {
 inline void OnUnload() {
     TacticsMenu = FlashFrostMenu = WallMenu = FrostbiteMenu = nullptr;
     StormMenu = PassiveMenu = FarmMenu = CoachMenu = nullptr;
+    StormPlanCaches.fill({});
+    StormPlanCacheCursor = 0;
 }
 
 inline constexpr const char* Scenarios[] = {

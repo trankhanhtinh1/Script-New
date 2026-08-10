@@ -77,7 +77,15 @@ namespace detail {
     };
 
     inline RawFlagCacheEntry* RawFlagCache() {
-        static RawFlagCacheEntry cache[kRawFlagCacheSize] = {};
+        // Wall checks run from both the game-update and render callbacks.  A
+        // process-wide direct-mapped table lets those callbacks overwrite an
+        // entry while the other thread is reading its key/flags (the fields
+        // are intentionally non-atomic for the hot path), which can produce
+        // false wall results and, in practice, undefined behaviour during
+        // map/object teardown.  Keep the tiny read cache per thread instead;
+        // each callback still gets one lookup per cell per frame and no lock
+        // or cross-thread lifetime is involved.
+        static thread_local RawFlagCacheEntry cache[kRawFlagCacheSize] = {};
         return cache;
     }
 
@@ -255,11 +263,22 @@ struct GridRef {
              static_cast<uintptr_t>(y) * static_cast<uintptr_t>(width));
     }
 
-    std::uint16_t GetRawCellFlags(int x, int y) const {
-        const uintptr_t cell = CellAddress(x, y);
-        if (!cell) {
+    // Hot wall-query loops validate the grid once before walking a segment or
+    // radius.  Re-running IsValid() (which performs several pointer/range
+    // checks) for every cell dominated the cost of those loops.  This helper
+    // keeps only the cheap bounds check; the actual memory reads remain under
+    // __try so a map teardown still degrades to an invalid cell rather than
+    // taking the process down.  Callers must have validated the GridRef first.
+    std::uint16_t GetRawCellFlagsInBounds(int x, int y) const {
+        if (x < 0 || y < 0 || x >= width || y >= height ||
+            !Globals::IsValidPtr(cellData)) {
             return kInvalidRawFlags;
         }
+
+        const uintptr_t cell = cellData +
+            static_cast<uintptr_t>(Offset::NavGridCellLayout::CellStride) *
+            (static_cast<uintptr_t>(x) +
+             static_cast<uintptr_t>(y) * static_cast<uintptr_t>(width));
 
         std::uint16_t cached = kInvalidRawFlags;
         if (detail::LookupRawFlag(cellData, x, y, cached)) {
@@ -286,13 +305,23 @@ struct GridRef {
         return result;
     }
 
+    std::uint16_t GetRawCellFlags(int x, int y) const {
+        if (!IsValid() || x < 0 || y < 0 || x >= width || y >= height) {
+            return kInvalidRawFlags;
+        }
+        return GetRawCellFlagsInBounds(x, y);
+    }
+
     std::uint16_t GetRawCellFlags(const Vec3& pos) const {
         int x = 0;
         int y = 0;
         if (!WorldToCell(pos, x, y, true)) {
             return kInvalidRawFlags;
         }
-        return GetRawCellFlags(x, y);
+        // WorldToCell already validated this GridRef.  Avoid calling
+        // CellAddress/IsValid a second time for every point sampled by
+        // IsWall/IsWater/IsBrush.
+        return GetRawCellFlagsInBounds(x, y);
     }
 
     bool SetRawCellFlags(int x, int y, std::uint16_t rawFlags) const {
@@ -434,7 +463,7 @@ struct GridRef {
             for (int x = minCellX; x <= maxCellX; ++x) {
                 const Vec3 center = CellToWorld(x, y, pos.y);
                 if (center.DistanceSqr2D(pos) <= radiusSqr &&
-                    matches(GetCollisionFlags(x, y))) {
+                    matches(RawToPublicFlags(GetRawCellFlagsInBounds(x, y)))) {
                     return true;
                 }
             }
@@ -465,7 +494,7 @@ struct GridRef {
         int x = x0;
         int y = y0;
         for (;;) {
-            if (RawHasWall(GetRawCellFlags(x, y))) {
+            if (RawHasWall(GetRawCellFlagsInBounds(x, y))) {
                 return true;
             }
             if (x == x1 && y == y1) {
@@ -529,7 +558,7 @@ struct GridRef {
                 y += sy;
             }
 
-            if (RawHasWall(GetRawCellFlags(x, y))) {
+            if (RawHasWall(GetRawCellFlagsInBounds(x, y))) {
                 hitPoint = CellToWorld(previousX, previousY, from.y);
                 return true;
             }
@@ -575,7 +604,7 @@ struct GridRef {
                 if (dx * dx + dzSqr > radiusSqr) {
                     continue;
                 }
-                if (RawHasWall(GetRawCellFlags(x, y))) {
+                if (RawHasWall(GetRawCellFlagsInBounds(x, y))) {
                     ++count;
                 }
             }
@@ -603,7 +632,7 @@ struct GridRef {
         if (!IsValid() || x < 0 || y < 0 || x >= width || y >= height) {
             return false;
         }
-        return !RawHasWall(GetRawCellFlags(x, y));
+        return !RawHasWall(GetRawCellFlagsInBounds(x, y));
     }
 
     std::vector<Vec3> FindPath(const Vec3& start, const Vec3& end,
@@ -843,8 +872,13 @@ private:
 inline GridRef Get() {
     (void)CoreRuntime::EnsureInitialized();
 
-    static int cachedFrame = -1;
-    static GridRef cachedGrid = {};
+    // Grid discovery is also called by update and render code.  The previous
+    // process-wide cache raced while RefreshReadState() rebuilt the nav-grid
+    // pointers, so one thread could observe a half-published GridRef.  Keep
+    // the per-frame snapshot local to the calling thread, matching the raw
+    // cell cache above and preserving the existing invalidation key.
+    static thread_local int cachedFrame = -1;
+    static thread_local GridRef cachedGrid = {};
     const int frame = detail::FrameKey();
     if (cachedFrame == frame) {
         return cachedGrid;

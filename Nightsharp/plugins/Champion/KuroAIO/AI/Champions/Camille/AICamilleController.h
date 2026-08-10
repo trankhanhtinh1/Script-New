@@ -57,6 +57,18 @@ inline Vector3 WallAnchor = {};
 inline Vector3 PlannedLanding = {};
 inline Vector3 ArenaCenter = {};
 
+// Hookshot planning fans out over NavMesh wall rays.  The update path can ask
+// for the same plan more than once (combo/harass/flee checks), so retain one
+// movement-aware result briefly and avoid rebuilding all rays every tick.
+inline int HookshotPlanCacheTick = 0;
+inline int HookshotPlanCacheTargetId = 0;
+inline bool HookshotPlanCacheFleeing = false;
+inline bool HookshotPlanCacheLethal = false;
+inline Vector3 HookshotPlanCacheSource = {};
+inline Vector3 HookshotPlanCacheRequested = {};
+inline Vector3 HookshotPlanCacheCursor = {};
+inline WallCandidate HookshotPlanCache = {};
+
 using ControllerHelpers::Now;
 inline int SpellRank(int index) {
     if (index < 0 || index >= 4 || !Engine::RuntimeSpells[index]) return 1;
@@ -227,8 +239,23 @@ inline WallCandidate BuildHookshotPlan(const AIHeroClient& target, bool fleeing,
     const Vector3 requested = fleeing ? Game::CursorPos() :
         (Engine::ValidEnemy(target) ? PredictPosition(target, 0.75f) : Vector3{});
     if (!requested.IsValid() || requested.IsZero()) return none;
+    const Vector3 cursor = Game::CursorPos();
+    const int now = Now();
+    const int targetId = Engine::ValidEnemy(target)
+        ? static_cast<int>(target.NetworkId()) : 0;
+    if (HookshotPlanCacheTick > 0 && now >= HookshotPlanCacheTick &&
+        now - HookshotPlanCacheTick <= 260 &&
+        HookshotPlanCacheTargetId == targetId &&
+        HookshotPlanCacheFleeing == fleeing &&
+        HookshotPlanCacheLethal == lethal &&
+        source.Distance2D(HookshotPlanCacheSource) <= 28.0f &&
+        requested.Distance2D(HookshotPlanCacheRequested) <= 36.0f &&
+        cursor.Distance2D(HookshotPlanCacheCursor) <= 36.0f) {
+        return HookshotPlanCache;
+    }
+    const bool sourceUnderTurret = Engine::UnderEnemyTurret(source);
     std::vector<Vector3> directions;
-    directions.reserve(36);
+    directions.reserve(24);
     AddDirection(directions, requested - source);
     const Vector3 toward = SharedGeometry::Direction2D(source, requested);
     if (!toward.IsZero()) {
@@ -237,8 +264,12 @@ inline WallCandidate BuildHookshotPlan(const AIHeroClient& target, bool fleeing,
         AddDirection(directions, SharedGeometry::Rotate2D(toward, 0.70f));
         AddDirection(directions, SharedGeometry::Rotate2D(toward, -0.70f));
     }
-    for (int i = 0; i < 32; ++i) {
-        const float angle = 2.0f * SharedGeometry::kPi * static_cast<float>(i) / 32.0f;
+    // Sixteen angular rays retain the requested/side bias above while
+    // avoiding 32 additional native FindWallCollision calls for every plan.
+    constexpr int kRadialDirections = 16;
+    for (int i = 0; i < kRadialDirections; ++i) {
+        const float angle = 2.0f * SharedGeometry::kPi * static_cast<float>(i) /
+            static_cast<float>(kRadialDirections);
         AddDirection(directions, Vector3{ std::cos(angle), 0.0f, std::sin(angle) });
     }
     std::vector<WallCandidate> candidates;
@@ -256,7 +287,7 @@ inline WallCandidate BuildHookshotPlan(const AIHeroClient& target, bool fleeing,
         HookshotContext safety{};
         safety.AnchorValid = safety.LandingValid = true;
         safety.LandingWalkable = !SDK::NavMesh::IsWall(landing);
-        safety.NewTurretDive = Engine::UnderEnemyTurret(landing) && !Engine::UnderEnemyTurret(source);
+        safety.NewTurretDive = Engine::UnderEnemyTurret(landing) && !sourceUnderTurret;
         safety.PointClickThreat = HasReadyPointClickThreatAt(landing);
         safety.DashHazard = HasReadyDashHazardAt(landing);
         safety.TargetReachable = fleeing || (Engine::ValidEnemy(target) &&
@@ -270,10 +301,19 @@ inline WallCandidate BuildHookshotPlan(const AIHeroClient& target, bool fleeing,
         candidate.Landing = landing;
         candidate.Safety = safety;
         candidate.TargetDistance = Engine::ValidEnemy(target) ? landing.Distance2D(requested) : 0.0f;
-        candidate.CursorDistance = landing.Distance2D(Game::CursorPos());
+        candidate.CursorDistance = landing.Distance2D(cursor);
         candidates.push_back(candidate);
     }
-    return SelectWallCandidate(candidates, fleeing);
+    const WallCandidate result = SelectWallCandidate(candidates, fleeing);
+    HookshotPlanCacheTick = now;
+    HookshotPlanCacheTargetId = targetId;
+    HookshotPlanCacheFleeing = fleeing;
+    HookshotPlanCacheLethal = lethal;
+    HookshotPlanCacheSource = source;
+    HookshotPlanCacheRequested = requested;
+    HookshotPlanCacheCursor = cursor;
+    HookshotPlanCache = result;
+    return result;
 }
 
 inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
@@ -535,12 +575,24 @@ inline void OnLoad() {
     PassiveReady = true;
     QFullyPrimed = WallAttached = ArenaActive = false;
     WallAnchor = PlannedLanding = ArenaCenter = {};
+    HookshotPlanCacheTick = 0;
+    HookshotPlanCacheTargetId = 0;
+    HookshotPlanCacheFleeing = false;
+    HookshotPlanCacheLethal = false;
+    HookshotPlanCacheSource = HookshotPlanCacheRequested = HookshotPlanCacheCursor = {};
+    HookshotPlanCache = {};
     ReconcileState();
 }
 inline void OnUnload() {
     TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
     ResetQState();
     WallAttached = ArenaActive = false;
+    HookshotPlanCacheTick = 0;
+    HookshotPlanCacheTargetId = 0;
+    HookshotPlanCacheFleeing = false;
+    HookshotPlanCacheLethal = false;
+    HookshotPlanCacheSource = HookshotPlanCacheRequested = HookshotPlanCacheCursor = {};
+    HookshotPlanCache = {};
 }
 
 inline constexpr const char* Scenarios[] = {

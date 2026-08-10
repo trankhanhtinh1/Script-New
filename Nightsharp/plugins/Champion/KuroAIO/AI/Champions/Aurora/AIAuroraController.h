@@ -277,6 +277,18 @@ inline WPlan LastWPlan = {};
 inline EPlan LastEPlan = {};
 inline RPlan LastRPlan = {};
 
+struct WEndpointCacheEntry {
+    Vector3 Origin = {};
+    Vector3 Direction = {};
+    Vector3 Endpoint = {};
+    int Tick = 0;
+    bool CrossesWall = false;
+    bool Reachable = false;
+};
+
+inline std::array<WEndpointCacheEntry, 8> WEndpointCaches = {};
+inline std::size_t WEndpointCacheCursor = 0;
+
 inline float TargetPriority(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return 0.0f;
     const float offense = target.TotalAttackDamage() * 0.0042f +
@@ -924,9 +936,9 @@ inline bool ManageQRecast(Mode mode) {
     return CastQ2(purpose, context.LethalNow || remaining <= 0.16f);
 }
 
-inline Vector3 ResolveWEndpoint(const Vector3& direction,
-                                bool& crossesWall,
-                                bool& reachable) {
+inline Vector3 ResolveWEndpointUncached(const Vector3& direction,
+                                        bool& crossesWall,
+                                        bool& reachable) {
     const auto player = GameObjects::Player();
     crossesWall = false;
     reachable = false;
@@ -954,6 +966,42 @@ inline Vector3 ResolveWEndpoint(const Vector3& direction,
     reachable = endpoint.IsValid() && !endpoint.IsZero() &&
                 !SDK::NavMesh::IsWall(endpoint);
     return reachable ? endpoint : Vector3{};
+}
+
+inline Vector3 ResolveWEndpoint(const Vector3& direction,
+                                bool& crossesWall,
+                                bool& reachable) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || direction.IsZero()) {
+        crossesWall = false;
+        reachable = false;
+        return {};
+    }
+    const Vector3 origin = player.Position();
+    const int now = Now();
+    for (const WEndpointCacheEntry& entry : WEndpointCaches) {
+        if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 56 ||
+            entry.Origin.Distance2D(origin) > 24.0f ||
+            entry.Direction.IsZero() || entry.Direction.Dot(direction) < 0.998f) {
+            continue;
+        }
+        crossesWall = entry.CrossesWall;
+        reachable = entry.Reachable;
+        return entry.Endpoint;
+    }
+
+    const Vector3 endpoint = ResolveWEndpointUncached(
+        direction, crossesWall, reachable);
+    WEndpointCacheEntry& entry =
+        WEndpointCaches[WEndpointCacheCursor % WEndpointCaches.size()];
+    WEndpointCacheCursor = (WEndpointCacheCursor + 1) % WEndpointCaches.size();
+    entry.Origin = origin;
+    entry.Direction = direction;
+    entry.Endpoint = endpoint;
+    entry.Tick = now;
+    entry.CrossesWall = crossesWall;
+    entry.Reachable = reachable;
+    return endpoint;
 }
 
 inline WPlan BuildWPlan(const AIHeroClient& target,
@@ -2647,12 +2695,16 @@ inline void OnLoad() {
     LastWPlan = {};
     LastEPlan = {};
     LastRPlan = {};
+    WEndpointCaches.fill({});
+    WEndpointCacheCursor = 0;
     RefreshRuntimeState();
 }
 
 inline void OnUnload() {
     TacticsMenu = PassiveMenu = HexMenu = VeilMenu = nullptr;
     WeirdingMenu = WorldsMenu = FarmMenu = CoachMenu = nullptr;
+    WEndpointCaches.fill({});
+    WEndpointCacheCursor = 0;
 }
 
 inline constexpr const char* Scenarios[] = {

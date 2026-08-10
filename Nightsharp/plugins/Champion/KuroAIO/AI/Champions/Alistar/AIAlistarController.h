@@ -115,6 +115,17 @@ inline bool WQBuffered = false;
 inline Vector3 WCastOrigin = {};
 inline KnockbackPlan LastKnockbackPlan = {};
 
+// Building a W plan can probe the same wall several times in one update:
+// TryCombo -> TryWallPin -> CastW all ask for the identical target/endpoint.
+// Keep a short-lived, movement-aware result so NavMesh thickness probing is
+// paid once while the target is effectively stationary.
+inline int KnockbackPlanCacheTargetId = 0;
+inline int KnockbackPlanCacheTick = 0;
+inline bool KnockbackPlanCacheBuffered = false;
+inline Vector3 KnockbackPlanCacheOrigin = {};
+inline Vector3 KnockbackPlanCacheTargetPosition = {};
+inline KnockbackPlan KnockbackPlanCache = {};
+
 inline int QCastTick = 0;
 inline int QPrimaryTargetId = 0;
 inline int InsecTargetId = 0;
@@ -291,7 +302,10 @@ inline float WallThicknessFrom(const Vector3& wallPoint,
                                const Vector3& direction,
                                float maximum = 420.0f) {
     if (!wallPoint.IsValid() || direction.IsZero()) return 0.0f;
-    constexpr float step = 12.0f;
+    // NavMesh::IsWall is a native/grid query.  A 12-unit probe produced up to
+    // 36 calls for every candidate W, while a 18-unit probe keeps the same
+    // wall-contact semantics with at most 24 calls.
+    constexpr float step = 18.0f;
     float thickness = 0.0f;
     bool entered = false;
     for (float distance = 0.0f; distance <= maximum; distance += step) {
@@ -315,6 +329,17 @@ inline KnockbackPlan BuildKnockbackPlan(const AIBaseClient& target,
     const Vector3 origin = castOrigin.IsValid() && !castOrigin.IsZero()
         ? castOrigin
         : player.Position();
+    const Vector3 targetPosition = target.Position();
+    const int now = Now();
+    const int targetId = static_cast<int>(target.NetworkId());
+    if (KnockbackPlanCacheTick > 0 && now >= KnockbackPlanCacheTick &&
+        now - KnockbackPlanCacheTick <= 90 &&
+        KnockbackPlanCacheTargetId == targetId &&
+        KnockbackPlanCacheBuffered == qBuffered &&
+        origin.Distance2D(KnockbackPlanCacheOrigin) <= 24.0f &&
+        targetPosition.Distance2D(KnockbackPlanCacheTargetPosition) <= 24.0f) {
+        return KnockbackPlanCache;
+    }
     const float centerDistance = origin.Distance2D(target.Position());
     const float travel = HeadbuttTravelSeconds(
         centerDistance, player.BoundingRadius(), target.BoundingRadius());
@@ -330,9 +355,10 @@ inline KnockbackPlan BuildKnockbackPlan(const AIBaseClient& target,
         plan.WallPoint = wall;
         const Vector3 direction = SharedGeometry::Direction2D(
             plan.TargetAtImpact, plan.DesiredEndpoint);
-        plan.WallThickness = WallThicknessFrom(wall, direction);
         const float required = std::max(
             105.0f, target.BoundingRadius() * 2.0f + 35.0f);
+        plan.WallThickness = WallThicknessFrom(
+            wall, direction, std::max(240.0f, required + 90.0f));
         plan.PinsToWall = plan.WallThickness >= required ||
                           SDK::NavMesh::IsWall(plan.DesiredEndpoint);
         if (plan.PinsToWall) {
@@ -342,6 +368,12 @@ inline KnockbackPlan BuildKnockbackPlan(const AIBaseClient& target,
     }
     plan.EffectiveTravel = plan.TargetAtImpact.Distance2D(
         plan.EffectiveEndpoint);
+    KnockbackPlanCacheTargetId = targetId;
+    KnockbackPlanCacheTick = now;
+    KnockbackPlanCacheBuffered = qBuffered;
+    KnockbackPlanCacheOrigin = origin;
+    KnockbackPlanCacheTargetPosition = targetPosition;
+    KnockbackPlanCache = plan;
     return plan;
 }
 
@@ -1813,6 +1845,12 @@ inline void OnLoad() {
     WDashActive = WQBufferWanted = WQBuffered = false;
     WCastOrigin = {};
     LastKnockbackPlan = {};
+    KnockbackPlanCacheTargetId = 0;
+    KnockbackPlanCacheTick = 0;
+    KnockbackPlanCacheBuffered = false;
+    KnockbackPlanCacheOrigin = {};
+    KnockbackPlanCacheTargetPosition = {};
+    KnockbackPlanCache = {};
     QCastTick = QPrimaryTargetId = InsecTargetId = InsecExpireTick = 0;
     InsecGoal = InsecCoachPoint = {};
     EActive = EAttackReady = false;
@@ -1836,6 +1874,12 @@ inline void OnUnload() {
     ClearForcedStunTarget();
     TacticsMenu = RoleMenu = HeadbuttMenu = PulverizeMenu = nullptr;
     TrampleMenu = UltimateMenu = FarmMenu = CoachMenu = nullptr;
+    KnockbackPlanCacheTargetId = 0;
+    KnockbackPlanCacheTick = 0;
+    KnockbackPlanCacheBuffered = false;
+    KnockbackPlanCacheOrigin = {};
+    KnockbackPlanCacheTargetPosition = {};
+    KnockbackPlanCache = {};
 }
 
 inline constexpr const char* Scenarios[] = {

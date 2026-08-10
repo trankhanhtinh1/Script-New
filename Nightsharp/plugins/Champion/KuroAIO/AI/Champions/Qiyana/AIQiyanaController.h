@@ -60,6 +60,43 @@ inline bool WWasManual = false;
 inline bool EWasManual = false;
 inline bool RWasManual = false;
 
+// Terrain queries are backed by the shared NavGrid and are comparatively
+// expensive.  Qiyana's decision loop can ask the same segment/terrain set
+// several times while trying Q/E/R fallbacks in one update.  Keep very short
+// identity-aware caches so repeated probes share the result without allowing
+// a moving target to reuse an old route for long enough to change the cast.
+struct SegmentWallCache {
+    Vector3 Start = {};
+    Vector3 End = {};
+    int Tick = 0;
+    bool Result = false;
+};
+
+inline SegmentWallCache ProjectileWallCache{};
+
+struct TerrainCandidateCache {
+    int Tick = 0;
+    int TargetId = 0;
+    bool Fleeing = false;
+    Vector3 PlayerPosition = {};
+    Vector3 CursorPosition = {};
+    std::vector<TerrainCandidate> Candidates;
+};
+
+inline TerrainCandidateCache WTerrainCache{};
+
+struct TerrainZoneCache {
+    int Tick = 0;
+    Vector3 Source = {};
+    Vector3 End = {};
+    std::vector<TerrainZone> Zones;
+};
+
+inline TerrainZoneCache RZoneCache{};
+
+inline std::vector<TerrainCandidate> TerrainCandidates(
+    const AIHeroClient& target, bool fleeing);
+
 inline constexpr int kElementDurationMs = 5000;
 inline constexpr int kManualOwnershipMs = 520;
 inline constexpr int kQPostCastMs = 48;
@@ -90,12 +127,53 @@ inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
 inline bool HasProjectileWall(const Vector3& start, const Vector3& end) {
     const float distance = start.Distance2D(end);
     if (distance <= 1.0f) return false;
-    const Vector3 direction = Direction2D(start, end);
-    if (direction.IsZero()) return false;
-    for (float travel = 20.0f; travel < distance - 20.0f; travel += 18.0f) {
-        if (SDK::NavMesh::IsWall(start + direction * travel)) return true;
+
+    const int now = Now();
+    const bool reusable = ProjectileWallCache.Tick > 0 && now >= ProjectileWallCache.Tick &&
+        now - ProjectileWallCache.Tick <= 32 &&
+        ProjectileWallCache.Start.Distance2D(start) <= 18.0f &&
+        ProjectileWallCache.End.Distance2D(end) <= 18.0f;
+    if (reusable) return ProjectileWallCache.Result;
+
+    // FindWallCollision walks the NavGrid cells once.  Preserve the old
+    // projectile margins (the first/last 20 units belong to the caster and
+    // target hitboxes) while replacing the repeated fixed 18-unit samples.
+    const Vec3 direction = Direction2D(start, end);
+    if (direction.IsZero() || distance <= 40.0f) return false;
+    const Vector3 queryStart = start + direction * 20.0f;
+    const Vector3 queryEnd = end - direction * 20.0f;
+    Vector3 wall{};
+    const bool result = SDK::NavMesh::FindWallCollision(
+        queryStart, queryEnd, wall, 18.0f);
+    ProjectileWallCache.Start = start;
+    ProjectileWallCache.End = end;
+    ProjectileWallCache.Tick = now;
+    ProjectileWallCache.Result = result;
+    return result;
+}
+
+inline const std::vector<TerrainCandidate>& CachedTerrainCandidates(
+    const AIHeroClient& target, bool fleeing) {
+    const auto player = GameObjects::Player();
+    const Vector3 playerPosition = player.IsValid() ? player.Position() : Vector3{};
+    const Vector3 cursorPosition = Game::CursorPos();
+    const int targetId = target.IsValid() ? static_cast<int>(target.NetworkId()) : 0;
+    const int now = Now();
+    const bool reusable = WTerrainCache.Tick > 0 && now >= WTerrainCache.Tick &&
+        now - WTerrainCache.Tick <= 64 &&
+        WTerrainCache.TargetId == targetId &&
+        WTerrainCache.Fleeing == fleeing &&
+        WTerrainCache.PlayerPosition.Distance2D(playerPosition) <= 24.0f &&
+        WTerrainCache.CursorPosition.Distance2D(cursorPosition) <= 24.0f;
+    if (!reusable) {
+        WTerrainCache.Candidates = TerrainCandidates(target, fleeing);
+        WTerrainCache.TargetId = targetId;
+        WTerrainCache.Fleeing = fleeing;
+        WTerrainCache.PlayerPosition = playerPosition;
+        WTerrainCache.CursorPosition = cursorPosition;
+        WTerrainCache.Tick = now;
     }
-    return false;
+    return WTerrainCache.Candidates;
 }
 
 inline bool SafeEndpoint(const Vector3& endpoint,
@@ -211,13 +289,17 @@ inline bool CursorAgrees(const Vector3& endpoint, const Vector3& origin) {
 inline std::vector<TerrainCandidate> TerrainCandidates(const AIHeroClient& target,
                                                        bool fleeing) {
     std::vector<TerrainCandidate> result;
+    result.reserve(10);
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return result;
+    const Vector3 playerPosition = player.Position();
+    const Vector3 cursorPosition = Game::CursorPos();
+    const Vector3 targetPosition = target.Position();
     std::array<Vec3, 12> directions{};
     std::size_t count = 0;
     for (const Vec3 direction : {
-        Direction2D(player.Position(), Game::CursorPos()),
-        Direction2D(player.Position(), target.Position()),
+        Direction2D(playerPosition, cursorPosition),
+        Direction2D(playerPosition, targetPosition),
         Vec3{ 1.0f, 0.0f, 0.0f }, Vec3{ -1.0f, 0.0f, 0.0f },
         Vec3{ 0.0f, 0.0f, 1.0f }, Vec3{ 0.0f, 0.0f, -1.0f },
         Vec3{ 0.707f, 0.0f, 0.707f }, Vec3{ -0.707f, 0.0f, 0.707f },
@@ -226,10 +308,11 @@ inline std::vector<TerrainCandidate> TerrainCandidates(const AIHeroClient& targe
     }
     for (std::size_t i = 0; i < count; ++i) {
         for (float distance = 85.0f; distance <= kWSearchRange; distance += 90.0f) {
-            const Vec3 sample = player.Position() + directions[i] * distance;
-            const bool wall = SDK::NavMesh::IsWall(sample);
-            const bool brush = IsBrush(sample);
-            const bool water = SDK::NavMesh::IsWater(sample);
+            const Vec3 sample = playerPosition + directions[i] * distance;
+            const SDK::CollisionFlags flags = SDK::NavMesh::GetCollisionFlags(sample);
+            const bool wall = SDK::HasFlag(flags, SDK::CollisionFlags::Wall);
+            const bool brush = SDK::HasFlag(flags, SDK::CollisionFlags::Grass);
+            const bool water = !wall && SDK::NavMesh::IsWater(sample);
             Element element = wall ? Element::Rock : brush ? Element::Brush :
                 water ? Element::River : Element::None;
             if (element == Element::None) continue;
@@ -249,8 +332,8 @@ inline std::vector<TerrainCandidate> TerrainCandidates(const AIHeroClient& targe
             safety.ExitAvailable = fleeing || safety.NearbyEnemies <= 1 ||
                                    Engine::CountAlliesAt(endpoint, 700.0f) > 0;
             result.push_back({ endpoint, element, safety,
-                               endpoint.Distance2D(Game::CursorPos()),
-                               endpoint.Distance2D(target.Position()) });
+                               endpoint.Distance2D(cursorPosition),
+                               endpoint.Distance2D(targetPosition) });
             break;
         }
     }
@@ -299,7 +382,8 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool defensive, bool ne
     const float hp = Engine::ValidEnemy(target) ? target.HealthPercent() : 100.0f;
     const Element desired = DesiredElement(hp, defensive, needsCatch,
                                            PassiveState.Confirmed, CurrentElement);
-    const TerrainCandidate chosen = SelectTerrainCandidate(TerrainCandidates(target, defensive), desired, defensive);
+    const TerrainCandidate chosen = SelectTerrainCandidate(
+        CachedTerrainCandidates(target, defensive), desired, defensive);
     if (chosen.Position.IsZero() || chosen.Kind == Element::None ||
         !CursorAgrees(chosen.Position, player.Position())) return false;
     if (!Engine::ControllerCastPosition(1, chosen.Position)) return false;
@@ -333,22 +417,41 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
 }
 
 inline std::vector<TerrainZone> RZones(const Vector3& source, const Vector3& end) {
+    const int now = Now();
+    const bool reusable = RZoneCache.Tick > 0 && now >= RZoneCache.Tick &&
+        now - RZoneCache.Tick <= 64 &&
+        RZoneCache.Source.Distance2D(source) <= 24.0f &&
+        RZoneCache.End.Distance2D(end) <= 24.0f;
+    if (reusable) return RZoneCache.Zones;
+
     std::vector<TerrainZone> zones;
     const Vec3 direction = Direction2D(source, end);
     if (direction.IsZero()) return zones;
-    for (float distance = 30.0f; distance <= kRRange; distance += 28.0f) {
+
+    // Find the first wall with one grid traversal, then only sample water and
+    // brush before that contact.  The old loop called IsWall for every 28-unit
+    // step and then performed another grid traversal once a wall was found.
+    const float endDistance = source.Distance2D(end);
+    const float queryDistance = std::min(kRRange, endDistance);
+    if (queryDistance <= 30.0f) return zones;
+    const Vector3 queryEnd = source + direction * queryDistance;
+    Vector3 wall{};
+    const bool hasWall = SDK::NavMesh::FindWallCollision(
+        source + direction * 30.0f, queryEnd, wall, 8.0f) &&
+        wall.IsValid() && !wall.IsZero();
+    const float wallDistance = hasWall
+        ? source.Distance2D(wall) : FLT_MAX;
+    const float sampleLimit = std::min(queryDistance, wallDistance);
+    for (float distance = 30.0f; distance <= sampleLimit; distance += 28.0f) {
         const Vec3 sample = source + direction * distance;
-        if (SDK::NavMesh::IsWall(sample)) {
-            Vector3 wall{};
-            if (SDK::NavMesh::FindWallCollision(source, sample, wall, 8.0f) &&
-                wall.IsValid() && !wall.IsZero()) {
-                zones.push_back({ wall, 80.0f, Element::Rock });
-            }
-            break;
-        }
-        const bool brush = IsBrush(sample);
         if (SDK::NavMesh::IsWater(sample)) zones.push_back({ sample, 105.0f, Element::River });
     }
+    if (hasWall) zones.push_back({ wall, 80.0f, Element::Rock });
+
+    RZoneCache.Source = source;
+    RZoneCache.End = end;
+    RZoneCache.Tick = now;
+    RZoneCache.Zones = zones;
     return zones;
 }
 
@@ -607,6 +710,9 @@ inline void OnLoad() {
     IncomingThreatUntil = IncomingHardCCUntil = PlayerOverrideUntil = 0;
     LastQDirection = LastWEndpoint = LastEEndpoint = LastREndpoint = {};
     QWasManual = WWasManual = EWasManual = RWasManual = false;
+    ProjectileWallCache = {};
+    WTerrainCache = {};
+    RZoneCache = {};
     ReconcileState();
 }
 
@@ -614,6 +720,9 @@ inline void OnUnload() {
     TacticsMenu = ElementMenu = MobilityMenu = UltimateMenu = FarmMenu = CoachMenu = nullptr;
     CurrentElement = Element::None;
     PassiveState = {};
+    ProjectileWallCache = {};
+    WTerrainCache = {};
+    RZoneCache = {};
 }
 
 inline constexpr const char* Scenarios[] = {

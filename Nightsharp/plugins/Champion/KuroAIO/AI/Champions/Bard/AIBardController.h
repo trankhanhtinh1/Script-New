@@ -240,6 +240,36 @@ inline WPlan LastWPlan = {};
 inline EPlan LastEPlan = {};
 inline RPlan LastRPlan = {};
 
+// Q candidate generation traces terrain and then evaluates every angular
+// candidate.  Cache the completed result briefly so posture branches that ask
+// for the same target do not repeat those wall/projectile scans.
+struct QPlanCacheEntry {
+    int Tick = 0;
+    int TargetId = 0;
+    QPurpose Purpose = QPurpose::None;
+    bool RequireStun = true;
+    Vector3 Origin = {};
+    Vector3 TargetPosition = {};
+    QPlan Plan = {};
+};
+
+struct PortalPlanCacheEntry {
+    int Tick = 0;
+    int ThreatId = 0;
+    EPurpose Purpose = EPurpose::None;
+    bool Defensive = false;
+    bool PlayerRequested = false;
+    Vector3 Origin = {};
+    Vector3 Desired = {};
+    Vector3 Cursor = {};
+    EPlan Plan = {};
+};
+
+inline std::array<QPlanCacheEntry, 8> QPlanCaches = {};
+inline std::size_t QPlanCacheCursor = 0;
+inline std::array<PortalPlanCacheEntry, 8> PortalPlanCaches = {};
+inline std::size_t PortalPlanCacheCursor = 0;
+
 inline int ChimeCount = 0;
 inline int MeepAmmo = 0;
 inline int MeepMaximum = 1;
@@ -665,7 +695,21 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
     QPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0) || TargetRejectsQ(target)) return best;
-    if (player.Position().Distance2D(target.Position()) >
+    const Vector3 origin = player.Position();
+    const Vector3 targetPosition = target.Position();
+    const int targetId = static_cast<int>(target.NetworkId());
+    const int now = Now();
+    for (const QPlanCacheEntry& entry : QPlanCaches) {
+        if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 72 ||
+            entry.TargetId != targetId || entry.Purpose != purpose ||
+            entry.RequireStun != requireStun ||
+            entry.Origin.Distance2D(origin) > 24.0f ||
+            entry.TargetPosition.Distance2D(targetPosition) > 24.0f) {
+            continue;
+        }
+        return entry.Plan;
+    }
+    if (origin.Distance2D(targetPosition) >
             kQInitialTargetRange + target.BoundingRadius() +
                 kQHalfWidth + 35.0f) {
         return best;
@@ -683,20 +727,26 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
     const float dealt = player.CalculateMagicDamage(target, raw);
     const bool lethal = dealt >= target.Health() + 4.0f;
     const auto candidates = QCandidates(target);
+    const float impact = kQCastSeconds +
+        std::max(0.0f,
+            origin.Distance2D(targetPosition) -
+            target.BoundingRadius() - kQHalfWidth) / kQMissileSpeed;
+    // Impact timing is independent of the angular candidate.  Build one
+    // object/prediction snapshot lazily after the first clear ray, then share
+    // it across all remaining candidate evaluations.
+    std::vector<QUnit> units;
+    bool unitsBuilt = false;
     for (const Vector3& aim : candidates) {
         if (!aim.IsValid() || aim.IsZero() ||
-            ProjectileWallBlocks(player.Position(), aim, kQHalfWidth)) {
+            ProjectileWallBlocks(origin, aim, kQHalfWidth)) {
             continue;
         }
-        const float impact = kQCastSeconds +
-            std::max(0.0f,
-                player.Position().Distance2D(target.Position()) -
-                target.BoundingRadius() - kQHalfWidth) / kQMissileSpeed;
-        const auto units = BuildQUnits(impact);
+        if (!unitsBuilt) {
+            units = BuildQUnits(impact);
+            unitsBuilt = true;
+        }
         QEvaluation evaluation = EvaluateCosmicBinding(
-            player.Position(), aim, units,
-            TerrainSamplesForQ(player.Position(), aim),
-            static_cast<int>(target.NetworkId()));
+            origin, aim, units, TerrainSamplesForQ(origin, aim), targetId);
         if (!evaluation.Valid) continue;
         const bool stun = evaluation.FirstStunned;
         if (requireStun && !stun && !lethal &&
@@ -725,6 +775,16 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
             best.Valid = true;
         }
     }
+    QPlanCacheEntry& cache =
+        QPlanCaches[QPlanCacheCursor % QPlanCaches.size()];
+    QPlanCacheCursor = (QPlanCacheCursor + 1) % QPlanCaches.size();
+    cache.Tick = now;
+    cache.TargetId = targetId;
+    cache.Purpose = purpose;
+    cache.RequireStun = requireStun;
+    cache.Origin = origin;
+    cache.TargetPosition = targetPosition;
+    cache.Plan = best;
     return best;
 }
 
@@ -1036,10 +1096,28 @@ inline EPlan BuildPortalPlan(const Vector3& desired,
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2) || PlayerMobilityLocked() ||
         !HasCurrentResource(SpellCost(2))) return best;
-    Vector3 base = SharedGeometry::Direction2D(player.Position(), desired);
+    const Vector3 origin = player.Position();
+    const int now = Now();
+    Vector3 base = SharedGeometry::Direction2D(origin, desired);
     if (base.IsZero()) return best;
     const AIHeroClient threat = ControllerHelpers::NearestEnemyToPlayer(
         {}, 1500.0f);
+    const int threatId = threat.IsValid()
+        ? static_cast<int>(threat.NetworkId()) : 0;
+    const Vector3 cursor = Game::CursorPos();
+    for (const PortalPlanCacheEntry& entry : PortalPlanCaches) {
+        if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 72 ||
+            entry.ThreatId != threatId || entry.Purpose != purpose ||
+            entry.Defensive != defensive ||
+            entry.PlayerRequested != playerRequested ||
+            entry.Origin.Distance2D(origin) > 24.0f ||
+            entry.Desired.Distance2D(desired) > 32.0f ||
+            entry.Cursor.Distance2D(cursor) > 36.0f) {
+            continue;
+        }
+        return entry.Plan;
+    }
+    const bool respectHazards = Bool(EMenu, "RespectDashHazards", true);
     static constexpr std::array<float, 9> angles = {
         0.0f, 0.08f, -0.08f, 0.16f, -0.16f,
         0.26f, -0.26f, 0.40f, -0.40f,
@@ -1049,16 +1127,20 @@ inline EPlan BuildPortalPlan(const Vector3& desired,
         if (direction.IsZero()) continue;
         for (float distance = 120.0f; distance <= kECastRange;
              distance += 35.0f) {
-            const Vector3 terrainPoint = player.Position() + direction * distance;
+            const Vector3 terrainPoint = origin + direction * distance;
             if (!SDK::NavMesh::IsWall(terrainPoint)) continue;
             const PortalTrace portal = TracePortal(
-                player.Position(), terrainPoint,
+                origin, terrainPoint,
                 [](const Vector3& point) { return SDK::NavMesh::IsWall(point); },
                 14.0f);
-            if (!portal.Valid || SDK::NavMesh::IsWall(portal.Exit) ||
-                HasReadyPointClickThreatAt(portal.Exit) ||
-                (Bool(EMenu, "RespectDashHazards", true) &&
-                 HasReadyDashHazardAt(portal.Exit))) {
+            const bool exitTerrain = portal.Valid &&
+                SDK::NavMesh::IsWall(portal.Exit);
+            const bool pointClickThreat = portal.Valid &&
+                HasReadyPointClickThreatAt(portal.Exit);
+            const bool dashHazard = portal.Valid &&
+                HasReadyDashHazardAt(portal.Exit);
+            if (!portal.Valid || exitTerrain || pointClickThreat ||
+                (respectHazards && dashHazard)) {
                 continue;
             }
             PortalSafetyContext context{};
@@ -1066,10 +1148,10 @@ inline EPlan BuildPortalPlan(const Vector3& desired,
             context.EnemiesAtExit = Engine::CountEnemiesAt(portal.Exit, 700.0f);
             context.EnemiesAtEntrance = Engine::CountEnemiesAt(
                 portal.Entrance, 550.0f);
-            context.CursorDistance = portal.Exit.Distance2D(Game::CursorPos());
-            context.ExitTerrain = SDK::NavMesh::IsWall(portal.Exit);
+            context.CursorDistance = portal.Exit.Distance2D(cursor);
+            context.ExitTerrain = exitTerrain;
             context.ExitUnderEnemyTurret = Engine::UnderEnemyTurret(portal.Exit);
-            context.DashHazardAtExit = HasReadyDashHazardAt(portal.Exit);
+            context.DashHazardAtExit = dashHazard;
             context.AllyRequestedDirection = playerRequested ||
                 CursorDirectionAgrees(portal.Exit, defensive ? -0.15f : 0.20f);
             if (threat.IsValid()) {
@@ -1092,6 +1174,19 @@ inline EPlan BuildPortalPlan(const Vector3& desired,
             break;
         }
     }
+    PortalPlanCacheEntry& cache =
+        PortalPlanCaches[PortalPlanCacheCursor % PortalPlanCaches.size()];
+    PortalPlanCacheCursor =
+        (PortalPlanCacheCursor + 1) % PortalPlanCaches.size();
+    cache.Tick = now;
+    cache.ThreatId = threatId;
+    cache.Purpose = purpose;
+    cache.Defensive = defensive;
+    cache.PlayerRequested = playerRequested;
+    cache.Origin = origin;
+    cache.Desired = desired;
+    cache.Cursor = cursor;
+    cache.Plan = best;
     return best;
 }
 
@@ -2644,6 +2739,10 @@ inline void OnLoad() {
     LastWPlan = {};
     LastEPlan = {};
     LastRPlan = {};
+    QPlanCaches.fill({});
+    QPlanCacheCursor = 0;
+    PortalPlanCaches.fill({});
+    PortalPlanCacheCursor = 0;
     ChimeCount = 0;
     MeepAmmo = 0;
     MeepMaximum = 1;
@@ -2672,6 +2771,10 @@ inline void OnLoad() {
 inline void OnUnload() {
     TacticsMenu = RoleMenu = PassiveMenu = QMenu = WMenu = nullptr;
     EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
+    QPlanCaches.fill({});
+    QPlanCacheCursor = 0;
+    PortalPlanCaches.fill({});
+    PortalPlanCacheCursor = 0;
 }
 
 inline constexpr const char* Scenarios[] = {

@@ -162,6 +162,22 @@ inline bool QDashObserved = false;
 inline Vector3 QCastOrigin = {};
 inline BandagePlan LastBandagePlan = {};
 
+// Bandage planning is queried by several posture branches in one update.
+// Keep a small movement-aware cache so the nine angular probes share one
+// object snapshot instead of rescanning minions/monsters/heroes per offset.
+struct BandagePlanCacheEntry {
+    int Tick = 0;
+    int IntendedId = 0;
+    BandagePurpose Purpose = BandagePurpose::None;
+    bool AllowSpellShieldMobility = false;
+    Vector3 Origin = {};
+    Vector3 IntendedPosition = {};
+    BandagePlan Plan = {};
+};
+
+inline std::array<BandagePlanCacheEntry, 8> BandagePlanCaches = {};
+inline std::size_t BandagePlanCacheCursor = 0;
+
 inline bool WActive = false;
 inline int WToggleTick = 0;
 inline int WLastContactTick = 0;
@@ -465,8 +481,21 @@ inline BandagePlan BuildBandagePlan(
         !intended.IsTargetable() || !Ready(0)) {
         return best;
     }
-    const float centerDistance = player.Position().Distance2D(
-        intended.Position());
+    const Vector3 origin = player.Position();
+    const Vector3 intendedPosition = intended.Position();
+    const int intendedId = static_cast<int>(intended.NetworkId());
+    const int now = Now();
+    for (const BandagePlanCacheEntry& entry : BandagePlanCaches) {
+        if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 72 ||
+            entry.IntendedId != intendedId || entry.Purpose != purpose ||
+            entry.AllowSpellShieldMobility != allowSpellShieldMobility ||
+            entry.Origin.Distance2D(origin) > 24.0f ||
+            entry.IntendedPosition.Distance2D(intendedPosition) > 24.0f) {
+            continue;
+        }
+        return entry.Plan;
+    }
+    const float centerDistance = origin.Distance2D(intendedPosition);
     if (centerDistance > kBandageRange + intended.BoundingRadius() +
                              kBandageHalfWidth + 25.0f) {
         return best;
@@ -502,31 +531,39 @@ inline BandagePlan BuildBandagePlan(
         0.055f, -0.055f, 0.080f, -0.080f,
     };
     float bestScore = -FLT_MAX;
+    const float provisionalEntry = std::max(
+        0.0f, centerDistance - intended.BoundingRadius() -
+                  kBandageHalfWidth);
+    const float impactDelay = BandageMissileSeconds(provisionalEntry);
+    // This snapshot is independent of the angular offset.  Build it lazily
+    // (only after the first clear projectile ray) and then reuse it for all
+    // remaining offsets, removing up to eight full object-list scans.
+    std::vector<LineUnit> units;
+    bool unitsBuilt = false;
     for (const float offset : offsets) {
         const Vector3 direction = SharedGeometry::Rotate2D(direct, offset);
         if (direction.IsZero()) continue;
-        const Vector3 castAim = player.Position() + direction * kBandageRange;
+        const Vector3 castAim = origin + direction * kBandageRange;
         if (ControllerHelpers::ProjectileWallBlocksFromPlayer(
                 castAim, kBandageHalfWidth)) {
             continue;
         }
-        const float provisionalEntry = std::max(
-            0.0f, centerDistance - intended.BoundingRadius() -
-                      kBandageHalfWidth);
-        const float impactDelay = BandageMissileSeconds(provisionalEntry);
-        const auto units = BandageCollisionUnits(impactDelay);
+        if (!unitsBuilt) {
+            units = BandageCollisionUnits(impactDelay);
+            unitsBuilt = true;
+        }
         const int firstIndex = FirstBandageCollisionIndex(
-            player.Position(), direction, units);
+            origin, direction, units);
         if (firstIndex < 0) continue;
         const LineUnit& collision = units[static_cast<std::size_t>(firstIndex)];
         const bool intendedFirst = collision.Id ==
             static_cast<int>(intended.NetworkId());
         if (!intendedFirst) continue;
         const float entry = BandageEntryDistance(
-            player.Position(), direction, collision);
+            origin, direction, collision);
         const float impact = BandageMissileSeconds(entry);
         const float arrival = BandageArrivalSeconds(
-            player.Position().Distance2D(collision.Position), entry,
+            origin.Distance2D(collision.Position), entry,
             player.BoundingRadius(), intended.BoundingRadius());
         const Vector3 arrivalPosition = collision.Position;
         const bool safe = ArrivalSafe(arrivalPosition, purpose, hero);
@@ -553,6 +590,17 @@ inline BandagePlan BuildBandagePlan(
             best.Valid = true;
         }
     }
+    BandagePlanCacheEntry& cache =
+        BandagePlanCaches[BandagePlanCacheCursor % BandagePlanCaches.size()];
+    BandagePlanCacheCursor =
+        (BandagePlanCacheCursor + 1) % BandagePlanCaches.size();
+    cache.Tick = now;
+    cache.IntendedId = intendedId;
+    cache.Purpose = purpose;
+    cache.AllowSpellShieldMobility = allowSpellShieldMobility;
+    cache.Origin = origin;
+    cache.IntendedPosition = intendedPosition;
+    cache.Plan = best;
     return best;
 }
 
@@ -2383,6 +2431,8 @@ inline void OnLoad() {
     QPendingArrival = QDashObserved = false;
     QCastOrigin = {};
     LastBandagePlan = {};
+    BandagePlanCaches.fill({});
+    BandagePlanCacheCursor = 0;
     WActive = GameObjects::Player().HasBuff("AuraofDespair");
     WToggleTick = WLastContactTick = WExpectedContactUntil = 0;
     ECastTick = ETargetId = 0;
@@ -2407,6 +2457,8 @@ inline void OnLoad() {
 inline void OnUnload() {
     TacticsMenu = RoleMenu = BandageMenu = DespairMenu = nullptr;
     TantrumMenu = UltimateMenu = FarmMenu = CoachMenu = nullptr;
+    BandagePlanCaches.fill({});
+    BandagePlanCacheCursor = 0;
 }
 
 inline constexpr const char* Scenarios[] = {

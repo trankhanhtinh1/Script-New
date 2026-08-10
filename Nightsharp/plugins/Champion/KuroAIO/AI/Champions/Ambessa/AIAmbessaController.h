@@ -181,6 +181,15 @@ inline int WeaveTargetId = 0;
 inline int WeaveWaitUntil = 0;
 inline int LastDecisionTargetId = 0;
 
+struct PassiveDashTerrainCache {
+    int Tick = 0;
+    Vector3 Origin = {};
+    Vector3 Desired = {};
+    Vector3 Endpoint = {};
+};
+
+inline PassiveDashTerrainCache LastPassiveDashTerrain = {};
+
 inline constexpr int kQRecastMs = 4000;
 inline constexpr int kPassiveStackMs = 4000;
 inline constexpr int kDashBufferMs = 275;
@@ -231,6 +240,14 @@ inline bool CursorConsentsTo(const Vector3& position,
 inline Vector3 ClipPassiveDashToTerrain(const Vector3& origin,
                                         const Vector3& desired) {
     if (!origin.IsValid() || !desired.IsValid()) return origin;
+    const int now = Now();
+    if (LastPassiveDashTerrain.Tick > 0 &&
+        now >= LastPassiveDashTerrain.Tick &&
+        now - LastPassiveDashTerrain.Tick <= 56 &&
+        LastPassiveDashTerrain.Origin.Distance2D(origin) <= 8.0f &&
+        LastPassiveDashTerrain.Desired.Distance2D(desired) <= 8.0f) {
+        return LastPassiveDashTerrain.Endpoint;
+    }
     const Vector3 direction = SharedGeometry::Direction2D(origin, desired);
     const float distance = origin.Distance2D(desired);
     if (direction.IsZero() || distance < 1.0f) return origin;
@@ -238,9 +255,13 @@ inline Vector3 ClipPassiveDashToTerrain(const Vector3& origin,
     for (float travel = 18.0f; travel <= distance; travel += 18.0f) {
         Vector3 sample = origin + direction * travel;
         sample.y = origin.y;
-        if (SDK::NavMesh::IsWall(sample)) return last;
+        if (SDK::NavMesh::IsWall(sample)) {
+            LastPassiveDashTerrain = { now, origin, desired, last };
+            return last;
+        }
         last = sample;
     }
+    LastPassiveDashTerrain = { now, origin, desired, desired };
     return desired;
 }
 
@@ -1933,12 +1954,14 @@ inline void OnLoad() {
     InterruptTargetId = InterruptExpireTick = 0;
     LastAutoTargetId = LastAutoTick = WeaveTargetId = WeaveWaitUntil = 0;
     LastDecisionTargetId = 0;
+    LastPassiveDashTerrain = {};
     RefreshState();
 }
 
 inline void OnUnload() {
     TacticsMenu = PassiveMenu = QMenu = WMenu = EMenu = nullptr;
     RMenu = FarmMenu = CoachMenu = nullptr;
+    LastPassiveDashTerrain = {};
 }
 
 inline constexpr const char* Scenarios[] = {

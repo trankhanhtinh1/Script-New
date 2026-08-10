@@ -4,6 +4,7 @@
 #include "../../AIControllerHelpers.h"
 #include "AIKSanteGeometry.h"
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
 
@@ -45,6 +46,16 @@ inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
+
+struct TerrainBlocksCacheEntry {
+  int Tick = 0;
+  Vector3 Start = {};
+  Vector3 End = {};
+  bool Blocks = false;
+};
+
+inline std::array<TerrainBlocksCacheEntry, 8> TerrainBlocksCaches = {};
+inline std::size_t TerrainBlocksCacheCursor = 0;
 using ControllerHelpers::Now;
 inline bool AllOut() { return CurrentStance == Stance::AllOut; }
 inline bool Ready(int i, Mode m, bool windup = false) {
@@ -84,10 +95,31 @@ inline bool TerrainBlocks(const Vector3 &a, const Vector3 &b) {
   const float n = a.Distance2D(b);
   if (d.IsZero())
     return false;
-  for (float x = 35; x < n - 25; x += 24)
-    if (SDK::NavMesh::IsWall(a + d * x))
-      return true;
-  return false;
+  const int now = Now();
+  for (const TerrainBlocksCacheEntry &entry : TerrainBlocksCaches) {
+    if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 56 ||
+        entry.Start.Distance2D(a) > 6.0f ||
+        entry.End.Distance2D(b) > 6.0f) {
+      continue;
+    }
+    return entry.Blocks;
+  }
+  bool blocks = false;
+  for (float x = 35; x < n - 25; x += 24) {
+    if (SDK::NavMesh::IsWall(a + d * x)) {
+      blocks = true;
+      break;
+    }
+  }
+  TerrainBlocksCacheEntry &cache =
+      TerrainBlocksCaches[TerrainBlocksCacheCursor % TerrainBlocksCaches.size()];
+  TerrainBlocksCacheCursor =
+      (TerrainBlocksCacheCursor + 1) % TerrainBlocksCaches.size();
+  cache.Tick = now;
+  cache.Start = a;
+  cache.End = b;
+  cache.Blocks = blocks;
+  return blocks;
 }
 
 inline void ReconcileState() {
@@ -626,11 +658,15 @@ inline void OnLoad() {
   InterruptTargetId = InterruptExpireTick = 0;
   LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick =
       LastAutoTargetId = LastAutoTick = 0;
+  TerrainBlocksCaches.fill({});
+  TerrainBlocksCacheCursor = 0;
 }
 
 inline void OnUnload() {
   TacticsMenu = WMenu = EMenu = RMenu = nullptr;
   WOwned = false;
+  TerrainBlocksCaches.fill({});
+  TerrainBlocksCacheCursor = 0;
 }
 
 inline constexpr const char *Scenarios[] = {

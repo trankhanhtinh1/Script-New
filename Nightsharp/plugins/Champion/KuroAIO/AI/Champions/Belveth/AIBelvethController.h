@@ -230,6 +230,16 @@ inline int GapcloserExpireTick = 0;
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
 
+struct QPathCache {
+    Vector3 Origin = {};
+    Vector3 Direction = {};
+    int Tick = 0;
+    bool TrueForm = false;
+    QPath Path = {};
+};
+
+inline QPathCache LastQPathCache = {};
+
 inline constexpr int kQHudLearnMs = 650;
 inline constexpr int kWRefreshObserveMs = 800;
 inline constexpr int kWeaveWindowMs = 360;
@@ -447,9 +457,9 @@ inline bool QEndpointSafe(const Vector3& endpoint,
     return true;
 }
 
-inline QPath TraceQPath(const Vector3& origin,
-                        const Vector3& direction,
-                        bool trueForm) {
+inline QPath TraceQPathUncached(const Vector3& origin,
+                                const Vector3& direction,
+                                bool trueForm) {
     QPath result{};
     if (!origin.IsValid() || direction.IsZero()) return result;
     const float maximum = trueForm
@@ -498,6 +508,27 @@ inline QPath TraceQPath(const Vector3& origin,
     result.TravelDistance = kQOpenDashDistance;
     result.Valid = !SDK::NavMesh::IsWall(result.Endpoint);
     return result;
+}
+
+inline QPath TraceQPath(const Vector3& origin,
+                        const Vector3& direction,
+                        bool trueForm) {
+    const int now = Now();
+    const bool reusable = LastQPathCache.Tick > 0 && now >= LastQPathCache.Tick &&
+        now - LastQPathCache.Tick <= 56 &&
+        LastQPathCache.TrueForm == trueForm &&
+        LastQPathCache.Origin.Distance2D(origin) <= 20.0f &&
+        !LastQPathCache.Direction.IsZero() &&
+        LastQPathCache.Direction.Dot(direction) >= 0.998f;
+    if (reusable) return LastQPathCache.Path;
+
+    const QPath path = TraceQPathUncached(origin, direction, trueForm);
+    LastQPathCache.Origin = origin;
+    LastQPathCache.Direction = direction;
+    LastQPathCache.TrueForm = trueForm;
+    LastQPathCache.Tick = now;
+    LastQPathCache.Path = path;
+    return path;
 }
 
 inline void AppendBody(std::vector<Body>& bodies,
@@ -2442,6 +2473,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     const int now = Now();
+    LastQPathCache = {};
     ActiveSequence = Sequence::None;
     CurrentPosture = Posture::Neutral;
     LastRReason = RReason::None;
@@ -2491,6 +2523,7 @@ inline void OnLoad() {
 inline void OnUnload() {
     TacticsMenu = PassiveMenu = QMenu = WMenu = nullptr;
     EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
+    LastQPathCache = {};
 }
 
 inline constexpr const char* Scenarios[] = {

@@ -197,13 +197,21 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     const Vector3 direction = Direction2D(player.Position(), toward.IsZero() ? cursor : toward);
     if (direction.IsZero()) return false;
     Vector3 endpoint = player.Position() + direction * std::min(kERange, player.Position().Distance2D(toward));
-    if (endpoint.IsZero() || !SDK::NavMesh::IsWall(endpoint)) {
+    // Reuse the first wall query.  The old path queried the same endpoint
+    // twice whenever it was already a wall, and could then rescan the whole
+    // 800-unit corridor on every E evaluation.
+    bool endpointWall = !endpoint.IsZero() && SDK::NavMesh::IsWall(endpoint);
+    if (!endpointWall) {
         for (float distance = 120.0f; distance <= kERange; distance += 80.0f) {
             const Vector3 sample = player.Position() + direction * distance;
-            if (SDK::NavMesh::IsWall(sample)) { endpoint = sample; break; }
+            if (SDK::NavMesh::IsWall(sample)) {
+                endpoint = sample;
+                endpointWall = true;
+                break;
+            }
         }
     }
-    if (endpoint.IsZero() || !SDK::NavMesh::IsWall(endpoint)) return false;
+    if (endpoint.IsZero() || !endpointWall) return false;
     const bool lethal = target.IsValid() && Lethal(target, QDamage(target));
     if (!SafeEndpoint(endpoint, target, lethal, fleeing)) return false;
     if (!Engine::ControllerCastPosition(2, endpoint)) return false;
