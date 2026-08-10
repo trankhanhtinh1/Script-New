@@ -298,15 +298,6 @@ inline bool IsWard(const AIMinionClient& minion) {
     return HasFlag(minion.GetMinionType(), MinionTypes::Ward);
 }
 
-inline bool IsSpecialMinion(const AIMinionClient& minion) {
-    if (!minion.IsValid() || minion.IsJungle() || minion.IsPlant() || IsWard(minion) || IsLaneMinion(minion)) {
-        return false;
-    }
-    const std::string name = ToLower(minion.CharacterName());
-    return name.find("minion") != std::string::npos ||
-           name.find("ward") == std::string::npos;
-}
-
 inline void FireBeforeAttack(OrbwalkingActionArgs& args) {
     BeforeAttackHandlers.Fire(args);
 }
@@ -2753,12 +2744,10 @@ protected:
         attackableMenu_ = rootMenu_->AddSubMenu(new Menu("Attackable", "Attackable Unit"));
         attackableMenu_->Add(new MenuBool("Barrels", "Barrels", true));
         attackableMenu_->Add(new MenuBool("JunglePlant", "Jungle Plant", false));
-        attackableMenu_->Add(new MenuBool("SpecialMinions", "Special Minions", true));
         attackableMenu_->Add(new MenuBool("Wards", "Wards", true));
 
         prioritizeMenu_ = rootMenu_->AddSubMenu(new Menu("Prioritize", "Prioritize"));
         prioritizeMenu_->Add(new MenuBool("FarmOverHarass", "Farm Over Harass", true));
-        prioritizeMenu_->Add(new MenuBool("SpecialMinion", "Special Minion", false));
         prioritizeMenu_->Add(new MenuBool("SmallJungle", "Small Jungle", false));
         prioritizeMenu_->Add(new MenuBool("Turret", "Turret", true));
 

@@ -282,7 +282,12 @@ namespace detail {
         if (IsKnownJungleMonsterName(name)) {
             return false;
         }
-        return minion.IsMinion() || IsLaneMinionName(name);
+        const MinionTypes type = minion.GetMinionType();
+        return HasFlag(type, MinionTypes::Melee) ||
+               HasFlag(type, MinionTypes::Ranged) ||
+               HasFlag(type, MinionTypes::Siege) ||
+               HasFlag(type, MinionTypes::Super) ||
+               IsLaneMinionName(name);
     }
 
     inline bool IsLaneMinionObject(const AIMinionClient& minion) {
@@ -644,8 +649,6 @@ namespace detail {
                 }
                 break;
             }
-            if (enemy) PushUniqueByNetworkId(EnemySpecialMinionsList, minion);
-            else PushUniqueByNetworkId(AllySpecialMinionsList, minion);
             break;
         }
         // REMOVED: Turret/Inhibitor/Nexus class disabled by user request

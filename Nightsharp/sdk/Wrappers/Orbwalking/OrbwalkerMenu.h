@@ -46,12 +46,10 @@ public:
     bool PrioritizeMinions() const { return BoolValue(prioritizeMinions_, false); }
     bool PrioritizeSmallJungle() const { return BoolValue(prioritizeSmallJungle_, false); }
     bool PrioritizeWards() const { return BoolValue(prioritizeWards_, false); }
-    bool PrioritizeSpecialMinions() const { return BoolValue(prioritizeSpecialMinions_, false); }
 
     bool AttackWards() const { return BoolValue(attackWards_, false); }
     bool AttackBarrels() const { return BoolValue(attackBarrels_, false); }
     bool AttackClones() const { return BoolValue(attackClones_, false); }
-    bool AttackSpecialMinions() const { return BoolValue(attackSpecialMinions_, true); }
 
     OrbwalkingMode ActiveMode() const {
         if (!Enabled() || Game::IsChatOpen() || Game::IsShopOpen()) {
@@ -133,13 +131,11 @@ private:
             prioritizeMinions_ = advancedMenu_->Add(new MenuBool("prioritizeMinions", "Minions Over Objectives", false));
             prioritizeSmallJungle_ = advancedMenu_->Add(new MenuBool("prioritizeSmallJungle", "Small Jungle", false));
             prioritizeWards_ = advancedMenu_->Add(new MenuBool("prioritizeWards", "Wards", false));
-            prioritizeSpecialMinions_ = advancedMenu_->Add(new MenuBool("prioritizeSpecialMinions", "Special Minions", false));
 
             advancedMenu_->Add(new MenuSeparator("separatorAttack", "Attack"));
             attackWards_ = advancedMenu_->Add(new MenuBool("attackWards", "Wards", false));
             attackBarrels_ = advancedMenu_->Add(new MenuBool("attackBarrels", "Barrels", false));
             attackClones_ = advancedMenu_->Add(new MenuBool("attackClones", "Clones", false));
-            attackSpecialMinions_ = advancedMenu_->Add(new MenuBool("attackSpecialMinions", "Special Minions", true));
 
         }
 
@@ -179,12 +175,10 @@ private:
     MenuBool* prioritizeMinions_ = nullptr;
     MenuBool* prioritizeSmallJungle_ = nullptr;
     MenuBool* prioritizeWards_ = nullptr;
-    MenuBool* prioritizeSpecialMinions_ = nullptr;
 
     MenuBool* attackWards_ = nullptr;
     MenuBool* attackBarrels_ = nullptr;
     MenuBool* attackClones_ = nullptr;
-    MenuBool* attackSpecialMinions_ = nullptr;
 
     MenuKeyBind* lastHitKey_ = nullptr;
     MenuKeyBind* laneClearKey_ = nullptr;

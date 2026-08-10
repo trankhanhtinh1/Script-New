@@ -433,7 +433,6 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
     const bool includeLaneAndJungleAndWard = mode != OrbwalkingMode::Combo;
     std::vector<AIMinionClient> jungleMinions;
     std::vector<AIMinionClient> wardMinions;
-    std::vector<AIMinionClient> specialMinions;
     std::vector<AIMinionClient> cloneMinions;
 
     if (includeLaneAndJungleAndWard) {
@@ -468,16 +467,6 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         }
     }
 
-    if (menu.AttackSpecialMinions()) {
-        const auto& specials = FrameMinions<&GameObjects::EnemySpecialMinionsInto>();
-        specialMinions.reserve(specials.size());
-        for (const auto& minion : specials) {
-            if (IsValidCurrentMinionTarget(player, minion)) {
-                AddUniqueMinion(specialMinions, minion);
-            }
-        }
-    }
-
     if (menu.AttackClones()) {
         const auto& clones = FrameMinions<&GameObjects::EnemyClonesInto>();
         cloneMinions.reserve(clones.size());
@@ -492,7 +481,6 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         laneMinions.size() +
         jungleMinions.size() +
         wardMinions.size() +
-        specialMinions.size() +
         cloneMinions.size());
 
     auto append = [&result](const std::vector<AIMinionClient>& values) {
@@ -506,22 +494,11 @@ inline MinionTargetLists GetMinionsForMode(OrbwalkingMode mode,
         append(jungleMinions);
     };
 
-    if (menu.AttackWards() && menu.PrioritizeWards() &&
-        menu.AttackSpecialMinions() && menu.PrioritizeSpecialMinions()) {
-        append(wardMinions);
-        append(specialMinions);
-        appendOrdinary();
-    } else if (menu.AttackSpecialMinions() && menu.PrioritizeSpecialMinions()) {
-        append(specialMinions);
-        appendOrdinary();
-        append(wardMinions);
-    } else if (menu.AttackWards() && menu.PrioritizeWards()) {
+    if (menu.AttackWards() && menu.PrioritizeWards()) {
         append(wardMinions);
         appendOrdinary();
-        append(specialMinions);
     } else {
         appendOrdinary();
-        append(specialMinions);
         append(wardMinions);
     }
 
@@ -794,14 +771,6 @@ inline AttackableUnit FirstValidMinionTarget(const AIHeroClient& player,
 
 inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
                                                 const AIHeroClient& player) {
-    if (menu.AttackSpecialMinions()) {
-        const AttackableUnit special =
-            FirstValidMinionTarget(player, FrameMinions<&GameObjects::EnemySpecialMinionsInto>());
-        if (special.IsValid()) {
-            return special;
-        }
-    }
-
     if (menu.AttackBarrels() && HasGangplankInGame()) {
         for (const auto& minion : FrameMinions<&GameObjects::MinionsInto>()) {
             if (IsGangplankBarrel(minion) &&

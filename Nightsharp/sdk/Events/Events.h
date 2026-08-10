@@ -1377,10 +1377,13 @@ namespace detail {
     }
 
     inline void EnsureBuffEventCacheSubscribed() {
+        // OnBuffUpdate đã được loại bỏ (RVA = 0, hook không install được).
+        // Chỉ cần OnBuffAdd + OnBuffRemove để bật EventCache — OnBuffUpdate
+        // không bắt buộc vì ApplyBuffUpdateEvent chỉ là alias của ApplyBuffAddEvent
+        // (cập nhật count/stack), thông tin này đã được OnBuffAdd cung cấp.
         const bool ok =
             EnsureBuffAddRawSubscribed() &&
-            EnsureBuffRemoveRawSubscribed() &&
-            EnsureBuffUpdateRawSubscribed();
+            EnsureBuffRemoveRawSubscribed();
         CoreBuffs::SetEventCacheEnabled(ok);
     }
 
