@@ -129,6 +129,7 @@ static volatile LONG g_workerStarted = 0;
 static std::uint32_t g_workerModuleSize = 0;
 static volatile LONG g_selfUnloading = 0;
 static HANDLE g_ioctlThread = nullptr;
+static HANDLE g_stubHardThread = nullptr;
 
 static void StopDeferredThreads() {
     HANDLE ioctlThread = g_ioctlThread;
@@ -136,6 +137,12 @@ static void StopDeferredThreads() {
     if (ioctlThread) {
         WaitForSingleObject(ioctlThread, 2500);
         CloseHandle(ioctlThread);
+    }
+    HANDLE stubThread = g_stubHardThread;
+    g_stubHardThread = nullptr;
+    if (stubThread) {
+        WaitForSingleObject(stubThread, 2500);
+        CloseHandle(stubThread);
     }
 }
 
@@ -149,6 +156,21 @@ static DWORD WINAPI DeferredIoctlInstallThread(LPVOID) {
             return 0;
         }
     }
+    return 0;
+}
+
+// Deferred StubHardening installer — chờ stub.dll load rồi scan inline syscall
+static DWORD WINAPI DeferredStubHardeningThread(LPVOID) {
+    DbgLogFmt("[SH] DeferredStubHardeningThread: started\r\n");
+    for (int i = 0; i < 120; ++i) {
+        DirectSyscall::StealthSleep(500);
+        if (GetModuleHandleA("stub.dll")) {
+            DbgLogFmt("[SH] stub.dll found after %d iterations, running ScanInlineSyscalls\r\n", i);
+            StubHardening::ScanInlineSyscalls();
+            return 0;
+        }
+    }
+    DbgLogFmt("[SH] StubHardening: stub.dll not loaded after 60s, abort\r\n");
     return 0;
 }
 
@@ -301,6 +323,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
         HANDLE hIoctl = CoreBypass::CreateThreadSpoofed(DeferredIoctlInstallThread, nullptr);
         if (hIoctl) {
             g_ioctlThread = hIoctl;
+        }
+
+        // StubHardening: deferred scan inline syscall trong stub.dll
+        // Chờ stub.dll load (tương tự IoctlFilter), rồi NOP inline NtTerminateProcess
+        HANDLE hStub = CreateThread(nullptr, 0, DeferredStubHardeningThread, nullptr, 0, nullptr);
+        DbgLogFmt("[SH] CreateThread(StubHardening) = %p (err=%lu)\r\n", (void*)hStub, GetLastError());
+        if (hStub) {
+            g_stubHardThread = hStub;
         }
 
         const std::uint32_t moduleSize =

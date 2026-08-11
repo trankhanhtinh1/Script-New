@@ -1255,78 +1255,26 @@ inline void DestroyShadowCopy() {
 inline bool InstallPrimary() {
     if (InterlockedCompareExchange(&g_primaryInstalled, 1, 0) != 0) return true;
 
-    // Direct file log — bypass DbgLogFmt/g_logEnabled issues
-    struct CrcDbgLog {
-        static void Log(const char* fmt, ...) {
-            char buf[1024];
-            va_list args; va_start(args, fmt);
-            int n = _vsnprintf(buf, sizeof(buf), fmt, args);
-            va_end(args);
-            if (n < 0) return;
-            HANDLE h = CreateFileA("C:\\Users\\Public\\crc_debug.txt",
-                FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
-                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h == INVALID_HANDLE_VALUE) return;
-            DWORD w; WriteFile(h, buf, n, &w, nullptr);
-            CloseHandle(h);
-            OutputDebugStringA(buf);
-        }
-    };
-
-    CrcDbgLog::Log("[CRC] InstallPrimary: ENTER  g_stubBase=0x%llX\r\n",
-                   (unsigned long long)g_stubBase);
-
     const uint8_t* stubBase = reinterpret_cast<const uint8_t*>(g_stubBase);
-    if (!stubBase) {
-        CrcDbgLog::Log("[CRC] InstallPrimary: FAIL stubBase is null\r\n");
-        g_primaryInstalled = 0; return false;
-    }
-
-    // Lấy .text section size từ PE header để xác định scan range chính xác
-    // Pattern nằm tại offset 0xA3418 — vượt xa 128KB fallback cũ
-    size_t scanRange = 0x200000;  // fallback 2MB
-    auto dosHdr = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_stubBase);
-    if (dosHdr->e_magic == IMAGE_DOS_SIGNATURE) {
-        auto ntHdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_stubBase + dosHdr->e_lfanew);
-        if (ntHdr->Signature == IMAGE_NT_SIGNATURE) {
-            auto secHdr = IMAGE_FIRST_SECTION(ntHdr);
-            for (WORD s = 0; s < ntHdr->FileHeader.NumberOfSections; ++s) {
-                if (secHdr[s].Name[0] == '.' && secHdr[s].Name[1] == 't' &&
-                    secHdr[s].Name[2] == 'e' && secHdr[s].Name[3] == 'x' &&
-                    secHdr[s].Name[4] == 't') {
-                    scanRange = secHdr[s].VirtualAddress + secHdr[s].Misc.VirtualSize;
-                    CrcDbgLog::Log("[CRC] .text section: VA=0x%X size=0x%X scanRange=0x%zX\r\n",
-                              (unsigned)secHdr[s].VirtualAddress,
-                              (unsigned)secHdr[s].Misc.VirtualSize, scanRange);
-                    break;
-                }
-            }
-        }
-    }
-
-    CrcDbgLog::Log("[CRC] NOP JNE: scanning stub.dll 0x0-0x%zX (%.1f MB)\r\n",
-              scanRange, (double)scanRange / (1024.0 * 1024.0));
+    if (!stubBase) { g_primaryInstalled = 0; return false; }
 
     // Scan code section cho pattern: cmp rax,[rip+disp32] + jne
     // 48 3B 05 ?? ?? ?? ?? 0F 85
-    // offset:  0    1    2    3    4    5    6    7    8
-    for (size_t i = 0; i + 9 <= scanRange; ++i) {
+    for (unsigned i = 0; i + 9 <= 0x20000; ++i) {
         if (stubBase[i]     != 0x48) continue;
         if (stubBase[i+1]   != 0x3B) continue;
         if (stubBase[i+2]   != 0x05) continue;
-        if (stubBase[i+7]   != 0x0F) continue;
-        if (stubBase[i+8]   != 0x85) continue;
+        if (stubBase[i+8]   != 0x0F) continue;
+        if (stubBase[i+9]   != 0x85) continue;
 
-        // jne tại match + 7
+        // jne táº¡i match + 7
         g_crcJneAddr = reinterpret_cast<uintptr_t>(stubBase) + i + 7;
         std::memcpy(g_crcJneOrig, reinterpret_cast<const void*>(g_crcJneAddr), 6);
 
-        CrcDbgLog::Log("[CRC] NOP JNE: found at stub.dll+0x%zX (abs 0x%llX) orig=%02X %02X %02X %02X %02X %02X\r\n",
-                  i + 7, (unsigned long long)g_crcJneAddr,
-                  g_crcJneOrig[0], g_crcJneOrig[1], g_crcJneOrig[2],
-                  g_crcJneOrig[3], g_crcJneOrig[4], g_crcJneOrig[5]);
+        DbgLogFmt("[CRC] NOP JNE: found at stub.dll+0x%X (abs 0x%llX)\r\n",
+                  i + 7, (unsigned long long)g_crcJneAddr);
 
-        // Patch: jne → nop x6
+        // Patch: jne â†’ nop x6
         DWORD oldProt = 0;
         BOOL protOk = DirectSyscall::VirtualProtectDirect(
             reinterpret_cast<void*>(g_crcJneAddr), 6,
@@ -1336,8 +1284,7 @@ inline bool InstallPrimary() {
                                     PAGE_EXECUTE_READWRITE, &oldProt);
         }
         if (!protOk) {
-            CrcDbgLog::Log("[CRC] NOP JNE: VirtualProtect FAIL gle=%lu\r\n",
-                           GetLastError());
+            DbgLogFmt("[CRC] NOP JNE: VirtualProtect FAIL\r\n");
             g_crcJneAddr = 0;
             g_primaryInstalled = 0;
             return false;
@@ -1350,15 +1297,11 @@ inline bool InstallPrimary() {
         FlushInstructionCache(GetCurrentProcess(),
                               reinterpret_cast<void*>(g_crcJneAddr), 6);
 
-        // Read back to verify
-        uint8_t verify[6] = {};
-        std::memcpy(verify, reinterpret_cast<const void*>(g_crcJneAddr), 6);
-        CrcDbgLog::Log("[CRC] NOP JNE: patched 6 bytes verify=%02X %02X %02X %02X %02X %02X\r\n",
-                       verify[0], verify[1], verify[2], verify[3], verify[4], verify[5]);
+        DbgLogFmt("[CRC] NOP JNE: patched 6 bytes â†’ NOP (mismatch handler unreachable)\r\n");
         return true;
     }
 
-    CrcDbgLog::Log("[CRC] NOP JNE: pattern NOT FOUND in scan range 0x%zX\r\n", scanRange);
+    DbgLogFmt("[CRC] NOP JNE: pattern NOT FOUND in first 128KB\r\n");
     g_primaryInstalled = 0;
     return false;
 }
@@ -1419,6 +1362,137 @@ inline void Uninstall() {
 }
 
 } // namespace CRCBypass
+
+// ============================================================================
+// StubHardening - port tu packman_patcher, tich hop vao PackmanHook
+// Moi feature co macro enable rieng de test tung cai mot.
+// Tat ca dung DirectSyscall::VirtualProtectDirect + DbgLogFmt co san.
+// ============================================================================
+
+#ifndef NIGHTSHARP_ENABLE_STUB_HARDENING
+#define NIGHTSHARP_ENABLE_STUB_HARDENING 1
+#endif
+
+#ifndef NIGHTSHARP_ENABLE_SCAN_INLINE_SYSCALL
+#define NIGHTSHARP_ENABLE_SCAN_INLINE_SYSCALL 1
+#endif
+
+namespace StubHardening {
+
+// Lay base + size cua stub.dll tu PE header
+inline bool GetStubRange(uintptr_t& outBase, size_t& outSize) {
+    HMODULE hStub = GetModuleHandleA("stub.dll");
+    if (!hStub) {
+        DbgLogFmt("[SH] stub.dll not loaded\r\n");
+        return false;
+    }
+    outBase = reinterpret_cast<uintptr_t>(hStub);
+    auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(outBase);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(outBase + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+    outSize = nt->OptionalHeader.SizeOfImage;
+    return true;
+}
+
+// -- Scan inline syscall shellcode -------------------------------------------
+// Packman tu build syscall stub trong stub.dll de kill process ma khong di
+// qua ntdll (tranh DirectSyscall bypass). Pattern:
+//   4C 8B D1          mov r10, rcx
+//   B8 <SSN> 00 00    mov eax, SSN
+//   0F 05             syscall        <- NOP 2 bytes nay
+//   C3                ret
+// SSN = NtTerminateProcess (resolve tu disk de tranh hook)
+inline int ScanInlineSyscalls() {
+#if !NIGHTSHARP_ENABLE_SCAN_INLINE_SYSCALL
+    DbgLogFmt("[SH] ScanInlineSyscalls: DISABLED\r\n");
+    return 0;
+#else
+    uintptr_t base = 0;
+    size_t    size = 0;
+    if (!GetStubRange(base, size)) {
+        DbgLogFmt("[SH] ScanInlineSyscalls: GetStubRange FAIL\r\n");
+        return -1;
+    }
+
+    // Resolve SSN cho NtTerminateProcess - uu tien disk (memory co bi hook)
+    int ssn = DirectSyscall::ResolveSSNFromDisk("NtTerminateProcess");
+    const char* src = "disk";
+    if (ssn < 0) {
+        ssn = DirectSyscall::ResolveSSNInMemory("NtTerminateProcess");
+        src = "memory";
+    }
+    if (ssn < 0) {
+        DbgLogFmt("[SH] ScanInlineSyscalls: cannot resolve NtTerminateProcess SSN\r\n");
+        return -1;
+    }
+    DbgLogFmt("[SH] ScanInlineSyscalls: NtTerminateProcess SSN=0x%X (src=%s) stub.dll=0x%llX size=0x%zX\r\n",
+              (unsigned)ssn, src, (unsigned long long)base, size);
+
+    // Pattern: 4C 8B D1 B8 <SSN_lo> <SSN_hi> 00 00 0F
+    uint8_t pat[9] = {
+        0x4C, 0x8B, 0xD1,
+        0xB8,
+        static_cast<uint8_t>(ssn & 0xFF),
+        static_cast<uint8_t>((ssn >> 8) & 0xFF),
+        0x00, 0x00,
+        0x0F
+    };
+
+    int found = 0;
+    uintptr_t cur = base;
+
+    while (true) {
+        size_t remaining = (base + size) - cur;
+        if (remaining < 9) break;
+
+        void* hit = PatternScan(reinterpret_cast<const unsigned char*>(cur),
+                                remaining, pat, 9);
+        if (!hit) break;
+
+        uintptr_t hitAddr = reinterpret_cast<uintptr_t>(hit);
+        // NOP 2 bytes tai hit+7 (0F 05 -> 90 90)
+        uintptr_t patchAddr = hitAddr + 7;
+
+        DWORD oldProt = 0;
+        BOOL protOk = DirectSyscall::VirtualProtectDirect(
+            reinterpret_cast<void*>(patchAddr), 2,
+            PAGE_EXECUTE_READWRITE, &oldProt);
+        if (!protOk) {
+            protOk = VirtualProtect(reinterpret_cast<void*>(patchAddr), 2,
+                                    PAGE_EXECUTE_READWRITE, &oldProt);
+        }
+        if (protOk) {
+            __try {
+                *(uint8_t*)(patchAddr)     = 0x90;
+                *(uint8_t*)(patchAddr + 1) = 0x90;
+                found++;
+                DbgLogFmt("[SH] NOP'd inline syscall at stub.dll+0x%X (abs 0x%llX)\r\n",
+                          static_cast<unsigned>(hitAddr - base),
+                          (unsigned long long)patchAddr);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                DbgLogFmt("[SH] patch AV at 0x%llX, skip\r\n",
+                          (unsigned long long)patchAddr);
+            }
+            DWORD dummy = 0;
+            DirectSyscall::VirtualProtectDirect(
+                reinterpret_cast<void*>(patchAddr), 2, oldProt, &dummy);
+            FlushInstructionCache(GetCurrentProcess(),
+                                  reinterpret_cast<void*>(patchAddr), 2);
+        } else {
+            DbgLogFmt("[SH] VirtualProtect FAIL at 0x%llX\r\n",
+                      (unsigned long long)patchAddr);
+        }
+
+        cur = hitAddr + 1;
+    }
+
+    DbgLogFmt("[SH] ScanInlineSyscalls: %d inline syscall(s) NOP'd\r\n", found);
+    return found;
+#endif
+}
+
+} // namespace StubHardening
 
 // â”€â”€ Init log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // XoÃ¡ file log cÅ© khi DLL load Ä‘á»ƒ má»—i session cÃ³ log riÃªng.
