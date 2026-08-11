@@ -564,9 +564,6 @@ namespace SpellBookLayout {
         // ClientMainLoop is intentionally 0: NIGHTSHARP_ENABLE_CLIENTMAINLOOP_HOOK
         // is off by default and CoreHook::IsInlineAllowed() skips RVA == 0.
         constexpr uintptr_t ClientMainLoop          = 0x5FA950; //E8 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B 0D ? ? ? ? E8 ? ? ? ? E8
-        // Central animation request wrapper. It stores the AIBaseClient
-        // callback receiver at *(RCX+0x08) and accepts an RDX string-view.
-        constexpr uintptr_t OnPlayAnimationWrapper  = 0xE44570; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 33 DB
         constexpr uintptr_t CreateClientEffect      = 0x9061A0; //E8 ? ? ? ? 45 33 C0 ? ? ? 48 8B 50 || E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 4C 8B E8
 
         constexpr uintptr_t DispatchEvent           = 0x4CFA90; //E8 ? ? ? ? E9 ? ? ? ? 4D 85 C0 || E8 ? ? ? ? 49 83 FE ? 76 ? 49 8D 56

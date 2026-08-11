@@ -34,7 +34,6 @@ namespace Hooks {
     inline constexpr HookId OnGameUpdate = ::CoreHookTest::OnGameUpdate;
     inline constexpr HookId OnLevelUp = ::CoreHookTest::OnLevelUp;
     inline constexpr HookId OnPlayAnimation = ::CoreHookTest::OnPlayAnimation;
-    inline constexpr HookId OnPlayAnimationWrapper = ::CoreHookTest::OnPlayAnimationWrapper;
     inline constexpr HookId OnProcessSpell = ::CoreHookTest::OnProcessSpell;
     inline constexpr HookId OnSpellImpact = ::CoreHookTest::OnSpellImpact;
     inline constexpr HookId OnStopCast = ::CoreHookTest::OnStopCast;
@@ -1807,10 +1806,6 @@ inline CastSpellEventArgs DecodeProcessCastSpell(const RawEventArgs& raw) {
 }
 
 inline PlayAnimationEventArgs DecodePlayAnimation(const RawEventArgs& raw) {
-    // OnPlayAnimationWrapper (sub_E15D10):
-    //   RCX = central request wrapper, *(RCX+0x08) = AIBaseClient,
-    //   RDX = input string-view { data, size, ... }.
-    //
     // OnPlayAnimation (sub_29BF90):
     //   packet callback for ids 0x11D/0x1F1, RCX = AIBaseClient,
     //   RDX+0x18 = internal string-view { data, size }.
@@ -1820,22 +1815,11 @@ inline PlayAnimationEventArgs DecodePlayAnimation(const RawEventArgs& raw) {
     args.Accepted = true;
 
     uintptr_t animationView = 0;
-    if (raw.Id == Hooks::OnPlayAnimationWrapper) {
-        uintptr_t sender = 0;
-        if (raw.Rcx) {
-            detail::Read(raw.Rcx + 0x08, sender);
-        }
-        if (detail::LooksLikeObject(sender)) {
-            args.Sender = detail::ReadObject(sender);
-        }
-        animationView = static_cast<uintptr_t>(raw.Rdx);
-    } else {
-        if (detail::LooksLikeObject(raw.Rcx)) {
-            args.Sender = detail::ReadObject(raw.Rcx);
-        }
-        if (raw.Rdx) {
-            animationView = static_cast<uintptr_t>(raw.Rdx) + 0x18;
-        }
+    if (detail::LooksLikeObject(raw.Rcx)) {
+        args.Sender = detail::ReadObject(raw.Rcx);
+    }
+    if (raw.Rdx) {
+        animationView = static_cast<uintptr_t>(raw.Rdx) + 0x18;
     }
 
     if (animationView) {
@@ -2164,7 +2148,6 @@ NS_CORE_EVENT_FORWARD(OnFinishCast, OnFinishCast)
 NS_CORE_EVENT_FORWARD(OnGameUpdate, OnGameUpdate)
 NS_CORE_EVENT_FORWARD(OnLevelUp, OnLevelUp)
 NS_CORE_EVENT_FORWARD(OnPlayAnimation, OnPlayAnimation)
-NS_CORE_EVENT_FORWARD(OnPlayAnimationWrapper, OnPlayAnimationWrapper)
 NS_CORE_EVENT_FORWARD(OnProcessSpell, OnProcessSpell)
 NS_CORE_EVENT_FORWARD(OnSpellImpact, OnSpellImpact)
 NS_CORE_EVENT_FORWARD(OnStopCast, OnStopCast)

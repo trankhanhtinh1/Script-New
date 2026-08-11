@@ -321,7 +321,6 @@ namespace detail {
     inline bool ProcessCastSpellRawSubscribed = false;
     inline bool FinishCastRawSubscribed = false;
     inline bool SpellImpactRawSubscribed = false;
-    inline bool PlayAnimationWrapperRawSubscribed = false;
     inline bool PlayAnimationRawSubscribed = false;
     inline bool StopCastRawSubscribed = false;
     inline int DashConsumerRefs = 0;
@@ -1181,7 +1180,6 @@ namespace detail {
                ProcessCastSpellRawSubscribed ||
                FinishCastRawSubscribed ||
                SpellImpactRawSubscribed ||
-               PlayAnimationWrapperRawSubscribed ||
                PlayAnimationRawSubscribed ||
                StopCastRawSubscribed;
     }
@@ -1329,10 +1327,6 @@ namespace detail {
         }
 
         (void)ReleaseRawSubscribed(
-            Hooks::OnPlayAnimationWrapper,
-            &OnRawPlayAnimation,
-            PlayAnimationWrapperRawSubscribed);
-        (void)ReleaseRawSubscribed(
             Hooks::OnPlayAnimation,
             &OnRawPlayAnimation,
             PlayAnimationRawSubscribed);
@@ -1423,18 +1417,11 @@ namespace detail {
                EnsureRawSubscribed(Hooks::OnSpellImpact, &OnRawSpellImpact, SpellImpactRawSubscribed);
     }
     inline bool EnsurePlayAnimationRawSubscribed() {
-        if (!EnsureGameUpdateRawSubscribed()) {
-            return false;
-        }
-        const bool wrapper = EnsureRawSubscribed(
-            Hooks::OnPlayAnimationWrapper,
-            &OnRawPlayAnimation,
-            PlayAnimationWrapperRawSubscribed);
-        const bool packet = EnsureRawSubscribed(
-            Hooks::OnPlayAnimation,
-            &OnRawPlayAnimation,
-            PlayAnimationRawSubscribed);
-        return wrapper || packet;
+        return EnsureGameUpdateRawSubscribed() &&
+               EnsureRawSubscribed(
+                   Hooks::OnPlayAnimation,
+                   &OnRawPlayAnimation,
+                   PlayAnimationRawSubscribed);
     }
     inline bool EnsureStopCastRawSubscribed() {
         return EnsureGameUpdateRawSubscribed() &&
@@ -1531,7 +1518,6 @@ inline void Reset() {
     detail::ProcessCastSpellRawSubscribed = false;
     detail::FinishCastRawSubscribed = false;
     detail::SpellImpactRawSubscribed = false;
-    detail::PlayAnimationWrapperRawSubscribed = false;
     detail::PlayAnimationRawSubscribed = false;
     detail::StopCastRawSubscribed = false;
     detail::DashConsumerRefs = 0;

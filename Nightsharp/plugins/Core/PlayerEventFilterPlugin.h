@@ -441,7 +441,7 @@ private:
     //     player (rcx / rdx / r8 / r9 / *(rcx+8) / *(rdx) / none),
     //     plus the resolved network id, so we can tell whether the
     //     hook puts the unit in RCX, the buff/damage struct in RDX,
-    //     or follows a wrapper pattern like OnPlayAnimationWrapper.
+    //     or follows a wrapper pattern.
 
     struct PlayerProbe {
         const char* slot = "none"; // which register/dereference matched
@@ -473,8 +473,7 @@ private:
 
     // Look for the local player anywhere in the raw register payload.
     // We accept matches in RCX / RDX / R8 / R9 directly, plus the
-    // common "wrapper pointer + 0x08" pattern used by some hooks
-    // (OnPlayAnimationWrapper is the canonical example).
+    // common "wrapper pointer + 0x08" pattern used by some hooks.
     static PlayerProbe ProbePlayer(const ::Core::Events::RawEventArgs& raw) {
         PlayerProbe probe{};
         const uintptr_t player = ::Core::ObjectManager::PlayerAddress();

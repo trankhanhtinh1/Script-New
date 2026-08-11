@@ -3648,34 +3648,6 @@
       "sig_source": "offset.h"
     },
     {
-      "id": "Offset::Hooks::OnPlayAnimationWrapper",
-      "target_kind": "function",
-      "required": true,
-      "expected": {
-        "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0xE3E380",
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE44570"
-      },
-      "locators": [
-        {
-          "pattern": "E8 ?? ?? ?? ?? 48 8D 4C 24 ?? E8 ?? ?? ?? ?? 33 DB",
-          "sections": [
-            ".text"
-          ],
-          "resolver": {
-            "kind": "call_rel32",
-            "displacement_offset": 1,
-            "instruction_size": 5
-          },
-          "validations": {
-            "target_sections": [
-              ".text"
-            ]
-          }
-        }
-      ],
-      "sig_source": "offset.h"
-    },
-    {
       "id": "Offset::Hooks::CreateClientEffect",
       "target_kind": "function",
       "required": true,

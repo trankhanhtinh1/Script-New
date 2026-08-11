@@ -589,7 +589,6 @@ namespace Hooks {
     constexpr uintptr_t OnGameUpdate            = ::Offset::Hooks::OnGameUpdate;
     constexpr uintptr_t OnLevelUp               = ::Offset::Hooks::OnLevelUp;
     constexpr uintptr_t OnPlayAnimation         = ::Offset::Hooks::OnPlayAnimation;
-    constexpr uintptr_t OnPlayAnimationWrapper  = ::Offset::Hooks::OnPlayAnimationWrapper;
     constexpr uintptr_t OnProcessSpell          = ::Offset::Hooks::OnProcessSpell;
     constexpr uintptr_t OnSpellImpact           = ::Offset::Hooks::OnSpellImpact;
     constexpr uintptr_t OnStopCast              = ::Offset::Hooks::OnStopCast;
@@ -617,7 +616,6 @@ enum HookId : int {
     OnGameUpdate,
     OnLevelUp,
     OnPlayAnimation,
-    OnPlayAnimationWrapper,
     OnProcessSpell,
     OnSpellImpact,
     OnStopCast,
@@ -655,7 +653,6 @@ inline constexpr HookSpec kHookSpecs[HookCount] = {
     { "OnGameUpdate",            Offsets::OnGameUpdate },
     { "OnLevelUp",               Offsets::OnLevelUp },
     { "OnPlayAnimation",         Offsets::OnPlayAnimation },
-    { "OnPlayAnimWrapper",       Offsets::OnPlayAnimationWrapper },
     { "OnProcessSpell",          Offsets::OnProcessSpell },
     { "OnSpellImpact",           Offsets::OnSpellImpact },
     { "OnStopCast",              Offsets::OnStopCast },
@@ -863,9 +860,6 @@ inline const char* InstallNote(HookId id) {
     if (id == OnPlayAnimation) {
         return "packet animation callback (0x11D/0x1F1); RCX is AIBaseClient, name view is at RDX+0x18";
     }
-    if (id == OnPlayAnimationWrapper) {
-        return "central animation wrapper; owner is *(RCX+0x8), input name is the RDX string-view";
-    }
     if (id == OnStealth) {
         return "PKT_StealthFlagsChanged_s handler; stealth buff catalog path is a separate derived fallback";
     }
@@ -896,7 +890,6 @@ inline bool IsEventGated(HookId id) {
         case ProcessCastSpell:
         case OnFinishCast:
         case OnPlayAnimation:
-        case OnPlayAnimationWrapper:
         case OnSpellImpact:
         case OnStopCast:
         case OnStealth:
@@ -1274,7 +1267,6 @@ extern "C" __declspec(dllexport) inline const uintptr_t g_CoreHookTestRVAs[] = {
     CoreHookTest::Offsets::OnGameUpdate,
     CoreHookTest::Offsets::OnLevelUp,
     CoreHookTest::Offsets::OnPlayAnimation,
-    CoreHookTest::Offsets::OnPlayAnimationWrapper,
     CoreHookTest::Offsets::OnProcessSpell,
     CoreHookTest::Offsets::OnSpellImpact,
     CoreHookTest::Offsets::OnStopCast,
