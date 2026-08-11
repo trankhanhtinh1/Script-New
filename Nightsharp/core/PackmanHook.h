@@ -1255,26 +1255,78 @@ inline void DestroyShadowCopy() {
 inline bool InstallPrimary() {
     if (InterlockedCompareExchange(&g_primaryInstalled, 1, 0) != 0) return true;
 
+    // Direct file log — bypass DbgLogFmt/g_logEnabled issues
+    struct CrcDbgLog {
+        static void Log(const char* fmt, ...) {
+            char buf[1024];
+            va_list args; va_start(args, fmt);
+            int n = _vsnprintf(buf, sizeof(buf), fmt, args);
+            va_end(args);
+            if (n < 0) return;
+            HANDLE h = CreateFileA("C:\\Users\\Public\\crc_debug.txt",
+                FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE) return;
+            DWORD w; WriteFile(h, buf, n, &w, nullptr);
+            CloseHandle(h);
+            OutputDebugStringA(buf);
+        }
+    };
+
+    CrcDbgLog::Log("[CRC] InstallPrimary: ENTER  g_stubBase=0x%llX\r\n",
+                   (unsigned long long)g_stubBase);
+
     const uint8_t* stubBase = reinterpret_cast<const uint8_t*>(g_stubBase);
-    if (!stubBase) { g_primaryInstalled = 0; return false; }
+    if (!stubBase) {
+        CrcDbgLog::Log("[CRC] InstallPrimary: FAIL stubBase is null\r\n");
+        g_primaryInstalled = 0; return false;
+    }
+
+    // Lấy .text section size từ PE header để xác định scan range chính xác
+    // Pattern nằm tại offset 0xA3418 — vượt xa 128KB fallback cũ
+    size_t scanRange = 0x200000;  // fallback 2MB
+    auto dosHdr = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_stubBase);
+    if (dosHdr->e_magic == IMAGE_DOS_SIGNATURE) {
+        auto ntHdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_stubBase + dosHdr->e_lfanew);
+        if (ntHdr->Signature == IMAGE_NT_SIGNATURE) {
+            auto secHdr = IMAGE_FIRST_SECTION(ntHdr);
+            for (WORD s = 0; s < ntHdr->FileHeader.NumberOfSections; ++s) {
+                if (secHdr[s].Name[0] == '.' && secHdr[s].Name[1] == 't' &&
+                    secHdr[s].Name[2] == 'e' && secHdr[s].Name[3] == 'x' &&
+                    secHdr[s].Name[4] == 't') {
+                    scanRange = secHdr[s].VirtualAddress + secHdr[s].Misc.VirtualSize;
+                    CrcDbgLog::Log("[CRC] .text section: VA=0x%X size=0x%X scanRange=0x%zX\r\n",
+                              (unsigned)secHdr[s].VirtualAddress,
+                              (unsigned)secHdr[s].Misc.VirtualSize, scanRange);
+                    break;
+                }
+            }
+        }
+    }
+
+    CrcDbgLog::Log("[CRC] NOP JNE: scanning stub.dll 0x0-0x%zX (%.1f MB)\r\n",
+              scanRange, (double)scanRange / (1024.0 * 1024.0));
 
     // Scan code section cho pattern: cmp rax,[rip+disp32] + jne
     // 48 3B 05 ?? ?? ?? ?? 0F 85
-    for (unsigned i = 0; i + 9 <= 0x20000; ++i) {
+    // offset:  0    1    2    3    4    5    6    7    8
+    for (size_t i = 0; i + 9 <= scanRange; ++i) {
         if (stubBase[i]     != 0x48) continue;
         if (stubBase[i+1]   != 0x3B) continue;
         if (stubBase[i+2]   != 0x05) continue;
-        if (stubBase[i+8]   != 0x0F) continue;
-        if (stubBase[i+9]   != 0x85) continue;
+        if (stubBase[i+7]   != 0x0F) continue;
+        if (stubBase[i+8]   != 0x85) continue;
 
-        // jne táº¡i match + 7
+        // jne tại match + 7
         g_crcJneAddr = reinterpret_cast<uintptr_t>(stubBase) + i + 7;
         std::memcpy(g_crcJneOrig, reinterpret_cast<const void*>(g_crcJneAddr), 6);
 
-        DbgLogFmt("[CRC] NOP JNE: found at stub.dll+0x%X (abs 0x%llX)\r\n",
-                  i + 7, (unsigned long long)g_crcJneAddr);
+        CrcDbgLog::Log("[CRC] NOP JNE: found at stub.dll+0x%zX (abs 0x%llX) orig=%02X %02X %02X %02X %02X %02X\r\n",
+                  i + 7, (unsigned long long)g_crcJneAddr,
+                  g_crcJneOrig[0], g_crcJneOrig[1], g_crcJneOrig[2],
+                  g_crcJneOrig[3], g_crcJneOrig[4], g_crcJneOrig[5]);
 
-        // Patch: jne â†’ nop x6
+        // Patch: jne → nop x6
         DWORD oldProt = 0;
         BOOL protOk = DirectSyscall::VirtualProtectDirect(
             reinterpret_cast<void*>(g_crcJneAddr), 6,
@@ -1284,7 +1336,8 @@ inline bool InstallPrimary() {
                                     PAGE_EXECUTE_READWRITE, &oldProt);
         }
         if (!protOk) {
-            DbgLogFmt("[CRC] NOP JNE: VirtualProtect FAIL\r\n");
+            CrcDbgLog::Log("[CRC] NOP JNE: VirtualProtect FAIL gle=%lu\r\n",
+                           GetLastError());
             g_crcJneAddr = 0;
             g_primaryInstalled = 0;
             return false;
@@ -1297,11 +1350,15 @@ inline bool InstallPrimary() {
         FlushInstructionCache(GetCurrentProcess(),
                               reinterpret_cast<void*>(g_crcJneAddr), 6);
 
-        DbgLogFmt("[CRC] NOP JNE: patched 6 bytes â†’ NOP (mismatch handler unreachable)\r\n");
+        // Read back to verify
+        uint8_t verify[6] = {};
+        std::memcpy(verify, reinterpret_cast<const void*>(g_crcJneAddr), 6);
+        CrcDbgLog::Log("[CRC] NOP JNE: patched 6 bytes verify=%02X %02X %02X %02X %02X %02X\r\n",
+                       verify[0], verify[1], verify[2], verify[3], verify[4], verify[5]);
         return true;
     }
 
-    DbgLogFmt("[CRC] NOP JNE: pattern NOT FOUND in first 128KB\r\n");
+    CrcDbgLog::Log("[CRC] NOP JNE: pattern NOT FOUND in scan range 0x%zX\r\n", scanRange);
     g_primaryInstalled = 0;
     return false;
 }

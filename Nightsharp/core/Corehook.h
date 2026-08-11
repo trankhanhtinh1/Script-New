@@ -1079,6 +1079,36 @@ inline bool InstallHook(HookId id) {
         return false;
     }
 
+    // === CRC Bypass: ensure installed before ANY inline hook ===
+    // When NIGHTSHARP_COREHOOK_AUTO_INSTALL_ALL=0, hooks are installed
+    // individually via Add() → InstallHook(id). CRCBypass::Install() must
+    // run once before the first hook patch to avoid CRC detection.
+    if (NIGHTSHARP_ENABLE_CRC_BYPASS) {
+        static volatile LONG s_crcInstalled = 0;
+        if (InterlockedCompareExchange(&s_crcInstalled, 1, 0) == 0) {
+            Logf("CRC Bypass: calling Install() before first hook %s",
+                 kHookSpecs[id].name);
+            bool crcOk = false;
+            __try {
+                crcOk = CRCBypass::Install();
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                Logf("CRC Bypass: Install SEH exception 0x%X",
+                     (unsigned)GetExceptionCode());
+                crcOk = false;
+            }
+            Logf("CRC Bypass: Install returned %d  primaryInstalled=%d  shadowCreated=%d  jneAddr=0x%llX",
+                 (int)crcOk,
+                 (int)CRCBypass::g_primaryInstalled,
+                 (int)CRCBypass::g_shadowCreated,
+                 (unsigned long long)CRCBypass::g_crcJneAddr);
+            if (!crcOk) {
+                Logf("CRC Bypass: Install failed — abort hook %s",
+                     kHookSpecs[id].name);
+                return false;
+            }
+        }
+    }
+
     const uintptr_t base = CoreEventHook::shim::GetGameBase();
     if (!base) return false;
     auto& d = g_detours[id];
