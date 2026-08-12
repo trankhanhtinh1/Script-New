@@ -244,6 +244,7 @@ private:
     MenuSlider* m_pathOnlyHoldMaxMenu = nullptr;
     MenuSlider* m_enemyAvoidanceMenu = nullptr;
     MenuBool* m_preferPathHoldMenu = nullptr;
+    MenuBool* m_onlyEvadeWhenCanMoveMenu = nullptr;
 
     MenuBool* m_smoothEvadeSpellMenu = nullptr;
     MenuBool* m_improveMoveMenu = nullptr;
@@ -629,6 +630,8 @@ private:
         settings.UseCurrentPath = !m_useCurrentPathMenu || m_useCurrentPathMenu->Value;
         settings.PreferPathHold =
             !m_preferPathHoldMenu || m_preferPathHoldMenu->Value;
+        settings.OnlyEvadeWhenCanMove =
+            !m_onlyEvadeWhenCanMoveMenu || m_onlyEvadeWhenCanMoveMenu->Value;
         settings.TestOnAllies = SameTeam();
         settings.EnableCollision = m_enableCollisionMenu && m_enableCollisionMenu->Value;
         settings.MinionCollision = m_minionCollisionMenu && m_minionCollisionMenu->Value;
@@ -1075,6 +1078,9 @@ private:
             "UseCurrentPath", "Accept verified safe manual clicks", true));
         m_preferPathHoldMenu = movement->Add(new MenuBool(
             "PreferPathHold", "Briefly wait for path-only threats", true));
+        m_onlyEvadeWhenCanMoveMenu = movement->Add(new MenuBool(
+            "OnlyEvadeWhenCanMove",
+            "Only dodge when player can move (preserve windup)", true));
         m_pathOnlyHoldMaxMenu = movement->Add(new MenuSlider(
             "PathOnlyHoldMax", "Maximum path wait (ms)", 240, 80, 500));
         m_enemyAvoidanceMenu = movement->Add(new MenuSlider(
@@ -1575,6 +1581,7 @@ private:
         m_pathOnlyHoldMaxMenu = nullptr;
         m_enemyAvoidanceMenu = nullptr;
         m_preferPathHoldMenu = nullptr;
+        m_onlyEvadeWhenCanMoveMenu = nullptr;
         m_smoothEvadeSpellMenu = nullptr;
         m_improveMoveMenu = nullptr;
         m_useCurrentPathMenu = nullptr;

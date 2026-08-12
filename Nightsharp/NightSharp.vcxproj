@@ -928,6 +928,7 @@
     <ClInclude Include="Plugins\EzEvade\EzEvade.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellData.h" />
     <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h" />
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellWindupDatabase.h" />
     <ClInclude Include="Plugins\IPlugin.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroActivatorComponent.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroActivatorPlugin.h" />

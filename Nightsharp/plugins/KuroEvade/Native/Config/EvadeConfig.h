@@ -18,6 +18,7 @@ struct EvadeSettings {
     bool LowEvadeSmooth = false;
     bool UseCurrentPath = true;
     bool PreferPathHold = true;
+    bool OnlyEvadeWhenCanMove = true;
 
     bool TestOnAllies = false;
     bool EnableCollision = true;

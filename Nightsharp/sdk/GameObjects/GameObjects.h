@@ -98,6 +98,9 @@ namespace detail {
     inline bool Initialized = false;
     inline bool SeedRetryPending = true;
     inline bool SeedInProgress = false;
+    // Invalid objects discovered by cache pruning are queued while g_mutex is
+    // held and dispatched on the next update after the lock is released.
+    inline std::vector<::Core::Objects::ObjectHandle> PendingPrunedDeletes;
 
 
     // ------------------------- string helpers ------------------------------
@@ -410,21 +413,87 @@ namespace detail {
                ::Core::Objects::ReadIndex(handle.address) == handle.index;
     }
 
+    inline bool LostRuntimeName(const GameObject& object) {
+        const auto handle = object.Handle();
+        const uint32_t index = handle.index & 0xFFFFu;
+        if (!handle.HasAddress() ||
+            index >= static_cast<uint32_t>(StaticStringCache::kMaxIndex)) {
+            return false;
+        }
+
+        std::string cachedName;
+        std::string cachedCharacterName;
+        const bool previouslyNamed =
+            StaticStringCache::CopyString(
+                index, false, cachedName, false) ||
+            StaticStringCache::CopyString(
+                index, true, cachedCharacterName, false);
+        if (!previouslyNamed) {
+            return false;
+        }
+
+        char runtimeName[96] = {};
+        char runtimeCharacterName[96] = {};
+        const bool hasRuntimeName =
+            ::Core::Objects::ReadName(
+                handle.address,
+                runtimeName,
+                static_cast<int>(sizeof(runtimeName))) &&
+            runtimeName[0];
+        const bool hasRuntimeCharacterName =
+            ::Core::Objects::ReadCharacterName(
+                handle.address,
+                runtimeCharacterName,
+                static_cast<int>(sizeof(runtimeCharacterName))) &&
+            runtimeCharacterName[0];
+        return !hasRuntimeName && !hasRuntimeCharacterName;
+    }
+
+    inline void QueuePrunedDelete(const GameObject& object) {
+        auto handle = object.Handle();
+        if (!handle.HasIdentity()) {
+            return;
+        }
+        const bool queued = std::any_of(
+            PendingPrunedDeletes.begin(), PendingPrunedDeletes.end(),
+            [&handle](const ::Core::Objects::ObjectHandle& existing) {
+                return (handle.networkId != 0 &&
+                        existing.networkId == handle.networkId) ||
+                       (handle.index != 0 && handle.index != 0xFFFFFFFFu &&
+                        existing.index == handle.index);
+            });
+        if (queued) {
+            return;
+        }
+        // Never expose a freed address to lifecycle subscribers.
+        handle.address = 0;
+        PendingPrunedDeletes.push_back(handle);
+    }
+
     template <typename T>
-    inline void CleanInvalid(std::vector<T>& vec) {
+    inline void CleanInvalid(std::vector<T>& vec, bool queueDelete = false) {
         if (vec.empty()) return;
-        vec.erase(std::remove_if(vec.begin(), vec.end(), [](const T& obj) {
+        vec.erase(std::remove_if(vec.begin(), vec.end(), [queueDelete](const T& obj) {
             const GameObject base(obj.Handle());
-            if (HasLiveIdentity(base)) {
+            const bool liveIdentity = HasLiveIdentity(base);
+            const bool lostRuntimeName = liveIdentity && LostRuntimeName(base);
+            if (liveIdentity && !lostRuntimeName) {
                 return false;
             }
-            ::Core::ObjectManager::TypeCache::Invalidate(base.Handle().address);
+            if (queueDelete) {
+                QueuePrunedDelete(base);
+            }
+            const auto handle = base.Handle();
+            ::Core::ObjectManager::TypeCache::Invalidate(handle.address);
             return true;
         }), vec.end());
     }
 
     inline void CleanInvalidObjects() {
-        CleanInvalid(GameObjectsList);
+        // Every classified object is also present in GameObjectsList. Queue the
+        // synthetic delete only from this canonical list to avoid duplicates
+        // when the same identity is removed from its typed/team lists.
+        CleanInvalid(GameObjectsList, true);
         CleanInvalid(AttackableUnitsList);
         CleanInvalid(AllyList);
         CleanInvalid(EnemyList);
@@ -477,6 +546,12 @@ namespace detail {
         CleanInvalid(EnemySpawnPointsList);
         CleanInvalid(ParticleEmittersList);
         CleanInvalid(MissilesList);
+
+        // Keep original names available until every typed/team list has had a
+        // chance to apply LostRuntimeName(). Clear only after the full prune.
+        for (const auto& handle : PendingPrunedDeletes) {
+            StaticStringCache::Clear(handle.index & 0xFFFFu);
+        }
     }
 
     inline void OnObjectAdd(const GameObject& object,
@@ -843,6 +918,7 @@ namespace detail {
         EnemySpawnPointsList.clear();
         ParticleEmittersList.clear();
         MissilesList.clear();
+        PendingPrunedDeletes.clear();
         PlayerObject = {};
         PlayerChampionIdObject = ChampionId::Unknown;
         PlayerChampionIdCached = false;
@@ -1073,6 +1149,37 @@ namespace detail {
     inline bool NativeLifecycleHooked = false;
     inline bool NativeUpdateHooked = false;
 
+    inline void DispatchPrunedDeletes() {
+        std::vector<::Core::Objects::ObjectHandle> deleted;
+        std::vector<LifecycleHandler> handlers;
+        {
+            Lock lk(g_mutex);
+            if (PendingPrunedDeletes.empty()) {
+                return;
+            }
+            deleted.swap(PendingPrunedDeletes);
+            handlers = DeleteHandlers;
+        }
+
+        for (const auto& handle : deleted) {
+            const GameObject object(handle);
+            for (size_t index = 0; index < handlers.size(); ++index) {
+                const auto handler = handlers[index];
+                if (!handler) {
+                    continue;
+                }
+                const auto perfStart = NightSharpPerf::Now();
+                handler(object);
+                const double ms = NightSharpPerf::MsSince(perfStart);
+                NightSharpPerf::AddEventHandlerTiming(
+                    "GameObjects::OnDelete(Prune)",
+                    static_cast<int>(index),
+                    reinterpret_cast<const void*>(handler),
+                    ms);
+            }
+        }
+    }
+
     inline GameObject ObjectFromArgs(const SDK::Events::ObjectEventArgs& args) {
         ::Core::Objects::ObjectHandle handle{};
         handle.address   = args.Sender.Ptr;
@@ -1120,6 +1227,18 @@ namespace detail {
     inline void OnNativeObjectDelete(const SDK::Events::ObjectEventArgs& args) {
         NS_PROFILE("GameObjects::OnNativeObjectDelete");
         if (args.Sender.IsValid()) {
+            {
+                // Prefer the authoritative native delete if it arrives before
+                // the queued prune fallback is dispatched.
+                Lock lk(g_mutex);
+                PendingPrunedDeletes.erase(
+                    std::remove_if(
+                        PendingPrunedDeletes.begin(), PendingPrunedDeletes.end(),
+                        [&args](const ::Core::Objects::ObjectHandle& handle) {
+                            return handle.networkId == args.Sender.NetworkId;
+                        }),
+                    PendingPrunedDeletes.end());
+            }
             StaticStringCache::Clear(static_cast<std::uint32_t>(args.Sender.Index & 0xFFFFu));
             const auto start = NightSharpPerf::Now();
             OnObjectDelete(static_cast<int>(args.Sender.NetworkId), args.Sender.Type);
@@ -1131,6 +1250,7 @@ namespace detail {
 
     inline void OnNativeGameUpdate(const SDK::Events::GameUpdateEventArgs&) {
         NS_PROFILE("GameObjects::SeedRetry");
+        DispatchPrunedDeletes();
         RetrySeedOnNextUpdate();
     }
 
@@ -1167,6 +1287,7 @@ namespace detail {
             SeedInProgress = false;
             CreateHandlers.clear();
             DeleteHandlers.clear();
+            PendingPrunedDeletes.clear();
         }
         if (wasUpdateHooked) {
             SDK::Events::RemoveOnGameUpdate(&OnNativeGameUpdate);
@@ -1198,6 +1319,21 @@ inline void Shutdown() {
     detail::Clear();
     ::Core::ObjectManager::TypeCache::InvalidateAll();
     detail::Initialized = false;
+}
+
+// Cheap cached-membership query shared by consumers that need to agree with
+// the AllGameObjects facade. It performs no ObjectManager scan/native read.
+inline bool ContainsNetworkId(int networkId) {
+    if (networkId == 0) {
+        return false;
+    }
+    Initialize();
+    detail::Lock lk(detail::g_mutex);
+    return std::any_of(
+        detail::GameObjectsList.begin(), detail::GameObjectsList.end(),
+        [networkId](const GameObject& object) {
+            return static_cast<int>(object.CachedNetworkId()) == networkId;
+        });
 }
 
 // --------------------- lifecycle events (EnsoulSharp-style) ------------------

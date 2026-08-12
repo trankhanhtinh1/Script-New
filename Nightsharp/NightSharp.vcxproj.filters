@@ -3101,6 +3101,9 @@
     <ClInclude Include="Plugins\EzEvade\Spells\SpellDatabase.h">
       <Filter>Plugins\EzEvade\Spells</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\EzEvade\Spells\SpellWindupDatabase.h">
+      <Filter>Plugins\EzEvade\Spells</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\IPlugin.h">
       <Filter>Plugins</Filter>
     </ClInclude>

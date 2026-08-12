@@ -698,11 +698,15 @@ namespace StaticStringCache {
         char nameBuf[96] = {};
         uint32_t team = 0;
         int minionClass = 0;
+        // Generic GameObjects (particles/indicators) also need their original
+        // names retained. Some retired effects keep the same address and
+        // NetworkId but clear both runtime strings instead of firing native
+        // delete immediately; GameObjects uses this snapshot to prune them.
+        (void)::Core::Objects::ReadCharacterName(
+            address, charBuf, static_cast<int>(sizeof(charBuf)));
+        (void)::Core::Objects::ReadName(
+            address, nameBuf, static_cast<int>(sizeof(nameBuf)));
         if (isMainType) {
-            (void)::Core::Objects::ReadCharacterName(
-                address, charBuf, static_cast<int>(sizeof(charBuf)));
-            (void)::Core::Objects::ReadName(
-                address, nameBuf, static_cast<int>(sizeof(nameBuf)));
             team = ::Core::Objects::ReadTeamValue(address);
         }
         if (isMainType && (

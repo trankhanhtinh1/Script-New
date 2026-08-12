@@ -56,6 +56,19 @@ public:
             ClearBlockedCommand();
             return false;
         }
+        // Preserve the orbwalker's current action when requested. CanMove()
+        // from the native player state rejects roots and other movement locks;
+        // Orbwalker::CanMove() covers attack windup. The explicit auto-attack
+        // check also protects the short interval in which the orbwalker is
+        // still resolving an attack state.
+        if (settings.OnlyEvadeWhenCanMove &&
+            (!SDK::CanMove(player) ||
+             SDK::Orbwalker::IsAutoAttacking() ||
+             !SDK::Orbwalker::CanMove())) {
+            Reset(false);
+            ClearBlockedCommand();
+            return false;
+        }
         const bool preserveTransientState =
             now < m_spellOnlyUntilTick ||
             m_state != SourceEvadeState::Idle;

@@ -4,9 +4,9 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <cstring>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -40,23 +40,60 @@ inline int LastCastW = 0;
 inline int LastCastR = 0;
 inline int LastBasicAttackTick = 0;
 inline int LastMoveTick = 0;
+inline AIBaseClient PendingEQTarget;
+inline int PendingEQTick = 0;
+inline int PendingDaggerResetUntilTick = 0;
+inline int PendingDaggerHoldNetworkId = 0;
+inline Vector3 PendingDaggerHoldPosition;
+inline int PendingDaggerGoneTick = 0;
+
+enum class EEQKillStealStage {
+    None,
+    WaitingForDagger,
+    WaitingForQ
+};
+
+inline EEQKillStealStage PendingEEQStage = EEQKillStealStage::None;
+inline AIBaseClient PendingEEQTarget;
+inline int PendingEEQDeadlineTick = 0;
+inline int PendingEEQSecondCastTick = 0;
 
 // Ngay sau khi bấm R, trạng thái di chuyển của frame trước còn sót lại vài chục
 // ms, nên phải có khoảng ân hạn trước khi coi di chuyển là hủy channel.
 inline constexpr int RMoveGraceMs = 250;
+inline constexpr int DaggerReadyAgeMs = 1000;
+inline constexpr int DaggerWaitWindowMs = 200;
+inline constexpr int DaggerPickupGraceMs = 250;
+inline constexpr int MaxEEQResetWaitMs = 250;
 inline std::vector<Dagger> Daggers;
 
-static std::string RuntimeName(const GameObject& object) {
-    return GetObjectCharacterName(object);
+static bool IsDaggerName(const std::string& name) {
+    static constexpr const char* suffix = "_W_Indicator_Ally";
+    return name.starts_with("Katarina_") && name.ends_with(suffix);
 }
 
-static bool IsHiddenMinion(const GameObject& object) {
-    if (!object.IsValid()) {
+static bool IsDaggerObject(const GameObject& object) {
+    return object.IsValid() && IsDaggerName(GetObjectName(object));
+}
+
+static bool HasLiveDaggerRuntimeName(const GameObject& object) {
+    const uintptr_t address = object.Address();
+    if (!Globals::IsValidPtr(address)) {
         return false;
     }
-    const std::string name = GetObjectName(object);
-    static const std::regex pattern("^Katarina_.*_W_Indicator_Ally$", std::regex_constants::icase);
-    return std::regex_match(name, pattern);
+
+    // Bypass StaticStringCache: when a dagger is picked, the native object can
+    // remain in AllGameObjects with the same address/NetworkId while Riot
+    // clears Name/CharacterName in-place. Cached Name() would keep the old
+    // indicator string and falsely report a live dagger.
+    char name[96] = {};
+    if (::Core::Objects::ReadName(address, name, sizeof(name)) && name[0]) {
+        return IsDaggerName(name);
+    }
+    char characterName[96] = {};
+    return ::Core::Objects::ReadCharacterName(
+               address, characterName, sizeof(characterName)) &&
+           characterName[0] && IsDaggerName(characterName);
 }
 
 // Trạng thái channel R được suy ra từ mốc OnProcessSpell của chính chiêu R:
@@ -114,20 +151,29 @@ static bool IsOwnDagger(const Dagger& dagger) {
     return dagger.Unit.IsValid();
 }
 
-static bool IsDaggerReady(const Dagger& dagger, int minAgeMs = 1000) {
-    return IsOwnDagger(dagger) && SDK::Variables::TickCount() - dagger.CreateTick >= minAgeMs;
+static bool IsDaggerReady(const Dagger& dagger) {
+    return IsOwnDagger(dagger) &&
+           SDK::Variables::TickCount() - dagger.CreateTick >= DaggerReadyAgeMs;
+}
+
+static int DaggerReadyInMs(const Dagger& dagger) {
+    return std::max(
+        0,
+        DaggerReadyAgeMs -
+            std::max(0, SDK::Variables::TickCount() - dagger.CreateTick));
 }
 
 static void PruneDaggers() {
     const int now = SDK::Variables::TickCount();
     Daggers.erase(
         std::remove_if(
-            Daggers.begin(),
-            Daggers.end(),
+            Daggers.begin(), Daggers.end(),
             [now](const Dagger& dagger) {
-                return now - dagger.CreateTick >= 5000 ||
-                       !dagger.Unit.IsValid() ||
-                       dagger.Position.IsZero();
+                return dagger.Position.IsZero() ||
+                       now - dagger.CreateTick >= 5000 ||
+                       !GameObjects::ContainsNetworkId(dagger.NetworkId) ||
+                       !GameObjects::detail::HasLiveIdentity(dagger.Unit) ||
+                       !HasLiveDaggerRuntimeName(dagger.Unit);
             }),
         Daggers.end());
 }
@@ -138,16 +184,19 @@ static bool HasOwnDagger() {
     });
 }
 
-static int CountOwnDaggersNear(const AIBaseClient& target, float range) {
-    int count = 0;
-    const float rangeSqr = range * range;
-    for (const auto& dagger : Daggers) {
-        if (IsOwnDagger(dagger) &&
-            dagger.Position.DistanceSqr2D(target.Position()) <= rangeSqr) {
-            ++count;
-        }
+static float MagicalEffectiveHealth(const AIBaseClient& target) {
+    return target.Health() + target.AllShield() + target.MagicalShield();
+}
+
+static const Dagger* FindDagger(int networkId) {
+    if (networkId == 0) {
+        return nullptr;
     }
-    return count;
+    const auto found = std::find_if(
+        Daggers.begin(), Daggers.end(), [networkId](const Dagger& dagger) {
+            return dagger.NetworkId == networkId && IsOwnDagger(dagger);
+        });
+    return found != Daggers.end() ? &*found : nullptr;
 }
 
 static int SpellRank(const Spell& spell, int maxRank) {
@@ -164,20 +213,22 @@ static float BonusAttackSpeed() {
     return player.IsValid() ? std::max(0.0f, player.AttackSpeedMod() - 1.0f) : 0.0f;
 }
 
+static float MagicDamageAmp(const AIBaseClient& target);
+
 static float PassiveDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
         return 0.0f;
     }
 
-    // Voracity / Sinister Steel: 68-240 based on champion level
+    // Voracity / Sinister Steel: 68-240 at normal levels (257/275 at 19/20)
     // +60% bonus AD +70/80/90/100% AP based on champion level.
     static constexpr float baseDamage[] = {
         0.0f, 68.0f, 72.0f, 77.0f, 82.0f, 89.0f, 96.0f, 103.0f, 112.0f,
         121.0f, 131.0f, 142.0f, 154.0f, 166.0f, 180.0f, 194.0f, 208.0f,
-        225.0f, 240.0f
+        224.0f, 240.0f, 257.0f, 275.0f
     };
-    const int level = std::clamp(player.Level(), 1, 18);
+    const int level = std::clamp(player.Level(), 1, 20);
     float apRatio = 1.00f;
     if (level < 6) {
         apRatio = 0.70f;
@@ -191,7 +242,7 @@ static float PassiveDamage(const AIBaseClient& target) {
         baseDamage[level] +
         apRatio * player.AP() +
         0.60f * player.BonusAttackDamage();
-    return player.CalculateMagicDamage(target, raw);
+    return player.CalculateMagicDamage(target, raw) * MagicDamageAmp(target);
 }
 
 static float QDamage(const AIBaseClient& target) {
@@ -206,7 +257,8 @@ static float QDamage(const AIBaseClient& target) {
         return 0.0f;
     }
 
-    return player.CalculateMagicDamage(target, baseDamage[rank] + 0.40f * player.AP());
+    return player.CalculateMagicDamage(target, baseDamage[rank] + 0.40f * player.AP()) *
+           MagicDamageAmp(target);
 }
 
 // Bội số khuếch đại sát thương PHÉP từ trang bị. Áp lên sát thương SAU khi đã
@@ -247,6 +299,25 @@ static float MagicDamageAmp(const AIBaseClient& target) {
     return amp;
 }
 
+static float NonMagicAbilityDamageAmp(const AIBaseClient& target) {
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return 1.0f;
+    }
+
+    float amp = 1.0f;
+    if (target.IsHero() && SDK::Items::HasItem(player, SDK::ItemId::Perplexity)) {
+        const float diff = target.MaxHealth() - player.MaxHealth();
+        if (diff > 0.0f) {
+            amp *= 1.0f + 0.15f * std::min(diff / 3000.0f, 1.0f);
+        }
+    }
+    if (SDK::Items::HasItem(player, SDK::ItemId::Lightning_Braid)) {
+        amp *= 0.80f;
+    }
+    return amp;
+}
+
 static float EDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
@@ -275,29 +346,47 @@ static float EOnHitDamage(const AIBaseClient& target) {
     return Damage::GetPassiveDamage(player, target);
 }
 
-static float RDamage(const AIBaseClient& target) {
+static float DaggerPickupDamage(const AIBaseClient& target) {
+    return PassiveDamage(target) +
+           (target.IsHero() ? EOnHitDamage(target) : 0.0f);
+}
+
+struct MixedDamage {
+    float Magical = 0.0f;
+    float Physical = 0.0f;
+};
+
+static MixedDamage RDamage(const AIBaseClient& target) {
     const auto player = Player();
     if (!player.IsValid() || !target.IsValid()) {
-        return 0.0f;
+        return {};
     }
 
     const int rank = SpellRank(R, 3);
     if (rank <= 0) {
-        return 0.0f;
+        return {};
     }
 
     static constexpr float baseMagicDamage[] = { 0.0f, 375.0f, 562.5f, 750.0f };
     const float magicDamage = player.CalculateMagicDamage(
         target,
-        baseMagicDamage[rank] + 2.85f * player.AP());
+        baseMagicDamage[rank] + 2.85f * player.AP()) * MagicDamageAmp(target);
     const float physicalDamage = player.CalculatePhysicalDamage(
         target,
-        (2.40f + 7.50f * BonusAttackSpeed()) * player.BonusAttackDamage());
-
-    const float damage = magicDamage + physicalDamage;
+        (2.40f + 7.50f * BonusAttackSpeed()) * player.BonusAttackDamage()) *
+        NonMagicAbilityDamageAmp(target);
 
     // Giữ nguyên hệ số khoảng cách của R theo yêu cầu.
-    return target.DistanceToPlayer() <= 350.0f ? damage : damage * 0.60f;
+    const float distanceScale = target.DistanceToPlayer() <= 350.0f ? 1.0f : 0.60f;
+    return { magicDamage * distanceScale, physicalDamage * distanceScale };
+}
+
+static bool IsRDamageLethal(const AIBaseClient& target) {
+    const MixedDamage damage = RDamage(target);
+    const float postTypeShields =
+        std::max(0.0f, damage.Magical - target.MagicalShield()) +
+        std::max(0.0f, damage.Physical - target.PhysicalShield());
+    return postTypeShields >= target.Health() + target.AllShield();
 }
 
 static bool UnderTower(const Vector3& position) {
@@ -367,42 +456,6 @@ static bool CastQ(const AIBaseClient& target) {
     return Q.Cast(target) == CastStates::SuccessfullyCasted;
 }
 
-static const Dagger* BestDaggerNearTarget(const AIBaseClient& target, float range) {
-    const Dagger* best = nullptr;
-    const auto player = Player();
-    for (const auto& dagger : Daggers) {
-        if (!IsOwnDagger(dagger) ||
-            player.Distance(dagger.Position) > E.Range + 150.0f ||
-            dagger.Position.Distance2D(target.Position()) > range) {
-            continue;
-        }
-
-        if (!best ||
-            player.Distance(dagger.Position) < player.Distance(best->Position)) {
-            best = &dagger;
-        }
-    }
-    return best;
-}
-
-static const Dagger* BestDaggerNearPosition(const Vector3& position, float range) {
-    const Dagger* best = nullptr;
-    const auto player = Player();
-    for (const auto& dagger : Daggers) {
-        if (!IsOwnDagger(dagger) ||
-            player.Distance(dagger.Position) > E.Range + 150.0f ||
-            dagger.Position.Distance2D(position) > range) {
-            continue;
-        }
-
-        if (!best ||
-            player.Distance(dagger.Position) < player.Distance(best->Position)) {
-            best = &dagger;
-        }
-    }
-    return best;
-}
-
 static Vector3 GetBestECastPos(
     const AIBaseClient& target,
     const Dagger& dagger,
@@ -427,7 +480,7 @@ static Vector3 GetBestECastPos(
     }
 
     if (A.Distance2D(bestPos) <= R_A) {
-        bestPos.y = NavMesh::GetHeightForPosition(bestPos);
+        bestPos.y = distToDagger <= 150.0f ? T.y : B.y;
         if (T.Distance2D(bestPos) <= maxTargetDistance) {
             return bestPos;
         }
@@ -441,7 +494,7 @@ static Vector3 GetBestECastPos(
 
     Vector3 P_B = B.Extend(T, R_B);
     if (A.Distance2D(P_B) <= R_A) {
-        P_B.y = NavMesh::GetHeightForPosition(P_B);
+        P_B.y = B.y;
         if (T.Distance2D(P_B) <= maxTargetDistance) {
             return P_B;
         }
@@ -450,7 +503,7 @@ static Vector3 GetBestECastPos(
 
     Vector3 P_A = A.Extend(T, R_A);
     if (B.Distance2D(P_A) <= R_B) {
-        P_A.y = NavMesh::GetHeightForPosition(P_A);
+        P_A.y = T.y;
         if (T.Distance2D(P_A) <= maxTargetDistance) {
             return P_A;
         }
@@ -462,13 +515,14 @@ static Vector3 GetBestECastPos(
         const float h_sqr = R_A * R_A - a * a;
         if (h_sqr >= 0.0f) {
             const float h = std::sqrt(h_sqr);
-            const Vector3 dir = (B - A).Normalized();
-            const Vector3 P_m = A + dir * a;
-            const Vector3 perp{-dir.z, 0.0f, dir.x};
+            const Vector3 dir{B.x - A.x, 0.0f, B.z - A.z};
+            const Vector3 normalizedDir = dir.Normalized();
+            const Vector3 P_m = A + normalizedDir * a;
+            const Vector3 perp{-normalizedDir.z, 0.0f, normalizedDir.x};
             Vector3 I1 = P_m + perp * h;
             Vector3 I2 = P_m - perp * h;
-            I1.y = NavMesh::GetHeightForPosition(I1);
-            I2.y = NavMesh::GetHeightForPosition(I2);
+            I1.y = B.y;
+            I2.y = B.y;
             Vector3 bestI = (T.Distance2D(I1) < T.Distance2D(I2)) ? I1 : I2;
             if (T.Distance2D(bestI) <= maxTargetDistance) {
                 return bestI;
@@ -479,7 +533,221 @@ static Vector3 GetBestECastPos(
     return Vector3();
 }
 
-static AIHeroClient BestDaggerTarget(float range) {
+inline constexpr float DaggerPickupRadius = 150.0f;
+inline constexpr float PassiveHitRadius = 340.0f;
+inline constexpr float ShunpoDamageRadius = 200.0f;
+
+struct ECandidate {
+    Vector3 Position;
+    const Dagger* Anchor = nullptr;
+    int ReadyPickups = 0;
+    int PassiveHits = 0;
+    bool AnchorReady = false;
+    int AnchorAgeMs = 0;
+    int EResetDelayMs = INT_MAX;
+    float TargetDistance = FLT_MAX;
+    float EstimatedDamage = 0.0f;
+
+    bool IsValid() const {
+        return Anchor != nullptr && !Position.IsZero();
+    }
+};
+
+static int ExpectedShunpoReadyDelayMs(const ECandidate& candidate);
+
+enum class DaggerReadinessFilter {
+    Any,
+    ReadyOnly,
+    UnreadyOnly
+};
+
+static void AddECandidate(std::vector<Vector3>& candidates, Vector3 position, float height) {
+    if (position.IsZero()) {
+        return;
+    }
+    position.y = height;
+    for (const auto& existing : candidates) {
+        if (existing.DistanceSqr2D(position) <= 25.0f) {
+            return;
+        }
+    }
+    candidates.push_back(position);
+}
+
+static ECandidate EvaluateECandidate(const AIBaseClient& target, const Vector3& position) {
+    ECandidate candidate;
+    const auto player = Player();
+    const float pickupRange = DaggerPickupRadius + player.BoundingRadius();
+    if (!player.IsValid() || position.IsZero() ||
+        player.Distance(position) > E.Range || !AllowDashTo(position)) {
+        return candidate;
+    }
+
+    float closestAnchorDistance = FLT_MAX;
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger)) {
+            continue;
+        }
+        const float distance = dagger.Position.Distance2D(position);
+        if (distance > pickupRange) {
+            continue;
+        }
+        const bool sameDistance = std::fabs(distance - closestAnchorDistance) <= 1.0f;
+        const bool betterTie = sameDistance && candidate.Anchor &&
+            (IsDaggerReady(dagger) != IsDaggerReady(*candidate.Anchor)
+                ? IsDaggerReady(dagger)
+                : dagger.CreateTick < candidate.Anchor->CreateTick);
+        if (candidate.Anchor && distance >= closestAnchorDistance - 1.0f && !betterTie) {
+            continue;
+        }
+        candidate.Anchor = &dagger;
+        closestAnchorDistance = distance;
+    }
+    if (!candidate.Anchor) {
+        return ECandidate{};
+    }
+
+    candidate.AnchorReady = IsDaggerReady(*candidate.Anchor);
+    candidate.AnchorAgeMs = std::max(
+        0, SDK::Variables::TickCount() - candidate.Anchor->CreateTick);
+    candidate.TargetDistance = target.Position().Distance2D(position);
+    for (const auto& dagger : Daggers) {
+        if (!IsDaggerReady(dagger) ||
+            dagger.Position.Distance2D(position) > pickupRange) {
+            continue;
+        }
+        ++candidate.ReadyPickups;
+        if (candidate.TargetDistance <= PassiveHitRadius + target.BoundingRadius()) {
+            ++candidate.PassiveHits;
+        }
+    }
+
+    candidate.EstimatedDamage =
+        DaggerPickupDamage(target) * static_cast<float>(candidate.PassiveHits);
+    if (candidate.TargetDistance <= ShunpoDamageRadius + target.BoundingRadius()) {
+        candidate.EstimatedDamage += EDamage(target) + EOnHitDamage(target);
+    }
+    candidate.Position = position;
+    candidate.EResetDelayMs = ExpectedShunpoReadyDelayMs(candidate);
+    return candidate;
+}
+
+static bool IsBetterECandidate(const ECandidate& candidate, const ECandidate& current,
+                               const AIBaseClient& target) {
+    if (!candidate.IsValid()) {
+        return false;
+    }
+    if (!current.IsValid()) {
+        return true;
+    }
+
+    // A landed dagger has deterministic pickup/passive value. An airborne
+    // dagger is only a fallback even when its raw cursor position is closer.
+    if (candidate.AnchorReady != current.AnchorReady) {
+        return candidate.AnchorReady;
+    }
+    if (candidate.EResetDelayMs != current.EResetDelayMs) {
+        return candidate.EResetDelayMs < current.EResetDelayMs;
+    }
+    if (!candidate.AnchorReady && candidate.AnchorAgeMs != current.AnchorAgeMs) {
+        return candidate.AnchorAgeMs > current.AnchorAgeMs;
+    }
+
+    const float effectiveHealth = MagicalEffectiveHealth(target);
+    const bool candidateLethal = candidate.EstimatedDamage >= effectiveHealth;
+    const bool currentLethal = current.EstimatedDamage >= effectiveHealth;
+    if (candidateLethal != currentLethal) {
+        return candidateLethal;
+    }
+    if (candidate.PassiveHits != current.PassiveHits) {
+        return candidate.PassiveHits > current.PassiveHits;
+    }
+    if (candidate.ReadyPickups != current.ReadyPickups) {
+        return candidate.ReadyPickups > current.ReadyPickups;
+    }
+    if (std::fabs(candidate.TargetDistance - current.TargetDistance) > 5.0f) {
+        return candidate.TargetDistance < current.TargetDistance;
+    }
+    return Player().Distance(candidate.Position) < Player().Distance(current.Position);
+}
+
+static ECandidate BestECandidate(
+    const AIBaseClient& target,
+    float maxTargetDistance = PassiveHitRadius,
+    DaggerReadinessFilter readiness = DaggerReadinessFilter::Any) {
+    ECandidate best;
+    const auto player = Player();
+    if (!player.IsValid() || !target.IsValid()) {
+        return best;
+    }
+
+    const float pickupRange = DaggerPickupRadius + player.BoundingRadius();
+    std::vector<Vector3> candidates;
+    candidates.reserve(Daggers.size() * Daggers.size() * 2 + 2);
+
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger) ||
+            player.Distance(dagger.Position) > E.Range + pickupRange) {
+            continue;
+        }
+        AddECandidate(candidates, GetBestECastPos(target, dagger, maxTargetDistance),
+                      dagger.Position.y);
+        AddECandidate(candidates, dagger.Position, dagger.Position.y);
+    }
+
+    // Pair midpoints/intersections are important when several pickup circles
+    // overlap: the old nearest-dagger rule regularly consumed only one dagger.
+    for (size_t i = 0; i < Daggers.size(); ++i) {
+        const auto& first = Daggers[i];
+        if (!IsOwnDagger(first)) {
+            continue;
+        }
+        for (size_t j = i + 1; j < Daggers.size(); ++j) {
+            const auto& second = Daggers[j];
+            if (!IsOwnDagger(second)) {
+                continue;
+            }
+            const float distance = first.Position.Distance2D(second.Position);
+            if (distance <= 0.0f || distance > pickupRange * 2.0f) {
+                continue;
+            }
+
+            Vector3 midpoint = first.Position + (second.Position - first.Position) * 0.5f;
+            AddECandidate(candidates, midpoint, first.Position.y);
+
+            const Vector3 horizontalDelta{
+                second.Position.x - first.Position.x,
+                0.0f,
+                second.Position.z - first.Position.z
+            };
+            const Vector3 direction = horizontalDelta.Normalized();
+            const Vector3 perpendicular{-direction.z, 0.0f, direction.x};
+            const float offset = std::sqrt(std::max(
+                0.0f, pickupRange * pickupRange - distance * distance * 0.25f));
+            AddECandidate(candidates, midpoint + perpendicular * offset, first.Position.y);
+            AddECandidate(candidates, midpoint - perpendicular * offset, second.Position.y);
+        }
+    }
+
+    for (const auto& candidatePosition : candidates) {
+        ECandidate candidate = EvaluateECandidate(target, candidatePosition);
+        if ((readiness == DaggerReadinessFilter::ReadyOnly && !candidate.AnchorReady) ||
+            (readiness == DaggerReadinessFilter::UnreadyOnly && candidate.AnchorReady)) {
+            continue;
+        }
+        if (candidate.TargetDistance > maxTargetDistance + target.BoundingRadius()) {
+            continue;
+        }
+        if (IsBetterECandidate(candidate, best, target)) {
+            best = candidate;
+        }
+    }
+    return best;
+}
+
+static AIHeroClient BestDaggerTarget(
+    float range,
+    DaggerReadinessFilter readiness = DaggerReadinessFilter::Any) {
     AIHeroClient best;
     float bestScore = FLT_MAX;
     const auto player = Player();
@@ -488,30 +756,20 @@ static AIHeroClient BestDaggerTarget(float range) {
             continue;
         }
 
-        bool canReach = false;
-        if (player.Distance(target.Position()) <= E.Range) {
-            canReach = true;
-        } else {
-            for (const auto& dagger : Daggers) {
-                if (IsOwnDagger(dagger) &&
-                    player.Distance(dagger.Position) <= E.Range + 150.0f) {
-                    Vector3 testPos = GetBestECastPos(target, dagger);
-                    if (!testPos.IsZero()) {
-                        canReach = true;
-                        break;
-                    }
-                }
-            }
-        }
+        const ECandidate candidate = BestECandidate(target, PassiveHitRadius, readiness);
+        const bool canReach = candidate.IsValid() ||
+            (readiness == DaggerReadinessFilter::Any &&
+             player.Distance(target.Position()) <= E.Range);
 
         if (!canReach) {
             continue;
         }
 
-        const int daggersNear = CountOwnDaggersNear(target, 350.0f);
-        float score = target.Health() - PassiveDamage(target) * static_cast<float>(daggersNear);
+        const int daggerHits = candidate.PassiveHits;
+        float score = MagicalEffectiveHealth(target) -
+                      DaggerPickupDamage(target) * static_cast<float>(daggerHits);
 
-        if (daggersNear > 0) {
+        if (daggerHits > 0) {
             score -= 1000.0f;
         }
 
@@ -558,7 +816,18 @@ static bool ShouldKeepR() {
     return false;
 }
 
-static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
+static bool DoComboE(
+    AIBaseClient& outTarget,
+    bool checkForDagger = true,
+    bool setupQAgainstUnreadyDagger = false,
+    bool* waitingForDagger = nullptr,
+    bool* waitingForQuickEReset = nullptr) {
+    if (waitingForDagger) {
+        *waitingForDagger = false;
+    }
+    if (waitingForQuickEReset) {
+        *waitingForQuickEReset = false;
+    }
     if (HaveRBuff() && Key(RMenu, "NeverCancelR")) {
         return false;
     }
@@ -568,24 +837,80 @@ static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
         return false;
     }
 
-    AIHeroClient target = HasOwnDagger()
-        ? BestDaggerTarget(E.Range + 400.0f)
-        : GetMagicalTarget(E.Range + 400.0f);
+    AIHeroClient target;
+    if (setupQAgainstUnreadyDagger) {
+        target = BestDaggerTarget(
+            E.Range + 400.0f, DaggerReadinessFilter::ReadyOnly);
+        if (!ValidHeroTarget(target, E.Range + 400.0f)) {
+            target = GetMagicalTarget(E.Range + 400.0f);
+        }
+    } else {
+        target = HasOwnDagger()
+            ? BestDaggerTarget(E.Range + 400.0f)
+            : GetMagicalTarget(E.Range + 400.0f);
+    }
     if (!ValidHeroTarget(target, E.Range + 400.0f)) {
         return false;
     }
 
     outTarget = AIBaseClient(target.Handle());
 
-    const Dagger* dagger = BestDaggerNearTarget(target, 490.0f);
-    if (dagger && IsOwnDagger(*dagger)) {
-        Vector3 castPos = GetBestECastPos(target, *dagger);
-        if (AllowDashTo(castPos) && CastE(castPos)) {
+    const ECandidate daggerCandidate = BestECandidate(
+        target,
+        PassiveHitRadius,
+        setupQAgainstUnreadyDagger
+            ? DaggerReadinessFilter::ReadyOnly
+            : DaggerReadinessFilter::Any);
+    if (daggerCandidate.IsValid()) {
+        const bool quickReset = setupQAgainstUnreadyDagger &&
+            daggerCandidate.EResetDelayMs <= MaxEEQResetWaitMs;
+        if (CastE(daggerCandidate.Position)) {
+            if (quickReset) {
+                PendingDaggerHoldNetworkId = daggerCandidate.Anchor->NetworkId;
+                PendingDaggerHoldPosition = daggerCandidate.Anchor->Position;
+                PendingDaggerResetUntilTick =
+                    SDK::Variables::TickCount() + MaxEEQResetWaitMs;
+                PendingDaggerGoneTick = 0;
+                if (waitingForQuickEReset) {
+                    *waitingForQuickEReset = true;
+                }
+            }
             return true;
         }
     }
 
-    if (checkForDagger && !Q.IsReady() && !W.IsReady() && !dagger) {
+    if (setupQAgainstUnreadyDagger) {
+        const ECandidate unreadyCandidate = BestECandidate(
+            target, PassiveHitRadius, DaggerReadinessFilter::UnreadyOnly);
+        if (unreadyCandidate.IsValid()) {
+            const int timeUntilReady =
+                DaggerReadyInMs(*unreadyCandidate.Anchor);
+            const bool passiveWillHit =
+                unreadyCandidate.TargetDistance <= PassiveHitRadius + target.BoundingRadius();
+            if (passiveWillHit &&
+                unreadyCandidate.EResetDelayMs <= MaxEEQResetWaitMs &&
+                timeUntilReady > DaggerWaitWindowMs &&
+                CastE(unreadyCandidate.Position)) {
+                PendingDaggerHoldNetworkId = unreadyCandidate.Anchor->NetworkId;
+                PendingDaggerHoldPosition = unreadyCandidate.Anchor->Position;
+                PendingDaggerResetUntilTick =
+                    SDK::Variables::TickCount() + MaxEEQResetWaitMs;
+                PendingDaggerGoneTick = 0;
+                if (waitingForQuickEReset) {
+                    *waitingForQuickEReset = true;
+                }
+                return true;
+            }
+            if (timeUntilReady <= DaggerWaitWindowMs && passiveWillHit) {
+                if (waitingForDagger) {
+                    *waitingForDagger = true;
+                }
+                return false;
+            }
+        }
+    }
+
+    if (checkForDagger && !Q.IsReady() && !W.IsReady() && !daggerCandidate.IsValid()) {
         return false;
     }
 
@@ -614,13 +939,13 @@ static bool DoComboE(AIBaseClient& outTarget, bool checkForDagger = true) {
         castPos = target.Position();
     }
 
-    castPos.y = NavMesh::GetHeightForPosition(castPos);
+    castPos.y = target.Position().y;
     if (player.Distance(castPos) <= E.Range && AllowDashTo(castPos)) {
         return CastE(castPos);
     }
 
     Vector3 fallbackPos = target.Position().Extend(player.Position(), -50.0f);
-    fallbackPos.y = NavMesh::GetHeightForPosition(fallbackPos);
+    fallbackPos.y = target.Position().y;
     if (player.Distance(fallbackPos) <= E.Range && AllowDashTo(fallbackPos)) {
         return CastE(fallbackPos);
     }
@@ -638,7 +963,7 @@ static bool TryEKillSteal() {
             continue;
         }
         const float damage = EDamage(target) + EOnHitDamage(target);
-        if (target.Health() <= damage &&
+        if (MagicalEffectiveHealth(target) <= damage &&
             AllowDashTo(target.Position()) &&
             CastE(target.Position())) {
             return true;
@@ -652,30 +977,33 @@ static bool TryDaggerKillSteal() {
         return false;
     }
 
-    for (const auto& dagger : Daggers) {
-        if (!IsDaggerReady(dagger) || Player().Distance(dagger.Position) > E.Range + 150.0f) {
+    AIHeroClient bestTarget;
+    ECandidate bestCandidate;
+    float bestRemainingHealth = FLT_MAX;
+    for (const auto& target : EnemyHeroes(E.Range + DaggerPickupRadius + PassiveHitRadius)) {
+        if (!ShouldCancelRForKillsteal(target)) {
             continue;
         }
 
-        for (const auto& target : EnemyHeroes(E.Range + W.Range)) {
-            if (!ShouldCancelRForKillsteal(target)) {
-                continue;
-            }
-            if (dagger.Position.Distance2D(target.Position()) > 490.0f ||
-                target.Health() > PassiveDamage(target)) {
-                continue;
-            }
+        ECandidate candidate = BestECandidate(target);
+        if (!candidate.IsValid() || candidate.PassiveHits <= 0 ||
+            candidate.EstimatedDamage < MagicalEffectiveHealth(target)) {
+            continue;
+        }
 
-            Vector3 castPos = GetBestECastPos(target, dagger);
-            if (castPos.IsZero() || castPos.Distance2D(target.Position()) > W.Range) {
-                continue;
-            }
-            if (AllowDashTo(castPos) && CastE(castPos)) {
-                return true;
-            }
+        const float remainingHealth =
+            MagicalEffectiveHealth(target) - candidate.EstimatedDamage;
+        if (!bestTarget.IsValid() || remainingHealth < bestRemainingHealth ||
+            (std::fabs(remainingHealth - bestRemainingHealth) <= 1.0f &&
+             IsBetterECandidate(candidate, bestCandidate, target))) {
+            bestTarget = target;
+            bestCandidate = candidate;
+            bestRemainingHealth = remainingHealth;
         }
     }
-    return false;
+
+    return bestTarget.IsValid() && bestCandidate.IsValid() &&
+           CastE(bestCandidate.Position);
 }
 
 static bool TryQKillSteal() {
@@ -687,7 +1015,7 @@ static bool TryQKillSteal() {
         if (!ShouldCancelRForKillsteal(target)) {
             continue;
         }
-        if (target.Health() <= QDamage(target) && CastQ(target)) {
+        if (MagicalEffectiveHealth(target) <= QDamage(target) && CastQ(target)) {
             return true;
         }
     }
@@ -703,8 +1031,7 @@ static bool TryEQKillSteal() {
     }
 
     const auto target = GetMagicalTarget(E.Range + Q.Range);
-    if (!ValidHeroTarget(target, E.Range + Q.Range) ||
-        target.Health() > QDamage(target)) {
+    if (!ValidHeroTarget(target, E.Range + Q.Range)) {
         return false;
     }
 
@@ -712,17 +1039,15 @@ static bool TryEQKillSteal() {
         return false;
     }
 
-    for (const auto& dagger : Daggers) {
-        if (IsOwnDagger(dagger) &&
-            Player().Distance(dagger.Position) <= E.Range + 150.0f) {
-            Vector3 castPos = GetBestECastPos(target, dagger, Q.Range);
-            if (!castPos.IsZero() &&
-                castPos.Distance2D(target.Position()) <= Q.Range &&
-                AllowDashTo(castPos) &&
-                CastE(castPos)) {
-                return true;
-            }
-        }
+    ECandidate candidate = BestECandidate(target, Q.Range);
+    if (candidate.IsValid() &&
+        QDamage(target) + candidate.EstimatedDamage >= MagicalEffectiveHealth(target) &&
+        CastE(candidate.Position)) {
+        return true;
+    }
+
+    if (QDamage(target) < MagicalEffectiveHealth(target)) {
+        return false;
     }
 
     AIBaseClient bestObject;
@@ -743,6 +1068,239 @@ static bool TryEQKillSteal() {
         return CastE(bestObject.Position());
     }
     return false;
+}
+
+static void ClearEEQKillSteal() {
+    PendingEEQStage = EEQKillStealStage::None;
+    PendingEEQTarget = AIBaseClient();
+    PendingEEQDeadlineTick = 0;
+    PendingEEQSecondCastTick = 0;
+    PendingDaggerHoldNetworkId = 0;
+    PendingDaggerHoldPosition = Vector3();
+    PendingDaggerResetUntilTick = 0;
+    PendingDaggerGoneTick = 0;
+}
+
+static bool ContinueEEQKillSteal() {
+    if (PendingEEQStage == EEQKillStealStage::None) {
+        return false;
+    }
+
+    const int now = SDK::Variables::TickCount();
+    if (!PendingEEQTarget.IsHero() ||
+        !ValidTarget(PendingEEQTarget, E.Range + Q.Range) ||
+        now > PendingEEQDeadlineTick) {
+        ClearEEQKillSteal();
+        return false;
+    }
+
+    if (PendingEEQStage == EEQKillStealStage::WaitingForDagger) {
+        const Dagger* trackedDagger = FindDagger(PendingDaggerHoldNetworkId);
+        if (trackedDagger && now <= PendingDaggerResetUntilTick) {
+            return true;
+        }
+
+        PendingDaggerHoldNetworkId = 0;
+        PendingDaggerHoldPosition = Vector3();
+        PendingDaggerResetUntilTick = 0;
+        PendingDaggerGoneTick = 0;
+
+        // Read the real cooldown state after the pickup. No cooldown formula or
+        // predicted reset is used here.
+        if (!E.IsReady()) {
+            return true;
+        }
+        if (!ValidTarget(PendingEEQTarget, E.Range) ||
+            !AllowDashTo(PendingEEQTarget.Position())) {
+            return true;
+        }
+        if (!CastE(PendingEEQTarget.Position())) {
+            return true;
+        }
+
+        PendingEEQStage = EEQKillStealStage::WaitingForQ;
+        PendingEEQSecondCastTick = now;
+        PendingEEQDeadlineTick = now + 300;
+        return true;
+    }
+
+    if (now - PendingEEQSecondCastTick < 30) {
+        return true;
+    }
+    if (ValidTarget(PendingEEQTarget, Q.Range) && CastQ(PendingEEQTarget)) {
+        ClearEEQKillSteal();
+        return true;
+    }
+    if (now - PendingEEQSecondCastTick <= 300) {
+        return true;
+    }
+
+    ClearEEQKillSteal();
+    return false;
+}
+
+static float ShunpoDaggerCooldownReduction() {
+    const int level = std::clamp(Player().Level(), 1, 18);
+    const int tier = std::clamp((level - 1) / 5, 0, 3);
+    return 0.78f + 0.06f * static_cast<float>(tier);
+}
+
+static float ShunpoTotalCooldownSeconds() {
+    const auto instance = E.Instance();
+    const float runtimeTotalCooldown = instance.IsValid() ? instance.Cooldown() : 0.0f;
+    if (runtimeTotalCooldown > 0.0f && runtimeTotalCooldown < 60.0f) {
+        return runtimeTotalCooldown;
+    }
+
+    static constexpr float baseCooldown[] = { 0.0f, 12.0f, 11.0f, 10.0f, 9.0f, 8.0f };
+    return baseCooldown[SpellRank(E, 5)];
+}
+
+static int ExpectedShunpoReadyDelayMs(const ECandidate& candidate) {
+    if (!candidate.IsValid()) {
+        return INT_MAX;
+    }
+
+    // Voracity subtracts a percentage of E's TOTAL cooldown, not its current
+    // remaining cooldown. Time elapsed before the dagger is retrieved continues
+    // ticking normally, so E becomes ready after the larger of pickup time and
+    // the residual total-cooldown fraction.
+    const float totalCooldownMs = ShunpoTotalCooldownSeconds() * 1000.0f;
+    if (totalCooldownMs <= 0.0f) {
+        return INT_MAX;
+    }
+
+    const auto player = Player();
+    const float pickupRange = DaggerPickupRadius + player.BoundingRadius();
+    std::vector<int> pickupTimes;
+    pickupTimes.reserve(Daggers.size());
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger) ||
+            dagger.Position.Distance2D(candidate.Position) > pickupRange) {
+            continue;
+        }
+        pickupTimes.push_back(std::max(150, DaggerReadyInMs(dagger)));
+    }
+    if (pickupTimes.empty()) {
+        return INT_MAX;
+    }
+
+    std::sort(pickupTimes.begin(), pickupTimes.end());
+    const float reductionPerDagger = ShunpoDaggerCooldownReduction();
+    int retrievedDaggers = 0;
+    int previousPickupTime = 0;
+    for (const int pickupTime : pickupTimes) {
+        if (retrievedDaggers > 0) {
+            const float naturalReadyTime =
+                totalCooldownMs *
+                (1.0f - reductionPerDagger * static_cast<float>(retrievedDaggers));
+            if (naturalReadyTime <= static_cast<float>(pickupTime)) {
+                return static_cast<int>(std::ceil(std::max(
+                    static_cast<float>(previousPickupTime), naturalReadyTime)));
+            }
+        }
+
+        ++retrievedDaggers;
+        previousPickupTime = pickupTime;
+        const float remainingAfterPickup =
+            totalCooldownMs - static_cast<float>(pickupTime) -
+            totalCooldownMs * reductionPerDagger *
+                static_cast<float>(retrievedDaggers);
+        if (remainingAfterPickup <= 0.0f) {
+            return pickupTime;
+        }
+    }
+
+    const float readyTime =
+        totalCooldownMs *
+        (1.0f - reductionPerDagger * static_cast<float>(retrievedDaggers));
+    return static_cast<int>(std::ceil(std::max(
+        static_cast<float>(previousPickupTime), readyTime)));
+}
+
+static bool TryEEQKillSteal() {
+    if (PendingEEQStage != EEQKillStealStage::None ||
+        !E.IsReady() || !Q.IsReady() ||
+        !Bool(EMenu, "EKs") || !Bool(QMenu, "useQKS")) {
+        return false;
+    }
+
+    AIHeroClient bestTarget;
+    ECandidate bestCandidate;
+    float bestRemainingHealth = FLT_MAX;
+
+    // Ready daggers finish the first part immediately. Only consider airborne
+    // daggers when no ready-dagger EEQ is available.
+    for (const auto readiness : {
+             DaggerReadinessFilter::ReadyOnly,
+             DaggerReadinessFilter::UnreadyOnly }) {
+        for (const auto& target : EnemyHeroes(
+                 E.Range + DaggerPickupRadius + PassiveHitRadius)) {
+            if (!ShouldCancelRForKillsteal(target)) {
+                continue;
+            }
+
+            ECandidate candidate = BestECandidate(
+                target, PassiveHitRadius, readiness);
+            if (!candidate.IsValid()) {
+                continue;
+            }
+
+            const int resetDelayMs = ExpectedShunpoReadyDelayMs(candidate);
+            if (resetDelayMs > MaxEEQResetWaitMs) {
+                continue;
+            }
+
+            float firstEDamage = candidate.EstimatedDamage;
+            if (!candidate.AnchorReady) {
+                if (candidate.TargetDistance >
+                    PassiveHitRadius + target.BoundingRadius()) {
+                    continue;
+                }
+                firstEDamage += DaggerPickupDamage(target);
+            } else if (candidate.PassiveHits <= 0) {
+                continue;
+            }
+
+            const float totalDamage =
+                firstEDamage +
+                EDamage(target) + EOnHitDamage(target) +
+                QDamage(target);
+            if (totalDamage < MagicalEffectiveHealth(target)) {
+                continue;
+            }
+
+            const float remainingHealth =
+                MagicalEffectiveHealth(target) - totalDamage;
+            if (!bestTarget.IsValid() || remainingHealth < bestRemainingHealth ||
+                (std::fabs(remainingHealth - bestRemainingHealth) <= 1.0f &&
+                 IsBetterECandidate(candidate, bestCandidate, target))) {
+                bestTarget = target;
+                bestCandidate = candidate;
+                bestRemainingHealth = remainingHealth;
+            }
+        }
+
+        if (bestTarget.IsValid()) {
+            break;
+        }
+    }
+
+    if (!bestTarget.IsValid() || !bestCandidate.IsValid() ||
+        !CastE(bestCandidate.Position)) {
+        return false;
+    }
+
+    const int now = SDK::Variables::TickCount();
+    const int timeUntilReady = DaggerReadyInMs(*bestCandidate.Anchor);
+    PendingEEQStage = EEQKillStealStage::WaitingForDagger;
+    PendingEEQTarget = AIBaseClient(bestTarget.Handle());
+    PendingEEQDeadlineTick = now + MaxEEQResetWaitMs;
+    PendingDaggerHoldNetworkId = bestCandidate.Anchor->NetworkId;
+    PendingDaggerHoldPosition = bestCandidate.Anchor->Position;
+    PendingDaggerResetUntilTick = now + timeUntilReady + DaggerPickupGraceMs;
+    PendingDaggerGoneTick = 0;
+    return true;
 }
 
 static bool TryCastW() {
@@ -768,7 +1326,7 @@ static bool TryCastR() {
         return false;
     }
 
-    if (target.Health() <= RDamage(target)) {
+    if (IsRDamageLethal(target)) {
         return R.Cast();
     }
 
@@ -787,13 +1345,93 @@ static void EQ() {
         return;
     }
 
+    const int now = SDK::Variables::TickCount();
+    bool daggerResetObserved = false;
+    if (PendingDaggerHoldNetworkId != 0) {
+        const Dagger* trackedDagger = FindDagger(PendingDaggerHoldNetworkId);
+        const bool timedOut = now > PendingDaggerResetUntilTick;
+        if (trackedDagger && !timedOut) {
+            PendingDaggerGoneTick = 0;
+            return;
+        }
+
+        if (!timedOut && !E.IsReady()) {
+            if (PendingDaggerGoneTick == 0) {
+                PendingDaggerGoneTick = now;
+                return;
+            }
+            if (now - PendingDaggerGoneTick <= 100) {
+                return;
+            }
+        }
+
+        PendingDaggerHoldNetworkId = 0;
+        PendingDaggerHoldPosition = Vector3();
+        PendingDaggerResetUntilTick = 0;
+        PendingDaggerGoneTick = 0;
+        if (E.IsReady()) {
+            daggerResetObserved = true;
+        } else {
+            PendingEQTick = now - 30;
+        }
+    }
+
+    if (PendingEQTick > 0) {
+        const int age = now - PendingEQTick;
+        if (age < 30) {
+            return;
+        }
+
+        AIBaseClient qTarget = PendingEQTarget;
+        if (!ValidTarget(qTarget, Q.Range)) {
+            qTarget = AIBaseClient(GetMagicalTarget(Q.Range).Handle());
+        }
+        if (ValidTarget(qTarget, Q.Range) && CastQ(qTarget)) {
+            PendingEQTarget = AIBaseClient();
+            PendingEQTick = 0;
+            if (!TryCastW()) {
+                (void)TryCastR();
+            }
+            return;
+        }
+        if (age <= 250) {
+            return;
+        }
+        PendingEQTarget = AIBaseClient();
+        PendingEQTick = 0;
+    }
+
     AIBaseClient eTarget;
     bool eCasted = false;
-    if (E.IsReady() && DoComboE(eTarget, Key(EMenu, "SaveEIfNoDaggers", true))) {
+    bool waitingForDagger = false;
+    bool waitingForQuickEReset = false;
+    if (E.IsReady() && DoComboE(
+            eTarget,
+            Key(EMenu, "SaveEIfNoDaggers", true),
+            Q.IsReady(),
+            &waitingForDagger,
+            &waitingForQuickEReset)) {
         eCasted = true;
     }
 
-    if (!eCasted && E.IsReady(500)) {
+    if (waitingForDagger) {
+        return;
+    }
+
+    if (eCasted) {
+        PendingEQTarget = eTarget;
+        if (!waitingForQuickEReset) {
+            PendingEQTick = SDK::Variables::TickCount();
+        }
+        return;
+    }
+
+    if (daggerResetObserved) {
+        PendingEQTick = now - 30;
+        return;
+    }
+
+    if (E.IsReady(500)) {
         return;
     }
 
@@ -834,6 +1472,10 @@ static void QE() {
 }
 
 static void Combo() {
+    if (PendingDaggerHoldNetworkId != 0) {
+        EQ();
+        return;
+    }
     switch (List(MenuRoot, "KataComboMode", 0)) {
     case 0:
         EQ();
@@ -864,11 +1506,198 @@ static void LastHit() {
 
     for (const auto& minion : GameObjects::EnemyMinions()) {
         if (ValidTarget(minion, Q.Range) &&
-            minion.Health() <= QDamage(minion) &&
+            MagicalEffectiveHealth(minion) <= QDamage(minion) &&
             CastQ(minion)) {
             return;
         }
     }
+}
+
+inline constexpr float WOrbMaxWalkRange = 450.0f;
+inline constexpr float WOrbPickupRadius = 150.0f;
+inline constexpr float WOrbPickupSafetyMargin = 10.0f;
+inline constexpr int WOrbMinApproachLeadMs = 75;
+inline constexpr int WOrbMaxApproachLeadMs = 175;
+
+struct WOrbCandidate {
+    Vector3 Position;
+    int TravelTimeMs = INT_MAX;
+    int ReadyInMs = INT_MAX;
+    int MoveStartInMs = INT_MAX;
+    int PickupTimeMs = INT_MAX;
+    int Pickups = 0;
+    int PassiveHits = 0;
+    bool Lethal = false;
+    bool ResetsE = false;
+
+    bool IsValid() const {
+        return !Position.IsZero() && Pickups > 0;
+    }
+};
+
+static WOrbCandidate EvaluateWOrbCandidate(
+    const Vector3& position,
+    const AIHeroClient& target) {
+    WOrbCandidate candidate;
+    const auto player = Player();
+    if (!player.IsValid() || position.IsZero() ||
+        player.Distance(position) > WOrbMaxWalkRange || NavMesh::IsWall(position)) {
+        return candidate;
+    }
+
+    const int now = SDK::Variables::TickCount();
+    const float pickupRange = WOrbPickupRadius;
+    const float moveSpeed = std::max(1.0f, player.MoveSpeed());
+    const int travelTimeMs = static_cast<int>(std::ceil(
+        player.Distance(position) / moveSpeed * 1000.0f));
+    int earliestReadyMs = INT_MAX;
+
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger) ||
+            dagger.Position.Distance2D(position) > pickupRange) {
+            continue;
+        }
+        const int age = std::max(0, now - dagger.CreateTick);
+        const int readyIn = DaggerReadyInMs(dagger);
+        const int expiresIn = std::max(0, 5000 - age);
+        if (std::max(travelTimeMs, readyIn) <= expiresIn) {
+            earliestReadyMs = std::min(earliestReadyMs, readyIn);
+        }
+    }
+    if (earliestReadyMs == INT_MAX) {
+        return candidate;
+    }
+
+    const int approachLeadMs = std::min(
+        WOrbMaxApproachLeadMs,
+        std::max(WOrbMinApproachLeadMs, Game::Ping() / 2 + 50));
+    candidate.TravelTimeMs = travelTimeMs;
+    candidate.ReadyInMs = earliestReadyMs;
+    candidate.MoveStartInMs = std::max(
+        0, earliestReadyMs - travelTimeMs - approachLeadMs);
+    candidate.PickupTimeMs = std::max(travelTimeMs, earliestReadyMs);
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger) ||
+            dagger.Position.Distance2D(position) > pickupRange) {
+            continue;
+        }
+        const int age = std::max(0, now - dagger.CreateTick);
+        const int readyIn = DaggerReadyInMs(dagger);
+        const int expiresIn = std::max(0, 5000 - age);
+        if (readyIn <= candidate.PickupTimeMs &&
+            candidate.PickupTimeMs <= expiresIn) {
+            ++candidate.Pickups;
+        }
+    }
+    if (candidate.Pickups <= 0) {
+        return WOrbCandidate{};
+    }
+
+    if (ValidHeroTarget(target, WOrbMaxWalkRange + PassiveHitRadius) &&
+        target.Position().Distance2D(position) <=
+            PassiveHitRadius + target.BoundingRadius()) {
+        candidate.PassiveHits = candidate.Pickups;
+        const float damage = DaggerPickupDamage(target) *
+                             static_cast<float>(candidate.PassiveHits);
+        candidate.Lethal = damage >= MagicalEffectiveHealth(target);
+    }
+
+    const auto eInstance = E.Instance();
+    const float currentERemainingMs = eInstance.IsValid()
+        ? eInstance.RemainingCooldown() * 1000.0f
+        : 0.0f;
+    if (currentERemainingMs > 0.0f) {
+        const float remainingAtPickup = std::max(
+            0.0f, currentERemainingMs - static_cast<float>(candidate.PickupTimeMs));
+        const float cooldownReduction =
+            ShunpoTotalCooldownSeconds() * 1000.0f *
+            ShunpoDaggerCooldownReduction() *
+            static_cast<float>(candidate.Pickups);
+        candidate.ResetsE = remainingAtPickup - cooldownReduction <= 0.0f;
+    }
+
+    candidate.Position = position;
+    return candidate;
+}
+
+static bool IsBetterWOrbCandidate(
+    const WOrbCandidate& candidate,
+    const WOrbCandidate& current) {
+    if (!candidate.IsValid()) {
+        return false;
+    }
+    if (!current.IsValid()) {
+        return true;
+    }
+    if (candidate.Lethal != current.Lethal) {
+        return candidate.Lethal;
+    }
+    if ((candidate.PassiveHits > 0) != (current.PassiveHits > 0)) {
+        return candidate.PassiveHits > 0;
+    }
+    if (candidate.ResetsE != current.ResetsE) {
+        return candidate.ResetsE;
+    }
+    if (candidate.PassiveHits != current.PassiveHits) {
+        return candidate.PassiveHits > current.PassiveHits;
+    }
+    if (candidate.Pickups != current.Pickups) {
+        return candidate.Pickups > current.Pickups;
+    }
+    return candidate.PickupTimeMs < current.PickupTimeMs;
+}
+
+static WOrbCandidate BestWOrbCandidate(const AIHeroClient& target) {
+    WOrbCandidate best;
+    const auto player = Player();
+    const float pickupRange = WOrbPickupRadius;
+    std::vector<Vector3> positions;
+    positions.reserve(Daggers.size() * Daggers.size() + Daggers.size() * 2);
+
+    for (const auto& dagger : Daggers) {
+        if (!IsOwnDagger(dagger)) {
+            continue;
+        }
+        AddECandidate(positions, dagger.Position, dagger.Position.y);
+        AddECandidate(
+            positions,
+            dagger.Position.Extend(
+                player.Position(),
+                std::max(0.0f, pickupRange - WOrbPickupSafetyMargin)),
+            dagger.Position.y);
+        if (ValidHeroTarget(target, WOrbMaxWalkRange + PassiveHitRadius)) {
+            AddECandidate(
+                positions,
+                dagger.Position.Extend(
+                    target.Position(),
+                    std::max(0.0f, pickupRange - WOrbPickupSafetyMargin)),
+                dagger.Position.y);
+        }
+    }
+
+    for (size_t i = 0; i < Daggers.size(); ++i) {
+        if (!IsOwnDagger(Daggers[i])) {
+            continue;
+        }
+        for (size_t j = i + 1; j < Daggers.size(); ++j) {
+            if (!IsOwnDagger(Daggers[j]) ||
+                Daggers[i].Position.Distance2D(Daggers[j].Position) > pickupRange * 2.0f) {
+                continue;
+            }
+            const Vector3 midpoint =
+                Daggers[i].Position +
+                (Daggers[j].Position - Daggers[i].Position) * 0.5f;
+            AddECandidate(positions, midpoint, Daggers[i].Position.y);
+        }
+    }
+
+    for (const auto& position : positions) {
+        const WOrbCandidate candidate = EvaluateWOrbCandidate(position, target);
+        if (IsBetterWOrbCandidate(candidate, best)) {
+            best = candidate;
+        }
+    }
+    return best;
 }
 
 static void UpdateOrbwalkerState() {
@@ -891,12 +1720,13 @@ static void UpdateOrbwalkerState() {
             SDK::Variables::TickCount() - LastR < 5000) {
             const auto target = BestDaggerTarget(E.Range + 400.0f);
             if (ValidHeroTarget(target, E.Range + 400.0f)) {
+                const ECandidate candidate = BestECandidate(target);
                 const float damage =
                     (Q.IsReady() ? QDamage(target) : 0.0f) +
                     (E.IsReady() ? EDamage(target) : 0.0f) +
-                    PassiveDamage(target) *
-                        static_cast<float>(CountOwnDaggersNear(target, 350.0f));
-                if (target.Health() <= damage) {
+                    DaggerPickupDamage(target) *
+                        static_cast<float>(candidate.PassiveHits);
+                if (MagicalEffectiveHealth(target) <= damage) {
                     Orbwalker::AttackEnabled(true);
                     Orbwalker::MoveEnabled(true);
                 }
@@ -908,45 +1738,56 @@ static void UpdateOrbwalkerState() {
     UpdateR = false;
     Orbwalker::MoveEnabled(true);
 
-    if (!Bool(WMenu, "WOrb") || !HasOwnDagger()) {
+    if (PendingDaggerHoldNetworkId != 0) {
+        const Dagger* trackedDagger = FindDagger(PendingDaggerHoldNetworkId);
+        if (trackedDagger &&
+            SDK::Variables::TickCount() <= PendingDaggerResetUntilTick) {
+            PendingDaggerHoldPosition = trackedDagger->Position;
+            Orbwalker::AttackEnabled(false);
+            Orbwalker::SetOrbwalkerPosition(PendingDaggerHoldPosition);
+            return;
+        }
+    }
+
+    if (!Bool(WMenu, "WOrb") || !HasOwnDagger() ||
+        Orbwalker::ActiveMode() != OrbwalkingMode::Combo) {
         Orbwalker::AttackEnabled(true);
         Orbwalker::SetOrbwalkerPosition({});
         return;
     }
 
-    const Dagger* closeDagger = nullptr;
-    for (const auto& dagger : Daggers) {
-        if (!IsDaggerReady(dagger, 750) || Player().Distance(dagger.Position) >= 300.0f) {
-            continue;
-        }
-        if (!closeDagger ||
-            dagger.CreateTick < closeDagger->CreateTick ||
-            player.Distance(dagger.Position) < player.Distance(closeDagger->Position)) {
-            closeDagger = &dagger;
-        }
-    }
-
-    if (!closeDagger) {
+    const auto target = GetMagicalTarget(WOrbMaxWalkRange + PassiveHitRadius);
+    const WOrbCandidate best = BestWOrbCandidate(target);
+    if (!best.IsValid()) {
         Orbwalker::AttackEnabled(true);
         Orbwalker::SetOrbwalkerPosition({});
         return;
     }
 
+    // Có thể chấm điểm dao chưa rơi xong để chuẩn bị đường đi, nhưng chưa ép
+    // orbwalker chạy nếu sẽ đến quá sớm. Công thức bắt đầu đi bù thời gian chạy,
+    // nửa ping và một khoảng đệm nhỏ; được tính lại mỗi frame.
+    if (best.MoveStartInMs > 0) {
+        Orbwalker::AttackEnabled(true);
+        Orbwalker::SetOrbwalkerPosition({});
+        return;
+    }
+
+    // Giữ đòn đánh đang wind-up, nhưng vẫn đặt điểm di chuyển để orbwalker bước
+    // vào vùng nhặt ngay sau khi đòn đánh hoàn tất.
     if (Orbwalker::IsWindingUp()) {
         Orbwalker::AttackEnabled(true);
-        Orbwalker::SetOrbwalkerPosition({});
+        Orbwalker::SetOrbwalkerPosition(best.Position);
         return;
     }
 
-    Orbwalker::AttackEnabled(false);
-    const auto target = GetMagicalTarget(W.Range);
-    if (Orbwalker::ActiveMode() == OrbwalkingMode::Combo &&
-        ValidHeroTarget(target, W.Range) &&
-        player.Distance(closeDagger->Position) < 100.0f) {
-        Orbwalker::SetOrbwalkerPosition(closeDagger->Position.Extend(target.Position(), 100.0f));
-    } else {
-        Orbwalker::SetOrbwalkerPosition({});
-    }
+    // Chỉ bỏ qua auto khi việc nhặt dao tạo lợi ích ngay: gây passive, hồi E,
+    // hoặc gom được nhiều dao. Nếu chỉ là dao đơn không trúng ai thì vẫn cho
+    // đánh thường và dùng vị trí này như hướng di chuyển, tránh tự khóa combat.
+    const bool shouldRushDagger =
+        best.PassiveHits > 0 || best.ResetsE || best.Pickups >= 2;
+    Orbwalker::AttackEnabled(!shouldRushDagger);
+    Orbwalker::SetOrbwalkerPosition(best.Position);
 }
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
@@ -975,7 +1816,12 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
-    if (TryDaggerKillSteal() || TryEKillSteal() || TryQKillSteal() || TryEQKillSteal()) {
+    if (ContinueEEQKillSteal()) {
+        return;
+    }
+
+    if (TryDaggerKillSteal() || TryEKillSteal() || TryQKillSteal() ||
+        TryEQKillSteal() || TryEEQKillSteal()) {
         return;
     }
 
@@ -1090,35 +1936,53 @@ static void OnProcessSpellCast(const Events::ProcessSpellEventArgs& args) {
 }
 
 static void OnObjectCreate(const GameObject& object) {
-    if (!IsHiddenMinion(object)) {
+    if (!IsDaggerObject(object)) {
         return;
     }
 
-    const int networkId = object.NetworkId();
-    const auto existing = std::find_if(Daggers.begin(), Daggers.end(), [networkId](const Dagger& dagger) {
-        return dagger.NetworkId == networkId;
+    const int networkId = static_cast<int>(object.CachedNetworkId());
+    const Vector3 position = object.Position();
+    if (networkId == 0 || position.IsZero()) {
+        return;
+    }
+
+    const bool alreadyTracked = std::any_of(
+        Daggers.begin(), Daggers.end(),
+        [networkId](const Dagger& dagger) {
+            return dagger.NetworkId == networkId;
+        });
+    if (alreadyTracked) {
+        return;
+    }
+
+    Daggers.push_back({
+        object,
+        position,
+        SDK::Variables::TickCount(),
+        networkId
     });
-    if (existing != Daggers.end()) {
-        return;
-    }
-
-    Daggers.push_back({ object, object.Position(), SDK::Variables::TickCount(), networkId });
 }
 
 static void OnObjectDelete(const GameObject& object) {
-    if (!IsHiddenMinion(object)) {
+    // OnDelete có thể là identity-only; CachedNetworkId() không cố resolve lại
+    // địa chỉ đã bị prune và vẫn giữ đúng identity snapshot của event.
+    const int networkId = static_cast<int>(object.CachedNetworkId());
+    if (networkId == 0) {
         return;
     }
 
-    const int networkId = object.NetworkId();
+    const size_t oldSize = Daggers.size();
     Daggers.erase(
         std::remove_if(
-            Daggers.begin(),
-            Daggers.end(),
+            Daggers.begin(), Daggers.end(),
             [networkId](const Dagger& dagger) {
                 return dagger.NetworkId == networkId;
             }),
         Daggers.end());
+
+    if (Daggers.size() != oldSize) {
+        Orbwalker::SetOrbwalkerPosition({});
+    }
 }
 
 static void OnDraw() {
@@ -1171,7 +2035,6 @@ static void BuildMenu() {
     WMenu->Add(new MenuBool("WOrb", "Orbwalker to Dagger"));
 
     EMenu = MenuRoot->AddSubMenu(new Menu("Estg", "E Settings"));
-    EMenu->Add(new MenuBool("UseELogic", "Use E Logic", false));
     EMenu->Add(new MenuBool("EKs", "Use E KS"));
     EMenu->Add(new MenuKeyBind("SaveEIfNoDaggers", "Save E", SDK::Keys::H, KeyBindType::Toggle, true))->Permashow();
 
@@ -1238,6 +2101,16 @@ static void OnGameLoad() {
     LastCastR = 0;
     LastBasicAttackTick = 0;
     LastMoveTick = 0;
+    PendingEQTarget = AIBaseClient();
+    PendingEQTick = 0;
+    PendingDaggerResetUntilTick = 0;
+    PendingDaggerHoldNetworkId = 0;
+    PendingDaggerHoldPosition = Vector3();
+    PendingDaggerGoneTick = 0;
+    PendingEEQStage = EEQKillStealStage::None;
+    PendingEEQTarget = AIBaseClient();
+    PendingEEQDeadlineTick = 0;
+    PendingEEQSecondCastTick = 0;
     Events::hook.OnGameUpdate += &Game_OnUpdate;
     Events::hook.OnProcessSpell += &OnProcessSpellCast;
     GameObjects::AddOnCreate(&OnObjectCreate);
@@ -1269,6 +2142,16 @@ static void OnUnload() {
     LastCastR = 0;
     LastBasicAttackTick = 0;
     LastMoveTick = 0;
+    PendingEQTarget = AIBaseClient();
+    PendingEQTick = 0;
+    PendingDaggerResetUntilTick = 0;
+    PendingDaggerHoldNetworkId = 0;
+    PendingDaggerHoldPosition = Vector3();
+    PendingDaggerGoneTick = 0;
+    PendingEEQStage = EEQKillStealStage::None;
+    PendingEEQTarget = AIBaseClient();
+    PendingEEQDeadlineTick = 0;
+    PendingEEQSecondCastTick = 0;
     RemoveMenu();
     Loaded = false;
 }
