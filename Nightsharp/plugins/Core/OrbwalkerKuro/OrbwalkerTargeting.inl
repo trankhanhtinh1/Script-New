@@ -20,6 +20,33 @@ inline constexpr uint32_t kJarvanIVStandardNameHash =
     SDK::Utils::HashName("jarvanivstandard");
 inline constexpr uint32_t kAzirSoldierNameHash =
     SDK::Utils::HashName("azirsolider");
+inline constexpr std::array<uint32_t, 25> kEnsoulSpecialMinionNameHashes = {{
+    SDK::Utils::HashName("tibbers"),
+    SDK::Utils::HashName("annietibbers"),
+    SDK::Utils::HashName("elisespiderling"),
+    SDK::Utils::HashName("heimertyellow"),
+    SDK::Utils::HashName("heimertblue"),
+    SDK::Utils::HashName("ivernminion"),
+    SDK::Utils::HashName("malzaharvoidling"),
+    SDK::Utils::HashName("zacrebirthbloblet"),
+    SDK::Utils::HashName("shacobox"),
+    SDK::Utils::HashName("yorickghoulmelee"),
+    SDK::Utils::HashName("yorickbigghoul"),
+    SDK::Utils::HashName("zyrathornplant"),
+    SDK::Utils::HashName("zyragraspingplant"),
+    SDK::Utils::HashName("teemomushroom"),
+    SDK::Utils::HashName("apheliosturret"),
+    SDK::Utils::HashName("kalistaspawn"),
+    SDK::Utils::HashName("jhintrap"),
+    SDK::Utils::HashName("nidaleespear"),
+    SDK::Utils::HashName("illaoiminion"),
+    SDK::Utils::HashName("sru_riftherald_mercenary"),
+    SDK::Utils::HashName("belvethvoidling"),
+    SDK::Utils::HashName("leblanc"),
+    SDK::Utils::HashName("monkeyking"),
+    SDK::Utils::HashName("neeko"),
+    SDK::Utils::HashName("shaco"),
+}};
 
 // Reusable per-frame snapshot buffers: the *Into accessors copy under the
 // snapshot lock into a preallocated buffer instead of allocating a fresh
@@ -344,6 +371,26 @@ inline bool HasGangplankInGame() {
 inline bool IsIgnoredMinion(const AIMinionClient& minion) {
     return SDK::Utils::HashName(minion.CharacterName().c_str()) ==
            kJarvanIVStandardNameHash;
+}
+
+inline bool IsEnsoulSpecialMinion(const AIMinionClient& minion) {
+    if (!minion.IsValid() || minion.IsDead() || !minion.IsMinion() ||
+        !minion.IsEnemy() || minion.Team() == GameObjectTeam::Neutral ||
+        minion.IsPlant() || HasFlag(minion.GetMinionType(), MinionTypes::Ward)) {
+        return false;
+    }
+
+    const uint32_t nameHash = SDK::Utils::HashName(minion.CharacterName().c_str());
+    if (nameHash == kJarvanIVStandardNameHash ||
+        nameHash == kGangplankBarrelNameHash) {
+        return false;
+    }
+    for (const uint32_t candidate : kEnsoulSpecialMinionNameHashes) {
+        if (nameHash == candidate) {
+            return true;
+        }
+    }
+    return false;
 }
 
 inline bool IsValidMinionTarget(const AIMinionClient& minion, float range = FLT_MAX) {
@@ -769,6 +816,51 @@ inline AttackableUnit FirstValidMinionTarget(const AIHeroClient& player,
     return {};
 }
 
+inline bool IsValidCurrentPlantTarget(const AIHeroClient& player,
+                                      const AIMinionClient& plant) {
+    if (!plant.IsValid() || !plant.IsPlant()) {
+        return false;
+    }
+    return IsValidCurrentAttackTarget(player, AttackableUnit(plant.Handle()));
+}
+
+inline AttackableUnit GetPlantTarget(const OrbwalkerMenu& menu,
+                                     const AIHeroClient& player) {
+    if (!menu.AttackPlants() || !player.IsValid()) {
+        return {};
+    }
+
+    for (const auto& plant : FrameMinions<&GameObjects::PlantsInto>()) {
+        if (IsValidCurrentPlantTarget(player, plant)) {
+            return AttackableUnit(plant.Handle());
+        }
+    }
+    return {};
+}
+
+inline AttackableUnit GetSpecialMinionTarget(const OrbwalkerMenu& menu,
+                                             const AIHeroClient& player) {
+    if (!menu.AttackSpecialMinions() || !player.IsValid()) {
+        return {};
+    }
+
+    auto scan = [&](const std::vector<AIMinionClient>& minions) -> AttackableUnit {
+        for (const auto& minion : minions) {
+            if (IsEnsoulSpecialMinion(minion) &&
+                IsValidCurrentMinionTarget(player, minion)) {
+                return AttackableUnit(minion.Handle());
+            }
+        }
+        return {};
+    };
+
+    AttackableUnit result = scan(FrameMinions<&GameObjects::EnemyPetsInto>());
+    if (result.IsValid()) return result;
+    result = scan(FrameMinions<&GameObjects::EnemySpecialMinionsInto>());
+    if (result.IsValid()) return result;
+    return scan(FrameMinions<&GameObjects::EnemyClonesInto>());
+}
+
 inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
                                                 const AIHeroClient& player) {
     if (menu.AttackBarrels() && HasGangplankInGame()) {
@@ -779,6 +871,13 @@ inline AttackableUnit GetComboFallbackCandidate(const OrbwalkerMenu& menu,
                     player, AttackableUnit(minion.Handle()))) {
                 return AttackableUnit(minion.Handle());
             }
+        }
+    }
+
+    {
+        const AttackableUnit plant = GetPlantTarget(menu, player);
+        if (plant.IsValid()) {
+            return plant;
         }
     }
 
@@ -910,6 +1009,9 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         context_.cachedTargetTick = now;
         context_.cachedTargetMode = mode;
         context_.cachedTargetForceTargetNetworkId = forceTargetNetworkId;
+        if (target.IsValid()) {
+            ActivatePlantAttackSpellBlock(target, now);
+        }
         return target;
     };
 
@@ -991,6 +1093,26 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
             heroTargetResolved = true;
         }
         return cachedHeroTarget;
+    };
+    AttackableUnit cachedSpecialMinionTarget;
+    bool specialMinionTargetResolved = false;
+    auto getSpecialMinionTarget = [&]() -> AttackableUnit {
+        if (!specialMinionTargetResolved) {
+            cachedSpecialMinionTarget =
+                OrbwalkingDetail::GetSpecialMinionTarget(menu_, player);
+            specialMinionTargetResolved = true;
+        }
+        return cachedSpecialMinionTarget;
+    };
+    AttackableUnit cachedPlantTarget;
+    bool plantTargetResolved = false;
+    auto getPlantTarget = [&]() -> AttackableUnit {
+        if (!plantTargetResolved) {
+            cachedPlantTarget =
+                OrbwalkingDetail::GetPlantTarget(menu_, player);
+            plantTargetResolved = true;
+        }
+        return cachedPlantTarget;
     };
 
     if (mode == OrbwalkingMode::Combo) {
@@ -1103,6 +1225,13 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
         }
     }
 
+    if (menu_.PrioritizeSpecialMinions()) {
+        const AttackableUnit specialTarget = getSpecialMinionTarget();
+        if (specialTarget.IsValid()) {
+            return cacheTarget(specialTarget);
+        }
+    }
+
     // Jungle camps are Neutral team, so the LaneClear last-hit loop below
     // deliberately skips them (canLaneClear rejects Neutral). The backup
     // OrbwalkerSelector selected jungle through a dedicated GetJungleTarget()
@@ -1190,6 +1319,20 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
                 context_.laneClearMinion = minion;
                 return cacheTarget(AttackableUnit(minion.Handle()));
             }
+        }
+    }
+
+    {
+        const AttackableUnit plantTarget = getPlantTarget();
+        if (plantTarget.IsValid()) {
+            return cacheTarget(plantTarget);
+        }
+    }
+
+    {
+        const AttackableUnit specialTarget = getSpecialMinionTarget();
+        if (specialTarget.IsValid()) {
+            return cacheTarget(specialTarget);
         }
     }
 

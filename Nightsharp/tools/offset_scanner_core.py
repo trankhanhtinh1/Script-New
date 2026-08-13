@@ -259,10 +259,10 @@ def _resolve_locator(
         resolved = instruction_address + addend
     elif kind == "function_start":
         resolved = adapter.function_start(instruction_address) + addend
-    elif kind in {"rip_rel32", "call_rel32"}:
+    elif kind in {"rip_rel32", "call_rel32", "call_rel32_follow_jmp"}:
         displacement_offset = int(resolver["displacement_offset"])
         instruction_size = int(resolver["instruction_size"])
-        if kind == "call_rel32":
+        if kind in {"call_rel32", "call_rel32_follow_jmp"}:
             # 0xE8 = CALL rel32, 0xE9 = JMP rel32 (tail call). Both encode the
             # target the same way, and tail calls are a legitimate way to
             # locate a function, so accept either.
@@ -279,6 +279,19 @@ def _resolve_locator(
             instruction_size,
             addend,
         )
+        if kind == "call_rel32_follow_jmp":
+            # The CALL target may be a thin wrapper (e.g. `add rcx, X; jmp target`).
+            # Follow the leading JMP rel32 (opcode 0xE9) at the resolved address
+            # to reach the real function. Stop on the first non-JMP instruction
+            # or after max_follow_depth hops.
+            max_depth = int(resolver.get("max_follow_depth", 8))
+            for _ in range(max_depth):
+                head = _read_exact(adapter, resolved, 1)
+                if not head or head[0] != 0xE9:
+                    break
+                resolved = _relative_target(
+                    adapter, resolved, 1, 5, 0
+                )
     else:
         raise CatalogError(f"{target_id}: unsupported resolver kind {kind!r}")
 

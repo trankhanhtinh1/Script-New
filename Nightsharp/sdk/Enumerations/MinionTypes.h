@@ -13,6 +13,8 @@ enum class MinionTypes : std::int32_t {
     Siege = 1 << 3,
     Super = 1 << 4,
     Ward = 1 << 5,
+    JunglePlant = 1 << 6,
+    Plant = JunglePlant,
 };
 
 constexpr MinionTypes operator|(MinionTypes lhs, MinionTypes rhs) {

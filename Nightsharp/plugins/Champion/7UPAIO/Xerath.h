@@ -52,7 +52,6 @@ inline int WallCastT = 0;
 inline Vec2 YasuoWallCastedPos = {};
 
 static constexpr float kQCloseReleaseRange = 300.0f;
-static constexpr float kRCenterPredictionRadius = 1.0f;
 
 static AIHeroClient Player() {
     return ObjectManager::Player();
@@ -184,25 +183,6 @@ static bool TryShootChargedQ(const AIBaseClient& target, HitChance hitChance) {
         return Q.ShootChargedSpell(pred.GetCastPosition());
     }
     return false;
-}
-
-static PredictionOutput GetRShotPrediction(const AIHeroClient& target) {
-    PredictionInput input;
-    input.Unit = target;
-    input.Delay = R.Delay;
-    input.Radius = kRCenterPredictionRadius;
-    input.Speed = FLT_MAX;
-    input.From = R.From;
-    input.Range = R.Range;
-    input.Collision = false;
-    input.SetType(SpellType::Circle);
-    input.Spell = &R;
-    input.RangeCheckFrom = R.RangeCheckFrom;
-    input.AoE = false;
-    input.AddHitBox = false;
-    input.MaxCollisionCount = R.MaxCollisionCount;
-    input.CollisionObjects = R.CollisionObjects;
-    return SDK::Prediction::GetPrediction(input);
 }
 
 static void BuildMenu();
@@ -530,7 +510,7 @@ static void AutoR() {
 
     if (ValidHeroTarget(target, R.Range)) {
         if (Key(Ulti, "RKey")) {
-            const auto pred = GetRShotPrediction(target);
+            const auto pred = R.GetPrediction(target);
             if (HitchanceAtLeast(pred.Hitchance, RHitchance())) {
                 R.Cast(pred.GetCastPosition());
             }

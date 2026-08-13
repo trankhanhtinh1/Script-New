@@ -145,12 +145,15 @@ inline bool IsCollisionMinionCandidate(const AIMinionClient& minion) {
         return false;
     }
 
-    if (HasFlag(minion.GetMinionType(), MinionTypes::Ward) || minion.IsPlant()) {
+    if (HasFlag(minion.GetMinionType(), MinionTypes::Ward)) {
         return false;
     }
 
     const GameObjectTeam team = minion.Team();
     if (team == GameObjectTeam::Neutral) {
+        if (minion.IsPlant()) {
+            return minion.MaxHealth() > 0.0f;
+        }
         return !minion.IsPet() && minion.IsJungle() && minion.MaxHealth() > 6.0f;
     }
 
@@ -554,6 +557,7 @@ inline const std::vector<AIMinionClient>& SnapshotCollisionMinions() {
     addList(GameObjects::EnemyPetsFrame());
     addList(GameObjects::EnemyClonesFrame());
     addList(GameObjects::JungleFrame());
+    addList(GameObjects::PlantsFrame());
 
     cachedFrame = frame;
     hasCachedFrame = true;

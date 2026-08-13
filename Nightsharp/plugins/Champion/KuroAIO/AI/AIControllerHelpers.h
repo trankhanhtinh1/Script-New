@@ -719,16 +719,21 @@ inline bool ValidHostileUnitInGameplayRange(const AIBaseClient& unit,
     const auto player = GameObjects::Player();
     return unit.IsValid() && !unit.IsDead() && unit.IsEnemy() &&
            unit.IsTargetable() && player.IsValid() &&
-           player.Position().Distance2D(unit.Position()) <=
-               range + unit.BoundingRadius();
+            player.Position().Distance2D(unit.Position()) <=
+                range + unit.BoundingRadius();
+}
+
+inline bool ValidJungleMonster(const AIMinionClient& monster) {
+    return monster.IsValid() && !monster.IsDead() &&
+           monster.IsJungle() && !monster.IsPlant() &&
+           monster.IsTargetable();
 }
 
 inline bool HasNearbyJungleTarget(float range) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     for (const auto& monster : GameObjects::JungleFrame()) {
-        if (monster.IsValid() && !monster.IsDead() &&
-            monster.IsTargetable() &&
+        if (ValidJungleMonster(monster) &&
             player.Position().Distance2D(monster.Position()) <= range) {
             return true;
         }
@@ -747,7 +752,7 @@ inline bool ObjectEventIsAllied(
 inline bool IsEpicMonster(const AIBaseClient& unit) {
     if (!unit.IsValid()) return false;
     const AIMinionClient monster(unit.Address());
-    if (!monster.IsValid()) return false;
+    if (!ValidJungleMonster(monster)) return false;
     const SDK::JungleType type = monster.GetJungleType();
     return type == SDK::JungleType::Legendary ||
            type == SDK::JungleType::Epic;
@@ -787,8 +792,7 @@ inline AIMinionClient SelectJungleTarget(
     if (!player.IsValid()) return best;
     float bestScore = -FLT_MAX;
     for (const auto& monster : GameObjects::JungleFrame()) {
-        if (!monster.IsValid() || monster.IsDead() ||
-            !monster.IsTargetable() ||
+        if (!ValidJungleMonster(monster) ||
             player.Position().Distance2D(monster.Position()) > range) {
             continue;
         }

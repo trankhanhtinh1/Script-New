@@ -21,6 +21,109 @@ inline bool OrbwalkerBase::EvadeBlocksAttack(int now) const {
             now, menu_.EvadeHandoffGrace());
 }
 
+inline bool OrbwalkerBase::ShouldBlockPlantAttackSpell(int slot) {
+    return slot >= static_cast<int>(SpellSlot::Q) &&
+           slot <= static_cast<int>(SpellSlot::R);
+}
+
+inline bool OrbwalkerBase::IsPlantAttackTarget(const AttackableUnit& target) {
+    if (!target.IsValid()) {
+        return false;
+    }
+    if (!target.IsMinion() &&
+        target.Type() != ::Core::Objects::ObjectType::NeutralMinionCampClient) {
+        return false;
+    }
+
+    const AIMinionClient minion(target.Handle());
+    return minion.IsValid() && minion.IsPlant();
+}
+
+inline bool OrbwalkerBase::ShouldBlockPlantAttackSpells(OrbwalkingMode mode) const {
+    return menu_.AttackPlants() &&
+        (mode == OrbwalkingMode::LaneClear ||
+         mode == OrbwalkingMode::Harass ||
+         mode == OrbwalkingMode::LastHit);
+}
+
+inline void OrbwalkerBase::ClearPlantAttackSpellBlock() {
+    if (context_.plantAttackSpellBlockOwner) {
+        CoreEvadeState::SetOwnerState(
+            context_.plantAttackSpellBlockOwner, false, false, 0);
+    }
+    context_.plantAttackSpellBlockUntilTick = 0;
+    context_.plantAttackSpellBlockNetworkId = 0;
+}
+
+inline void OrbwalkerBase::ActivatePlantAttackSpellBlock(
+    const AttackableUnit& target,
+    int now) {
+    const OrbwalkingMode mode = context_.activeMode != OrbwalkingMode::None
+        ? context_.activeMode
+        : ActiveMode();
+    if (!ShouldBlockPlantAttackSpells(mode) || !IsPlantAttackTarget(target)) {
+        return;
+    }
+
+    if (!context_.plantAttackSpellBlockOwner) {
+        context_.plantAttackSpellBlockOwner = CoreEvadeState::AcquireOwner();
+        if (context_.plantAttackSpellBlockOwner) {
+            CoreEvadeState::SetOwnerSpellBlockPredicate(
+                context_.plantAttackSpellBlockOwner,
+                &OrbwalkerBase::ShouldBlockPlantAttackSpell);
+        }
+    }
+
+    bool activated = context_.plantAttackSpellBlockOwner &&
+        CoreEvadeState::SetOwnerState(
+            context_.plantAttackSpellBlockOwner, true, false, 0);
+    if (!activated) {
+        context_.plantAttackSpellBlockOwner = CoreEvadeState::AcquireOwner();
+        if (context_.plantAttackSpellBlockOwner) {
+            CoreEvadeState::SetOwnerSpellBlockPredicate(
+                context_.plantAttackSpellBlockOwner,
+                &OrbwalkerBase::ShouldBlockPlantAttackSpell);
+            activated = CoreEvadeState::SetOwnerState(
+                context_.plantAttackSpellBlockOwner, true, false, 0);
+        }
+    }
+    if (!activated) {
+        return;
+    }
+
+    const int blockMs = std::clamp(
+        static_cast<int>(context_.attackDelayMs + OneWayPingMs() + 120.0f),
+        350,
+        1300);
+    context_.plantAttackSpellBlockUntilTick = now + blockMs;
+    context_.plantAttackSpellBlockNetworkId = target.NetworkId();
+}
+
+inline void OrbwalkerBase::ExpirePlantAttackSpellBlock(int now) {
+    if (context_.plantAttackSpellBlockUntilTick <= 0) {
+        return;
+    }
+
+    const OrbwalkingMode mode = context_.activeMode != OrbwalkingMode::None
+        ? context_.activeMode
+        : ActiveMode();
+    if (!menu_.Enabled() || !ShouldBlockPlantAttackSpells(mode) ||
+        now >= context_.plantAttackSpellBlockUntilTick) {
+        ClearPlantAttackSpellBlock();
+        return;
+    }
+
+    if (context_.plantAttackSpellBlockNetworkId == 0) {
+        return;
+    }
+
+    const AIMinionClient plant = GameObjects::GetUnitByNetworkId<AIMinionClient>(
+        context_.plantAttackSpellBlockNetworkId);
+    if (!plant.IsValid() || plant.IsDead() || !plant.IsPlant()) {
+        ClearPlantAttackSpellBlock();
+    }
+}
+
 struct OrbProbeAcc { const char* n; double ms; unsigned cnt; };
 inline OrbProbeAcc g_orbAcc[48] = {};
 inline int g_orbAccN = 0;
@@ -361,6 +464,8 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
         ClearPendingAttackState();
         return false;
     }
+
+    ActivatePlantAttackSpellBlock(attackTarget, now);
 
     context_.lastAttackOrderTick = now;
     context_.lastAttackOrderNetworkId = targetNetworkId;

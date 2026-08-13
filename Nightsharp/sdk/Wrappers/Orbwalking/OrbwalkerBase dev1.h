@@ -2886,6 +2886,10 @@ protected:
     // - 25 and OMITTED the player's own bounding radius, so auto attacks fired
     // ~90 units short of the real max range. That was the "doesn't attack at max
     // AA range" bug.
+    //
+    // Ping compensation (-min(ping/4,10)-5) added to match
+    // Extensions::GetCurrentAutoAttackRange — without it the range was ~15
+    // units too large at high ping.
     float GetAutoAttackRange(const AttackableUnit& target) const {
         const auto player = GameObjects::Player();
         if (!player.IsValid()) {
@@ -2907,6 +2911,7 @@ protected:
                 }
             }
             range += target.BoundingRadius();
+            range -= std::min(static_cast<float>(Game::Ping()) / 4.0f, 10.0f) + 5.0f;
         }
         return range;
     }

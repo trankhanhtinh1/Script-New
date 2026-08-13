@@ -176,6 +176,11 @@ inline void OrbwalkerBase::Dispose() {
     Events::RemoveOnPlayAnimation(&OrbwalkerBase::OnPlayAnimationStatic);
     Events::RemoveOnDash(&OrbwalkerBase::OnDashStatic);
     Drawing::RemoveOnDraw(&OrbwalkerBase::OnDrawStatic);
+    ClearPlantAttackSpellBlock();
+    if (context_.plantAttackSpellBlockOwner) {
+        CoreEvadeState::ReleaseOwner(context_.plantAttackSpellBlockOwner);
+        context_.plantAttackSpellBlockOwner = {};
+    }
     if (context_.fakeCursorTexture.Texture) {
         UI::Icons::ReleaseTexture(context_.fakeCursorTexture);
     }

@@ -168,6 +168,7 @@ inline void OrbwalkerBase::OnGameUpdate() {
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
         ClearPostFlashAttackGrace();
+        ClearPlantAttackSpellBlock();
         context_.activeMode = OrbwalkingMode::None;
         return;
     }
@@ -177,10 +178,12 @@ inline void OrbwalkerBase::OnGameUpdate() {
     if (context_.activeMode == OrbwalkingMode::None) {
         ClearPendingAttackState();
         ClearPostFlashAttackGrace();
+        ClearPlantAttackSpellBlock();
         return;
     }
 
     const int now = Tick();
+    ExpirePlantAttackSpellBlock(now);
     if (!IsPostFlashAttackGraceActive(now)) {
         ClearPostFlashAttackGrace();
     }

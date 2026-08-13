@@ -177,6 +177,12 @@ private:
     bool EvadeBlocksAttack(int now) const;
     bool IsPostFlashAttackGraceActive(int now) const;
     void ClearPostFlashAttackGrace();
+    static bool ShouldBlockPlantAttackSpell(int slot);
+    static bool IsPlantAttackTarget(const AttackableUnit& target);
+    bool ShouldBlockPlantAttackSpells(OrbwalkingMode mode) const;
+    void ActivatePlantAttackSpellBlock(const AttackableUnit& target, int now);
+    void ExpirePlantAttackSpellBlock(int now);
+    void ClearPlantAttackSpellBlock();
 
     float AttackSafetyMs() const;
     float MoveSafetyMs() const;

@@ -1931,6 +1931,7 @@ inline std::vector<AIBaseClient> ClearUnits(bool jungle) {
     if (jungle) {
         for (const auto& minion : GameObjects::JungleFrame()) {
             if (minion.IsValid() && !minion.IsDead() && minion.Health() > 0.0f &&
+                minion.IsJungle() && !minion.IsPlant() &&
                 minion.IsTargetable()) {
                 result.emplace_back(minion.Handle());
             }

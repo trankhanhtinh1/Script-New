@@ -1739,7 +1739,7 @@ inline ProcessSpellEventArgs DecodeDoCast(const RawEventArgs& raw) {
     args.CastInfo = static_cast<uintptr_t>(raw.Rdx);
 
     // Resolve the hero from the SpellDataInstance source-index. Field offset
-    // 0xA8 was extracted directly from sub_97C290's prologue:
+    // 0xA8 was extracted directly from sub_999320's prologue:
     //     mov edx, [rcx+0xA8] ; call ObjectManager::FindObject
     if (raw.Rcx) {
         uint32_t srcIndex = 0;
@@ -1756,6 +1756,22 @@ inline ProcessSpellEventArgs DecodeDoCast(const RawEventArgs& raw) {
     }
     if (args.Sender.IsValid()) {
         args.CasterNetworkId = args.Sender.NetworkId;
+    }
+
+    // OnDoCast (sub_999320) reads CastTime from RCX (SpellDataInstance), NOT
+    // from RDX (CastInfo). IDA 13337 disassembly:
+    //     movss xmm6, [rdi+0x12C]  ; rdi=RCX; ExtraTimeForCast on SpellDataInstance
+    //     addss xmm6, [rdi+0x128]  ; DesignerCastTime on SpellDataInstance
+    // The getter pair sub_11ED960 (RCX+0x12C) / sub_11EDAD0 (RCX+0x128) confirms
+    // these are SpellDataInstance fields, distinct from the CastInfo getters
+    // sub_963EB0 (RDX+0x98) / sub_9CFED0 (RDX+0x9C) that FillCastInfoFields
+    // uses. Override the CastInfo-derived value with the correct one.
+    if (raw.Rcx) {
+        float extraTimeForCast = 0.0f;
+        float designerCastTime = 0.0f;
+        detail::Read(raw.Rcx + 0x12C, extraTimeForCast);
+        detail::Read(raw.Rcx + 0x128, designerCastTime);
+        args.CastTime = extraTimeForCast + designerCastTime;
     }
 
     // FillCastInfoFields cannot read a slot from this hook: RDX here is not the

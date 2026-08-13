@@ -431,6 +431,19 @@ namespace ObjectDetail {
         return false;
     }
 
+    inline bool IsJunglePlantName(std::string_view text) {
+        return ContainsAny(text, {
+            "sru_plant",
+            "plant_satchel", "plant_health", "plant_vision",
+            "plantsatchel", "planthealth", "plantvision",
+            "blastcone", "blast_cone",
+            "honeyfruit", "honey_fruit",
+            "scryer", "scryersbloom", "scryers_bloom",
+            "hiddenminionplantdemon", "planthealthmirrored",
+            "plantmasterminion"
+        });
+    }
+
     inline GameObjectTeam MapTeam(std::uint32_t team) {
         switch (team) {
         case 100: return GameObjectTeam::Order;
@@ -1748,6 +1761,10 @@ public:
         const std::string& unitName = Name();
         const std::string name = !charName.empty() ? charName : unitName;
 
+        if (ObjectDetail::IsJunglePlantName(name)) {
+            return MinionTypes::JunglePlant;
+        }
+
         if (ObjectDetail::EqualsAny(name, {
             "SRU_ChaosMinionMelee", "SRU_OrderMinionMelee",
             "HA_ChaosMinionMelee", "HA_OrderMinionMelee",
@@ -1812,6 +1829,10 @@ public:
         const std::string& charName = CharacterName();
         const std::string& unitName = Name();
         const std::string name = !charName.empty() ? charName : unitName;
+
+        if (ObjectDetail::IsJunglePlantName(name)) {
+            return JungleType::Plant;
+        }
 
         // Plants: blast cone, honeyfruit, scryer's bloom (visible-only +
         // Smolder's Twin Shadows passive variant). Map under the same enum
@@ -1882,7 +1903,10 @@ public:
     // monsters; auto-attacking them wastes a basic attack and gives no
     // gold/xp. Mirrors EnsoulSharp's IsPlant convention.
     bool IsPlant() const {
-        return GetJungleType() == JungleType::Plant;
+        const float maxHp = MaxHealth();
+        return HasFlag(GetMinionType(), MinionTypes::JunglePlant) ||
+               GetJungleType() == JungleType::Plant ||
+               (Team() == GameObjectTeam::Neutral && maxHp > 0.0f && maxHp <= 6.0f);
     }
 
     bool IsJungle() const {

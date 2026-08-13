@@ -2,6 +2,7 @@
 
 #include "OrbwalkerFarmLogic.h"
 #include "OrbwalkerTypes.h"
+#include "../../../core/CoreEvadeState.h"
 #include "../../../sdk/UI/Icons.h"
 
 #include <string>
@@ -53,6 +54,8 @@ struct OrbwalkerRuntimeContext {
     int lastCritProcessSpellTick = -1;
     int lastCritProcessSpellTargetNetworkId = 0;
     int apheliosReturnMissileNetworkId = 0;
+    int plantAttackSpellBlockUntilTick = 0;
+    int plantAttackSpellBlockNetworkId = 0;
     float attackDelayMs = 625.0f;
     float attackWindupMs = 300.0f;
     float visualWindupWeight = 0.0f;
@@ -82,6 +85,7 @@ struct OrbwalkerRuntimeContext {
     std::string fakeCursorTexturePath;
     std::string lastAttackSpellName;
     FarmLogic::CritSequenceTracker critSequence = {};
+    CoreEvadeState::OwnerToken plantAttackSpellBlockOwner = {};
 };
 
 } // namespace OrbwalkerKuro

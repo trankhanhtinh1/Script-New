@@ -446,7 +446,7 @@
           }
         },
         {
-          "pattern": "E8 ?? ?? ?? ?? 48 85 C0 74 ?? 41 B0",
+          "pattern": "E8 ?? ?? ?? ?? 48 85 C0 74 ?? 41 B0 40 8B D3",
           "sections": [
             ".text"
           ],
@@ -807,7 +807,7 @@
     {
       "id": "Offset::GameRuntime::MySpellState",
       "target_kind": "global",
-      "required": true,
+      "required": false,
       "expected": {
         "7ae7929bd855471994b760c977ef52f758e64c511336be92a2a9c96a4289eff6": "0x1F066A0",
         "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1F1AC60"
@@ -1542,7 +1542,7 @@
           }
         },
         {
-          "pattern": "48 8D 0D ?? ?? ?? ?? C7 45 ?? 00 00 00 00",
+          "pattern": "48 8D 0D ?? ?? ?? ?? C7 45 ?? 00 00 00 00 E8",
           "sections": [
             ".text"
           ],
@@ -2106,22 +2106,6 @@
       "locators": [
         {
           "pattern": "E8 ?? ?? ?? ?? 48 3B F0 75 ?? 48 8B 05",
-          "sections": [
-            ".text"
-          ],
-          "resolver": {
-            "kind": "call_rel32",
-            "displacement_offset": 1,
-            "instruction_size": 5
-          },
-          "validations": {
-            "target_sections": [
-              ".text"
-            ]
-          }
-        },
-        {
-          "pattern": "E8 ?? ?? ?? ?? 41 0F B6 4E ?? 4C 8B F8",
           "sections": [
             ".text"
           ],
@@ -3316,7 +3300,8 @@
             "target_sections": [
               ".text"
             ]
-          }
+          },
+          "allow_multiple": true
         },
         {
           "pattern": "E8 ?? ?? ?? ?? 48 8B CE F3 0F 11 83",
@@ -4173,9 +4158,10 @@
             ".text"
           ],
           "resolver": {
-            "kind": "call_rel32",
+            "kind": "call_rel32_follow_jmp",
             "displacement_offset": 1,
-            "instruction_size": 5
+            "instruction_size": 5,
+            "max_follow_depth": 8
           },
           "validations": {
             "target_sections": [
@@ -4189,9 +4175,10 @@
             ".text"
           ],
           "resolver": {
-            "kind": "call_rel32",
+            "kind": "call_rel32_follow_jmp",
             "displacement_offset": 1,
-            "instruction_size": 5
+            "instruction_size": 5,
+            "max_follow_depth": 8
           },
           "validations": {
             "target_sections": [
@@ -4282,7 +4269,7 @@
       },
       "locators": [
         {
-          "pattern": "75 ?? 48 8B D7 48 8D 4F",
+          "pattern": "75 ?? 44 8B 44 24 ?? 49 8B C9 8B 54 24 ?? E8 ?? ?? ?? ?? 48 8B 5C 24",
           "sections": [
             ".text"
           ],
@@ -4770,7 +4757,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x8"
       },
       "locators": [
         {
@@ -4781,6 +4769,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 5C 24 ?? 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 20 48 8B 05 C5",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -4822,7 +4828,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x8"
       },
       "locators": [
         {
@@ -4833,6 +4840,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 5C 24 ?? 57 48 83 EC 20 4C 8B 81 38",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -4926,7 +4951,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x30"
       },
       "locators": [
         {
@@ -4937,6 +4963,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 8B 5C 24 ?? 48 83 C4 20 5F C3 8B 0D",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -4978,13 +5022,32 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xD0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xD0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xD0"
       },
       "locators": [
         {
           "pattern": "FF 90 ?? ?? ?? ?? 48 85 C0 74 ?? 48 8B C8 E8 ?? ?? ?? ?? 48 85 C0 74 ?? ?? ?? ?? 4C 8D 4C 24 ?? 4C 8D 45 ?? 48 8B D6 4C 8B 51 ?? 48 8D 4C 24 ?? 48 89 4C 24 ?? 48 8D 4C 24 ?? 48 89 4C 24 ?? 48 8B C8 41 FF D2 B8 ?? ?? ?? ?? C6 45",
           "sections": [
             ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "8B 9D ?? ?? ?? ?? F2",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
           ],
           "resolver": {
             "kind": "displacement",
@@ -5108,7 +5171,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x30"
       },
       "locators": [
         {
@@ -5125,6 +5189,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "4C 89 74 24 ?? 33 DB 0F",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_source": "offset.h"
@@ -5134,13 +5216,32 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x68"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x68",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x68"
       },
       "locators": [
         {
           "pattern": "48 8B 74 24 ?? 48 83 C4 ?? 41 5F 41 5E 5F C3 48 89 5C 24 ?? 48 8B CE",
           "sections": [
             ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "4C 8D 4C 24 ?? 8B D7 C7",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
           ],
           "resolver": {
             "kind": "displacement",
@@ -5316,13 +5417,32 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x130"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x130",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x130"
       },
       "locators": [
         {
           "pattern": "48 83 BA ?? ?? ?? ?? 00 4D 8B E1 4D 63 E8 48 8B F2 4C 8B F1 0F 84 ?? ?? ?? ?? 4C 89 78 ?? 4C 8B 3D ?? ?? ?? ?? 48 89 58 ?? 48 89 78 ?? 4D 85 FF 0F 84 ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? 48 85 D2 0F 84 ?? ?? ?? ?? 0F B6 42 ?? 48 83 C2 ?? 66 0F 6F 15 ?? ?? ?? ?? 45 33 C0 0F B6 4C 10 ?? 44 0F B6 4A ?? 88 4C 24 ?? 41 8B C8 4D 85 C9 0F 84 ?? ?? ?? ?? 49 83 F9 ?? 0F 82 ?? ?? ?? ?? 48 8D 42 ?? ?? ?? ?? ?? 4C 8D 5C 24 ?? 4E 8D 54 CC ?? 4C 3B D8 77 ?? 4C 3B D2 0F 83 ?? ?? ?? ?? 49 8B F9 48 83 E7 ?? 4C 8D 5C 24 ?? 4C 8D 54 24 ?? 4C 2B DA 4C 2B D2 48 8D 5C 24 ?? 48 2B DA 48 8D 42 ?? 0F 1F 40",
           "sections": [
             ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 83 BA ?? ?? ?? ?? 00 4D 8B F9 4D 63 E0 4C",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
           ],
           "resolver": {
             "kind": "displacement",
@@ -5342,7 +5462,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x14"
       },
       "locators": [
         {
@@ -5359,6 +5480,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "0F B6 48 ?? 88 4D B8",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5368,7 +5507,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x18"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x18",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x18"
       },
       "locators": [
         {
@@ -5385,6 +5525,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 89 58 ?? 48 89 70 D8",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5394,7 +5552,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x24"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x24",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x24"
       },
       "locators": [
         {
@@ -5411,6 +5570,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "44 8B 40 ?? F2 0F 11 74 24 38 41 0F 14 C8 F2 0F 11 4C 24 30 45 0F 14 CA F2 44 0F 11 4C 24 28 40 88 7C 24 20 E8 43",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5420,7 +5597,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x28"
       },
       "locators": [
         {
@@ -5437,6 +5615,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 89 4C 24 ?? 48 8D 4C 24 58 48 89 4C 24 20 48 8B CF",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5446,13 +5642,32 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x8"
       },
       "locators": [
         {
           "pattern": "48 89 48 ?? 55 56 41 54 41 55 41 56 48 8D A8",
           "sections": [
             ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 48 ?? 55 41 54 41 56 41",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
           ],
           "resolver": {
             "kind": "displacement",
@@ -5472,7 +5687,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x14"
       },
       "locators": [
         {
@@ -5489,6 +5705,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "0F B6 48 ?? 88 4D B8",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5498,7 +5732,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x60"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x60",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x60"
       },
       "locators": [
         {
@@ -5509,6 +5744,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 9,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 5C 24 ?? 48 8B CE 4C 89 74 24 30",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -5524,7 +5777,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x28"
       },
       "locators": [
         {
@@ -5535,6 +5789,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 10,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 4C 24 ?? 48 8D 4C 24 58 48 89 4C 24 20 48 8B CF",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -5550,7 +5822,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x28",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x28"
       },
       "locators": [
         {
@@ -5567,6 +5840,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 89 4C 24 ?? 48 8D 4C 24 58 48 89 4C 24 20 48 8B CF",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -5576,7 +5867,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x60"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x60",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x60"
       },
       "locators": [
         {
@@ -5587,6 +5879,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 9,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 5C 24 ?? 48 8B CE 4C 89 74 24 30",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -5628,7 +5938,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x458"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x458",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x458"
       },
       "locators": [
         {
@@ -5639,6 +5950,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 6,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "F3 0F 11 86 ?? ?? ?? ?? 8B 95",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 4
           },
           "validations": {
@@ -5758,7 +6087,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x110"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x110",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x110"
       },
       "locators": [
         {
@@ -5769,6 +6099,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 5,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 8B BE ?? ?? ?? ?? 8B AE 18 01 00 00 48 C1 E5 05 48 03 EF 48 3B FD 74",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
             "width": 4
           },
           "validations": {
@@ -5862,7 +6210,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xE8"
       },
       "locators": [
         {
@@ -5873,6 +6222,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 5,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "4C 89 BD ?? ?? ?? ?? C7 85 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
             "width": 4
           },
           "validations": {
@@ -6096,7 +6463,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x68"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x68",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x68"
       },
       "locators": [
         {
@@ -6107,6 +6475,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 3,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "89 5F ?? 41 83 FF",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
             "width": 1
           },
           "validations": {
@@ -6408,7 +6794,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x8"
       },
       "locators": [
         {
@@ -6425,6 +6812,24 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 89 5C 24 ?? 48 89 74 24 10 57 48 83 EC 20 48 8B 8A 28 04 00 00 41 8B F1",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_source": "offset.h"
@@ -6434,7 +6839,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x10"
       },
       "locators": [
         {
@@ -6445,6 +6851,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 2,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 89 74 24 ?? 57 48 83 EC 20 48 8B 8A 28 04 00 00 41 8B F1",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 1
           },
           "validations": {
@@ -6720,7 +7144,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x50"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x50",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x50"
       },
       "locators": [
         {
@@ -6731,6 +7156,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 18,
+            "width": 1
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "FF ?? 50 3B F0 0F 85",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 1,
             "width": 1
           },
           "validations": {
@@ -6762,7 +7205,8 @@
           "validations": {
             "min": 0,
             "max": 65536
-          }
+          },
+          "allow_multiple": true
         }
       ],
       "sig_quality": "in-func"
@@ -7084,7 +7528,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x458"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x458",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x458"
       },
       "locators": [
         {
@@ -7095,6 +7540,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 6,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "F3 0F 11 86 ?? ?? ?? ?? 8B 95",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 4,
             "width": 4
           },
           "validations": {
@@ -7214,7 +7677,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x110"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x110",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x110"
       },
       "locators": [
         {
@@ -7225,6 +7689,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 5,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "48 8B BE ?? ?? ?? ?? 8B AE 18 01 00 00 48 C1 E5 05 48 03 EF 48 3B FD 74",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
             "width": 4
           },
           "validations": {
@@ -7438,7 +7920,8 @@
           "validations": {
             "min": 0,
             "max": 65536
-          }
+          },
+          "allow_multiple": true
         }
       ],
       "sig_quality": "in-func"
@@ -7578,7 +8061,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2F8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2F8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2F8"
       },
       "locators": [
         {
@@ -7595,6 +8079,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 85 ?? ?? ?? ?? 48 8D 05 9C 42 97",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -7786,7 +8289,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2B0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2B0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2B0"
       },
       "locators": [
         {
@@ -7797,6 +8301,24 @@
           "resolver": {
             "kind": "displacement",
             "displacement_offset": 13,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
+        },
+        {
+          "pattern": "4C 89 B7 ?? ?? ?? ?? 4C 89 BF D0",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
             "width": 4
           },
           "validations": {
@@ -8358,7 +8880,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8C"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x8C",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x8C"
       },
       "locators": [
         {
@@ -8375,6 +8898,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "A0 45 31 E6 44 31 DE C5 CD 72 D7 0A 45 31 EE 45 8D 0C 31 41 89 CC C5 C5 73 D7 11 44 03 84 24 ?? ?? ?? ?? 41 21 DC C4 63 7B F0 EB 19 C5 CD EF F7 C4 E3 7B",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 31,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -8384,7 +8926,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x90"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x90",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x90"
       },
       "locators": [
         {
@@ -8401,6 +8944,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "29 B4 24 ?? ?? ?? ?? 44 0F 29 BC 24 A0 00 00 00 89 F0 C1 E8 05 83 C0 05 89 82 F0 00 00 00 B9",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -8566,7 +9128,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xA8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xA8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xA8"
       },
       "locators": [
         {
@@ -8583,6 +9146,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "B8 00 00 00 48 8B 78 08 48 8B 70 10 49 89 80 98 00 00 00 49 89 B0 ?? ?? ?? ?? 49 89 B8 B0 00 00 00 49 8B 79 28 4C 89 C6 B9 9A",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 22,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -8592,7 +9174,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xAC0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xAC0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xAC0"
       },
       "locators": [
         {
@@ -8609,6 +9192,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 81 ?? ?? ?? ?? 89 81 C8 0A 00 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -9476,7 +10078,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x7C4"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x7C4",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x7C4"
       },
       "locators": [
         {
@@ -9493,6 +10096,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "39 AF ?? ?? ?? ?? 7C 0C 48 8B 8F B8 07",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -9684,7 +10306,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x141"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x141",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x141"
       },
       "locators": [
         {
@@ -9701,6 +10324,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "80 BB ?? ?? ?? ?? 00 75 23 80 BB 40",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -9892,7 +10534,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x19C"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x19C",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x19C"
       },
       "locators": [
         {
@@ -9909,6 +10552,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "C7 85 ?? ?? ?? ?? 08 00 00 00 C6 85 A0",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10048,7 +10710,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4498"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4498",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x4498"
       },
       "locators": [
         {
@@ -10065,6 +10728,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8B 86 ?? ?? ?? ?? 48 8D 8E 98 44 00 00 FF 50 10 8B",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10074,7 +10756,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4978"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4978",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x4978"
       },
       "locators": [
         {
@@ -10091,6 +10774,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8E ?? ?? ?? ?? 48 8B 51 08 48 3B 51 10 74 0C",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10360,7 +11062,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11B"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11B",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x11B"
       },
       "locators": [
         {
@@ -10377,6 +11080,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "28 BA ?? ?? ?? ?? 48 8D 0D 80 F2 E0 01 E8 4B",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10412,7 +11134,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xF48"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xF48",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xF48"
       },
       "locators": [
         {
@@ -10429,6 +11152,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 87 ?? ?? ?? ?? 33 C0 4D 89 9F 50",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10490,7 +11232,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21D8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x21D8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x21D8"
       },
       "locators": [
         {
@@ -10507,6 +11250,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? 48 8B D7 66 0F 7F 44 24 20 E8 73",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10646,7 +11408,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10B0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x10B0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x10B0"
       },
       "locators": [
         {
@@ -10663,6 +11426,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? E8 D1 3D 01 00 48",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10802,7 +11584,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11C8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11C8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x11C8"
       },
       "locators": [
         {
@@ -10819,6 +11602,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 9F ?? ?? ?? ?? C6 44 24 20 01 4C 89 33 41 B8 01 00 00 00 48 8B 05 2C",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10828,7 +11630,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11F0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x11F0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x11F0"
       },
       "locators": [
         {
@@ -10845,6 +11648,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? E8 27 37 01 00 48",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10880,7 +11702,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xEB0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xEB0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xEB0"
       },
       "locators": [
         {
@@ -10897,6 +11720,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 BD ?? ?? ?? ?? 48 89 85 A8 0E 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -10958,13 +11800,34 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1480"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1480",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x1480"
       },
       "locators": [
+        {
+          "pattern": "46 01 00 00 48 8D 88 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 7,
+            "width": 4,
+            "addend": 48
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "derived-from-action-state-base"
+        },
         {
           "pattern": "68 03 00 00 00 48 8D 85 ?? ?? ?? ??",
           "sections": [
             ".text"
+          ],
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
           ],
           "resolver": {
             "kind": "displacement",
@@ -10984,13 +11847,34 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14A8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x14A8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x14A8"
       },
       "locators": [
+        {
+          "pattern": "46 01 00 00 48 8D 88 ?? ?? ?? ??",
+          "sections": [
+            ".text"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 7,
+            "width": 4,
+            "addend": 88
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "derived-from-action-state-base"
+        },
         {
           "pattern": "14 00 00 49 89 2E 49 89 6E 08 49 89 6E 10 48 C7 86 ?? ?? ?? ?? 07 00 00 00",
           "sections": [
             ".text"
+          ],
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
           ],
           "resolver": {
             "kind": "displacement",
@@ -11010,7 +11894,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x340"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x340",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x340"
       },
       "locators": [
         {
@@ -11027,6 +11912,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 85 ?? ?? ?? ?? 48 8D 05 A1 42 97",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11062,7 +11966,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE00"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xE00",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xE00"
       },
       "locators": [
         {
@@ -11079,6 +11984,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? 48 8B D8 E8 94 4B",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11218,7 +12142,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1BA0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1BA0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x1BA0"
       },
       "locators": [
         {
@@ -11235,6 +12160,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? E8 03 16 FF FF 48 8D 95 A0",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11608,7 +12552,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2118"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2118",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2118"
       },
       "locators": [
         {
@@ -11625,6 +12570,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? 48 8B D7 66 0F 7F 44 24 20 E8 60",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11712,7 +12676,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2258"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2258",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2258"
       },
       "locators": [
         {
@@ -11729,6 +12694,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? 48 8B D7 66 0F 7F 44 24 20 E8 D5",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11764,7 +12748,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x22A8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x22A8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x22F0"
       },
       "locators": [
         {
@@ -11816,7 +12801,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2348"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2348",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2348"
       },
       "locators": [
         {
@@ -11833,6 +12819,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8B 8B ?? ?? ?? ?? 48 8B 7C 24 20 48 83 B9 D0 00 00 00 00 74 17 48 81 C1 C8 00 00 00 E8 B0",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11868,7 +12873,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2398"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2398",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2398"
       },
       "locators": [
         {
@@ -11885,6 +12891,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8D ?? ?? ?? ?? 48 8B D7 66 0F 7F 44 24 20 E8 0A",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11920,7 +12945,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x23E8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x23E8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x23E8"
       },
       "locators": [
         {
@@ -11937,6 +12963,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8B ?? ?? ?? ?? E8 2A 77 69 00 48",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11972,7 +13017,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2488"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2488",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2488"
       },
       "locators": [
         {
@@ -11989,6 +13035,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 AE ?? ?? ?? ?? 40 88 AE 70 24 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -11998,7 +13063,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x25C8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x25C8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x25C8"
       },
       "locators": [
         {
@@ -12015,6 +13081,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "00 8B ?? ?? ?? ?? 00 FF 3D 00 00 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12050,7 +13135,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2870"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x2870",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x2870"
       },
       "locators": [
         {
@@ -12067,6 +13153,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8E ?? ?? ?? ?? 48 89 44 24 28 4C 8D 0D 53",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12076,7 +13181,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D48"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D48",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x4D48"
       },
       "locators": [
         {
@@ -12093,6 +13199,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8E ?? ?? ?? ?? 4C 8B C7 48 8D 96",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12102,7 +13227,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D70"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D70",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x4D70"
       },
       "locators": [
         {
@@ -12119,6 +13245,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8E ?? ?? ?? ?? 48 89 44 24 28 4C 8D 05 B5",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12128,7 +13273,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D98"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x4D98",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x4D98"
       },
       "locators": [
         {
@@ -12145,6 +13291,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 8E ?? ?? ?? ?? 48 89 44 24 28 4C 8D 0D 44",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12154,13 +13319,17 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x50B8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x50B8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x50B8"
       },
       "locators": [
         {
           "pattern": "DC A4 00 ?? ?? ?? ??",
           "sections": [
             ".text"
+          ],
+          "fixtures": [
+            "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954"
           ],
           "resolver": {
             "kind": "displacement",
@@ -12171,6 +13340,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 86 ?? ?? ?? ?? 48 8B 05 4D EC 8C",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12180,7 +13368,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5578"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x5578",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x5538"
       },
       "locators": [
         {
@@ -12197,6 +13386,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 8D 8E ?? ?? ?? ?? 41 88 40 02 48 8B D6 41 C6 40 08 01 E8 ?? ?? ?? ?? 4C 8D 86 D8 55 00 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 4,
+            "addend": 56
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -12206,7 +13414,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55A0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55A0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x5560"
       },
       "locators": [
         {
@@ -12223,6 +13432,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "48 8D 8E ?? ?? ?? ?? 41 88 40 02 48 8B D6 41 C6 40 08 01 E8 ?? ?? ?? ?? 4C 8D 86 D8 55 00 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 4,
+            "addend": 96
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          }
         }
       ],
       "sig_quality": "in-func"
@@ -12232,7 +13460,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55C8"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55C8",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x55C8"
       },
       "locators": [
         {
@@ -12249,6 +13478,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "89 B6 ?? ?? ?? ?? 4C 89 B6 D0 55 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12258,7 +13506,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55F0"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x55F0",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x55F0"
       },
       "locators": [
         {
@@ -12275,6 +13524,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8B 95 ?? ?? ?? ?? 44 8B 95 80 80 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12388,7 +13656,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1314"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x1314",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x1314"
       },
       "locators": [
         {
@@ -12405,6 +13674,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "8D 87 ?? ?? ?? ?? 48 89 B7 E0 12 00",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12518,7 +13806,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x148C"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x148C",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x148C"
       },
       "locators": [
         {
@@ -12535,6 +13824,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "10 8B ?? ?? ?? ?? F3 0F 5C 0D 91 AE",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_quality": "in-func"
@@ -12639,7 +13947,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x30",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x30"
       },
       "locators": [
         {
@@ -12656,6 +13965,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "F6 9E ?? ?? ?? ?? 66 4D 0F 38 F6 DD",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 2,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -12665,7 +13993,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x3C"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0x3C",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0x3C"
       },
       "locators": [
         {
@@ -12682,6 +14011,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "C7 44 24 ?? ?? ?? ?? 00 C6 44 24 3B 00 E8 9F",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 3,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"
@@ -12743,7 +14091,8 @@
       "target_kind": "field",
       "required": true,
       "expected": {
-        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xC"
+        "fa2176e5412be31de4dd5878a50a19bb519251f9e344aac6ac81b12e09956954": "0xC",
+        "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111": "0xC"
       },
       "locators": [
         {
@@ -12760,6 +14109,25 @@
             "min": 0,
             "max": 65536
           }
+        },
+        {
+          "pattern": "A0 00 00 00 49 8D B8 00 02 00 00 B9 ?? ?? ?? ?? FC F3 48 A5 48 8B 78 08 48 8B 70 10 49 89 80 98",
+          "sections": [
+            ".text"
+          ],
+          "fixtures": [
+            "9715ef5b9112877227c1239d04dafed9d9f5ef6fe7d75e2d83a7c0a57fc19111"
+          ],
+          "resolver": {
+            "kind": "displacement",
+            "displacement_offset": 12,
+            "width": 4
+          },
+          "validations": {
+            "min": 0,
+            "max": 65536
+          },
+          "sig_quality": "wide"
         }
       ],
       "sig_source": "offset.h"

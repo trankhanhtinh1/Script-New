@@ -263,7 +263,7 @@ inline std::vector<AIBaseClient> ClearUnits(float range) {
         }
     }
     for (const auto& monster : GameObjects::Jungle()) {
-        if (ValidTarget(monster, range)) {
+        if (ValidTarget(monster, range) && monster.IsJungle() && !monster.IsPlant()) {
             units.push_back(AIBaseClient(monster.Handle()));
         }
     }

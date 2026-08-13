@@ -22,6 +22,7 @@
 #include "../../UI/UI.h"
 #include "../../Utils/AssetInstaller.h"
 #include "../../Utils/AutoAttack.h"
+#include "../../Utils/DelayAction.h"
 #include "../../Variables.h"
 #include "../../Wrappers/Damages/Damage.h"
 #include "../../../Core/CoreAttackableUnit.h"
@@ -317,6 +318,27 @@ inline bool IsWard(const AIMinionClient& minion) {
     return HasFlag(minion.GetMinionType(), MinionTypes::Ward);
 }
 
+inline bool IsEnsoulSpecialMinion(const AIMinionClient& minion) {
+    if (!minion.IsValid() || minion.IsDead() || !minion.IsMinion() ||
+        !minion.IsEnemy() || minion.Team() == GameObjectTeam::Neutral ||
+        minion.IsPlant() || IsWard(minion)) {
+        return false;
+    }
+
+    const std::string name = ToLower(minion.CharacterName());
+    return Contains({
+        "tibbers", "annietibbers", "elisespiderling",
+        "heimertyellow", "heimertblue", "ivernminion",
+        "malzaharvoidling", "zacrebirthbloblet", "shacobox",
+        "yorickghoulmelee", "yorickbigghoul", "zyrathornplant",
+        "zyragraspingplant", "teemomushroom", "apheliosturret",
+        "kalistaspawn", "jhintrap", "nidaleespear",
+        "illaoiminion", "sru_riftherald_mercenary",
+        "belvethvoidling", "leblanc", "monkeyking",
+        "neeko", "shaco",
+    }, name);
+}
+
 inline void FireBeforeAttack(OrbwalkingActionArgs& args) {
     BeforeAttackHandlers.Fire(args);
 }
@@ -405,8 +427,11 @@ public:
         }
         const float windup = GetAttackCastDelay() * 1000.0f;
         const float safetyBuffer = std::clamp(windup * 0.08f, 20.0f, 45.0f);
+        const float animGap = lastAttackOrderToAnimGapMs_ > 0
+            ? static_cast<float>(lastAttackOrderToAnimGapMs_)
+            : 0.0f;
         const float serverNow = static_cast<float>(Tick()) + static_cast<float>(Game::Ping()) / 2.0f;
-        return serverNow < static_cast<float>(last) + windup + safetyBuffer;
+        return serverNow < static_cast<float>(last) + animGap + windup + safetyBuffer;
     }
 
     bool IsAutoAttacking() override { return IsWindingUp(); }
@@ -420,7 +445,9 @@ public:
         if (last <= 0 || !IsWindingUp()) {
             return 0;
         }
-        const int readyAt = last + static_cast<int>(GetAttackCastDelay() * 1000.0f);
+        const int readyAt = last +
+            std::max(0, lastAttackOrderToAnimGapMs_) +
+            static_cast<int>(GetAttackCastDelay() * 1000.0f);
         return std::max(0, readyAt - Tick());
     }
 
@@ -601,8 +628,11 @@ public:
         // guaranteed out. We keep the wait as tight as possible (windup + a small
         // desync safety) so movement is responsive without cancelling the shot.
         const float safetyBuffer = std::clamp(windup * 0.08f, 20.0f, 45.0f);
+        const float animGap = lastAttackOrderToAnimGapMs_ > 0
+            ? static_cast<float>(lastAttackOrderToAnimGapMs_)
+            : 0.0f;
         const float readyAt = static_cast<float>(lastAutoAttackTick_) +
-            windup + extraWindup + safetyBuffer + static_cast<float>(rengarExtra);
+            animGap + windup + extraWindup + safetyBuffer + static_cast<float>(rengarExtra);
         const float serverNow = static_cast<float>(now) + (static_cast<float>(Game::Ping()) / 2.0f);
 
         const bool ready = serverNow >= readyAt;
@@ -677,6 +707,8 @@ public:
             lastAutoAttackTick_ = now - Game::Ping() / 2;
             lastAttackOrderTick_ = now;
             lastAttackOrderTargetNetworkId_ = target.NetworkId();
+            lastAttackOrderToAnimGapMs_ = 0;
+            lastAfterAttackStartTick_ = 0;
             attackOrderPending_ = true;
             lastTarget_ = target;
             missileLaunched_ = false;
@@ -858,7 +890,9 @@ public:
             player.IsValid() &&
             lastLocalAttackTick_ > 0 &&
             static_cast<float>(now - lastLocalAttackTick_) <
-                GetAttackCastDelay() * 1000.0f + static_cast<float>(Game::Ping()) / 4.0f;
+                GetAttackCastDelay() * 1000.0f +
+                    static_cast<float>(std::max(0, lastAttackOrderToAnimGapMs_)) +
+                    static_cast<float>(Game::Ping()) / 4.0f;
 
         bool attackBlocked = true;
         const bool canAttackNow = attackEnabled_ && CanAttack();
@@ -926,6 +960,8 @@ public:
         lastAutoAttackTick_ = 0;
         lastLocalAttackTick_ = 0;
         lastAutoAttackEventTick_ = 0;
+        lastAttackOrderToAnimGapMs_ = 0;
+        lastAfterAttackStartTick_ = 0;
         attackOrderPending_ = false;
         missileLaunched_ = true;
         attackDamageIssued_ = true;
@@ -2504,11 +2540,23 @@ protected:
         }
 
         const int now = Tick();
+        const bool hadPendingAttack =
+            attackOrderPending_ &&
+            lastLocalAttackTick_ > 0 &&
+            now - lastLocalAttackTick_ >= -50 &&
+            now - lastLocalAttackTick_ <= PendingAttackHookWindow();
         if (lastLocalAttackTick_ <= 0 || now - lastLocalAttackTick_ > PendingAttackHookWindow()) {
             lastLocalAttackTick_ = now;
+            lastAttackOrderToAnimGapMs_ = 0;
+        } else if (hadPendingAttack) {
+            lastAttackOrderToAnimGapMs_ = std::max(0, now - lastLocalAttackTick_);
         }
         const bool hadDamageIssued = attackDamageIssued_;
-        lastAutoAttackTick_ = now - Game::Ping() / 2;
+        if (!hadDamageIssued) {
+            lastAutoAttackTick_ = hadPendingAttack ? lastLocalAttackTick_ : now;
+        } else if (lastAutoAttackTick_ <= 0) {
+            lastAutoAttackTick_ = now;
+        }
         lastMovementTick_ = 0;
         attackOrderPending_ = false;
         missileLaunched_ = hadDamageIssued;
@@ -2582,12 +2630,21 @@ protected:
 
         const int now = Tick();
         const bool firstDamageMilestone = !attackDamageIssued_;
-        if (lastAutoAttackTick_ <= 0) {
-            lastAutoAttackTick_ = now - Game::Ping() / 2;
-        }
+        const bool hadPendingAttack =
+            attackOrderPending_ &&
+            lastLocalAttackTick_ > 0 &&
+            now - lastLocalAttackTick_ >= -50 &&
+            now - lastLocalAttackTick_ <= PendingAttackHookWindow();
         if (lastLocalAttackTick_ <= 0 || now - lastLocalAttackTick_ > PendingAttackHookWindow()) {
             lastLocalAttackTick_ = now;
+            lastAttackOrderToAnimGapMs_ = 0;
+        } else if (hadPendingAttack) {
+            lastAttackOrderToAnimGapMs_ = std::max(0, now - lastLocalAttackTick_);
+        } else {
+            lastAttackOrderToAnimGapMs_ = 0;
         }
+        const int attackStartTick = hadPendingAttack ? lastLocalAttackTick_ : now;
+        lastAutoAttackTick_ = attackStartTick;
         attackOrderPending_ = false;
         missileLaunched_ = true;
         attackDamageIssued_ = true;
@@ -2618,10 +2675,27 @@ protected:
             args.MissileSpeed);
 
         if (firstDamageMilestone && target.IsValid()) {
+            const int afterAttackStartTick = lastAutoAttackTick_;
             OrbwalkingActionArgs attackArgs(OrbwalkingType::OnAttack, target, {}, "SDK");
             OrbwalkingDetail::FireOnAttack(attackArgs);
-            OrbwalkingActionArgs afterArgs(OrbwalkingType::AfterAttack, target, {}, "SDK");
-            OrbwalkingDetail::FireAfterAttack(afterArgs);
+            if (lastAfterAttackStartTick_ != afterAttackStartTick) {
+                lastAfterAttackStartTick_ = afterAttackStartTick;
+                const float windup = GetAttackCastDelay() * 1000.0f;
+                const int delayMs = std::max(0, static_cast<int>(std::ceil(windup)));
+                Utils::DelayAction::Add(delayMs, [this, target, afterAttackStartTick]() {
+                    if (!initialized_ ||
+                        lastAfterAttackStartTick_ != afterAttackStartTick ||
+                        !target.IsValid()) {
+                        return;
+                    }
+                    OrbwalkingActionArgs afterArgs(
+                        OrbwalkingType::AfterAttack,
+                        target,
+                        target.Position(),
+                        "SDK");
+                    OrbwalkingDetail::FireAfterAttack(afterArgs);
+                });
+            }
         }
     }
 
@@ -2917,10 +2991,12 @@ protected:
         attackableMenu_ = rootMenu_->AddSubMenu(new Menu("Attackable", "Attackable Unit"));
         attackableMenu_->Add(new MenuBool("Barrels", "Barrels", true));
         attackableMenu_->Add(new MenuBool("JunglePlant", "Jungle Plant", false));
+        attackableMenu_->Add(new MenuBool("SpecialMinions", "Pets", true));
         attackableMenu_->Add(new MenuBool("Wards", "Wards", true));
 
         prioritizeMenu_ = rootMenu_->AddSubMenu(new Menu("Prioritize", "Prioritize"));
         prioritizeMenu_->Add(new MenuBool("FarmOverHarass", "Farm Over Harass", true));
+        prioritizeMenu_->Add(new MenuBool("SpecialMinion", "Special Minion", false));
         prioritizeMenu_->Add(new MenuBool("SmallJungle", "Small Jungle", false));
         prioritizeMenu_->Add(new MenuBool("Turret", "Turret", true));
 
@@ -3051,14 +3127,16 @@ protected:
         return std::max(0.0f, windup);
     }
 
-    // Exact port of EnsoulSharp AIBaseClientExtensions.GetRealAutoAttackRange:
-    //   if turret -> 900
-    //   range = sender.AttackRange + sender.BoundingRadius
-    //   if target valid & alive: (+ champion range buffs) + target.BoundingRadius
-    // The previous native formula used AttackRange + GetBoundingRadius(target)
-    // - 25 and OMITTED the player's own bounding radius, so auto attacks fired
-    // ~90 units short of the real max range. That was the "doesn't attack at max
-    // AA range" bug.
+    // Auto-attack range used by the orbwalker for its attack/move decision.
+    //
+    // Port of EnsoulSharp AIBaseClientExtensions.GetRealAutoAttackRange:
+    //   range = sender.AttackRange + sender.BoundingRadius + target.BoundingRadius
+    // plus ping compensation matching Extensions::GetCurrentAutoAttackRange:
+    //   - min(ping/4, 10) - 5
+    //
+    // The ping compensation was previously missing, which made the orbwalker's
+    // attack check ~15 units larger than the practical in-game reach and caused
+    // it to try attacking targets that were just barely out of real AA range.
     float GetAutoAttackRange(const AttackableUnit& target) const {
         const auto player = GameObjects::Player();
         if (!player.IsValid()) {
@@ -3080,6 +3158,9 @@ protected:
                 }
             }
             range += target.BoundingRadius();
+            // Ping compensation — matches Extensions::GetCurrentAutoAttackRange.
+            // Without this the range was ~15 units too large at high ping.
+            range -= std::min(static_cast<float>(Game::Ping()) / 4.0f, 10.0f) + 5.0f;
         }
         return range;
     }
@@ -3586,6 +3667,8 @@ protected:
     int lastAutoAttackEventTick_ = 0;
     int lastAttackOrderTick_ = 0;
     int lastAttackOrderTargetNetworkId_ = 0;
+    int lastAttackOrderToAnimGapMs_ = 0;
+    int lastAfterAttackStartTick_ = 0;
     int autoAttackCounter_ = 0;
     int attackPauseTick_ = 0;
     int movePauseTick_ = 0;

@@ -200,9 +200,14 @@ namespace detail {
     // JungleType flag checks.
     inline bool IsKnownJunglePlantName(const std::string& name) {
         return ContainsAny(name, {
-            "sru_plant", "hiddenminionplantdemon",
-            "planthealthmirrored", "plantmasterminion", "minimapicon",
-            "plant_satchel", "plant_health", "plant_vision"
+            "sru_plant",
+            "plant_satchel", "plant_health", "plant_vision",
+            "plantsatchel", "planthealth", "plantvision",
+            "blastcone", "blast_cone",
+            "honeyfruit", "honey_fruit",
+            "scryer", "scryersbloom", "scryers_bloom",
+            "hiddenminionplantdemon", "planthealthmirrored",
+            "plantmasterminion", "minimapicon"
         });
     }
 
@@ -1514,6 +1519,9 @@ inline std::vector<AIMinionClient> Jungle() { return detail::Snapshot(detail::Ju
 inline std::size_t JungleInto(std::span<AIMinionClient> output) {
     return detail::SnapshotInto(detail::JungleList, output);
 }
+inline std::size_t PlantsInto(std::span<AIMinionClient> output) {
+    return detail::SnapshotInto(detail::PlantsList, output);
+}
 
 // ------------------------ zero-allocation frame snapshots -------------------
 // Each (T, Fill) specialization retains its capacity and publishes one settled
@@ -1551,6 +1559,9 @@ inline const std::vector<AIMinionClient>& EnemyMinionsFrame() {
 }
 inline const std::vector<AIMinionClient>& JungleFrame() {
     return FrameSnapshot<AIMinionClient, &JungleInto>();
+}
+inline const std::vector<AIMinionClient>& PlantsFrame() {
+    return FrameSnapshot<AIMinionClient, &PlantsInto>();
 }
 inline const std::vector<AIMinionClient>& EnemySpecialMinionsFrame() {
     return FrameSnapshot<AIMinionClient, &EnemySpecialMinionsInto>();

@@ -37,15 +37,14 @@ public:
         menu_->Add(new SDK::MenuBool("ForceSelectTarget", "Force on Select Target", true));
         menu_->Add(new SDK::MenuBool("OnlySelectTarget", "Only Attack Select Target", false));
 
-        const auto player = Player();
-        modeKey_ = "TSMode_" + (player.IsValid() ? player.CharacterName() : std::string());
+        modeKey_ = "TSMode";
         menu_->Add(new SDK::MenuList(
             modeKey_.c_str(),
             "TS Mode",
             std::vector<std::string>{
                 "Smart AD/AP", "Lowest Health", "Most Priority",
                 "Near Mouse", "Near Hero"},
-            0));
+            1));
         Resume();
     }
 
@@ -128,6 +127,7 @@ public:
         const SDK::Vector3& checkFrom = SDK::Vector3())
     {
         (void)ignoreShields;
+        ValidateSelectedTarget();
         std::vector<SDK::AIHeroClient> list;
         for (const auto& target : possibleTargets) {
             if (IsValidTarget(target, FLT_MAX, checkFrom)) list.push_back(target);
@@ -182,6 +182,7 @@ public:
         static const std::vector<SDK::AIHeroClient> empty;
         const auto& ignored = ignoreChampions ? *ignoreChampions : empty;
 
+        ValidateSelectedTarget();
         if (selectedTarget_.IsValid()) {
             if (Bool("ForceSelectTarget", true) && IsValidTarget(selectedTarget_, range, checkFrom)) {
                 return selectedTarget_;
@@ -237,6 +238,7 @@ public:
         const SDK::Vector3& checkFrom = SDK::Vector3(),
         const std::vector<SDK::AIHeroClient>* ignoreChampions = nullptr) override
     {
+        ValidateSelectedTarget();
         if (Bool("OnlySelectTarget", false) && selectedTarget_.IsValid() &&
             SDK::Extensions::IsValidTarget(selectedTarget_, FLT_MAX, true, SDK::Vector3())) {
             return {selectedTarget_};
@@ -412,6 +414,17 @@ private:
     }
 
     static SDK::AIHeroClient Player() { return SDK::GameObjects::Player(); }
+
+    // Clear the locked selected target when it is no longer valid or visible.
+    // This ensures the selector stops forcing a target after it enters fog of
+    // war, dies, or otherwise becomes untargetable.
+    void ValidateSelectedTarget() {
+        if (!selectedTarget_.IsValid()) return;
+        if (selectedTarget_.IsDead() || !selectedTarget_.IsVisible() ||
+            !selectedTarget_.IsTargetable()) {
+            selectedTarget_ = {};
+        }
+    }
 
     bool Bool(const char* key, bool fallback) const {
         const auto* item = menu_ ? menu_->Get<SDK::MenuBool>(key) : nullptr;

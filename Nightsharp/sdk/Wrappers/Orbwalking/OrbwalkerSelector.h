@@ -128,6 +128,23 @@ public:
             }
         }
 
+        if (mode != OrbwalkingMode::Combo &&
+            Bool(prioritizeMenu_, "SpecialMinion", false) &&
+            !waitForFarm) {
+            FarmDebugBreadcrumb("before-priority-special-minion", minions.size());
+            AttackableUnit specialMinion = GetSpecialMinionTarget(mode);
+            FarmDebugBreadcrumb("after-priority-special-minion", minions.size(), specialMinion);
+            if (specialMinion.IsValid()) {
+                FarmDebugLogTargetDecision(
+                    "return:priority-special-minion",
+                    specialMinion,
+                    minions.size(),
+                    waitForFarm,
+                    true);
+                return specialMinion;
+            }
+        }
+
         if (mode == OrbwalkingMode::Combo) {
             FarmDebugBreadcrumb("before-combo-jungle-plant", minions.size());
             AttackableUnit plant = GetJunglePlantTarget();
@@ -177,6 +194,21 @@ public:
         // targets structures inside its `activeMode != Combo` block; this
         // fallback mirrors that gate so structures are attackable with the farm
         // keys (LaneClear / LastHit / Harass) only.
+        if (mode != OrbwalkingMode::Combo && !waitForFarm) {
+            FarmDebugBreadcrumb("before-special-minion", minions.size());
+            AttackableUnit specialMinion = GetSpecialMinionTarget(mode);
+            FarmDebugBreadcrumb("after-special-minion", minions.size(), specialMinion);
+            if (specialMinion.IsValid()) {
+                FarmDebugLogTargetDecision(
+                    "return:special-minion",
+                    specialMinion,
+                    minions.size(),
+                    waitForFarm,
+                    true);
+                return specialMinion;
+            }
+        }
+
         if (mode != OrbwalkingMode::Combo) {
             FarmDebugBreadcrumb("before-structure-fallback", minions.size());
             AttackableUnit structure = GetStructureTarget();
@@ -589,6 +621,53 @@ protected:
                 return AttackableUnit(plant.Handle());
             }
         }
+        return {};
+    }
+
+    AttackableUnit GetSpecialMinionTarget(OrbwalkingMode mode) const {
+        if (mode == OrbwalkingMode::Combo) {
+            return {};
+        }
+
+        auto validTarget = [&](const AIMinionClient& minion) {
+            return OrbwalkingDetail::IsValidAttackTarget(minion, GetAutoAttackRange(minion));
+        };
+
+        auto scanSpecial = [&](const std::vector<AIMinionClient>& minions) -> AttackableUnit {
+            for (const auto& minion : minions) {
+                if (OrbwalkingDetail::IsEnsoulSpecialMinion(minion) &&
+                    validTarget(minion)) {
+                    return AttackableUnit(minion.Handle());
+                }
+            }
+            return {};
+        };
+
+        if (Bool(attackableMenu_, "SpecialMinions", true)) {
+            AttackableUnit result = scanSpecial(GameObjects::EnemyPets());
+            if (result.IsValid()) return result;
+            result = scanSpecial(GameObjects::EnemySpecialMinions());
+            if (result.IsValid()) return result;
+            result = scanSpecial(GameObjects::EnemyClones());
+            if (result.IsValid()) return result;
+        }
+
+        if (Bool(attackableMenu_, "Wards", true)) {
+            for (const auto& ward : GameObjects::EnemyWards()) {
+                if (validTarget(ward)) {
+                    return AttackableUnit(ward.Handle());
+                }
+            }
+        }
+
+        if (Bool(attackableMenu_, "JunglePlant", false)) {
+            for (const auto& plant : GameObjects::JunglePlants()) {
+                if (validTarget(plant)) {
+                    return AttackableUnit(plant.Handle());
+                }
+            }
+        }
+
         return {};
     }
 
