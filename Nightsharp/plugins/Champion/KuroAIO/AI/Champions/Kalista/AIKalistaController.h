@@ -96,7 +96,16 @@ inline bool RendLethal(const AIBaseClient& target, bool objectiveSecure = false)
 
 inline bool SpearExpiryImminent(const AIBaseClient& target) {
     if (!HasSpear(target)) return false;
-    const float remaining = BuffRemainingMs(target, "kalistaexpungemarker");
+    float remaining = 0.0f;
+    for (const char* alias :
+         {"kalistaexpungemarker", "KalistaExpungeMarker",
+          "kalistaexpungemarkerbuff"}) {
+        const float candidate = BuffRemainingMs(target, alias);
+        if (candidate > 0.0f &&
+            (remaining <= 0.0f || candidate < remaining)) {
+            remaining = candidate;
+        }
+    }
     return remaining > 0.0f && remaining <= 700.0f;
 }
 
@@ -104,20 +113,49 @@ inline bool SafeAdditionalAuto(const AIHeroClient& target) {
     return Engine::ValidEnemy(target, 1000.0f) &&
         LocalAttackReadySoon(target, 300) &&
         !IsEscaping(target, 0.40f) &&
-        Engine::CountEnemiesAt(GameObjects::Player().Position(), 650.0f) <= 1;
+        Engine::CountEnemiesAt(
+            GameObjects::Player().Position(), 650.0f) <= 1;
 }
 
-inline RendDecisionContext RendContext(const AIBaseClient& target,
-                                       bool objective = false) {
+inline RendTargetKind RendKind(const AIBaseClient& target) {
+    if (target.IsHero()) return RendTargetKind::Hero;
+    const AIMinionClient minion(target.Handle());
+    if (minion.IsValid() && minion.IsJungle()) {
+        return IsEpicMonster(target)
+            ? RendTargetKind::EpicMonster
+            : RendTargetKind::JungleMonster;
+    }
+    return RendTargetKind::LaneMinion;
+}
+
+inline RendDecisionContext RendContext(const AIBaseClient& target) {
     RendDecisionContext context{};
+    context.TargetKind = RendKind(target);
     context.SpearStacks = SpearStacks(target);
-    context.Lethal = RendLethal(target);
-    context.TargetEscaping = target.IsHero() && IsEscaping(target, 0.40f);
-    context.SafeAdditionalAuto = target.IsHero() &&
+    context.MinimumEscapeStacks =
+        Slider(RendMenu, "EscapeStacks",
+               kDefaultEscapeSpearThreshold);
+    context.Lethal =
+        context.TargetKind != RendTargetKind::EpicMonster &&
+        RendLethal(target);
+    const auto player = GameObjects::Player();
+    const float distance = player.IsValid()
+        ? player.Position().Distance2D(target.Position()) : FLT_MAX;
+    context.TargetEscaping =
+        context.TargetKind == RendTargetKind::Hero &&
+        distance >= kERange - 75.0f &&
+        IsEscaping(target, 0.40f);
+    context.SafeAdditionalAuto =
+        context.TargetKind == RendTargetKind::Hero &&
         SafeAdditionalAuto(AIHeroClient(target.Handle()));
-    context.SpearExpiryImminent = SpearExpiryImminent(target);
-    context.ObjectiveSecure = objective && RendLethal(target, true);
-    context.UnderEnemyTurret = Engine::UnderEnemyTurret(target.Position());
+    context.SpearExpiryImminent =
+        context.TargetKind == RendTargetKind::Hero &&
+        SpearExpiryImminent(target);
+    context.ObjectiveSecure =
+        context.TargetKind == RendTargetKind::EpicMonster &&
+        RendLethal(target, true);
+    context.UnderEnemyTurret =
+        Engine::UnderEnemyTurret(target.Position());
     return context;
 }
 
@@ -181,7 +219,7 @@ inline AIBaseClient BestRendTarget(Mode mode, bool objectiveOnly = false) {
             player.Position().Distance2D(unit.Position()) > kERange + unit.BoundingRadius() ||
             !HasSpear(unit)) return;
         if (objectiveOnly && !objective) return;
-        const auto context = RendContext(unit, objective);
+        const auto context = RendContext(unit);
         if (!ShouldRend(context)) return;
         float score = RendLethal(unit, objective) ? 1200.0f : 0.0f;
         score += objective ? 720.0f : 0.0f;
@@ -426,8 +464,12 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KalistaMechanics", "Kalista Mechanics"));
     RendMenu = TacticsMenu->AddSubMenu(new Menu("RendLogic", "Rend / Spear stacks"));
-    RendMenu->Add(new MenuSeparator("Threshold", "Hold E for lethal, escape, expiry or verified objective secure"));
-    RendMenu->Add(new MenuBool("UseSentinel", "Use W Sentinel mark", false));
+    RendMenu->Add(new MenuSeparator(
+        "Threshold",
+        "Heroes: lethal, expiring, or leaving at the spear threshold; minions: lethal only"));
+    RendMenu->Add(new MenuSlider(
+        "EscapeStacks", "Minimum spears before E on escaping hero",
+        kDefaultEscapeSpearThreshold, 1, 15));
     HopMenu = TacticsMenu->AddSubMenu(new Menu("MartialPoise", "Hop movement"));
     HopMenu->Add(new MenuBool("Enable", "Hop after confirmed attacks", true));
     HopMenu->Add(new MenuSlider("DelayMs", "Hop delay (ms)", 35, 0, 120));
@@ -463,8 +505,10 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Track KalistaExpungeMarker through mixed-case buff aliases and clamp observed spear stacks",
     "Compute live Rend damage from rank, total AD, AP and the epic-objective modifier",
-    "Hold Rend when one safe attack can add a useful spear, then reset the stack state after E",
-    "Rend immediately on lethal, imminent marker expiry, escape range loss or conservative objective secure",
+    "Never spend Rend on a nonlethal lane minion or ordinary jungle monster",
+    "Rend heroes immediately only on lethal or imminent marker expiry",
+    "Require five spears by default and actual range loss before nonlethal Rend on an escaping hero",
+    "Require the extra conservative half-damage margin before Rend on epic objectives",
     "Require a collision-free high-confidence Pierce prediction and projectile-wall check",
     "Preserve an orbwalker attack windup rather than stealing a confirmed spear application",
     "Keep selected/reachable target ownership while redirecting BeforeAttack to the spear target",
@@ -475,7 +519,6 @@ inline constexpr const char* Scenarios[] = {
     "Keep Fate's Call engage disabled by default and require allied follow-up when enabled",
     "Support manual Fate's Call through the same Oathsworn range and safety checks",
     "Prefer hero Rend execution before farming, but allow Q last-hit and lane/jungle fallback",
-    "Apply an additional conservative half-damage margin before Rend on epic objectives",
     "Flee with Rend against a committed pursuer and reserve R for an actual ally save",
 };
 

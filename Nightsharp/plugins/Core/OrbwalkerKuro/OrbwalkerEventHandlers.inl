@@ -12,9 +12,233 @@ inline bool IsFlashSpellName(const char* name) {
             ::Core::Objects::ContainsInsensitive(name, "summoner_flash"));
 }
 
+struct LocalPlayerCheckResult {
+    bool isLocal = false;
+    bool stdCheck = false;
+    bool ptrCheck = false;
+    bool netCheck = false;
+    bool rcxCheck = false;
+    bool charCheck = false;
+    bool azirCheck = false;
+    bool selfCheck = false;
+    bool teamRejected = false;
+};
+
+inline LocalPlayerCheckResult EvaluateLocalPlayerProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    LocalPlayerCheckResult res{};
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) {
+        return res;
+    }
+
+    const uintptr_t playerAddr = player.Address();
+    const uint32_t playerNetId = static_cast<uint32_t>(player.NetworkId());
+    const std::string& playerCharName = player.CharacterName();
+    const std::string& playerName = player.Name();
+
+    // 1. Direct SDK check
+    if (Events::IsLocalPlayer(args.Sender)) {
+        res.stdCheck = true;
+    }
+
+    // 2. Player memory range check:
+    // In League x64, HeroClient is ~0x5000 bytes. Its SpellBookClient (RCX) is at +0x3xxx (+0x3BE0 on current patch),
+    // and internal sub-controllers (Sender.Ptr) are at +0x000..+0x2000 (e.g. +0xAD8).
+    if (playerAddr != 0) {
+        if (args.Sender.Ptr != 0) {
+            if (args.Sender.Ptr == playerAddr ||
+                (args.Sender.Ptr >= playerAddr && args.Sender.Ptr < playerAddr + 0x6000)) {
+                res.ptrCheck = true;
+            }
+        }
+        if (args.Raw.Rcx != 0) {
+            if (args.Raw.Rcx >= playerAddr && args.Raw.Rcx < playerAddr + 0x6000) {
+                res.rcxCheck = true;
+            }
+        }
+        if (args.Spellbook != 0) {
+            if (args.Spellbook >= playerAddr && args.Spellbook < playerAddr + 0x6000) {
+                res.rcxCheck = true;
+            }
+        }
+    }
+
+    // 3. NetworkId match
+    if (playerNetId != 0 && playerNetId != 0xFFFFFFFFu) {
+        if (args.Sender.NetworkId != 0 && args.Sender.NetworkId == playerNetId) {
+            res.netCheck = true;
+        }
+        if (args.CasterNetworkId != 0 && args.CasterNetworkId == playerNetId) {
+            res.netCheck = true;
+        }
+    }
+
+    // 4. CharacterName / Name match
+    if (!playerCharName.empty() && args.Sender.CharacterName[0] != '\0') {
+        if (_stricmp(args.Sender.CharacterName, playerCharName.c_str()) == 0) {
+            res.charCheck = true;
+        }
+    }
+    if (!playerName.empty() && args.Sender.Name[0] != '\0') {
+        if (_stricmp(args.Sender.Name, playerName.c_str()) == 0) {
+            res.charCheck = true;
+        }
+    }
+
+    // 5. Azir soldier owned by player
+    if (OrbwalkingDetail::IsOwnedAzirSoldierSender(player, args.Sender)) {
+        res.azirCheck = true;
+    }
+
+    // 6. Self-cast / buff emitter targeting local player
+    const uint32_t targetNetId = args.Target.IsValid() ? args.Target.NetworkId : args.TargetNetworkId;
+    if (playerNetId != 0 && targetNetId == playerNetId) {
+        if (args.SpellName && args.SpellName[0]) {
+            if (!playerCharName.empty() &&
+                _strnicmp(args.SpellName, playerCharName.c_str(), playerCharName.length()) == 0) {
+                res.selfCheck = true;
+            }
+            if (!res.selfCheck) {
+                for (int s = 0; s <= 13; ++s) {
+                    auto sp = player.GetSpell(static_cast<SpellSlot>(s));
+                    if (sp.IsValid() && sp.Name().c_str() && _stricmp(sp.Name().c_str(), args.SpellName) == 0) {
+                        res.selfCheck = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 7. Spell name champion prefix match when sender is within player range or unspecified
+    if (!res.rcxCheck && !res.ptrCheck && args.SpellName && args.SpellName[0] && !playerCharName.empty()) {
+        if (_strnicmp(args.SpellName, playerCharName.c_str(), playerCharName.length()) == 0) {
+            if (args.Sender.Ptr == 0 || (args.Sender.Ptr >= playerAddr && args.Sender.Ptr < playerAddr + 0x6000)) {
+                res.charCheck = true;
+            }
+        }
+    }
+
+    res.isLocal = res.stdCheck || res.ptrCheck || res.netCheck || res.rcxCheck ||
+                  res.charCheck || res.azirCheck || res.selfCheck;
+    return res;
+}
+
+inline bool IsLocalPlayerProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    return EvaluateLocalPlayerProcessSpell(args).isLocal;
+}
+
+inline int ResolveSpellSlot(const Events::ProcessSpellEventArgs& args, const AIHeroClient& player) {
+    if (args.SpellName && args.SpellName[0]) {
+        if (::Core::Objects::ContainsInsensitive(args.SpellName, "BasicAttack") ||
+            ::Core::Objects::ContainsInsensitive(args.SpellName, "CritAttack")) {
+            return 64;
+        }
+    }
+
+    if (args.SpellSlotName[0] != '\0') {
+        if (_stricmp(args.SpellSlotName, "Spell1") == 0) return 0;
+        if (_stricmp(args.SpellSlotName, "Spell2") == 0) return 1;
+        if (_stricmp(args.SpellSlotName, "Spell3") == 0) return 2;
+        if (_stricmp(args.SpellSlotName, "Spell4") == 0) return 3;
+        if (_stricmp(args.SpellSlotName, "SummonerDot") == 0 ||
+            _stricmp(args.SpellSlotName, "SummonerFlash") == 0 ||
+            _stricmp(args.SpellSlotName, "SummonerSmite") == 0) {
+            if (player.IsValid()) {
+                auto s1 = player.GetSpell(SpellSlot::Summoner1);
+                if (s1.IsValid() && args.SpellName && _stricmp(s1.Name().c_str(), args.SpellName) == 0) return 4;
+                auto s2 = player.GetSpell(SpellSlot::Summoner2);
+                if (s2.IsValid() && args.SpellName && _stricmp(s2.Name().c_str(), args.SpellName) == 0) return 5;
+            }
+        }
+    }
+
+    if (player.IsValid() && args.SpellName && args.SpellName[0]) {
+        for (int s = 0; s <= 13; ++s) {
+            auto sp = player.GetSpell(static_cast<SpellSlot>(s));
+            if (sp.IsValid() && sp.Name().c_str() && _stricmp(sp.Name().c_str(), args.SpellName) == 0) {
+                return s;
+            }
+        }
+
+        const SDK::ChampionId champId = SDK::ChampionIdFromName(player.CharacterName().c_str());
+        switch (champId) {
+        case SDK::ChampionId::Renekton:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "renektoncleave") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektonq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "renektonpreexecute") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektonexecute") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektonw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "renektonslice") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektondice") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektone")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "renektonreign") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "renektonr")) return 3;
+            break;
+        case SDK::ChampionId::Rengar:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "rengarq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "rengarw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "rengare")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "rengarr")) return 3;
+            break;
+        case SDK::ChampionId::Aatrox:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "aatroxq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "aatroxw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "aatroxe")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "aatroxr")) return 3;
+            break;
+        case SDK::ChampionId::Sett:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "settq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "settw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "sette")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "settr")) return 3;
+            break;
+        case SDK::ChampionId::Vayne:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "vaynetumble")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "silveredbolts")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "vaynecondemn")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "vayneinquisition")) return 3;
+            break;
+        case SDK::ChampionId::Lucian:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "lucianq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "lucianw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "luciane")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "lucianr")) return 3;
+            break;
+        case SDK::ChampionId::Jax:
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "jaxleapstrike") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "jaxq")) return 0;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "jaxempowertwo") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "jaxw")) return 1;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "jaxcounterstrike") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "jaxe")) return 2;
+            if (::Core::Objects::ContainsInsensitive(args.SpellName, "jaxrelentlessassault") ||
+                ::Core::Objects::ContainsInsensitive(args.SpellName, "jaxr")) return 3;
+            break;
+        default:
+            break;
+        }
+
+        const std::string& charName = player.CharacterName();
+        if (!charName.empty() && _strnicmp(args.SpellName, charName.c_str(), charName.length()) == 0) {
+            const char suffixChar = args.SpellName[charName.length()];
+            if (suffixChar == 'Q' || suffixChar == 'q') return 0;
+            if (suffixChar == 'W' || suffixChar == 'w') return 1;
+            if (suffixChar == 'E' || suffixChar == 'e') return 2;
+            if (suffixChar == 'R' || suffixChar == 'r') return 3;
+        }
+    }
+
+    if (args.Slot > 0) {
+        return args.Slot;
+    }
+
+    return args.Slot;
+}
+
 inline bool IsLocalFlashSpell(
     const Events::ProcessSpellEventArgs& args) {
-    if (!Events::IsLocalPlayer(args.Sender)) {
+    if (!IsLocalPlayerProcessSpell(args)) {
         return false;
     }
 
@@ -46,6 +270,37 @@ inline bool IsLocalFlashSpell(
     return IsFlashSpellName(spell.Name().c_str()) ||
            IsFlashSpellName(spell.ScriptName().c_str()) ||
            IsFlashSpellName(spell.IconName().c_str());
+}
+
+inline const char* SlotToString(int slot) {
+    switch (slot) {
+    case 0:  return "Q";
+    case 1:  return "W";
+    case 2:  return "E";
+    case 3:  return "R";
+    case 4:  return "D";
+    case 5:  return "F";
+    case 6:  return "Item1";
+    case 7:  return "Item2";
+    case 8:  return "Item3";
+    case 9:  return "Item4";
+    case 10: return "Item5";
+    case 11: return "Item6";
+    case 12: return "Trinket";
+    case 13: return "Recall";
+    case 64: return "BasicAttack";
+    case -1: return "None";
+    default: return "Other";
+    }
+}
+
+inline const char* ResetMatchToString(OrbwalkerBase::AutoAttackResetMatch match) {
+    switch (match) {
+    case OrbwalkerBase::AutoAttackResetMatch::SpellName:    return "1(spell)";
+    case OrbwalkerBase::AutoAttackResetMatch::ChampionSlot: return "1(slot)";
+    case OrbwalkerBase::AutoAttackResetMatch::None:
+    default:                                               return "0";
+    }
 }
 
 } // namespace OrbwalkingDetail
@@ -287,6 +542,74 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
 }
 
 inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
+    const auto player = GameObjects::Player();
+    const OrbwalkingDetail::LocalPlayerCheckResult chk =
+        OrbwalkingDetail::EvaluateLocalPlayerProcessSpell(args);
+
+    const bool isAttack = IsLocalAutoAttack(args);
+    const AutoAttackResetMatch resetMatch = GetLocalAutoAttackResetMatch(args);
+
+    if (menu_.DebugLogSpellNames()) {
+        const int effectiveSlot = OrbwalkingDetail::ResolveSpellSlot(args, player);
+        const char* slotStr = OrbwalkingDetail::SlotToString(effectiveSlot);
+        const char* senderName = args.Sender.CharacterName[0] ? args.Sender.CharacterName
+                               : (args.Sender.Name[0] ? args.Sender.Name : "-");
+        const char* targetName = "-";
+        if (args.Target.IsValid()) {
+            targetName = args.Target.CharacterName[0] ? args.Target.CharacterName
+                       : (args.Target.Name[0] ? args.Target.Name : "Target");
+        }
+
+        const uint32_t playerNet = player.IsValid() ? static_cast<uint32_t>(player.NetworkId()) : 0;
+        const uint32_t playerTeam = player.IsValid() ? static_cast<uint32_t>(player.Team()) : 0;
+        const uintptr_t playerAddr = player.IsValid() ? player.Address() : 0;
+        const char* playerChar = player.IsValid() ? player.CharacterName().c_str() : "-";
+
+        NightSharpDebug::Logf(
+            "[<b-cyan>OrbwalkerKuro</b-cyan>][<b-yellow>Spell</b-yellow>] "
+            "spell=<magenta>%s</magenta> slot=<cyan>%s</cyan>(%d,raw=%d) "
+            "isLocal=%d[std=%d,ptr=%d,net=%d,rcx=%d,char=%d,self=%d,rej=%d] "
+            "sender=<yellow>%s</yellow>(#%u,team=%u,ptr=0x%llX,casterNet=#%u) "
+            "target=%s(#%u) "
+            "player=%s(#%u,team=%u,ptr=0x%llX) "
+            "rcx=0x%llX spellbook=0x%llX "
+            "delay=%.3f castTime=%.3f speed=%.0f isAttack=%d isReset=%s",
+            args.SpellName && args.SpellName[0] ? args.SpellName : (args.ScriptName[0] ? args.ScriptName : "-"),
+            slotStr,
+            effectiveSlot,
+            args.Slot,
+            chk.isLocal ? 1 : 0,
+            chk.stdCheck ? 1 : 0,
+            chk.ptrCheck ? 1 : 0,
+            chk.netCheck ? 1 : 0,
+            chk.rcxCheck ? 1 : 0,
+            chk.charCheck ? 1 : 0,
+            chk.selfCheck ? 1 : 0,
+            chk.teamRejected ? 1 : 0,
+            senderName,
+            args.Sender.NetworkId,
+            args.Sender.Team,
+            args.Sender.Ptr,
+            args.CasterNetworkId,
+            targetName,
+            args.Target.IsValid() ? args.Target.NetworkId : args.TargetNetworkId,
+            playerChar,
+            playerNet,
+            playerTeam,
+            playerAddr,
+            args.Raw.Rcx,
+            args.Spellbook,
+            args.CastDelay,
+            args.CastTime,
+            args.MissileSpeed,
+            isAttack ? 1 : 0,
+            OrbwalkingDetail::ResetMatchToString(resetMatch));
+    }
+
+    if (!chk.isLocal) {
+        return;
+    }
+
     if (OrbwalkingDetail::IsLocalFlashSpell(args)) {
         const int now = Tick();
         int targetNetworkId = context_.pendingAttackTargetNetworkId;
@@ -304,22 +627,7 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.cachedTargetTick = -1;
     }
 
-    const bool isAttack = IsLocalAutoAttack(args);
-    const AutoAttackResetMatch resetMatch = GetLocalAutoAttackResetMatch(args);
-
-    if (menu_.DebugLogSpellNames()) {
-        NightSharpDebug::Logf(
-            "[<b-cyan>OrbwalkerKuro</b-cyan>][<b-yellow>Spell</b-yellow>] "
-            "spell=<magenta>%s</magenta> missile=<cyan>%s</cyan> slot=%d isAttack=%d isReset=%d",
-            args.SpellName ? args.SpellName : "",
-            args.MissileName ? args.MissileName : "",
-            args.Slot,
-            isAttack ? 1 : 0,
-            resetMatch != AutoAttackResetMatch::None ? 1 : 0);
-    }
-
     if (resetMatch != AutoAttackResetMatch::None && !isAttack) {
-        const auto player = GameObjects::Player();
         const std::string championName = player.IsValid()
             ? player.CharacterName()
             : std::string(args.Sender.CharacterName);
@@ -352,7 +660,6 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     }
 
     const int now = Tick();
-    const auto player = GameObjects::Player();
     const SDK::ChampionId playerChampionId = player.IsValid()
         ? SDK::ChampionIdFromName(player.CharacterName().c_str())
         : SDK::ChampionId::Unknown;
@@ -656,7 +963,7 @@ inline bool IsKnownAutoAttackResetSlot(
 
 inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs& args) const {
     const auto player = GameObjects::Player();
-    if (Events::IsLocalPlayer(args.Sender)) {
+    if (OrbwalkingDetail::IsLocalPlayerProcessSpell(args)) {
         if (args.IsAutoAttack) return true;
         if (args.SpellName && IsAutoAttack(args.SpellName)) return true;
         if (player.IsValid() &&
@@ -684,7 +991,7 @@ inline bool OrbwalkerBase::IsLocalAutoAttack(const Events::ProcessSpellEventArgs
 inline OrbwalkerBase::AutoAttackResetMatch OrbwalkerBase::GetLocalAutoAttackResetMatch(
     const Events::ProcessSpellEventArgs& args
 ) const {
-    if (!Events::IsLocalPlayer(args.Sender)) {
+    if (!OrbwalkingDetail::IsLocalPlayerProcessSpell(args)) {
         return AutoAttackResetMatch::None;
     }
     if (IsAutoAttackReset(args.SpellName)) {
@@ -692,7 +999,8 @@ inline OrbwalkerBase::AutoAttackResetMatch OrbwalkerBase::GetLocalAutoAttackRese
     }
     const auto player = GameObjects::Player();
     if (player.IsValid()) {
-        if (IsLocalAutoAttackResetSlot(args.Sender, args.Slot)) {
+        const int effectiveSlot = OrbwalkingDetail::ResolveSpellSlot(args, player);
+        if (IsLocalAutoAttackResetSlot(args.Sender, effectiveSlot)) {
             return AutoAttackResetMatch::ChampionSlot;
         }
         if (args.SpellName && args.SpellName[0]) {
@@ -711,15 +1019,11 @@ inline OrbwalkerBase::AutoAttackResetMatch OrbwalkerBase::GetLocalAutoAttackRese
 
 inline bool OrbwalkerBase::IsLocalAutoAttackResetSlot(const ::Core::Events::ObjectInfo& sender,
                                                       int slot) const {
-    if (!Events::IsLocalPlayer(sender)) {
-        return false;
-    }
-
     SDK::ChampionId championId = SDK::ChampionId::Unknown;
     const auto player = GameObjects::Player();
     if (player.IsValid()) {
         championId = SDK::ChampionIdFromName(player.CharacterName().c_str());
-    } else if (sender.CharacterName) {
+    } else if (sender.CharacterName[0]) {
         championId = SDK::ChampionIdFromName(sender.CharacterName);
     }
 

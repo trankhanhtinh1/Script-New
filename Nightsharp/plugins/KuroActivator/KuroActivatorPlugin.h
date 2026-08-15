@@ -10,6 +10,7 @@
 #include "KuroQssActivator.h"
 #include "KuroSmiteActivator.h"
 #include "KuroAfterAttackActivator.h"
+#include "KuroOffensiveItemActivator.h"
 
 #include <array>
 #include <cstddef>
@@ -45,13 +46,21 @@ public:
         root_ = new SDK::Menu("utility.kuro_activator", "KuroActivator", true);
         root_->Attach();
 
+        auto* debugMenu = root_->AddSubMenu(new SDK::Menu("debug", "Debug"));
+        if (debugMenu) {
+            g_debugLog = debugMenu->Add(new SDK::MenuBool("debugLog", "Enable Debug Log", false));
+        }
+
         componentCount_ = 0;
         Register(&qssActivator_);
         Register(&smiteActivator_);
         Register(&afterAttackActivator_);
+        Register(&offensiveItemActivator_);
 
-        NightSharpDebug::Logf("[KuroActivator] loaded components=%d/%d",
-                              ComponentCount(), kMaxComponents);
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator] loaded components=%d/%d",
+                                  ComponentCount(), kMaxComponents);
+        }
     }
 
     void OnUpdate() override {
@@ -69,13 +78,16 @@ public:
             components_[i - 1]->OnUnload();
         }
         componentCount_ = 0;
+        g_debugLog = nullptr;
         if (root_) {
             SDK::MenuManager::Instance().Remove(root_);
             delete root_;
         }
         root_ = nullptr;
         loaded_ = false;
-        NightSharpDebug::Logf("[KuroActivator] unloaded");
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator] unloaded");
+        }
     }
 
 private:
@@ -84,11 +96,15 @@ private:
         component->OnLoad(root_);
         if (component->IsLoaded()) {
             components_[componentCount_++] = component;
-            NightSharpDebug::Logf("[KuroActivator] component loaded: %s",
-                                  component->GetName());
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf("[KuroActivator] component loaded: %s",
+                                      component->GetName());
+            }
         } else {
-            NightSharpDebug::Logf("[KuroActivator] component failed to load: %s",
-                                  component->GetName());
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf("[KuroActivator] component failed to load: %s",
+                                      component->GetName());
+            }
         }
     }
 
@@ -102,6 +118,7 @@ private:
     KuroQssActivator qssActivator_;
     KuroSmiteActivator smiteActivator_;
     KuroAfterAttackActivator afterAttackActivator_;
+    KuroOffensiveItemActivator offensiveItemActivator_;
 };
 
 } // namespace Plugins::KuroActivator

@@ -962,6 +962,9 @@
     <ClInclude Include="Core\LeagueObfuscation.h">
       <Filter>Core</Filter>
     </ClInclude>
+    <ClInclude Include="Core\offset old.h">
+      <Filter>Core</Filter>
+    </ClInclude>
     <ClInclude Include="Core\offset.h">
       <Filter>Core</Filter>
     </ClInclude>
@@ -973,6 +976,9 @@
     </ClInclude>
     <ClInclude Include="Core\spoof\spoofcall.h">
       <Filter>Core\spoof</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\StructureNamePolicy.h">
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Core\Vector.h">
       <Filter>Core</Filter>
@@ -3113,7 +3119,13 @@
     <ClInclude Include="Plugins\KuroActivator\KuroActivatorPlugin.h">
       <Filter>Plugins\KuroActivator</Filter>
     </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroActivatorPolicy.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
     <ClInclude Include="Plugins\KuroActivator\KuroAfterAttackActivator.h">
+      <Filter>Plugins\KuroActivator</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugins\KuroActivator\KuroOffensiveItemActivator.h">
       <Filter>Plugins\KuroActivator</Filter>
     </ClInclude>
     <ClInclude Include="Plugins\KuroActivator\KuroQssActivator.h">

@@ -8,6 +8,12 @@
 
 namespace Plugins::KuroActivator {
 
+inline SDK::MenuBool* g_debugLog = nullptr;
+
+inline bool IsDebugLogEnabled() noexcept {
+    return g_debugLog && g_debugLog->Value;
+}
+
 // ── Helper chung cho các component ──────────────────────────────────────────
 
 inline bool ContainsIgnoreCase(const char* haystack,

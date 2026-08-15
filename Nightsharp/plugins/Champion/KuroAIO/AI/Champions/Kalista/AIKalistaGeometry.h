@@ -10,6 +10,7 @@ inline constexpr float kQWidth = 60.0f;
 inline constexpr float kERange = 1000.0f;
 inline constexpr float kRRange = 1400.0f;
 inline constexpr int kMaxObservedSpears = 100;
+inline constexpr int kDefaultEscapeSpearThreshold = 5;
 
 inline int ClampSpearStacks(int observed) {
     return std::clamp(observed, 0, kMaxObservedSpears);
@@ -38,8 +39,17 @@ inline float ConservativeObjectiveDamage(float finalRendDamage,
         (largeOrEpicObjective ? 0.50f : 1.0f);
 }
 
+enum class RendTargetKind {
+    Hero,
+    LaneMinion,
+    JungleMonster,
+    EpicMonster,
+};
+
 struct RendDecisionContext {
+    RendTargetKind TargetKind = RendTargetKind::Hero;
     int SpearStacks = 0;
+    int MinimumEscapeStacks = kDefaultEscapeSpearThreshold;
     bool Lethal = false;
     bool TargetEscaping = false;
     bool SafeAdditionalAuto = false;
@@ -51,9 +61,20 @@ struct RendDecisionContext {
 inline bool ShouldRend(const RendDecisionContext& input) {
     const int stacks = ClampSpearStacks(input.SpearStacks);
     if (stacks <= 0 || input.UnderEnemyTurret) return false;
-    if (input.Lethal || input.ObjectiveSecure || input.SpearExpiryImminent) return true;
-    if (stacks >= 4) return true;
-    return input.TargetEscaping && !input.SafeAdditionalAuto;
+
+    switch (input.TargetKind) {
+    case RendTargetKind::Hero:
+        if (input.Lethal || input.SpearExpiryImminent) return true;
+        return input.TargetEscaping && !input.SafeAdditionalAuto &&
+            stacks >= std::clamp(
+                input.MinimumEscapeStacks, 1, kMaxObservedSpears);
+    case RendTargetKind::EpicMonster:
+        return input.ObjectiveSecure;
+    case RendTargetKind::LaneMinion:
+    case RendTargetKind::JungleMonster:
+        return input.Lethal;
+    }
+    return false;
 }
 
 inline bool RendResetsStacks(bool castAccepted, int spearStacks) {

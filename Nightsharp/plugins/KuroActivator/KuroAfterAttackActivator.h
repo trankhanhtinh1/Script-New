@@ -69,7 +69,9 @@ public:
         SDK::Orbwalker::OnAfterAttack += &KuroAfterAttackActivator::OnAfterAttackEvent;
 
         SetLoaded(true);
-        NightSharpDebug::Logf("[KuroActivator][AfterAA] loaded");
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator][AfterAA] loaded");
+        }
     }
 
     void OnUnload() override {
@@ -83,7 +85,9 @@ public:
         itemEnabled_.fill(nullptr);
         ResetState();
         SetLoaded(false);
-        NightSharpDebug::Logf("[KuroActivator][AfterAA] unloaded");
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator][AfterAA] unloaded");
+        }
     }
 
     void OnUpdate() override {
@@ -123,47 +127,57 @@ private:
     }
 
     void HandleAfterAttack(const SDK::AttackableUnit& target) {
-        NightSharpDebug::Logf(
-            "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-            "fire target=<cyan>%s</cyan> net=%u valid=%d dead=%d",
-            target.CharacterName().c_str(),
-            target.NetworkId(),
-            target.IsValid() ? 1 : 0,
-            target.IsDead() ? 1 : 0);
-        if (!enabled_ || !enabled_->Value) {
+        if (IsDebugLogEnabled()) {
             NightSharpDebug::Logf(
                 "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "skip: disabled");
+                "fire target=<cyan>%s</cyan> net=%u valid=%d dead=%d",
+                target.CharacterName().c_str(),
+                target.NetworkId(),
+                target.IsValid() ? 1 : 0,
+                target.IsDead() ? 1 : 0);
+        }
+        if (!enabled_ || !enabled_->Value) {
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "skip: disabled");
+            }
             return;
         }
         if (requireOrbwalk_ && requireOrbwalk_->Value &&
             SDK::Orbwalker::ActiveMode() == SDK::OrbwalkingMode::None) {
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "skip: orbwalk mode=<magenta>none</magenta>");
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "skip: orbwalk mode=<magenta>none</magenta>");
+            }
             return;
         }
         if (!IsValidTarget(target, includeMinions_ && includeMinions_->Value)) {
-            const SDK::AIMinionClient minion(target.Handle());
-            const bool isDummy = target.CharacterName() == "PracticeTool_TargetDummy";
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "skip: invalid target (hero=%d enemy=%d jungle=%d minion=%d dummy=%d)",
-                target.IsHero() ? 1 : 0,
-                target.IsEnemy() ? 1 : 0,
-                minion.IsJungle() ? 1 : 0,
-                target.IsMinion() ? 1 : 0,
-                isDummy ? 1 : 0);
+            if (IsDebugLogEnabled()) {
+                const SDK::AIMinionClient minion(target.Handle());
+                const bool isDummy = target.CharacterName() == "PracticeTool_TargetDummy";
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "skip: invalid target (hero=%d enemy=%d jungle=%d minion=%d dummy=%d)",
+                    target.IsHero() ? 1 : 0,
+                    target.IsEnemy() ? 1 : 0,
+                    minion.IsJungle() ? 1 : 0,
+                    target.IsMinion() ? 1 : 0,
+                    isDummy ? 1 : 0);
+            }
             return;
         }
 
         const auto player = SDK::GameObjects::Player();
         if (!player.IsValid() || player.IsDead()) {
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "skip: player invalid=%d dead=%d",
-                player.IsValid() ? 0 : 1,
-                player.IsDead() ? 1 : 0);
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "skip: player invalid=%d dead=%d",
+                    player.IsValid() ? 0 : 1,
+                    player.IsDead() ? 1 : 0);
+            }
             return;
         }
         const int now = SDK::Variables::TickCount();
@@ -176,29 +190,35 @@ private:
             const int itemId = SDK::ItemIdValue(kAfterAttackItems[i].id);
             const SDK::SpellSlot slot = SDK::GetItemSlot(player, itemId);
             const bool found = slot != SDK::SpellSlot::Unknown;
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "item=<yellow>%s</yellow> id=%d found=%d slot=%d",
-                kAfterAttackItems[i].name,
-                itemId,
-                found ? 1 : 0,
-                static_cast<int>(slot));
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "item=<yellow>%s</yellow> id=%d found=%d slot=%d",
+                    kAfterAttackItems[i].name,
+                    itemId,
+                    found ? 1 : 0,
+                    static_cast<int>(slot));
+            }
             if (!found) continue;
 
             const bool ready = SDK::CanUseItem(player, kAfterAttackItems[i].id);
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "item=<yellow>%s</yellow> ready=%d",
-                kAfterAttackItems[i].name,
-                ready ? 1 : 0);
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "item=<yellow>%s</yellow> ready=%d",
+                    kAfterAttackItems[i].name,
+                    ready ? 1 : 0);
+            }
             if (!ready) continue;
 
             const bool cast = SDK::Items::UseItem(player, kAfterAttackItems[i].id);
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
-                "item=<yellow>%s</yellow> cast=%d",
-                kAfterAttackItems[i].name,
-                cast ? 1 : 0);
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>AfterAA</b-yellow>] "
+                    "item=<yellow>%s</yellow> cast=%d",
+                    kAfterAttackItems[i].name,
+                    cast ? 1 : 0);
+            }
             if (cast) {
                 lastCastTick_ = now;
                 return;

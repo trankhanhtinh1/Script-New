@@ -49,7 +49,7 @@ public:
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
         SDK::Events::AddOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
-        SDK::Events::AddOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
+        SDK::GameObjects::AddOnCreate(&KuroEvadePlugin::OnObjectCreateStatic);
         SDK::Events::AddOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
         SDK::Game::AddOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
         SDK::Orbwalker::OnBeforeMove += &KuroEvadePlugin::OnBeforeMoveStatic;
@@ -63,7 +63,7 @@ public:
         SDK::Orbwalker::OnBeforeMove -= &KuroEvadePlugin::OnBeforeMoveStatic;
         SDK::Game::RemoveOnWndProc(&KuroEvadePlugin::OnWndProcStatic);
         SDK::Events::RemoveOnMissileCreate(&KuroEvadePlugin::OnMissileCreateStatic);
-        SDK::Events::RemoveOnCreateObject(&KuroEvadePlugin::OnObjectCreateStatic);
+        SDK::GameObjects::RemoveOnCreate(&KuroEvadePlugin::OnObjectCreateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::ProcessCastSpell, &KuroEvadePlugin::OnRawProcessCastSpellImmediateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnDoCast, &KuroEvadePlugin::OnRawDoCastImmediateStatic);
         SDK::Events::RemoveOnCoreHook(SDK::Events::Hooks::OnProcessSpell, &KuroEvadePlugin::OnRawProcessSpellImmediateStatic);
@@ -383,9 +383,9 @@ private:
         }
     }
 
-    static void OnObjectCreateStatic(const SDK::Events::ObjectEventArgs& args) {
+    static void OnObjectCreateStatic(const SDK::GameObject& object) {
         if (s_instance) {
-            s_instance->m_detector.OnObjectCreate(args);
+            s_instance->m_detector.OnObjectCreate(object);
         }
     }
 

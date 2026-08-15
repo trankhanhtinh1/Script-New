@@ -25,6 +25,7 @@ using ControllerHelpers::PredictPosition;
 using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellRank;
+using ControllerHelpers::SpellEventNameContainsAny;
 
 inline Menu* TacticsMenu = nullptr;
 inline Menu* FarmMenu = nullptr;
@@ -44,6 +45,7 @@ inline bool QInterrupted = false;
 inline int QStartTick = 0;
 inline int QTargetId = 0;
 inline Vector3 QDirection{};
+inline int QRuntimeMissingSince = 0;
 
 inline int LastWTargetId = 0;
 inline Vector3 LastWCenter{};
@@ -60,6 +62,7 @@ inline int RTargetId = 0;
 inline int RShotsRemaining = 0;
 inline int RShotsFired = 0;
 inline Vector3 RLastAim{};
+inline int RRuntimeMissingSince = 0;
 
 inline bool TargetBlocked(const AIHeroClient& target) {
     return !Engine::ValidEnemy(target) || IsCommonUntargetableOrImmune(target) ||
@@ -85,16 +88,63 @@ inline bool RuntimeQCharging() {
 }
 inline bool RuntimeRChanneling() {
     const auto player = GameObjects::Player();
-    return (Engine::RuntimeSpells[3] && Engine::RuntimeSpells[3]->IsCharging()) ||
-           (player.IsValid() && (player.HasBuff("XerathRRampUp") ||
-                                 player.HasBuff("XerathLocusOfPower2")));
+    return player.IsValid() &&
+           (player.Spellbook().IsChanneling() ||
+            player.HasBuff("XerathRRampUp") ||
+            player.HasBuff("XerathLocusOfPower2"));
 }
 inline bool IsOwnChannelUnsafe() {
     const auto player = GameObjects::Player();
-    return !player.IsValid() || ControllerHelpers::PlayerMobilityLocked() ||
+    return !player.IsValid() ||
            (Engine::UnderEnemyTurret(player.Position()) &&
             Engine::CountEnemiesAt(player.Position(), 700.0f) >
                 ControllerHelpers::Slider(UltimateMenu, "MaxChannelEnemies", 2));
+}
+inline void ClearQState() {
+    QCharging = false;
+    QOwned = false;
+    QInterrupted = false;
+    QRuntimeMissingSince = 0;
+    QStartTick = 0;
+    QTargetId = 0;
+    QDirection = {};
+}
+
+inline void ClearRState() {
+    RChanneling = false;
+    ROwned = false;
+    RInterrupted = false;
+    RStartTick = 0;
+    RRuntimeMissingSince = 0;
+    RLastShotTick = -1;
+    RTargetId = 0;
+    RShotsRemaining = 0;
+    RShotsFired = 0;
+    RLastAim = {};
+}
+inline void ObserveQStart(bool owned, int now) {
+    if (!QCharging || QStartTick <= 0) {
+        QStartTick = now;
+    }
+    QCharging = true;
+    QOwned = QOwned || owned;
+    QInterrupted = false;
+    QRuntimeMissingSince = 0;
+}
+
+inline void ObserveRStart(bool owned, int now) {
+    if (!RChanneling || RStartTick <= 0) {
+        const RAmmoState state = BeginR(SpellRank(3));
+        RStartTick = now;
+        RLastShotTick = now;
+        RShotsRemaining = state.Remaining;
+        RShotsFired = 0;
+        RLastAim = {};
+    }
+    RChanneling = true;
+    ROwned = ROwned || owned;
+    RInterrupted = false;
+    RRuntimeMissingSince = 0;
 }
 
 inline float QDamage(const AIBaseClient& target) {
@@ -124,29 +174,52 @@ inline float RDamage(const AIHeroClient& target) {
     return runtime > 1.0f ? runtime : RShotDamage(SpellRank(3), ControllerHelpers::AP(), RShotsFired);
 }
 
-inline bool BuildAim(const AIHeroClient& target, float delay, Vector3& aim) {
+inline bool BuildAim(int index,
+                     const AIHeroClient& target,
+                     float fallbackDelay,
+                     float predictionRange,
+                     Vector3& aim,
+                     Vector3* predictedUnit = nullptr) {
     aim = {};
+    if (predictedUnit) *predictedUnit = {};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return false;
-    const auto prediction = Engine::RuntimeSpells[0]
-        ? Engine::RuntimeSpells[0]->GetPrediction(target) : SDK::PredictionOutput{};
+
+    SDK::PredictionOutput prediction{};
+    if (index >= 0 && index < 4 && Engine::RuntimeSpells[index]) {
+        prediction = Engine::RuntimeSpells[index]->GetPrediction(
+            target, false, predictionRange);
+    }
+
+    Vector3 unitPosition = prediction.GetUnitPosition();
+    if (unitPosition.IsZero() || !unitPosition.IsValid()) {
+        unitPosition = PredictPosition(target, fallbackDelay);
+    }
     aim = prediction.GetCastPosition();
-    if (aim.IsZero() || !aim.IsValid()) aim = PredictPosition(target, delay);
-    return aim.IsValid() && !aim.IsZero();
+    if (aim.IsZero() || !aim.IsValid()) aim = unitPosition;
+    if (predictedUnit) *predictedUnit = unitPosition;
+    return aim.IsValid() && !aim.IsZero() &&
+           unitPosition.IsValid() && !unitPosition.IsZero();
 }
 
 inline bool StartQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || QCharging || RChanneling || TargetBlocked(target) ||
+    if (!player.IsValid() || QCharging || RuntimeQCharging() || RChanneling ||
+        TargetBlocked(target) ||
         !Engine::ValidEnemy(target, kQMaxRange + 50.0f) || !Ready(0, mode) ||
-        !Throttle(0) || PreserveAttack(0, reactive) || ManualOverrideUntil > Now()) return false;
+        !Throttle(0) || PreserveAttack(0, reactive) ||
+        ManualOverrideUntil > Now()) return false;
     Vector3 aim{};
-    if (!BuildAim(target, 0.25f, aim)) return false;
+    if (!BuildAim(0, target, kQDelay, kQMaxRange, aim)) return false;
     const Vector3 direction = Direction2D(player.Position(), aim);
-    if (direction.IsZero()) return false;
-    if (!Engine::ControllerCastPosition(0, player.Position() + direction * kQMinRange)) return false;
+    if (direction.IsZero() || !Engine::RuntimeSpells[0] ||
+        !Engine::RuntimeSpells[0]->StartCharging(aim)) {
+        return false;
+    }
+    Engine::MarkSuccessfulCast(0);
     QCharging = QOwned = true;
     QInterrupted = false;
+    QRuntimeMissingSince = 0;
     QStartTick = LastCastTick[0] = Now();
     QTargetId = static_cast<int>(target.NetworkId());
     QDirection = direction;
@@ -154,22 +227,50 @@ inline bool StartQ(const AIHeroClient& target, Mode mode, bool reactive = false)
 }
 inline bool ReleaseQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !QCharging || !QOwned || QInterrupted || RChanneling ||
-        TargetBlocked(target) || !Engine::ValidEnemy(target, kQMaxRange + 50.0f) ||
-        !ControllerHelpers::SpellEnabled(0, mode) ||
-        !QCanRelease(true, (Now() - QStartTick) / 1000.0f)) return false;
-    Vector3 aim{};
-    if (!BuildAim(target, 0.25f, aim)) return false;
-    const Vector3 direction = Direction2D(player.Position(), aim);
+    const float elapsed = static_cast<float>(std::max(0, Now() - QStartTick)) /
+        1000.0f;
+    if (!player.IsValid() || !QCharging || !QOwned || QInterrupted ||
+        RChanneling || !ControllerHelpers::SpellEnabled(0, mode) ||
+        !QCanRelease(true, elapsed)) return false;
+
+    const bool forceRelease = QShouldForceRelease(elapsed);
+    const bool hasTarget = Engine::ValidEnemy(target, kQMaxRange + 50.0f) &&
+        !TargetBlocked(target);
+    Vector3 direction = QDirection;
+    Vector3 predictedUnit{};
+    float targetRadius = 0.0f;
+    if (hasTarget) {
+        Vector3 aim{};
+        if (BuildAim(0, target, kQDelay, kQMaxRange, aim, &predictedUnit)) {
+            const Vector3 predictedDirection =
+                Direction2D(player.Position(), aim);
+            if (!predictedDirection.IsZero()) {
+                direction = predictedDirection;
+                QDirection = predictedDirection;
+            }
+        } else if (!forceRelease) {
+            return false;
+        }
+        targetRadius = target.BoundingRadius();
+    } else if (!forceRelease) {
+        return false;
+    }
+
     if (direction.IsZero()) return false;
-    const float range = QRangeForCharge((Now() - QStartTick) / 1000.0f);
-    const Vector3 endpoint = player.Position() + direction * std::min(range, player.Position().Distance2D(aim));
-    if (!QLineHits(player.Position(), endpoint, aim, target.BoundingRadius()) ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(endpoint, kQWidth * 0.5f) ||
-        !Engine::ControllerCastPosition(0, endpoint)) return false;
-    QCharging = QOwned = false;
-    QStartTick = QTargetId = 0;
-    QDirection = {};
+    const float range = QRangeForCharge(elapsed);
+    const Vector3 endpoint = player.Position() + direction * range;
+    if (hasTarget &&
+        (!predictedUnit.IsValid() || predictedUnit.IsZero() ||
+         !QLineHits(player.Position(), endpoint, predictedUnit, targetRadius)) &&
+        !forceRelease) {
+        return false;
+    }
+    if (!Engine::RuntimeSpells[0] ||
+        !Engine::RuntimeSpells[0]->ShootChargedSpell(endpoint)) {
+        return false;
+    }
+    Engine::MarkSuccessfulCast(0);
+    ClearQState();
     LastCastTick[0] = Now();
     (void)reactive;
     return true;
@@ -181,10 +282,12 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
         !Engine::ValidEnemy(target, kWRange + 40.0f) || !Ready(1, mode) ||
         !Throttle(1) || PreserveAttack(1, reactive)) return false;
     Vector3 aim{};
-    if (!BuildAim(target, kWDelay, aim) || player.Position().Distance2D(aim) > kWRange + target.BoundingRadius() ||
-        !WOuterHits(aim, PredictPosition(target, kWDelay), target.BoundingRadius()) ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kWOuterRadius * 0.08f)) return false;
-    const bool center = WCenterHits(aim, PredictPosition(target, kWDelay), target.BoundingRadius());
+    Vector3 predictedUnit{};
+    if (!BuildAim(1, target, kWDelay, kWRange, aim, &predictedUnit) ||
+        player.Position().Distance2D(aim) > kWRange + target.BoundingRadius() ||
+        !WOuterHits(aim, predictedUnit, target.BoundingRadius())) return false;
+    const bool center =
+        WCenterHits(aim, predictedUnit, target.BoundingRadius());
     if (!center && mode == Mode::Harass && target.HealthPercent() > 70.0f) return false;
     if (!Engine::ControllerCastPosition(1, aim)) return false;
     LastCastTick[1] = Now();
@@ -217,18 +320,24 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
 inline bool StartR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || QCharging || RChanneling || TargetBlocked(target) ||
-        !Engine::ValidEnemy(target, kRRange) || !Ready(3, mode) || !Throttle(3, 170) ||
-        PreserveAttack(3, reactive) || ManualOverrideUntil > Now() || IsOwnChannelUnsafe()) return false;
+        !Engine::ValidEnemy(target, kRRange) || !Ready(3, mode) ||
+        !Throttle(3, 170) || PreserveAttack(3, reactive) ||
+        ManualOverrideUntil > Now() || IsOwnChannelUnsafe() ||
+        ControllerHelpers::PlayerMobilityLocked()) return false;
     const bool lethal = Lethal(target, RDamage(target));
     const bool executeWindow = target.HealthPercent() <=
         ControllerHelpers::Slider(UltimateMenu, "RTargetHP", 48);
     if (!reactive && !lethal && !executeWindow && mode != Mode::Flee) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
+    Orbwalker::SetAttackPauseTime(250);
+    Orbwalker::SetMovePauseTime(250);
     const RAmmoState state = BeginR(SpellRank(3));
+    const int now = Now();
     RChanneling = ROwned = true;
     RInterrupted = false;
-    RStartTick = LastCastTick[3] = Now();
-    RLastShotTick = -1;
+    RRuntimeMissingSince = 0;
+    RStartTick = LastCastTick[3] = now;
+    RLastShotTick = now;
     RTargetId = static_cast<int>(target.NetworkId());
     RShotsRemaining = state.Remaining;
     RShotsFired = 0;
@@ -236,12 +345,15 @@ inline bool StartR(const AIHeroClient& target, Mode mode, bool reactive = false)
 }
 inline bool FireR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !RChanneling || !ROwned || RInterrupted || IsOwnChannelUnsafe() ||
+    if (!player.IsValid() || !RChanneling || !ROwned || RInterrupted ||
+        !RuntimeRChanneling() || !Engine::RuntimeSpells[3] ||
+        !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target, kRRange) || RShotsRemaining <= 0 ||
-        !RCanFire({RShotsRemaining, RShotsRemaining + RShotsFired, RShotsFired, true}, Now(), RLastShotTick)) return false;
-    const Vector3 aim = PredictPosition(target, kRTrajectorySeconds);
-    if (aim.IsZero() || player.Position().Distance2D(aim) > kRRange ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kRRadius)) return false;
+        !RCanFire({RShotsRemaining, RShotsRemaining + RShotsFired,
+                   RShotsFired, true}, Now(), RLastShotTick)) return false;
+    Vector3 aim{};
+    if (!BuildAim(3, target, kRTrajectorySeconds, kRRange, aim) ||
+        player.Position().Distance2D(aim) > kRRange) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
     --RShotsRemaining;
     ++RShotsFired;
@@ -273,70 +385,112 @@ inline bool Farm(Mode mode) {
 
 inline void ReconcileState() {
     const int now = Now();
-    const auto player = GameObjects::Player();
     if (QCharging) {
-        const bool runtime = RuntimeQCharging();
-        if ((!runtime && now - QStartTick > 350) || QInterrupted || now - QStartTick > 4500) {
-            QCharging = QOwned = false;
-            QTargetId = 0;
-            QDirection = {};
+        QRuntimeMissingSince = TrackRuntimeMissingSince(
+            RuntimeQCharging(), now, QRuntimeMissingSince);
+        const int maximumLifetime = static_cast<int>(
+            (kQMaxHoldSeconds + 0.50f) * 1000.0f);
+        if (QInterrupted ||
+            RuntimeMissingPastGrace(
+                now, QRuntimeMissingSince, 300) ||
+            now - QStartTick > maximumLifetime) {
+            ClearQState();
         }
     }
     if (RChanneling) {
-        const bool runtime = RuntimeRChanneling();
-        if (!runtime && now - RStartTick > 450) RChanneling = ROwned = false;
-        if (IsOwnChannelUnsafe()) RInterrupted = true;
-        if (RShotsRemaining <= 0 || now - RStartTick >= static_cast<int>((kRChannelSeconds + 0.25f) * 1000.0f))
-            RChanneling = ROwned = false;
+        RRuntimeMissingSince = TrackRuntimeMissingSince(
+            RuntimeRChanneling(), now, RRuntimeMissingSince);
+        if (RuntimeMissingPastGrace(
+                now, RRuntimeMissingSince, 450) ||
+            RShotsRemaining <= 0 ||
+            now - RStartTick >= static_cast<int>(
+                (kRChannelSeconds + 0.25f) * 1000.0f)) {
+            ClearRState();
+        }
     }
     if (EStunUntil <= now) EStunnedTargetId = EStunUntil = 0;
     if (GapcloserUntil <= now) GapcloserTargetId = GapcloserUntil = 0;
     if (InterruptUntil <= now) InterruptTargetId = InterruptUntil = 0;
     if (ManualOverrideUntil <= now) ManualOverrideUntil = 0;
-    (void)player;
 }
 
 inline void Combo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return;
-    if (RChanneling) { (void)FireR(target, Mode::Combo); return; }
     if (StartR(target, Mode::Combo)) return;
     if (CastE(target, Mode::Combo)) return;
     if (CastW(target, Mode::Combo)) return;
-    if (QCharging) (void)ReleaseQ(target, Mode::Combo);
-    else (void)StartQ(target, Mode::Combo);
+    (void)StartQ(target, Mode::Combo);
 }
 inline void Harass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || GameObjects::Player().ManaPercent() <
         ControllerHelpers::Slider(TacticsMenu, "HarassMana", 48)) return;
     if (CastE(target, Mode::Harass)) return;
     if (CastW(target, Mode::Harass)) return;
-    if (QCharging) (void)ReleaseQ(target, Mode::Harass);
-    else (void)StartQ(target, Mode::Harass);
+    (void)StartQ(target, Mode::Harass);
 }
 inline void Flee(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return;
-    if (CastE(target, Mode::Flee, true)) return;
-    if (RChanneling) (void)FireR(target, Mode::Flee, true);
-    else if (QCharging) (void)ReleaseQ(target, Mode::Flee, true);
+    (void)CastE(target, Mode::Flee, true);
 }
 inline void Automatic(const AIHeroClient& target) {
     if (InterruptUntil > Now() || GapcloserUntil > Now()) {
-        const auto threat = HeroByNetworkId(InterruptTargetId != 0 ? InterruptTargetId : GapcloserTargetId);
-        if (Engine::ValidEnemy(threat, kERange)) { (void)CastE(threat, Mode::Automatic, true); return; }
+        const auto threat = HeroByNetworkId(
+            InterruptTargetId != 0 ? InterruptTargetId : GapcloserTargetId);
+        if (Engine::ValidEnemy(threat, kERange)) {
+            (void)CastE(threat, Mode::Automatic, true);
+            return;
+        }
     }
-    if (RChanneling) { (void)FireR(target, Mode::Automatic, true); return; }
-    if (Engine::ValidEnemy(target) && Lethal(target, RDamage(target))) (void)StartR(target, Mode::Automatic, true);
+    if (Engine::ValidEnemy(target) && Lethal(target, RDamage(target))) {
+        (void)StartR(target, Mode::Automatic, true);
+    }
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
+    const Mode actionMode = mode == Mode::None ? Mode::Automatic : mode;
+
+    if (RChanneling) {
+        // Block only orbwalker-issued input; direct player movement remains
+        // authoritative and can still cancel a manually controlled channel.
+        Orbwalker::SetAttackPauseTime(180);
+        Orbwalker::SetMovePauseTime(180);
+        auto target = HeroByNetworkId(RTargetId);
+        if (!Engine::ValidEnemy(target, kRRange) || TargetBlocked(target)) {
+            target = PreferredEnemyTarget(selected, kRRange);
+        }
+        if (Engine::ValidEnemy(target, kRRange) && !TargetBlocked(target)) {
+            RTargetId = static_cast<int>(target.NetworkId());
+            (void)FireR(target, actionMode, true);
+        }
+        return true;
+    }
+
+    if (QCharging) {
+        auto target = HeroByNetworkId(QTargetId);
+        if (!Engine::ValidEnemy(target, kQMaxRange + 50.0f) ||
+            TargetBlocked(target)) {
+            target = PreferredEnemyTarget(selected, kQMaxRange + 50.0f);
+        }
+        if (Engine::ValidEnemy(target, kQMaxRange + 50.0f) &&
+            !TargetBlocked(target)) {
+            QTargetId = static_cast<int>(target.NetworkId());
+        }
+        (void)ReleaseQ(target, actionMode, actionMode == Mode::Flee);
+        return true;
+    }
+
     if (ManualOverrideUntil > Now()) return true;
     const auto target = PreferredEnemyTarget(selected, kRRange);
-    if (mode == Mode::Automatic) Automatic(target);
-    else if (mode == Mode::Flee) Flee(target);
-    else if (mode == Mode::Combo) Combo(target);
-    else if (mode == Mode::Harass) Harass(target);
-    else if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) (void)Farm(mode);
+    if (actionMode == Mode::Automatic) Automatic(target);
+    else if (actionMode == Mode::Flee) Flee(target);
+    else if (actionMode == Mode::Combo) Combo(target);
+    else if (actionMode == Mode::Harass) Harass(target);
+    else if (actionMode == Mode::LaneClear ||
+             actionMode == Mode::Jungle ||
+             actionMode == Mode::LastHit) {
+        (void)Farm(actionMode);
+    }
     return true;
 }
 
@@ -345,11 +499,10 @@ inline void OnLoad() {
     LastCastTick = {};
     ManualOverrideUntil = LastAutoTargetId = GapcloserTargetId = GapcloserUntil = 0;
     InterruptTargetId = InterruptUntil = 0; GapcloserEndpoint = {};
-    QCharging = QOwned = QInterrupted = false; QStartTick = QTargetId = 0; QDirection = {};
+    ClearQState();
     LastWTargetId = 0; LastWCenter = {}; LastWCenterHit = false;
     EStunnedTargetId = EStunUntil = 0;
-    RChanneling = ROwned = RInterrupted = false; RStartTick = 0; RLastShotTick = -1;
-    RTargetId = RShotsRemaining = RShotsFired = 0; RLastAim = {};
+    ClearRState();
 }
 inline void OnUnload() { OnLoad(); }
 
@@ -358,17 +511,49 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-        if (!owned) ManualOverrideUntil = now + ControllerHelpers::Slider(TacticsMenu, "ManualOwnershipMs", 600);
-        if (slot >= 0 && slot < 4) LastCastTick[static_cast<std::size_t>(slot)] = now;
-        if (slot == 0) { QCharging = true; QOwned = owned; QStartTick = now; QInterrupted = false; }
-        if (slot == 3) { RChanneling = true; ROwned = owned; RStartTick = now; }
+        const bool owned =
+            slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
+        if (!owned) {
+            ManualOverrideUntil = now +
+                ControllerHelpers::Slider(
+                    TacticsMenu, "ManualOwnershipMs", 600);
+        }
+        if (slot >= 0 && slot < 4) {
+            LastCastTick[static_cast<std::size_t>(slot)] = now;
+        }
+
+        const bool qBegin = SpellEventNameContainsAny(
+            args, {"XerathArcanopulseChargeUp"});
+        const bool qRelease = SpellEventNameContainsAny(
+            args, {"XerathArcanopulse2"});
+        if (qRelease) {
+            ClearQState();
+        } else if (qBegin ||
+                   (slot == 0 && RuntimeQCharging())) {
+            ObserveQStart(owned, now);
+        }
+
+        const bool rBegin = SpellEventNameContainsAny(
+            args, {"XerathLocusOfPower2"});
+        const bool rShot = SpellEventNameContainsAny(
+            args, {"XerathLocusPulse", "XerathArcaneBarrage2",
+                   "xerathrmissilewrapper"});
+        if (rBegin) {
+            ObserveRStart(owned, now);
+        } else if (rShot || (slot == 3 && RChanneling)) {
+            RLastShotTick = now;
+        } else if (slot == 3) {
+            ObserveRStart(owned, now);
+        }
         return;
     }
-    const auto analysis = AnalyzeEnemyCast(args, 240.0f, 95.0f, 250, 250, 250, 1500, 450);
+    const auto analysis =
+        AnalyzeEnemyCast(args, 240.0f, 95.0f, 250, 250, 250, 1500, 450);
     if (analysis.Valid && analysis.Enemy.IsValid()) {
-        GapcloserTargetId = static_cast<int>(analysis.Enemy.NetworkId());
-        GapcloserUntil = std::max(analysis.CommitmentUntilTick, analysis.LineThreatUntilTick);
+        GapcloserTargetId =
+            static_cast<int>(analysis.Enemy.NetworkId());
+        GapcloserUntil = std::max(
+            analysis.CommitmentUntilTick, analysis.LineThreatUntilTick);
     }
 }
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -377,20 +562,49 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     if (IsLocalPlayer(args.Sender)) {
-        if (Engine::TextContains(args.BuffName, "ArcanopulseChargeUp")) { QCharging = true; QStartTick = Now(); }
-        if (Engine::TextContains(args.BuffName, "RRampUp") || Engine::TextContains(args.BuffName, "LocusOfPower2")) { RChanneling = true; RStartTick = Now(); }
-    } else if (Engine::TextContains(args.BuffName, "XerathMageSpear")) {
-        EStunnedTargetId = static_cast<int>(args.Sender.NetworkId); EStunUntil = Now() + 2250;
+        const int now = Now();
+        if (Engine::TextContains(
+                args.BuffName, "ArcanopulseChargeUp")) {
+            ObserveQStart(false, now);
+        }
+        if (Engine::TextContains(args.BuffName, "RRampUp") ||
+            Engine::TextContains(args.BuffName, "LocusOfPower2") ||
+            Engine::TextContains(args.BuffName, "xerathrshots")) {
+            ObserveRStart(false, now);
+        }
+    } else if (Engine::TextContains(
+                   args.BuffName, "XerathMageSpear")) {
+        EStunnedTargetId = static_cast<int>(args.Sender.NetworkId);
+        EStunUntil = Now() + 2250;
     }
 }
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "ArcanopulseChargeUp")) QCharging = QOwned = false;
-    if (IsLocalPlayer(args.Sender) && (Engine::TextContains(args.BuffName, "RRampUp") || Engine::TextContains(args.BuffName, "LocusOfPower2"))) RChanneling = ROwned = false;
-    if (static_cast<int>(args.Sender.NetworkId) == EStunnedTargetId && Engine::TextContains(args.BuffName, "XerathMageSpear")) EStunnedTargetId = EStunUntil = 0;
+    if (IsLocalPlayer(args.Sender) &&
+        Engine::TextContains(args.BuffName, "ArcanopulseChargeUp")) {
+        QRuntimeMissingSince = Now();
+    }
+    if (IsLocalPlayer(args.Sender) &&
+        (Engine::TextContains(args.BuffName, "RRampUp") ||
+         Engine::TextContains(args.BuffName, "LocusOfPower2") ||
+         Engine::TextContains(args.BuffName, "xerathrshots"))) {
+        RRuntimeMissingSince = Now();
+    }
+    if (static_cast<int>(args.Sender.NetworkId) == EStunnedTargetId &&
+        Engine::TextContains(args.BuffName, "XerathMageSpear")) {
+        EStunnedTargetId = EStunUntil = 0;
+    }
 }
 inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "RRampUp")) RChanneling = true;
-    if (static_cast<int>(args.Sender.NetworkId) == EStunnedTargetId && args.EndTime <= Game::Time()) EStunnedTargetId = EStunUntil = 0;
+    if (IsLocalPlayer(args.Sender) &&
+        (Engine::TextContains(args.BuffName, "RRampUp") ||
+         Engine::TextContains(args.BuffName, "LocusOfPower2") ||
+         Engine::TextContains(args.BuffName, "xerathrshots"))) {
+        if (RChanneling) RRuntimeMissingSince = 0;
+    }
+    if (static_cast<int>(args.Sender.NetworkId) == EStunnedTargetId &&
+        args.EndTime <= Game::Time()) {
+        EStunnedTargetId = EStunUntil = 0;
+    }
 }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
@@ -408,7 +622,11 @@ inline void OnInterruptable(const SDK::Events::InterruptableSpell::Interruptable
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs&) {}
 inline void OnObjectDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
-    if (ControllerHelpers::MissileEventIsLocal(args) && Engine::TextContains(args.MissileName, "Xerath")) RLastShotTick = Now();
+    if (RChanneling && ControllerHelpers::MissileEventIsLocal(args) &&
+        (Engine::TextContains(args.MissileName, "XerathR") ||
+         Engine::TextContains(args.MissileName, "ArcaneBarrage"))) {
+        RLastShotTick = Now();
+    }
 }
 inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void OnDraw() {}
@@ -427,12 +645,12 @@ inline void BuildMenu(Menu* root) {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Q four-second charge, 750-to-1125 range interpolation, release prediction and beam collision",
+    "Q three-second channel, 750-to-1550 range growth, live-target re-aim and forced maximum-range release",
     "W outer 250 radius impact with 100 radius center sweet spot and 1.667 damage multiplier",
     "E 70-width first-collision line prediction, 1600 missile safety and distance-scaled stun",
     "R ten-second channel, 4/5/6 artillery ammo, 0.6 second trajectory and prior-hit ramp damage",
-    "R manual ownership, anti-interrupt mobility/turret/enemy-count safety and polling reconciliation",
-    "Selected target precedence, orbwalker fallback, auto-attack windup ownership and shield-aware lethal checks",
+    "R preserves controller ownership across phase-buff transitions and pauses orbwalker movement between shots",
+    "Selected target precedence, locked Q/R target continuity, fallback retargeting and shield-aware lethal checks",
     "Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic interrupt/gapcloser routes",
 };
 

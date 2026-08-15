@@ -550,24 +550,24 @@ public:
         CleanupTraps();
     }
 
-    void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
+    void OnObjectCreate(const SDK::GameObject& object) {
         if (!m_enhancedDetection) {
             return;
         }
-        if (!args.Sender.Ptr) {
+        if (!object.Address()) {
             return;
         }
-        if (args.Sender.Type != ::Core::Objects::ObjectType::AIMinionClient &&
-            args.Sender.Type != ::Core::Objects::ObjectType::EffectEmitter) {
+        const auto& handle = object.Handle();
+        if (handle.type != ::Core::Objects::ObjectType::AIMinionClient &&
+            handle.type != ::Core::Objects::ObjectType::EffectEmitter) {
             return;
         }
-        SDK::GameObject object(args.Sender.Ptr, args.Sender.Type);
         if (!object.IsValid() || (object.IsAlly() && !m_sameTeam)) {
             return;
         }
         const int objectId = object.NetworkId() != 0
             ? object.NetworkId()
-            : static_cast<int>(args.Sender.NetworkId);
+            : static_cast<int>(handle.networkId);
         if (objectId == 0 || m_traps.find(objectId) != m_traps.end()) {
             return;
         }

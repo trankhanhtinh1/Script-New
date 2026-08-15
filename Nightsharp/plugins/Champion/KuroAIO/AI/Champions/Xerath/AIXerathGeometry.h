@@ -13,11 +13,15 @@ using Vec3 = ::Vec3;
 using SharedGeometry::Direction2D;
 using SharedGeometry::ProjectPointToSegment2D;
 
-// Riot 26.15 / CommunityDragon 16.15 Summoner's Rift values.
+// Current CommunityDragon fields: a three-second channel and 1.5-second
+// range growth. 1550 is the conservative gameplay endpoint used by the
+// working 7UP Xerath implementation.
 inline constexpr float kQMinRange = 750.0f;
-inline constexpr float kQMaxRange = 1125.0f;
+inline constexpr float kQMaxRange = 1550.0f;
 inline constexpr float kQWidth = 145.0f;
-inline constexpr float kQChargeSeconds = 4.0f;
+inline constexpr float kQDelay = 0.50f;
+inline constexpr float kQRangeGrowthSeconds = 1.5f;
+inline constexpr float kQMaxHoldSeconds = 3.0f;
 inline constexpr float kWRange = 1000.0f;
 inline constexpr float kWOuterRadius = 250.0f;
 inline constexpr float kWCenterRadius = 100.0f;
@@ -42,7 +46,7 @@ inline constexpr float RankValue(int rank, const std::array<float, 3>& values) {
 
 inline float QChargeFraction(float elapsedSeconds) {
     if (!std::isfinite(elapsedSeconds)) return 0.0f;
-    return std::clamp(elapsedSeconds / kQChargeSeconds, 0.0f, 1.0f);
+    return std::clamp(elapsedSeconds / kQRangeGrowthSeconds, 0.0f, 1.0f);
 }
 inline float QRangeForCharge(float elapsedSeconds) {
     return kQMinRange + (kQMaxRange - kQMinRange) * QChargeFraction(elapsedSeconds);
@@ -50,6 +54,23 @@ inline float QRangeForCharge(float elapsedSeconds) {
 inline bool QCanRelease(bool charging, float elapsedSeconds) {
     return charging && std::isfinite(elapsedSeconds) && elapsedSeconds >= 0.10f;
 }
+inline bool QShouldForceRelease(float elapsedSeconds) {
+    return std::isfinite(elapsedSeconds) &&
+           elapsedSeconds >= kQRangeGrowthSeconds;
+}
+inline constexpr int TrackRuntimeMissingSince(
+    bool runtimeActive, int nowTick, int previousMissingTick) {
+    if (runtimeActive) return 0;
+    if (previousMissingTick > 0) return previousMissingTick;
+    return std::max(0, nowTick);
+}
+
+inline constexpr bool RuntimeMissingPastGrace(
+    int nowTick, int missingSinceTick, int graceMilliseconds) {
+    return missingSinceTick > 0 && nowTick >= missingSinceTick &&
+           nowTick - missingSinceTick > std::max(0, graceMilliseconds);
+}
+
 
 inline bool LineHits(const Vec3& origin, const Vec3& endpoint, const Vec3& target,
                      float width, float targetRadius = 0.0f) {
@@ -149,17 +170,6 @@ inline constexpr RAmmoState ConsumeRShot(RAmmoState state) {
         ++state.PriorHits;
     }
     return state;
-}
-inline constexpr bool RChannelSafe(bool owned, bool interrupted, bool mobilityLocked,
-                                   bool underEnemyTurret, int nearbyEnemies,
-                                   int maximumEnemies) {
-    return owned && !interrupted && !mobilityLocked &&
-           (!underEnemyTurret || nearbyEnemies <= std::max(0, maximumEnemies));
-}
-inline constexpr bool RShouldStop(const RAmmoState& state, int nowTick, int startTick,
-                                  bool interrupted, bool mobilityLocked) {
-    return !state.Channeling || state.Remaining <= 0 || interrupted || mobilityLocked ||
-           nowTick - startTick >= static_cast<int>(kRChannelSeconds * 1000.0f);
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Xerath::Geometry

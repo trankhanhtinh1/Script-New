@@ -209,10 +209,12 @@
     <ClInclude Include="Core\IoctlFilter.h" />
     <ClInclude Include="Core\KuroCombatCoordinator.h" />
     <ClInclude Include="Core\LeagueObfuscation.h" />
+    <ClInclude Include="Core\offset old.h" />
     <ClInclude Include="Core\offset.h" />
     <ClInclude Include="Core\PackmanHook.h" />
     <ClInclude Include="Core\PebHide.h" />
     <ClInclude Include="Core\spoof\spoofcall.h" />
+    <ClInclude Include="Core\StructureNamePolicy.h" />
     <ClInclude Include="Core\Vector.h" />
     <ClInclude Include="CrashBridge.h" />
     <ClInclude Include="CrashReporter.h" />
@@ -932,7 +934,9 @@
     <ClInclude Include="Plugins\IPlugin.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroActivatorComponent.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroActivatorPlugin.h" />
+    <ClInclude Include="Plugins\KuroActivator\KuroActivatorPolicy.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroAfterAttackActivator.h" />
+    <ClInclude Include="Plugins\KuroActivator\KuroOffensiveItemActivator.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroQssActivator.h" />
     <ClInclude Include="Plugins\KuroActivator\KuroSmiteActivator.h" />
     <ClInclude Include="Plugins\KuroEvade\EvadeTextureAssets.inl" />

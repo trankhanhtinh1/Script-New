@@ -88,15 +88,16 @@ public:
     static bool IsAutoAttack(std::string name);
     static bool IsAutoAttackReset(std::string name);
 
-protected:
-    static int Tick();
-
-private:
     enum class AutoAttackResetMatch {
         None,
         SpellName,
         ChampionSlot,
     };
+
+protected:
+    static int Tick();
+
+private:
 
     static constexpr int kMoveDelayMs = 25;
     static constexpr int kMoveDuplicateDelayMs = 85;

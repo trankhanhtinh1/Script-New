@@ -55,7 +55,9 @@ public:
 
         ResetState();
         SetLoaded(true);
-        NightSharpDebug::Logf("[KuroActivator][Smite] loaded");
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator][Smite] loaded");
+        }
     }
 
     void OnUnload() override {
@@ -68,7 +70,9 @@ public:
         range_ = nullptr;
         ResetState();
         SetLoaded(false);
-        NightSharpDebug::Logf("[KuroActivator][Smite] unloaded");
+        if (IsDebugLogEnabled()) {
+            NightSharpDebug::Logf("[KuroActivator][Smite] unloaded");
+        }
     }
 
     void OnUpdate() override {
@@ -111,7 +115,7 @@ private:
             return;
         }
 
-        if (now - smiteRefreshedAt_ >= kCastCacheMs) {
+        if (smiteSlot_ == -1 || now - smiteRefreshedAt_ >= kSlotRefreshMs) {
             smiteRefreshedAt_ = now;
             smiteName_[0] = '\0';
             smiteSlot_ = FindSummonerSlot(player, "smite");
@@ -121,13 +125,17 @@ private:
                 const std::string name =
                     spell.IsValid() ? spell.Name() : std::string();
                 std::snprintf(smiteName_, sizeof(smiteName_), "%s", name.c_str());
-                NightSharpDebug::Logf(
-                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
-                    "slot=%d name=%s", smiteSlot_, smiteName_);
+                if (IsDebugLogEnabled()) {
+                    NightSharpDebug::Logf(
+                        "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
+                        "slot=%d name=%s", smiteSlot_, smiteName_);
+                }
             } else {
-                NightSharpDebug::Logf(
-                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
-                    "summoner 'smite' not found");
+                if (IsDebugLogEnabled()) {
+                    NightSharpDebug::Logf(
+                        "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
+                        "summoner 'smite' not found");
+                }
             }
         }
         if (smiteSlot_ == -1) return;
@@ -164,26 +172,25 @@ private:
             }
         }
         if (!best.IsValid()) {
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
-                "no target in range (dmg=%.0f, jungle=%zu)",
-                damage,
-                jungle.size());
             return;
         }
 
         if (player.Spellbook().CastSpell(
                 static_cast<SDK::SpellSlot>(smiteSlot_), best)) {
             lastCastTick_ = now;
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
-                "cast on %s dmg=%.0f hp=%.0f",
-                best.CharacterName().c_str(), damage, best.Health());
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
+                    "cast on %s dmg=%.0f hp=%.0f",
+                    best.CharacterName().c_str(), damage, best.Health());
+            }
         } else {
-            NightSharpDebug::Logf(
-                "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
-                "cast FAILED on %s",
-                best.CharacterName().c_str());
+            if (IsDebugLogEnabled()) {
+                NightSharpDebug::Logf(
+                    "[<b-cyan>KuroActivator</b-cyan>][<b-yellow>Smite</b-yellow>] "
+                    "cast FAILED on %s",
+                    best.CharacterName().c_str());
+            }
         }
     }
 

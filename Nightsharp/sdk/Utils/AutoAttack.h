@@ -186,7 +186,7 @@ private:
             "quinne","quinnvault",
             "reksaiq",
             "rellw","rellw_dismount","rellferromancymountup",
-            "renektonpreexecute",
+            "renektonpreexecute","renektonexecute",
             "rengarq","rengarqemp","rengarqattack","rengarqempattack","rengarqbase",
             "riventricleave",
             "samirap","samiradaredevilimpulse",

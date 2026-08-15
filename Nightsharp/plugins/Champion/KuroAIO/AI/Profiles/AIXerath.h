@@ -31,20 +31,20 @@ inline constexpr ChampionProfile Xerath = [] {
     p.TacticalSummary =
         "Long-range artillery mage: charge Arcanopulse to the required distance, use Eye of Destruction center hits after control, and spend Rite of the Arcane ammo only from a safe channel.";
     p.ResearchSummary =
-        "Riot 26.15 / CommunityDragon 16.15 values: Q 75/115/155/195/235 plus 85 percent AP with a 4 second charge and 750 to 1125 range; W 50/85/120/155/190 plus 65 percent AP with a 1.667 center multiplier; E 70/100/130/160/190 plus 45 percent AP, 70 width first-collision missile and 0.75 to 2.25 second distance stun; R 4/5/6 shots, 170/220/270 plus 45 percent AP and 20/25/30 plus 5 percent AP per prior hit over a 10 second channel.";
+        "Current CommunityDragon values: Q channels for three seconds but reaches its effective 750-to-1550 range after 1.5 seconds; W has a 250 outer radius and 100 center sweet spot; E is a first-collision line; R has 4/5/6 fixed-time artillery shots over a ten-second channel.";
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Arcanopulse", CastKind::ChargedLine,
         Intent::Damage | Intent::Setup | Intent::Waveclear |
             Intent::Jungle | Intent::LastHit | Intent::Channel,
-        AllModes, 1125.0f, 0.25f, 145.0f, FLT_MAX, false,
+        AllModes, 1550.0f, 0.50f, 145.0f, FLT_MAX, false,
         SDK::DamageType::Magical, SDK::SpellType::SkillshotLine);
     p.Spells[0].Aim = AimPolicy::Prediction;
     p.Spells[0].Priority = 90;
     p.Spells[0].Hitchance = SDK::HitChance::High;
     p.Spells[0].ChargeMinRange = 750;
-    p.Spells[0].ChargeMaxRange = 1125;
-    p.Spells[0].ChargeDurationSeconds = 4.0f;
+    p.Spells[0].ChargeMaxRange = 1550;
+    p.Spells[0].ChargeDurationSeconds = 1.5f;
     p.Spells[0].ChargeBuffName = "XerathArcanopulseChargeUp";
     p.Spells[0].PreserveAutoAttack = true;
     p.Spells[0].HarassManaPercent = 42.0f;
@@ -80,7 +80,7 @@ inline constexpr ChampionProfile Xerath = [] {
         Intent::Damage | Intent::Finisher | Intent::Channel | Intent::Recast |
             Intent::Interrupt,
         Mode::Combo | Mode::Flee | Mode::Automatic,
-        5000.0f, 10.0f, 200.0f, 20.0f, false,
+        5000.0f, 0.60f, 200.0f, FLT_MAX, false,
         SDK::DamageType::Magical, SDK::SpellType::SkillshotCircle);
     p.Spells[3].Aim = AimPolicy::TargetPosition;
     p.Spells[3].Priority = 100;
