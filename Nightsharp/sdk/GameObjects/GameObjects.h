@@ -67,22 +67,22 @@ namespace detail {
     inline std::vector<AIMinionClient> AllyPetsList;
     inline std::vector<AIMinionClient> EnemyPetsList;
 
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // inline std::vector<AITurretClient> TurretsList;
-    // inline std::vector<AITurretClient> AllyTurretsList;
-    // inline std::vector<AITurretClient> EnemyTurretsList;
-    //
-    // inline std::vector<BarracksDampenerClient> InhibitorsList;
-    // inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
-    // inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
-    // inline std::vector<HQClient> NexusList;
-    // inline HQClient AllyNexusObject;
-    // inline HQClient EnemyNexusObject;
+    // Turret support enabled
+    inline std::vector<AITurretClient> TurretsList;
+    inline std::vector<AITurretClient> AllyTurretsList;
+    inline std::vector<AITurretClient> EnemyTurretsList;
 
-    // Not classified yet: no vtable RVAs dumped for ShopClient / Obj_SpawnPoint /
-    // EffectEmitter. Kept (empty) so the public API surface stays identical.
-    // To enable: dump the vtable RVA live (see Offset::StructureVTable notes)
-    // and add a branch in RefreshStructures.
+    inline std::vector<BarracksDampenerClient> InhibitorsList;
+    inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
+    inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
+    inline std::vector<HQClient> NexusList;
+    inline HQClient AllyNexusObject;
+    inline HQClient EnemyNexusObject;
+
+    // Not classified yet: ShopClient has no strict runtime-name policy.
+    // Kept empty so the public API surface stays identical. To enable it, add
+    // an exact name predicate and a dedicated seed branch like the two
+    // structures above; do not feed it into the general object cache.
     // inline std::vector<ShopClient> ShopsList;
     // inline std::vector<ShopClient> AllyShopsList;
     // inline std::vector<ShopClient> EnemyShopsList;
@@ -531,17 +531,17 @@ namespace detail {
         CleanInvalid(AllyPetsList);
         CleanInvalid(EnemyPetsList);
 
-        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-        // CleanInvalid(TurretsList);
-        // CleanInvalid(AllyTurretsList);
-        // CleanInvalid(EnemyTurretsList);
-        //
-        // CleanInvalid(InhibitorsList);
-        // CleanInvalid(AllyInhibitorsList);
-        // CleanInvalid(EnemyInhibitorsList);
-        // CleanInvalid(NexusList);
-        // if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
-        // if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
+        // Enable Turret cleanup
+        CleanInvalid(TurretsList);
+        CleanInvalid(AllyTurretsList);
+        CleanInvalid(EnemyTurretsList);
+
+        CleanInvalid(InhibitorsList);
+        CleanInvalid(AllyInhibitorsList);
+        CleanInvalid(EnemyInhibitorsList);
+        CleanInvalid(NexusList);
+        if (!AllyNexusObject.IsValid()) AllyNexusObject = {};
+        if (!EnemyNexusObject.IsValid()) EnemyNexusObject = {};
 
         // CleanInvalid(ShopsList);
         // CleanInvalid(AllyShopsList);
@@ -585,7 +585,7 @@ namespace detail {
                 ::Core::ObjectManager::TypeCache::Lookup(classifiedHandle.address);
             if (upgraded == ::Core::Objects::ObjectType::Unknown && inferGeneric) {
                 upgraded =
-                    ::Core::ObjectManager::InferType(classifiedHandle.address);
+                    ::Core::ObjectManager::InferLifecycleType(classifiedHandle.address);
             }
             if (!IsGenericObjectType(upgraded)) {
                 classifiedType = upgraded;
@@ -594,32 +594,38 @@ namespace detail {
         }
         GameObject classifiedObject(classifiedHandle);
         const int netId = static_cast<int>(classifiedHandle.networkId);
+        const bool dedicatedStructure =
+            classifiedType == ::Core::Objects::ObjectType::AITurretClient ||
+            classifiedType == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+            classifiedType == ::Core::Objects::ObjectType::HQClient;
 
-        bool replacedExisting = false;
-        for (auto& existing : GameObjectsList) {
-            if (static_cast<int>(existing.CachedNetworkId()) != netId) {
-                continue;
-            }
+        if (!dedicatedStructure) {
+            bool replacedExisting = false;
+            for (auto& existing : GameObjectsList) {
+                if (static_cast<int>(existing.CachedNetworkId()) != netId) {
+                    continue;
+                }
 
-            const auto existingType = existing.Handle().type;
-            if (!IsGenericObjectType(existingType) &&
-                IsGenericObjectType(classifiedType)) {
-                // Preserve an already-specific classification when a generic
-                // lifecycle hint for the same object arrives later.
-                classifiedObject = existing;
-                classifiedType = existingType;
-                classifiedHandle = existing.Handle();
-            } else {
-                // Replace the base entry with the freshest handle. In
-                // particular this upgrades a seed-time GameObject fallback to
-                // AIHeroClient/AIMinionClient instead of returning early.
-                existing = classifiedObject;
+                const auto existingType = existing.Handle().type;
+                if (!IsGenericObjectType(existingType) &&
+                    IsGenericObjectType(classifiedType)) {
+                    // Preserve an already-specific classification when a generic
+                    // lifecycle hint for the same object arrives later.
+                    classifiedObject = existing;
+                    classifiedType = existingType;
+                    classifiedHandle = existing.Handle();
+                } else {
+                    // Replace the base entry with the freshest handle. In
+                    // particular this upgrades a seed-time GameObject fallback to
+                    // AIHeroClient/AIMinionClient instead of returning early.
+                    existing = classifiedObject;
+                }
+                replacedExisting = true;
+                break;
             }
-            replacedExisting = true;
-            break;
-        }
-        if (!replacedExisting) {
-            GameObjectsList.push_back(classifiedObject);
+            if (!replacedExisting) {
+                GameObjectsList.push_back(classifiedObject);
+            }
         }
 
         ::Core::ObjectManager::TypeCache::Store(
@@ -629,7 +635,7 @@ namespace detail {
             PopulateStatic(classifiedObject);
         }
 
-        if (::Core::Objects::IsAttackable(classifiedType)) {
+        if (!dedicatedStructure && ::Core::Objects::IsAttackable(classifiedType)) {
             PushUniqueByNetworkId(
                 AttackableUnitsList,
                 AttackableUnit(classifiedObject.Handle()));
@@ -731,28 +737,27 @@ namespace detail {
             }
             break;
         }
-        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-        // case ::Core::Objects::ObjectType::AITurretClient: {
-        //     const AITurretClient turret(classifiedObject.Handle());
-        //     PushUniqueByNetworkId(TurretsList, turret);
-        //     if (ally) PushUniqueByNetworkId(AllyTurretsList, turret);
-        //     else if (enemy) PushUniqueByNetworkId(EnemyTurretsList, turret);
-        //     break;
-        // }
-        // case ::Core::Objects::ObjectType::BarracksDampenerClient: {
-        //     const BarracksDampenerClient inhib(classifiedObject.Handle());
-        //     PushUniqueByNetworkId(InhibitorsList, inhib);
-        //     if (ally) PushUniqueByNetworkId(AllyInhibitorsList, inhib);
-        //     else if (enemy) PushUniqueByNetworkId(EnemyInhibitorsList, inhib);
-        //     break;
-        // }
-        // case ::Core::Objects::ObjectType::HQClient: {
-        //     const HQClient nexus(classifiedObject.Handle());
-        //     PushUniqueByNetworkId(NexusList, nexus);
-        //     if (ally) AllyNexusObject = nexus;
-        //     else if (enemy) EnemyNexusObject = nexus;
-        //     break;
-        // }
+        case ::Core::Objects::ObjectType::AITurretClient: {
+            const AITurretClient turret(classifiedObject.Handle());
+            PushUniqueByNetworkId(TurretsList, turret);
+            if (ally) PushUniqueByNetworkId(AllyTurretsList, turret);
+            else if (enemy) PushUniqueByNetworkId(EnemyTurretsList, turret);
+            break;
+        }
+        case ::Core::Objects::ObjectType::BarracksDampenerClient: {
+            const BarracksDampenerClient inhibitor(classifiedObject.Handle());
+            PushUniqueByNetworkId(InhibitorsList, inhibitor);
+            if (ally) PushUniqueByNetworkId(AllyInhibitorsList, inhibitor);
+            else if (enemy) PushUniqueByNetworkId(EnemyInhibitorsList, inhibitor);
+            break;
+        }
+        case ::Core::Objects::ObjectType::HQClient: {
+            const HQClient nexus(classifiedObject.Handle());
+            PushUniqueByNetworkId(NexusList, nexus);
+            if (ally) AllyNexusObject = nexus;
+            else if (enemy) EnemyNexusObject = nexus;
+            break;
+        }
         case ::Core::Objects::ObjectType::MissileClient: {
             const MissileClient missile(classifiedObject.Handle());
             PushUniqueByNetworkId(MissilesList, missile);
@@ -808,24 +813,23 @@ namespace detail {
             EraseByNetworkId(EnemyPetsList, netId);
             break;
 
-        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-        // case ::Core::Objects::ObjectType::AITurretClient:
-        //     EraseByNetworkId(TurretsList, netId);
-        //     EraseByNetworkId(AllyTurretsList, netId);
-        //     EraseByNetworkId(EnemyTurretsList, netId);
-        //     break;
-        //
-        // case ::Core::Objects::ObjectType::BarracksDampenerClient:
-        //     EraseByNetworkId(InhibitorsList, netId);
-        //     EraseByNetworkId(AllyInhibitorsList, netId);
-        //     EraseByNetworkId(EnemyInhibitorsList, netId);
-        //     break;
-        //
-        // case ::Core::Objects::ObjectType::HQClient:
-        //     EraseByNetworkId(NexusList, netId);
-        //     if (static_cast<int>(AllyNexusObject.Handle().networkId) == netId) AllyNexusObject = {};
-        //     if (static_cast<int>(EnemyNexusObject.Handle().networkId) == netId) EnemyNexusObject = {};
-        //     break;
+        case ::Core::Objects::ObjectType::AITurretClient:
+            EraseByNetworkId(TurretsList, netId);
+            EraseByNetworkId(AllyTurretsList, netId);
+            EraseByNetworkId(EnemyTurretsList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::BarracksDampenerClient:
+            EraseByNetworkId(InhibitorsList, netId);
+            EraseByNetworkId(AllyInhibitorsList, netId);
+            EraseByNetworkId(EnemyInhibitorsList, netId);
+            break;
+
+        case ::Core::Objects::ObjectType::HQClient:
+            EraseByNetworkId(NexusList, netId);
+            if (static_cast<int>(AllyNexusObject.Handle().networkId) == netId) AllyNexusObject = {};
+            if (static_cast<int>(EnemyNexusObject.Handle().networkId) == netId) EnemyNexusObject = {};
+            break;
 
         case ::Core::Objects::ObjectType::MissileClient:
             EraseByNetworkId(MissilesList, netId);
@@ -860,14 +864,15 @@ namespace detail {
             EraseByNetworkId(PetsList, netId);
             EraseByNetworkId(AllyPetsList, netId);
             EraseByNetworkId(EnemyPetsList, netId);
-            // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-            // EraseByNetworkId(TurretsList, netId);
-            // EraseByNetworkId(AllyTurretsList, netId);
-            // EraseByNetworkId(EnemyTurretsList, netId);
-            // EraseByNetworkId(InhibitorsList, netId);
-            // EraseByNetworkId(AllyInhibitorsList, netId);
-            // EraseByNetworkId(EnemyInhibitorsList, netId);
-            // EraseByNetworkId(NexusList, netId);
+            EraseByNetworkId(TurretsList, netId);
+            EraseByNetworkId(AllyTurretsList, netId);
+            EraseByNetworkId(EnemyTurretsList, netId);
+            EraseByNetworkId(InhibitorsList, netId);
+            EraseByNetworkId(AllyInhibitorsList, netId);
+            EraseByNetworkId(EnemyInhibitorsList, netId);
+            EraseByNetworkId(NexusList, netId);
+            if (static_cast<int>(AllyNexusObject.Handle().networkId) == netId) AllyNexusObject = {};
+            if (static_cast<int>(EnemyNexusObject.Handle().networkId) == netId) EnemyNexusObject = {};
             EraseByNetworkId(MissilesList, netId);
             break;
         }
@@ -905,16 +910,15 @@ namespace detail {
         PetsList.clear();
         AllyPetsList.clear();
         EnemyPetsList.clear();
-        // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-        // TurretsList.clear();
-        // AllyTurretsList.clear();
-        // EnemyTurretsList.clear();
-        // InhibitorsList.clear();
-        // AllyInhibitorsList.clear();
-        // EnemyInhibitorsList.clear();
-        // NexusList.clear();
-        // AllyNexusObject = {};
-        // EnemyNexusObject = {};
+        TurretsList.clear();
+        AllyTurretsList.clear();
+        EnemyTurretsList.clear();
+        InhibitorsList.clear();
+        AllyInhibitorsList.clear();
+        EnemyInhibitorsList.clear();
+        NexusList.clear();
+        AllyNexusObject = {};
+        EnemyNexusObject = {};
         // ShopsList.clear();
         // AllyShopsList.clear();
         // EnemyShopsList.clear();
@@ -982,6 +986,10 @@ namespace detail {
         const int rawMinionManagerCount = ::Core::ObjectManager::EnumerateMinions(
             minionEntries.data(),
             static_cast<int>(minionEntries.size()));
+        std::vector<uintptr_t> turretEntries(128);
+        const int rawTurretManagerCount = ::Core::ObjectManager::EnumerateTurrets(
+            turretEntries.data(),
+            static_cast<int>(turretEntries.size()));
 
         std::vector<GameObject> managerHeroes;
         managerHeroes.reserve(rawHeroManagerCount > 0
@@ -1009,8 +1017,75 @@ namespace detail {
             }
         }
 
+        std::vector<GameObject> managerTurrets;
+        managerTurrets.reserve(rawTurretManagerCount > 0
+            ? static_cast<std::size_t>(rawTurretManagerCount)
+            : 0);
+        for (int i = 0; i < rawTurretManagerCount; ++i) {
+            auto handle = ::Core::ObjectManager::MakeHandle(
+                turretEntries[static_cast<std::size_t>(i)],
+                ::Core::Objects::ObjectType::AITurretClient);
+            if (handle.HasAddress() && handle.HasIdentity()) {
+                managerTurrets.emplace_back(handle);
+            }
+        }
+
+        // Inhibitor/Nexus have no typed manager. Discover them once from the
+        // complete object array using strict runtime-name patterns. Store their
+        // exact type before the general raw pass so structures stay out of the
+        // legacy GameObjects/AttackableUnits/Hero/Minion caches.
+        std::vector<uintptr_t> structureEntries(16384);
+        const int rawStructureEntryCount =
+            ::Core::ObjectManager::EnumerateAllIncludingStructures(
+                structureEntries.data(),
+                static_cast<int>(structureEntries.size()));
+        std::vector<GameObject> managerStructures;
+        managerStructures.reserve(8);
+        std::size_t expectedInhibitorCount = 0;
+        std::size_t expectedNexusCount = 0;
+        for (int i = 0; i < rawStructureEntryCount; ++i) {
+            const uintptr_t address = structureEntries[static_cast<std::size_t>(i)];
+            StructureInfo info{};
+            if (!ProbeStructureGuarded(address, info) ||
+                info.kind == StructureKind::None) {
+                continue;
+            }
+
+            ::Core::Objects::ObjectHandle handle{};
+            handle.address = address;
+            handle.index = info.index;
+            handle.networkId = info.networkId;
+            if (info.kind == StructureKind::Inhibitor) {
+                handle.type = ::Core::Objects::ObjectType::BarracksDampenerClient;
+                ++expectedInhibitorCount;
+            } else if (info.kind == StructureKind::Nexus) {
+                handle.type = ::Core::Objects::ObjectType::HQClient;
+                ++expectedNexusCount;
+            } else {
+                continue;
+            }
+            if (!handle.HasAddress() || !handle.HasIdentity()) {
+                continue;
+            }
+
+            ::Core::ObjectManager::TypeCache::Store(address, handle.type);
+            managerStructures.emplace_back(handle);
+#if NIGHTSHARP_STRUCTURE_SCAN_DEBUG
+            NightSharpDebug::Logf(
+                "[StructScan] kind=%s addr=0x%p index=%u net=%u team=%u name='%s' char='%s'",
+                StructureKindName(info.kind),
+                reinterpret_cast<void*>(address),
+                info.index,
+                info.networkId,
+                info.team,
+                info.name,
+                info.charName);
+#endif
+        }
+
         const int expectedHeroCount = static_cast<int>(managerHeroes.size());
         const int expectedMinionCount = static_cast<int>(managerMinions.size());
+        const int expectedTurretCount = static_cast<int>(managerTurrets.size());
 
         if (!playerHandle.HasAddress() || !playerHandle.HasIdentity() ||
             expectedHeroCount <= 0) {
@@ -1025,9 +1100,12 @@ namespace detail {
         // A seed is a one-shot bootstrap operation, so it must not inherit a
         // possibly empty per-frame ObjectManager::Get<T>() memo.
         NightSharpDebug::Logf(
-            "[GameObjects] Seed begin managerHeroes=%d managerMinions=%d",
+            "[GameObjects] Seed begin managerHeroes=%d managerMinions=%d managerTurrets=%d inhibitors=%zu nexuses=%zu",
             expectedHeroCount,
-            expectedMinionCount);
+            expectedMinionCount,
+            expectedTurretCount,
+            expectedInhibitorCount,
+            expectedNexusCount);
         const auto rawObjects = SDK::ObjectManager::GetUncached<GameObject>();
         NightSharpDebug::Logf(
             "[GameObjects] Seed raw enumeration complete count=%zu",
@@ -1064,6 +1142,16 @@ namespace detail {
             for (const auto& minion : managerMinions) {
                 OnObjectAdd(minion, false, false, false, false);
             }
+            // Structures are intentionally absent from rawObjects/general
+            // caches. Seed turrets only through the typed manager so their
+            // dedicated lists are populated without changing legacy
+            // hero/minion/attackable-unit consumers.
+            for (const auto& turret : managerTurrets) {
+                OnObjectAdd(turret, false, false, false, false);
+            }
+            for (const auto& structure : managerStructures) {
+                OnObjectAdd(structure, false, true, false, false);
+            }
 
             seededHeroCount = HeroesList.size();
             for (const auto& seeded : GameObjectsList) {
@@ -1081,12 +1169,18 @@ namespace detail {
         }
 
         NightSharpDebug::Logf(
-            "[GameObjects] Seed raw=%zu heroes=%zu minions=%zu expectedHeroes=%d expectedMinions=%d player=%d complete=%d",
+            "[GameObjects] Seed raw=%zu heroes=%zu minions=%zu turrets=%zu inhibitors=%zu nexuses=%zu expectedHeroes=%d expectedMinions=%d expectedTurrets=%d expectedInhibitors=%zu expectedNexuses=%zu player=%d complete=%d",
             rawObjects.size(),
             seededHeroCount,
             seededMinionCount,
+            TurretsList.size(),
+            InhibitorsList.size(),
+            NexusList.size(),
             expectedHeroCount,
             expectedMinionCount,
+            expectedTurretCount,
+            expectedInhibitorCount,
+            expectedNexusCount,
             playerSeeded ? 1 : 0,
             complete ? 1 : 0);
         return complete;
@@ -1607,38 +1701,43 @@ inline std::vector<AIMinionClient> Pets() { return detail::Snapshot(detail::Pets
 inline std::vector<AIMinionClient> AllyPets() { return detail::Snapshot(detail::AllyPetsList); }
 inline std::vector<AIMinionClient> EnemyPets() { return detail::Snapshot(detail::EnemyPetsList); }
 
-// REMOVED: Turret object contents disabled by user request. Keep API names.
-inline std::vector<AITurretClient> Turrets() { return {}; }
-inline std::vector<AITurretClient> AllyTurrets() { return {}; }
-inline std::vector<AITurretClient> EnemyTurrets() { return {}; }
+// Turret support enabled
+inline std::vector<AITurretClient> Turrets() {
+    return detail::Snapshot(detail::TurretsList);
+}
+inline std::vector<AITurretClient> AllyTurrets() {
+    return detail::Snapshot(detail::AllyTurretsList);
+}
+inline std::vector<AITurretClient> EnemyTurrets() {
+    return detail::Snapshot(detail::EnemyTurretsList);
+}
 
-// REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-// inline std::vector<BarracksDampenerClient> Inhibitors() {
-//     return detail::Snapshot(detail::InhibitorsList);
-// }
-// inline std::vector<BarracksDampenerClient> AllyInhibitors() {
-//     return detail::Snapshot(detail::AllyInhibitorsList);
-// }
-// inline std::vector<BarracksDampenerClient> EnemyInhibitors() {
-//     return detail::Snapshot(detail::EnemyInhibitorsList);
-// }
-//
-// inline std::vector<HQClient> Nexuses() {
-//     return detail::Snapshot(detail::NexusList);
-// }
-// inline HQClient AllyNexus() {
-//     detail::Lock lk(detail::g_mutex);
-//     return detail::AllyNexusObject;
-// }
-// inline HQClient EnemyNexus() {
-//     detail::Lock lk(detail::g_mutex);
-//     return detail::EnemyNexusObject;
-// }
-//
+inline std::vector<BarracksDampenerClient> Inhibitors() {
+    return detail::Snapshot(detail::InhibitorsList);
+}
+inline std::vector<BarracksDampenerClient> AllyInhibitors() {
+    return detail::Snapshot(detail::AllyInhibitorsList);
+}
+inline std::vector<BarracksDampenerClient> EnemyInhibitors() {
+    return detail::Snapshot(detail::EnemyInhibitorsList);
+}
+
+inline std::vector<HQClient> Nexuses() {
+    return detail::Snapshot(detail::NexusList);
+}
+inline HQClient AllyNexus() {
+    detail::Lock lk(detail::g_mutex);
+    return detail::AllyNexusObject;
+}
+inline HQClient EnemyNexus() {
+    detail::Lock lk(detail::g_mutex);
+    return detail::EnemyNexusObject;
+}
+
 // Compatibility aliases (previous API); same snapshot data.
-inline std::vector<AITurretClient> ScanTurrets() { return {}; }
-// inline std::vector<BarracksDampenerClient> ScanInhibitors() { return Inhibitors(); }
-// inline std::vector<HQClient> ScanNexuses() { return Nexuses(); }
+inline std::vector<AITurretClient> ScanTurrets() { return Turrets(); }
+inline std::vector<BarracksDampenerClient> ScanInhibitors() { return Inhibitors(); }
+inline std::vector<HQClient> ScanNexuses() { return Nexuses(); }
 
 // REMOVED: Shop object contents disabled by user request. Keep API names.
 inline std::vector<ShopClient> Shops() { return {}; }
@@ -1698,13 +1797,12 @@ inline std::vector<T> Get() {
         result.insert(result.end(), detail::PetsList.begin(), detail::PetsList.end());
         result.insert(result.end(), detail::ClonesList.begin(), detail::ClonesList.end());
         return result;
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // } else if constexpr (std::is_same_v<T, AITurretClient>) {
-    //     return Turrets();
-    // } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
-    //     return Inhibitors();
-    // } else if constexpr (std::is_same_v<T, HQClient>) {
-    //     return Nexuses();
+    } else if constexpr (std::is_same_v<T, AITurretClient>) {
+        return Turrets();
+    } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
+        return Inhibitors();
+    } else if constexpr (std::is_same_v<T, HQClient>) {
+        return Nexuses();
     } else if constexpr (std::is_same_v<T, EffectEmitter>) {
         return ParticleEmitters();
     } else if constexpr (std::is_same_v<T, MissileClient>) {
@@ -1750,15 +1848,19 @@ namespace SDK::ObjectManager {
     inline std::vector<AIMinionClient> EpicJungle() { return SDK::GameObjects::EpicJungle(); }
     inline std::vector<AIMinionClient> Plants() { return SDK::GameObjects::Plants(); }
     inline std::vector<AIMinionClient> Wards() { return SDK::GameObjects::Wards(); }
-    // REMOVED: Turret object contents disabled by user request. Keep API names.
-    inline std::vector<AITurretClient> Turrets() { return {}; }
-    inline std::vector<AITurretClient> AllyTurrets() { return {}; }
-    inline std::vector<AITurretClient> EnemyTurrets() { return {}; }
+    // Turret support enabled
+    inline std::vector<AITurretClient> Turrets() { return SDK::GameObjects::Turrets(); }
+    inline std::vector<AITurretClient> AllyTurrets() { return SDK::GameObjects::AllyTurrets(); }
+    inline std::vector<AITurretClient> EnemyTurrets() { return SDK::GameObjects::EnemyTurrets(); }
+    inline std::vector<BarracksDampenerClient> Inhibitors() { return SDK::GameObjects::Inhibitors(); }
+    inline std::vector<BarracksDampenerClient> AllyInhibitors() { return SDK::GameObjects::AllyInhibitors(); }
+    inline std::vector<BarracksDampenerClient> EnemyInhibitors() { return SDK::GameObjects::EnemyInhibitors(); }
+    inline std::vector<HQClient> Nexuses() { return SDK::GameObjects::Nexuses(); }
+    inline HQClient AllyNexus() { return SDK::GameObjects::AllyNexus(); }
+    inline HQClient EnemyNexus() { return SDK::GameObjects::EnemyNexus(); }
     inline std::vector<ShopClient> Shops() { return {}; }
     inline std::vector<ShopClient> AllyShops() { return {}; }
     inline std::vector<ShopClient> EnemyShops() { return {}; }
-    // inline std::vector<BarracksDampenerClient> EnemyInhibitors() { return SDK::GameObjects::EnemyInhibitors(); }
-    // inline HQClient EnemyNexus() { return SDK::GameObjects::EnemyNexus(); }
     inline std::vector<MissileClient> Missiles() { return SDK::GameObjects::Missiles(); }
     inline std::vector<GameObject> AllObjects() { return SDK::GameObjects::AllGameObjects(); }
 }
@@ -1793,30 +1895,32 @@ inline int AIBaseClient::CountEnemyHeroesInRange(float range) const {
     return count;
 }
 
-// REMOVED: Turret/Inhibitor/Nexus class disabled by user request
+// Turret support enabled
 inline bool AIBaseClient::IsUnderAllyTurret() const {
-    // for (const auto& turret : GameObjects::AllyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) {
-    //         continue;
-    //     }
-    //     const float range = turret.AttackRange() + turret.BoundingRadius() + BoundingRadius();
-    //     if (turret.Position().DistanceSqr2D(Position()) <= range * range) {
-    //         return true;
-    //     }
-    // }
+    for (const auto& turret : GameObjects::AllyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) {
+            continue;
+        }
+        const float range = std::max(775.0f, turret.AttackRange()) +
+                            turret.BoundingRadius() + BoundingRadius();
+        if (turret.Position().DistanceSqr2D(Position()) <= range * range) {
+            return true;
+        }
+    }
     return false;
 }
 
 inline bool AIBaseClient::IsUnderEnemyTurret() const {
-    // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) {
-    //         continue;
-    //     }
-    //     const float range = turret.AttackRange() + turret.BoundingRadius() + BoundingRadius();
-    //     if (turret.Position().DistanceSqr2D(Position()) <= range * range) {
-    //         return true;
-    //     }
-    // }
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) {
+            continue;
+        }
+        const float range = std::max(775.0f, turret.AttackRange()) +
+                            turret.BoundingRadius() + BoundingRadius();
+        if (turret.Position().DistanceSqr2D(Position()) <= range * range) {
+            return true;
+        }
+    }
     return false;
 }
 

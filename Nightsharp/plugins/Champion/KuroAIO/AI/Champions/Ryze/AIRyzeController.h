@@ -1137,11 +1137,10 @@ inline bool DestinationHasVisionProxy(const Vector3& destination) {
         if (minion.IsValid() && !minion.IsDead() && minion.IsVisible() &&
             minion.Position().Distance2D(destination) <= 850.0f) return true;
     }
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::AllyTurrets()) {
-    //     if (turret.IsValid() && !turret.IsDead() &&
-    //         turret.Position().Distance2D(destination) <= 1100.0f) return true;
-    // }
+    for (const auto& turret : GameObjects::AllyTurrets()) {
+        if (turret.IsValid() && !turret.IsDead() &&
+            turret.Position().Distance2D(destination) <= 1100.0f) return true;
+    }
     for (const auto& ward : GameObjects::Wards()) {
         if (ward.IsValid() && !ward.IsDead() && !ward.IsEnemy() &&
             ward.Position().Distance2D(destination) <= 900.0f) return true;

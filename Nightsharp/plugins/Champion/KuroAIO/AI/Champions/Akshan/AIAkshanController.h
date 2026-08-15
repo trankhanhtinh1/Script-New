@@ -1388,15 +1388,14 @@ inline std::vector<RuntimeRBlocker> CollectRBlockers(
             false, true, enemy.Health(),
         });
     }
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead() || !turret.IsTargetable()) continue;
-    //     blockers.push_back({
-    //         { turret.Position(), std::max(75.0f, turret.BoundingRadius()),
-    //           static_cast<int>(turret.NetworkId()) },
-    //         false, true, turret.Health(),
-    //     });
-    // }
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead() || !turret.IsTargetable()) continue;
+        blockers.push_back({
+            { turret.Position(), std::max(75.0f, turret.BoundingRadius()),
+              static_cast<int>(turret.NetworkId()) },
+            false, true, turret.Health(),
+        });
+    }
     return blockers;
 }
 

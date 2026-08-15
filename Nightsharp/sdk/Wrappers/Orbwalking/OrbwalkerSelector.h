@@ -580,10 +580,9 @@ protected:
             return {};
         }
 
-        // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-        /*
         for (const auto& turret : GameObjects::EnemyTurrets()) {
             if (!turret.IsValid() || turret.IsDead() ||
+                !turret.IsLaneTurret() ||
                 turret.IsFountainTurret() || turret.IsShurimaTurret()) {
                 continue;
             }
@@ -594,6 +593,9 @@ protected:
         }
 
         for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
+            if (!inhibitor.IsValid() || inhibitor.IsDead()) {
+                continue;
+            }
             AttackableUnit target(inhibitor.Handle());
             if (OrbwalkingDetail::IsValidAttackTarget(target, GetAutoAttackRange(target))) {
                 return target;
@@ -601,13 +603,12 @@ protected:
         }
 
         const auto nexus = GameObjects::EnemyNexus();
-        if (nexus.IsValid() && !nexus.HasShield()) {
+        if (nexus.IsValid() && !nexus.IsDead() && !nexus.HasShield()) {
             AttackableUnit target(nexus.Handle());
             if (OrbwalkingDetail::IsValidAttackTarget(target, GetAutoAttackRange(target))) {
                 return target;
             }
         }
-        */
         return {};
     }
 

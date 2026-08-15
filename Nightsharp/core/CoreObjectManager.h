@@ -119,9 +119,7 @@ inline uintptr_t GetManagerAddress(ManagerKind kind) {
     case ManagerKind::Objects: return ctx.objectManager;
     case ManagerKind::Heroes: return ctx.heroManager;
     case ManagerKind::Minions: return ctx.minionManager;
-    case ManagerKind::Turrets:
-        // REMOVED: Turret object manager disabled by user request.
-        return 0;
+    case ManagerKind::Turrets: return ctx.turretManager;
     case ManagerKind::Missiles: return ctx.missileManager;
     default: return 0;
     }
@@ -207,10 +205,18 @@ inline int EnumerateObjectArray(uintptr_t manager, uintptr_t* out, int maxOut) {
             continue;
         }
 
-        // REMOVED: Filter out Turret/Inhibitor/Nexus objects from enumeration
-        // so plugins never receive structure objects (user request).
-        const ObjectType otype = InferLifecycleType(entry);
-        if (//otype == ObjectType::AITurretClient ||
+        // Keep structures out of the legacy/general object cache. Structure
+        // consumers opt in through their typed managers (EnumerateTurrets,
+        // EnumerateAllIncludingStructures) so orbwalker hero/minion state is
+        // not changed merely by enabling structure support.
+        // Structure discovery seeds the exact name-classified type into the
+        // cache before this general walk. Do not name-scan every generic object
+        // here; that would add avoidable work to legacy Hero/Minion consumers.
+        ObjectType otype = TypeCache::Lookup(entry);
+        if (otype == ObjectType::Unknown) {
+            otype = InferType(entry);
+        }
+        if (otype == ObjectType::AITurretClient ||
             otype == ObjectType::BarracksDampenerClient ||
             otype == ObjectType::HQClient) {
             continue;
@@ -323,10 +329,7 @@ inline int EnumerateMinions(uintptr_t* out, int maxOut) {
 }
 
 inline int EnumerateTurrets(uintptr_t* out, int maxOut) {
-    (void)out;
-    (void)maxOut;
-    // REMOVED: Turret object enumeration disabled by user request.
-    return 0;
+    return Enumerate(ManagerKind::Turrets, out, maxOut);
 }
 
 inline int EnumerateMissiles(uintptr_t* out, int maxOut) {
@@ -568,9 +571,8 @@ inline ObjectType InferType(uintptr_t object) {
         result = ObjectType::AIHeroClient;
     } else if (ManagerContains(ManagerKind::Minions, object)) {
         result = ObjectType::AIMinionClient;
-    // REMOVED: Turret object inference disabled by user request.
-    // } else if (ManagerContains(ManagerKind::Turrets, object)) {
-    //     result = ObjectType::AITurretClient;
+    } else if (ManagerContains(ManagerKind::Turrets, object)) {
+        result = ObjectType::AITurretClient;
     } else if (ManagerContains(ManagerKind::Missiles, object)) {
         result = ObjectType::MissileClient;
     }
@@ -586,14 +588,6 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
     ObjectType type = InferType(object);
     if (type != ObjectType::GameObject && type != ObjectType::Unknown) {
         return type;
-    }
-
-    // Check cache again before the expensive name-based scan.
-    // (InferType stores non-Unknown results, so a cache hit here means the
-    // name scan already ran and produced a specific type on a prior frame.)
-    const ObjectType cached = TypeCache::Lookup(object);
-    if (cached != ObjectType::Unknown) {
-        return cached;
     }
 
     // MissileClient has no verified direct predicate in this build.
@@ -616,25 +610,27 @@ inline ObjectType InferLifecycleType(uintptr_t object) {
         object,
         objectName,
         static_cast<int>(sizeof(objectName)));
-    const char* name = characterName[0] ? characterName : objectName;
-
     ObjectType resolved = type;
-    if (Core::Objects::ContainsInsensitive(name, "barracksdampener") ||
-        Core::Objects::ContainsInsensitive(name, "inhibitor")) {
-        resolved = ObjectType::BarracksDampenerClient;
-    } else if (Core::Objects::ContainsInsensitive(name, "nexus") ||
-               Core::Objects::ContainsInsensitive(name, "hq")) {
-        resolved = ObjectType::HQClient;
+    const ObjectType structureType = Core::Objects::StructureTypeFromNames(
+        objectName,
+        characterName);
+    if (structureType != ObjectType::Unknown) {
+        resolved = structureType;
     }
-    if (Core::Objects::ContainsInsensitive(name, "shop")) {
+
+    const char* name = characterName[0] ? characterName : objectName;
+    if (resolved == ObjectType::GameObject &&
+        Core::Objects::ContainsInsensitive(name, "shop")) {
         //resolved = ObjectType::ShopClient;
-    } else if (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
-               Core::Objects::ContainsInsensitive(name, "spawn_point")) {
+    } else if (resolved == ObjectType::GameObject &&
+               (Core::Objects::ContainsInsensitive(name, "spawnpoint") ||
+                Core::Objects::ContainsInsensitive(name, "spawn_point"))) {
         resolved = ObjectType::Obj_SpawnPoint;
-    } else if (Core::Objects::ContainsInsensitive(name, "effect") ||
-               Core::Objects::ContainsInsensitive(name, "emitter") ||
-               Core::Objects::ContainsInsensitive(name, "particle") ||
-               Core::Objects::ContainsInsensitive(name, "windwall")) {
+    } else if (resolved == ObjectType::GameObject &&
+               (Core::Objects::ContainsInsensitive(name, "effect") ||
+                Core::Objects::ContainsInsensitive(name, "emitter") ||
+                Core::Objects::ContainsInsensitive(name, "particle") ||
+                Core::Objects::ContainsInsensitive(name, "windwall"))) {
         resolved = ObjectType::EffectEmitter;
     }
 

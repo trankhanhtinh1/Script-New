@@ -4,6 +4,7 @@
 #include "CoreAttackableUnit.h"
 #include "CoreBypass.h"
 #include "Globals.h"
+#include "StructureNamePolicy.h"
 #include "Vector.h"
 #include "offset.h"
 #include "spoof/spoofcall.h"
@@ -159,14 +160,13 @@ inline bool IsAttackable(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    //case ObjectType::AITurretClient:
-    // REMOVED: Turret/Shop disabled by user request.
-    // case ObjectType::AITurretCommon:
+    case ObjectType::AITurretClient:
+    case ObjectType::AITurretCommon:
     case ObjectType::AnimatedBuildingClient:
     case ObjectType::Barracks:
-    //case ObjectType::BarracksDampenerClient:
+    case ObjectType::BarracksDampenerClient:
     case ObjectType::BuildingClient:
-    //case ObjectType::HQClient:
+    case ObjectType::HQClient:
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
     case ObjectType::Pawn:
@@ -181,9 +181,8 @@ inline bool IsAIBase(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    //case ObjectType::AITurretClient:
-    // REMOVED: Turret/Shop disabled by user request.
-    // case ObjectType::AITurretCommon:
+    case ObjectType::AITurretClient:
+    case ObjectType::AITurretCommon:
     case ObjectType::LevelPropAIClient:
     case ObjectType::NeutralMinionCampClient:
     case ObjectType::Pawn:
@@ -201,7 +200,7 @@ inline bool IsLifecycleType(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient:
     case ObjectType::AIMinionClient:
-    //case ObjectType::AITurretClient:
+    case ObjectType::AITurretClient:
     case ObjectType::MissileClient:
     case ObjectType::BarracksDampenerClient:
     case ObjectType::HQClient:
@@ -234,6 +233,30 @@ inline bool ContainsInsensitive(const char* value, const char* needle) {
         }
     );
     return it != v.end();
+}
+
+// Structure classification deliberately uses strict runtime-name patterns.
+// Broad substring matches (for example, any name containing "Nexus") also
+// match particle/audio objects and the non-attackable Barracks spawner.
+inline bool IsBarracksDampenerName(const char* value) {
+    return ::Core::StructureNamePolicy::IsBarracksDampenerName(value);
+}
+
+inline bool IsNexusName(const char* value) {
+    return ::Core::StructureNamePolicy::IsNexusName(value);
+}
+
+inline ObjectType StructureTypeFromNames(
+    const char* objectName,
+    const char* characterName) {
+    if (IsBarracksDampenerName(objectName) ||
+        IsBarracksDampenerName(characterName)) {
+        return ObjectType::BarracksDampenerClient;
+    }
+    if (IsNexusName(objectName) || IsNexusName(characterName)) {
+        return ObjectType::HQClient;
+    }
+    return ObjectType::Unknown;
 }
 
 inline bool IsClone(const ObjectSnapshot& snapshot) {
@@ -301,9 +324,9 @@ inline const char* TypeName(ObjectType type) {
     switch (type) {
     case ObjectType::AIHeroClient: return "AIHeroClient";
     case ObjectType::AIMinionClient: return "AIMinionClient";
-    //case ObjectType::AITurretClient: return "AITurretClient";
-    //case ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
-    //case ObjectType::HQClient: return "HQClient";
+    case ObjectType::AITurretClient: return "AITurretClient";
+    case ObjectType::BarracksDampenerClient: return "BarracksDampenerClient";
+    case ObjectType::HQClient: return "HQClient";
     case ObjectType::MissileClient: return "MissileClient";
     case ObjectType::EffectEmitter: return "EffectEmitter";
     case ObjectType::Obj_SpawnPoint: return "Obj_SpawnPoint";

@@ -1267,17 +1267,16 @@ inline std::vector<StasisUnit> BuildStasisUnits(float predictionSeconds) {
         unit.Monster = unit.EpicMonster = unit.Valid = true;
         units.push_back(unit);
     }
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) continue;
-    //     StasisUnit unit{};
-    //     unit.Position = unit.PredictedPosition = turret.Position();
-    //     unit.Radius = turret.BoundingRadius();
-    //     unit.Id = static_cast<int>(turret.NetworkId());
-    //     unit.Team = TeamRelation::Enemy;
-    //     unit.Turret = unit.Valid = true;
-    //     units.push_back(unit);
-    // }
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) continue;
+        StasisUnit unit{};
+        unit.Position = unit.PredictedPosition = turret.Position();
+        unit.Radius = turret.BoundingRadius();
+        unit.Id = static_cast<int>(turret.NetworkId());
+        unit.Team = TeamRelation::Enemy;
+        unit.Turret = unit.Valid = true;
+        units.push_back(unit);
+    }
     for (const auto& plant : GameObjects::Plants()) {
         if (!plant.IsValid() || plant.IsDead()) continue;
         StasisUnit unit{};
@@ -1426,21 +1425,20 @@ inline RPlan BuildDiveTurretRPlan() {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) ||
         !Key(RMenu, "DiveTurret", false)) return best;
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead() ||
-    //         player.Position().Distance2D(turret.Position()) > kRCastRange) {
-    //         continue;
-    //     }
-    //     if (Engine::CountAlliesAt(turret.Position(), 900.0f) < 1) continue;
-    //     StasisContext context{};
-    //     context.DiveTower = true;
-    //     context.MaximumFriendlyGrief = 0;
-    //     RPlan plan = EvaluateRPlanAt(
-    //         turret.Position(), static_cast<int>(turret.NetworkId()),
-    //         RPurpose::DiveTurret, context, true);
-    //     if (BetterRPlan(plan.Evaluation, best.Evaluation)) best = plan;
-    // }
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead() ||
+            player.Position().Distance2D(turret.Position()) > kRCastRange) {
+            continue;
+        }
+        if (Engine::CountAlliesAt(turret.Position(), 900.0f) < 1) continue;
+        StasisContext context{};
+        context.DiveTower = true;
+        context.MaximumFriendlyGrief = 0;
+        RPlan plan = EvaluateRPlanAt(
+            turret.Position(), static_cast<int>(turret.NetworkId()),
+            RPurpose::DiveTurret, context, true);
+        if (BetterRPlan(plan.Evaluation, best.Evaluation)) best = plan;
+    }
     return best;
 }
 

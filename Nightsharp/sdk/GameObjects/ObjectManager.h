@@ -21,15 +21,14 @@ namespace detail {
             return ::Core::Objects::ObjectType::AIHeroClient;
         } else if constexpr (std::is_same_v<T, AIMinionClient>) {
             return ::Core::Objects::ObjectType::AIMinionClient;
-        // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
-        // } else if constexpr (std::is_same_v<T, AITurretClient>) {
-        //     return ::Core::Objects::ObjectType::AITurretClient;
+        } else if constexpr (std::is_same_v<T, AITurretClient>) {
+            return ::Core::Objects::ObjectType::AITurretClient;
         } else if constexpr (std::is_same_v<T, MissileClient>) {
             return ::Core::Objects::ObjectType::MissileClient;
-        // } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
-        //     return ::Core::Objects::ObjectType::BarracksDampenerClient;
-        // } else if constexpr (std::is_same_v<T, HQClient>) {
-        //     return ::Core::Objects::ObjectType::HQClient;
+        } else if constexpr (std::is_same_v<T, BarracksDampenerClient>) {
+            return ::Core::Objects::ObjectType::BarracksDampenerClient;
+        } else if constexpr (std::is_same_v<T, HQClient>) {
+            return ::Core::Objects::ObjectType::HQClient;
         // } else if constexpr (std::is_same_v<T, ShopClient>) {
         //     return ::Core::Objects::ObjectType::ShopClient;
         } else if constexpr (std::is_same_v<T, Obj_SpawnPoint>) {
@@ -92,11 +91,14 @@ namespace detail {
             count = ::Core::ObjectManager::EnumerateHeroes(entries.data(), 8192);
         } else if constexpr (std::is_same_v<T, AIMinionClient>) {
             count = ::Core::ObjectManager::EnumerateMinions(entries.data(), 8192);
-        // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
-        // } else if constexpr (std::is_same_v<T, AITurretClient>) {
-        //     count = ::Core::ObjectManager::EnumerateTurrets(entries, 8192);
+        } else if constexpr (std::is_same_v<T, AITurretClient>) {
+            count = ::Core::ObjectManager::EnumerateTurrets(entries.data(), 8192);
         } else if constexpr (std::is_same_v<T, MissileClient>) {
             count = ::Core::ObjectManager::EnumerateMissiles(entries.data(), 8192);
+        } else if constexpr (std::is_same_v<T, BarracksDampenerClient> ||
+                             std::is_same_v<T, HQClient>) {
+            count = ::Core::ObjectManager::EnumerateAllIncludingStructures(
+                entries.data(), 8192);
         }
 
         result.reserve(count > 0 ? static_cast<std::size_t>(count) : 0);
@@ -165,8 +167,9 @@ template <typename T>
 inline std::vector<T> GetUncached() {
     if constexpr (std::is_same_v<T, AIHeroClient> ||
                   std::is_same_v<T, AIMinionClient> ||
-                  // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
-                  // std::is_same_v<T, AITurretClient> ||
+                  std::is_same_v<T, AITurretClient> ||
+                  std::is_same_v<T, BarracksDampenerClient> ||
+                  std::is_same_v<T, HQClient> ||
                   std::is_same_v<T, MissileClient>) {
         return detail::EnumerateSpecificManager<T>();
     } else {

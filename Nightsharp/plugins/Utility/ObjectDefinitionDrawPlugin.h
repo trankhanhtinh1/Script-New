@@ -733,20 +733,14 @@ private:
             break;
         }
         case ModeInhibitors:
-            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-            /*
             for (const auto& object : SDK::GameObjects::ScanInhibitors()) {
                 AddObjectRow(object, "Inhibitor", 0xFFFF8A3Du);
             }
-            */
             break;
         case ModeNexus:
-            // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-            /*
             for (const auto& object : SDK::GameObjects::ScanNexuses()) {
                 AddObjectRow(object, "Nexus", 0xFFFF3D9Au);
             }
-            */
             break;
         case ModeMissiles:
             PruneMissileRows(GetTickCount());

@@ -3,18 +3,6 @@
 #include "../IPlugin.h"
 #include "../../SDK/SDK.h"
 
-namespace SDK::GameObjects::detail {
-    // inline std::vector<AITurretClient> TurretsList;
-    // inline std::vector<AITurretClient> AllyTurretsList;
-    // inline std::vector<AITurretClient> EnemyTurretsList;
-    inline std::vector<BarracksDampenerClient> InhibitorsList;
-    inline std::vector<BarracksDampenerClient> AllyInhibitorsList;
-    inline std::vector<BarracksDampenerClient> EnemyInhibitorsList;
-    inline std::vector<HQClient> NexusList;
-    inline HQClient AllyNexusObject;
-    inline HQClient EnemyNexusObject;
-}
-
 #include "../../DebugLog.h"
 #include "../../imgui/imgui.h"
 

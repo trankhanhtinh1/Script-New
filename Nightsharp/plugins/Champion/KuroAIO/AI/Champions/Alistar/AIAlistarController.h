@@ -274,17 +274,16 @@ inline Vector3 AlliedDisplacementGoal(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     Vector3 bestTurret{};
     float bestTurretDistance = FLT_MAX;
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::AllyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) continue;
-    //     const float distance = target.IsValid()
-    //         ? turret.Position().Distance2D(target.Position())
-    //         : turret.Position().Distance2D(player.Position());
-    //     if (distance <= 1800.0f && distance < bestTurretDistance) {
-    //         bestTurret = turret.Position();
-    //         bestTurretDistance = distance;
-    //     }
-    // }
+    for (const auto& turret : GameObjects::AllyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) continue;
+        const float distance = target.IsValid()
+            ? turret.Position().Distance2D(target.Position())
+            : turret.Position().Distance2D(player.Position());
+        if (distance <= 1800.0f && distance < bestTurretDistance) {
+            bestTurret = turret.Position();
+            bestTurretDistance = distance;
+        }
+    }
     if (bestTurret.IsValid() && !bestTurret.IsZero()) return bestTurret;
 
     std::vector<Vec3> points;

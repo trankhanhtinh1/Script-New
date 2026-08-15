@@ -33,8 +33,9 @@
 // â”€â”€ Master switch: CRC Bypass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // 0 = DISABLED. CRCBypass::Install / Uninstall trá»Ÿ thÃ nh no-op.
 // 1 = ENABLED. Shadow Copy + NOP JNE bypass hoáº¡t Ä‘á»™ng.
+// 0 = DISABLED. Tạm thời disable do crash sau ~4 phút (Packman detect byte thay đổi).
 #ifndef NIGHTSHARP_ENABLE_CRC_BYPASS
-#define NIGHTSHARP_ENABLE_CRC_BYPASS 1
+#define NIGHTSHARP_ENABLE_CRC_BYPASS 0
 #endif
 
 // â”€â”€ Logging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1203,6 +1204,10 @@ inline volatile LONG g_shadowCreated    = 0;
 inline uintptr_t g_crcJneAddr    = 0;
 inline uint8_t   g_crcJneOrig[6] = {};
 
+// NOP int3 crash function state
+inline uintptr_t g_int3CrashAddr = 0;
+inline uint8_t   g_int3CrashOrig = 0;
+
 // Shadow copy state
 inline void*     g_shadowBase   = nullptr;
 inline size_t    g_shadowSize   = 0;
@@ -1255,36 +1260,113 @@ inline void DestroyShadowCopy() {
 inline bool InstallPrimary() {
     if (InterlockedCompareExchange(&g_primaryInstalled, 1, 0) != 0) return true;
 
+    // Direct file log — bypass DbgLogFmt/g_logEnabled issues
+    struct CrcDbgLog {
+        static void Log(const char* fmt, ...) {
+            char buf[1024];
+            va_list args; va_start(args, fmt);
+            int n = _vsnprintf(buf, sizeof(buf), fmt, args);
+            va_end(args);
+            if (n < 0) return;
+            HANDLE h = CreateFileA("C:\\Users\\Public\\crc_debug.txt",
+                FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE) return;
+            DWORD w; WriteFile(h, buf, n, &w, nullptr);
+            CloseHandle(h);
+            OutputDebugStringA(buf);
+        }
+    };
+
+    CrcDbgLog::Log("[CRC] InstallPrimary: ENTER  g_stubBase=0x%llX\r\n",
+                   (unsigned long long)g_stubBase);
+
     const uint8_t* stubBase = reinterpret_cast<const uint8_t*>(g_stubBase);
-    if (!stubBase) { g_primaryInstalled = 0; return false; }
+    if (!stubBase) {
+        CrcDbgLog::Log("[CRC] InstallPrimary: FAIL stubBase is null\r\n");
+        g_primaryInstalled = 0; return false;
+    }
+
+    // Lấy .text section size từ PE header để xác định scan range chính xác
+    size_t scanRange = 0x200000;  // fallback 2MB
+    auto dosHdr = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_stubBase);
+    if (dosHdr->e_magic == IMAGE_DOS_SIGNATURE) {
+        CrcDbgLog::Log("[CRC] PE: DOS sig OK  e_lfanew=0x%X\r\n",
+                       (unsigned)dosHdr->e_lfanew);
+        auto ntHdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_stubBase + dosHdr->e_lfanew);
+        if (ntHdr->Signature == IMAGE_NT_SIGNATURE) {
+            CrcDbgLog::Log("[CRC] PE: NT sig OK  sections=%u\r\n",
+                           (unsigned)ntHdr->FileHeader.NumberOfSections);
+            auto secHdr = IMAGE_FIRST_SECTION(ntHdr);
+            for (WORD s = 0; s < ntHdr->FileHeader.NumberOfSections; ++s) {
+                char name[9] = {};
+                std::memcpy(name, secHdr[s].Name, 8);
+                CrcDbgLog::Log("[CRC] PE: section[%u] name='%s' VA=0x%X size=0x%X\r\n",
+                               (unsigned)s, name,
+                               (unsigned)secHdr[s].VirtualAddress,
+                               (unsigned)secHdr[s].Misc.VirtualSize);
+                if (secHdr[s].Name[0] == '.' && secHdr[s].Name[1] == 't' &&
+                    secHdr[s].Name[2] == 'e' && secHdr[s].Name[3] == 'x' &&
+                    secHdr[s].Name[4] == 't') {
+                    scanRange = secHdr[s].VirtualAddress + secHdr[s].Misc.VirtualSize;
+                    CrcDbgLog::Log("[CRC] .text section: VA=0x%X size=0x%X scanRange=0x%zX\r\n",
+                              (unsigned)secHdr[s].VirtualAddress,
+                              (unsigned)secHdr[s].Misc.VirtualSize, scanRange);
+                    break;
+                }
+            }
+        } else {
+            CrcDbgLog::Log("[CRC] PE: NT sig BAD  sig=0x%X\r\n",
+                           (unsigned)ntHdr->Signature);
+        }
+    } else {
+        CrcDbgLog::Log("[CRC] PE: DOS sig BAD  magic=0x%X\r\n",
+                       (unsigned)dosHdr->e_magic);
+    }
+
+    CrcDbgLog::Log("[CRC] NOP JNE: scanning stub.dll 0x0-0x%zX (%.1f MB)\r\n",
+              scanRange, (double)scanRange / (1024.0 * 1024.0));
 
     // Scan code section cho pattern: cmp rax,[rip+disp32] + jne
     // 48 3B 05 ?? ?? ?? ?? 0F 85
-    for (unsigned i = 0; i + 9 <= 0x20000; ++i) {
+    // offset:  0  1  2  3  4  5  6  7  8
+    int matchCount = 0;
+    for (size_t i = 0; i + 9 <= scanRange; ++i) {
         if (stubBase[i]     != 0x48) continue;
         if (stubBase[i+1]   != 0x3B) continue;
         if (stubBase[i+2]   != 0x05) continue;
-        if (stubBase[i+8]   != 0x0F) continue;
-        if (stubBase[i+9]   != 0x85) continue;
+        if (stubBase[i+7]   != 0x0F) continue;
+        if (stubBase[i+8]   != 0x85) continue;
 
-        // jne táº¡i match + 7
+        ++matchCount;
+        CrcDbgLog::Log("[CRC] NOP JNE: match #%d at stub.dll+0x%zX\r\n",
+                       matchCount, i);
+
+        // jne tại match + 7
         g_crcJneAddr = reinterpret_cast<uintptr_t>(stubBase) + i + 7;
         std::memcpy(g_crcJneOrig, reinterpret_cast<const void*>(g_crcJneAddr), 6);
 
-        DbgLogFmt("[CRC] NOP JNE: found at stub.dll+0x%X (abs 0x%llX)\r\n",
-                  i + 7, (unsigned long long)g_crcJneAddr);
+        CrcDbgLog::Log("[CRC] NOP JNE: found at stub.dll+0x%zX (abs 0x%llX) orig=%02X %02X %02X %02X %02X %02X\r\n",
+                  i + 7, (unsigned long long)g_crcJneAddr,
+                  g_crcJneOrig[0], g_crcJneOrig[1], g_crcJneOrig[2],
+                  g_crcJneOrig[3], g_crcJneOrig[4], g_crcJneOrig[5]);
 
-        // Patch: jne â†’ nop x6
+        // Patch: jne → nop x6
         DWORD oldProt = 0;
         BOOL protOk = DirectSyscall::VirtualProtectDirect(
             reinterpret_cast<void*>(g_crcJneAddr), 6,
             PAGE_EXECUTE_READWRITE, &oldProt);
+        CrcDbgLog::Log("[CRC] VirtualProtectDirect: protOk=%d oldProt=0x%X\r\n",
+                       (int)protOk, (unsigned)oldProt);
         if (!protOk) {
             protOk = VirtualProtect(reinterpret_cast<void*>(g_crcJneAddr), 6,
                                     PAGE_EXECUTE_READWRITE, &oldProt);
+            CrcDbgLog::Log("[CRC] VirtualProtect fallback: protOk=%d oldProt=0x%X\r\n",
+                           (int)protOk, (unsigned)oldProt);
         }
         if (!protOk) {
-            DbgLogFmt("[CRC] NOP JNE: VirtualProtect FAIL\r\n");
+            CrcDbgLog::Log("[CRC] NOP JNE: VirtualProtect FAIL gle=%lu\r\n",
+                           GetLastError());
             g_crcJneAddr = 0;
             g_primaryInstalled = 0;
             return false;
@@ -1297,12 +1379,123 @@ inline bool InstallPrimary() {
         FlushInstructionCache(GetCurrentProcess(),
                               reinterpret_cast<void*>(g_crcJneAddr), 6);
 
-        DbgLogFmt("[CRC] NOP JNE: patched 6 bytes â†’ NOP (mismatch handler unreachable)\r\n");
+        // Read back to verify
+        uint8_t verify[6] = {};
+        std::memcpy(verify, reinterpret_cast<const void*>(g_crcJneAddr), 6);
+        CrcDbgLog::Log("[CRC] NOP JNE: patched 6 bytes verify=%02X %02X %02X %02X %02X %02X\r\n",
+                       verify[0], verify[1], verify[2], verify[3], verify[4], verify[5]);
         return true;
     }
 
-    DbgLogFmt("[CRC] NOP JNE: pattern NOT FOUND in first 128KB\r\n");
+    CrcDbgLog::Log("[CRC] NOP JNE: pattern NOT FOUND in scan range 0x%zX  matchCount=%d\r\n",
+                   scanRange, matchCount);
     g_primaryInstalled = 0;
+    return false;
+}
+
+// ── NOP int3 crash function ──────────────────────────────────────────
+// Packman có 1 function `int3; ret` (CC C3) tại cuối .text section.
+// Được gọi trực tiếp từ periodic CRC check (mỗi ~4 phút) khi phát hiện
+// byte thay đổi trong stub.dll hoặc League of Legends.exe .text.
+//
+// Pattern unique: CC C3 66 8C D0 C3 53 9C 48 81 0C 24
+//   CC          = int3
+//   C3          = ret
+//   66 8C D0    = mov ax, ss  (next function prologue)
+//   C3          = ret
+//   53          = push rbx
+//   9C          = pushfd
+//   48 81 0C 24 = or [rsp], imm32
+//
+// NOP chỉ 1 byte (CC → 90) → function thành `nop; ret`.
+// Tất cả callers sẽ return thay vì crash.
+inline bool NopInt3Crash() {
+    if (!g_stubBase) return false;
+
+    struct Int3DbgLog {
+        static void Log(const char* fmt, ...) {
+            char buf[1024];
+            va_list args; va_start(args, fmt);
+            int n = _vsnprintf(buf, sizeof(buf), fmt, args);
+            va_end(args);
+            if (n < 0) return;
+            HANDLE h = CreateFileA("C:\\Users\\Public\\crc_debug.txt",
+                FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE) return;
+            DWORD w; WriteFile(h, buf, n, &w, nullptr);
+            CloseHandle(h);
+        }
+    };
+
+    const uint8_t* stubBase = reinterpret_cast<const uint8_t*>(g_stubBase);
+
+    // Lấy .text section range
+    size_t scanRange = 0x200000;
+    auto dosHdr = reinterpret_cast<const IMAGE_DOS_HEADER*>(g_stubBase);
+    if (dosHdr->e_magic == IMAGE_DOS_SIGNATURE) {
+        auto ntHdr = reinterpret_cast<const IMAGE_NT_HEADERS64*>(g_stubBase + dosHdr->e_lfanew);
+        if (ntHdr->Signature == IMAGE_NT_SIGNATURE) {
+            auto secHdr = IMAGE_FIRST_SECTION(ntHdr);
+            for (WORD s = 0; s < ntHdr->FileHeader.NumberOfSections; ++s) {
+                if (secHdr[s].Name[0] == '.' && secHdr[s].Name[1] == 't' &&
+                    secHdr[s].Name[2] == 'e' && secHdr[s].Name[3] == 'x' &&
+                    secHdr[s].Name[4] == 't') {
+                    scanRange = secHdr[s].VirtualAddress + secHdr[s].Misc.VirtualSize;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Pattern: CC C3 66 8C D0 C3 53 9C 48 81 0C 24
+    // int3; ret; mov ax,ss; ret; push rbx; pushfd; or [rsp],imm32
+    const uint8_t pattern[] = { 0xCC, 0xC3, 0x66, 0x8C, 0xD0, 0xC3, 0x53, 0x9C, 0x48, 0x81, 0x0C, 0x24 };
+    const size_t patLen = sizeof(pattern);
+
+    Int3DbgLog::Log("[CRC] NopInt3Crash: scanning stub.dll 0x0-0x%zX for int3 crash function\r\n", scanRange);
+
+    for (size_t i = 0; i + patLen <= scanRange; ++i) {
+        bool match = true;
+        for (size_t j = 0; j < patLen; ++j) {
+            if (stubBase[i + j] != pattern[j]) { match = false; break; }
+        }
+        if (!match) continue;
+
+        g_int3CrashAddr = reinterpret_cast<uintptr_t>(stubBase) + i;
+        g_int3CrashOrig = 0xCC;
+
+        DWORD oldProt = 0;
+        BOOL protOk = DirectSyscall::VirtualProtectDirect(
+            reinterpret_cast<void*>(g_int3CrashAddr), 1,
+            PAGE_EXECUTE_READWRITE, &oldProt);
+        if (!protOk) {
+            protOk = VirtualProtect(reinterpret_cast<void*>(g_int3CrashAddr), 1,
+                                    PAGE_EXECUTE_READWRITE, &oldProt);
+        }
+        if (!protOk) {
+            Int3DbgLog::Log("[CRC] NopInt3Crash: VirtualProtect FAIL gle=%lu\r\n", GetLastError());
+            g_int3CrashAddr = 0;
+            return false;
+        }
+
+        uint8_t nop = 0x90;
+        std::memcpy(reinterpret_cast<void*>(g_int3CrashAddr), &nop, 1);
+        DWORD dummy = 0;
+        DirectSyscall::VirtualProtectDirect(
+            reinterpret_cast<void*>(g_int3CrashAddr), 1, oldProt, &dummy);
+        FlushInstructionCache(GetCurrentProcess(),
+                              reinterpret_cast<void*>(g_int3CrashAddr), 1);
+
+        // Verify
+        uint8_t verify = 0;
+        std::memcpy(&verify, reinterpret_cast<const void*>(g_int3CrashAddr), 1);
+        Int3DbgLog::Log("[CRC] NopInt3Crash: patched int3 at stub.dll+0x%zX (abs 0x%llX) verify=%02X\r\n",
+                        i, (unsigned long long)g_int3CrashAddr, verify);
+        return true;
+    }
+
+    Int3DbgLog::Log("[CRC] NopInt3Crash: pattern NOT FOUND\r\n");
     return false;
 }
 
@@ -1346,7 +1539,10 @@ inline bool Install() {
         DbgLogFmt("[CRC] Install: InstallPrimary FAIL â€” shadow copy available as fallback\r\n");
         // KhÃ´ng return false â€” shadow copy váº«n cÃ³ thá»ƒ dÃ¹ng
     }
-    DbgLogFmt("[CRC] === CRC Bypass Installed (Shadow Copy + NOP JNE) ===\r\n");
+    // NopAllInt3();  // DISABLED: NOP all CC C3 causes crash (breaks function padding)
+    // 3. NOP int3 crash function — Packman gọi int3 trực tiếp từ periodic check
+    NopInt3Crash();
+    DbgLogFmt("[CRC] === CRC Bypass Installed (Shadow Copy + NOP JNE + NOP int3crash) ===\r\n");
     return true;
 #endif
 }
@@ -1355,6 +1551,19 @@ inline void Uninstall() {
 #if !NIGHTSHARP_ENABLE_CRC_BYPASS
     return;
 #else
+    // Restore int3 crash function
+    if (g_int3CrashAddr) {
+        DWORD oldProt = 0;
+        if (DirectSyscall::VirtualProtectDirect(
+                reinterpret_cast<void*>(g_int3CrashAddr), 1,
+                PAGE_EXECUTE_READWRITE, &oldProt)) {
+            std::memcpy(reinterpret_cast<void*>(g_int3CrashAddr), &g_int3CrashOrig, 1);
+            DWORD dummy = 0;
+            DirectSyscall::VirtualProtectDirect(
+                reinterpret_cast<void*>(g_int3CrashAddr), 1, oldProt, &dummy);
+        }
+        g_int3CrashAddr = 0;
+    }
     UninstallPrimary();
     DestroyShadowCopy();
     DbgLogFmt("[CRC] === CRC Bypass Uninstalled ===\r\n");

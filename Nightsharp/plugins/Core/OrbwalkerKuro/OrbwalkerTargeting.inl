@@ -1198,24 +1198,34 @@ inline AttackableUnit OrbwalkerBase::GetTarget() {
 
     if (mode == OrbwalkingMode::LaneClear &&
         (!menu_.PrioritizeMinions() || minions.empty())) {
-        // for (const auto& turret : GameObjects::EnemyTurrets()) {
-        //     const AttackableUnit target(turret.Handle());
-        //     if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
-        //         return cacheTarget(target);
-        //     }
-        // }
-        // for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
-        //     const AttackableUnit target(inhibitor.Handle());
-        //     if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
-        //         return cacheTarget(target);
-        //     }
-        // }
-        // const auto nexus = GameObjects::EnemyNexus();
-        // const AttackableUnit nexusTarget(nexus.Handle());
-        // if (OrbwalkingDetail::IsValidCurrentAttackTarget(
-        //         player, nexusTarget)) {
-        //     return cacheTarget(nexusTarget);
-        // }
+        for (const auto& turret : GameObjects::EnemyTurrets()) {
+            if (!turret.IsValid() || turret.IsDead() ||
+                !turret.IsLaneTurret() || turret.IsFountainTurret() ||
+                turret.IsShurimaTurret()) {
+                continue;
+            }
+            const AttackableUnit target(turret.Handle());
+            if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
+                return cacheTarget(target);
+            }
+        }
+        for (const auto& inhibitor : GameObjects::EnemyInhibitors()) {
+            if (!inhibitor.IsValid() || inhibitor.IsDead()) {
+                continue;
+            }
+            const AttackableUnit target(inhibitor.Handle());
+            if (OrbwalkingDetail::IsValidCurrentAttackTarget(player, target)) {
+                return cacheTarget(target);
+            }
+        }
+        const auto nexus = GameObjects::EnemyNexus();
+        if (nexus.IsValid() && !nexus.IsDead() && !nexus.HasShield()) {
+            const AttackableUnit nexusTarget(nexus.Handle());
+            if (OrbwalkingDetail::IsValidCurrentAttackTarget(
+                    player, nexusTarget)) {
+                return cacheTarget(nexusTarget);
+            }
+        }
     }
 
     if (mode != OrbwalkingMode::LastHit) {

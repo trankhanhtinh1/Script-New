@@ -1335,29 +1335,36 @@ private:
             return forceTarget_;
         }
 
-        // REMOVED: Turret/structure targeting disabled by user request.
-        /*
         if (mode == SDK::OrbwalkingMode::LaneClear &&
             (!PrioritizeMinions() || minions.empty())) {
             for (const auto& turret : SDK::GameObjects::EnemyTurrets()) {
+                if (!turret.IsValid() || turret.IsDead() ||
+                    !turret.IsLaneTurret() || turret.IsFountainTurret() ||
+                    turret.IsShurimaTurret()) {
+                    continue;
+                }
                 const SDK::AttackableUnit target(turret.Handle());
                 if (InAutoAttackRange(target)) {
                     return target;
                 }
             }
             for (const auto& inhibitor : SDK::GameObjects::EnemyInhibitors()) {
+                if (!inhibitor.IsValid() || inhibitor.IsDead()) {
+                    continue;
+                }
                 const SDK::AttackableUnit target(inhibitor.Handle());
                 if (InAutoAttackRange(target)) {
                     return target;
                 }
             }
             const auto nexus = SDK::GameObjects::EnemyNexus();
-            const SDK::AttackableUnit nexusTarget(nexus.Handle());
-            if (InAutoAttackRange(nexusTarget)) {
-                return nexusTarget;
+            if (nexus.IsValid() && !nexus.IsDead() && !nexus.HasShield()) {
+                const SDK::AttackableUnit nexusTarget(nexus.Handle());
+                if (InAutoAttackRange(nexusTarget)) {
+                    return nexusTarget;
+                }
             }
         }
-        */
 
         if (mode != SDK::OrbwalkingMode::LastHit) {
             const SDK::AttackableUnit hero = GetHeroTarget();

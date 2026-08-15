@@ -1,12 +1,12 @@
 #pragma once
 
 // ============================================================================
-// StructureScan.h - SEH-guarded, name-based detection of turret / inhibitor /
-// nexus objects, with crash-dump + breadcrumb instrumentation.
+// StructureScan.h - SEH-guarded, runtime-name detection of inhibitor / nexus
+// objects, with crash-dump + breadcrumb instrumentation.
 // ----------------------------------------------------------------------------
-// Structures are not tracked by any typed manager, so they are found by walking
-// the full object array and classifying each object by its model name
-// (All::Name) and character name (All::CharacterName). The reads that touch the
+// Inhibitors and nexus are not tracked by a dedicated manager, so they are found
+// by walking the full object array and matching strict object/character names.
+// The reads that touch the
 // live game object are wrapped in a dedicated __try/__except so that:
 //   * a faulting read (e.g. an object freed by the game between enumeration and
 //     read) is caught instead of taking down the whole process,
@@ -20,7 +20,6 @@
 // ============================================================================
 
 #include "../../core/Globals.h"
-#include "../../core/offset.h"
 #include "../../core/CoreObjects.h"
 #include "../../core/CoreObjectManager.h"
 #include "../../DebugLog.h"
@@ -48,30 +47,17 @@ inline const char* StructureKindName(StructureKind kind) {
     }
 }
 
-// Classify an object purely by its C++ vtable pointer (obj+0x0). This is how the
-// game (and EnsoulSharp, via `sender as AITurretClient`) actually distinguishes
-// object types: every turret shares one vtable, every inhibitor another, every
-// nexus another. Particle / audio / effect objects whose MODEL name merely
-// contains "Turret"/"Nexus"/"Barracks" have a DIFFERENT vtable and are rejected.
-// Reading obj+0x0 is the single safest read possible (offset 0 exists on every
-// live object), so this never touches deep offsets on small/foreign objects.
-inline StructureKind ClassifyStructureVtable(uintptr_t vtable) {
-    if (!vtable || !Globals::base) {
+inline StructureKind ClassifyStructureNames(
+    const char* objectName,
+    const char* characterName) {
+    switch (::Core::Objects::StructureTypeFromNames(objectName, characterName)) {
+    case ::Core::Objects::ObjectType::BarracksDampenerClient:
+        return StructureKind::Inhibitor;
+    case ::Core::Objects::ObjectType::HQClient:
+        return StructureKind::Nexus;
+    default:
         return StructureKind::None;
     }
-    // REMOVED: Turret/Inhibitor/Nexus disabled by user request
-    // if (vtable == Globals::base + Offset::StructureVTable::AITurretClient) {
-    //     return StructureKind::Turret;
-    // }
-    // if (vtable == Globals::base + Offset::StructureVTable::BarracksDampenerClient) {
-    //     return StructureKind::Inhibitor;
-    // }
-    // if (vtable == Globals::base + Offset::StructureVTable::HQClient) {
-    //     return StructureKind::Nexus;
-    // }
-    // REMOVED: Turret/Inhibitor/Nexus disabled
-    (void)vtable;
-    return StructureKind::None;
 }
 
 // POD result of probing one object. No destructors -> safe under __try.
@@ -121,12 +107,13 @@ inline bool ProbeStructureGuarded(uintptr_t address, StructureInfo& out) {
             return true;
         }
 
-        // Classify by vtable (obj+0x0) FIRST. This is the safest possible read
-        // and rejects every non-structure (minions/missiles/particles/effects)
-        // before any deep field is ever touched -- which is what made the old
-        // name-scan crash (it read object fields such as name/team/character-name on foreign objects).
-        const uintptr_t vtable = Globals::Read<uintptr_t>(address);
-        out.kind = ClassifyStructureVtable(vtable);
+        // Runtime string readers are independently SEH-guarded. Strict patterns
+        // reject Barracks spawners and Nexus-named effects without type metadata.
+        ::Core::Objects::ReadName(
+            address, out.name, static_cast<int>(sizeof(out.name)));
+        ::Core::Objects::ReadCharacterName(
+            address, out.charName, static_cast<int>(sizeof(out.charName)));
+        out.kind = ClassifyStructureNames(out.name, out.charName);
         if (out.kind == StructureKind::None) {
             return true;
         }
@@ -136,8 +123,7 @@ inline bool ProbeStructureGuarded(uintptr_t address, StructureInfo& out) {
             address,
             static_cast<std::uint64_t>(out.kind));
 
-        // Confirmed real structure -> now it is safe to read its identity/name.
-        ::Core::Objects::ReadName(address, out.name, static_cast<int>(sizeof(out.name)));
+        // Confirmed structure name -> read its identity/team.
         out.index = ::Core::Objects::ReadIndex(address);
         out.networkId = ::Core::Objects::ReadNetworkId(address);
         out.team = ::Core::Objects::ReadTeamValue(address);

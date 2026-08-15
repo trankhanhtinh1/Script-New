@@ -221,16 +221,15 @@ inline int CountAlliesAt(const Vector3& position, float range) {
 }
 
 inline bool UnderEnemyTurret(const Vector3& position) {
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) {
-    //         continue;
-    //     }
-    //     const float range = std::max(775.0f, turret.AttackRange()) + 65.0f;
-    //     if (position.DistanceSqr2D(turret.Position()) <= range * range) {
-    //         return true;
-    //     }
-    // }
+    for (const auto& turret : GameObjects::EnemyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) {
+            continue;
+        }
+        const float range = std::max(775.0f, turret.AttackRange()) + 65.0f;
+        if (position.DistanceSqr2D(turret.Position()) <= range * range) {
+            return true;
+        }
+    }
     return false;
 }
 

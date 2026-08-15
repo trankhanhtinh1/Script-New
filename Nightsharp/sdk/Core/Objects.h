@@ -698,10 +698,8 @@ namespace StaticStringCache {
         const bool isMainType = (
             type == ::Core::Objects::ObjectType::AIHeroClient ||
             type == ::Core::Objects::ObjectType::AIMinionClient ||
-            // REMOVED: Turret/Inhibitor/Nexus query disabled by user request
-            // type == ::Core::Objects::ObjectType::AITurretClient ||
-            // type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
-            // type == ::Core::Objects::ObjectType::HQClient ||
+            type == ::Core::Objects::ObjectType::BarracksDampenerClient ||
+            type == ::Core::Objects::ObjectType::HQClient ||
             type == ::Core::Objects::ObjectType::MissileClient);
 
         // Never hold the cache lock while reading game memory. A lifecycle
@@ -1116,8 +1114,7 @@ public:
     }
 
     bool IsTurret() const {
-        // return Type() == ::Core::Objects::ObjectType::AITurretClient;
-        return false;
+        return Type() == ::Core::Objects::ObjectType::AITurretClient;
     }
 
     bool IsMissile() const {
@@ -1930,12 +1927,10 @@ class AITurretClient : public AIBaseClient {
 public:
     AITurretClient() = default;
     explicit AITurretClient(uintptr_t address)
-        : AIBaseClient() {
-        (void)address;
-    }
+        : AIBaseClient(address, ::Core::Objects::ObjectType::AITurretClient) {}
     explicit AITurretClient(::Core::Objects::ObjectHandle handle)
-        : AIBaseClient() {
-        (void)handle;
+        : AIBaseClient(handle) {
+        handle_.type = ::Core::Objects::ObjectType::AITurretClient;
     }
 
     // Lane turret families (outer / inner / inhib / nexus) on Summoner's
@@ -1943,18 +1938,33 @@ public:
     // anywhere in CharacterName; the precise tier comes from the Name
     // ("Turret_T1_R_03_A" = bot outer, etc.) but for orbwalker target
     // selection only the Lane/Fountain/Other split matters.
-    bool IsLaneTurret() const { return false; }
+    bool IsLaneTurret() const {
+        const std::string name = ObjectDetail::ToLower(Name());
+        return !name.empty() &&
+               (name.find("turret_torder_") != std::string::npos ||
+                name.find("turret_tchaos_") != std::string::npos) &&
+               name.find("_p0_") == std::string::npos;
+    }
 
     // Fountain / nexus shrine turrets. Untargetable when a friendly hero
     // is in fountain — orbwalker MUST never target these even when the
     // game reports them as enemy & targetable, because attacking them
     // immediately puts the player in the fountain laser's range.
-    bool IsFountainTurret() const { return false; }
+    bool IsFountainTurret() const {
+        const std::string name = ObjectDetail::ToLower(Name());
+        return name.find("_p0_") != std::string::npos ||
+               name.find("shrine") != std::string::npos ||
+               name.find("fountain") != std::string::npos;
+    }
 
     // Shuriman / Azir-style summoned tower (sand soldier or special map
     // event). These are NOT real lane structures — they spawn from
     // gameplay scripts and orbwalker should treat them as champion-pet.
-    bool IsShurimaTurret() const { return false; }
+    bool IsShurimaTurret() const {
+        const std::string name = ObjectDetail::ToLower(Name());
+        return name.find("azir") != std::string::npos ||
+               name.find("shurima") != std::string::npos;
+    }
 };
 
 

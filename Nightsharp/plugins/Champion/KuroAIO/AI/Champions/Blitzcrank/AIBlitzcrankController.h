@@ -532,14 +532,13 @@ inline std::vector<HookBody> BuildHookBodies(int futureTargetableId = 0) {
 }
 
 inline bool UnderAlliedTurret(const Vector3& position) {
-    // REMOVED: Turret/Inhibitor/Nexus class disabled by user request
-    // for (const auto& turret : GameObjects::AllyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) continue;
-    //     const float range = std::max(775.0f, turret.AttackRange()) + 75.0f;
-    //     if (position.DistanceSqr2D(turret.Position()) <= range * range) {
-    //         return true;
-    //     }
-    // }
+    for (const auto& turret : GameObjects::AllyTurrets()) {
+        if (!turret.IsValid() || turret.IsDead()) continue;
+        const float range = std::max(775.0f, turret.AttackRange()) + 75.0f;
+        if (position.DistanceSqr2D(turret.Position()) <= range * range) {
+            return true;
+        }
+    }
     return false;
 }
 
