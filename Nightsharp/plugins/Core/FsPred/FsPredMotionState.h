@@ -214,7 +214,7 @@ inline SDK::HitChance ApplyPredictionHorizonConfidence(
     bool ignoreMaxRangePenalty,
     float openEscapeFraction = 1.0f) {
     if (!antiBaitEnabled ||
-        confidence < SDK::HitChance::High ||
+        confidence < SDK::HitChance::Medium ||
         !IsFreelyMoving(motion)) {
         return confidence;
     }
@@ -223,6 +223,7 @@ inline SDK::HitChance ApplyPredictionHorizonConfidence(
         std::isfinite(horizon.SpellRange) &&
         horizon.SpellRange > 0.0f &&
         horizon.SpellRange < std::numeric_limits<float>::max();
+    SDK::HitChance adjustedConfidence = confidence;
     const float maxRangeRatio = static_cast<float>(std::clamp(
         weights.MaxRangeThresholdPercent,
         70,
@@ -233,14 +234,16 @@ inline SDK::HitChance ApplyPredictionHorizonConfidence(
         std::isfinite(horizon.CastDistance) &&
         horizon.CastDistance >= horizon.SpellRange * maxRangeRatio;
     if (nearMaximumRange) {
-        return std::min(confidence, SDK::HitChance::Medium);
+        adjustedConfidence = std::min(
+            adjustedConfidence,
+            SDK::HitChance::Medium);
     }
 
     if (!std::isfinite(horizon.ArrivalSeconds) ||
         horizon.ArrivalSeconds < 0.0f ||
         !std::isfinite(horizon.MoveSpeed) ||
         horizon.MoveSpeed <= 0.0f) {
-        return std::min(confidence, SDK::HitChance::Medium);
+        return std::min(adjustedConfidence, SDK::HitChance::Medium);
     }
 
     const float reactionFloorSeconds =
@@ -281,6 +284,13 @@ inline SDK::HitChance ApplyPredictionHorizonConfidence(
         horizon.ArrivalSeconds >= impactThresholdSeconds * 2.0f ||
         !std::isfinite(horizon.ProjectileTravelSeconds) ||
         horizon.ProjectileTravelSeconds >= flightThresholdSeconds * 2.0f;
+    // Relaxed combo callers accept Medium. Multiple exposure signals must
+    // therefore cross that gate instead of merely capping confidence at it.
+    const int riskFactorCount =
+        static_cast<int>(nearMaximumRange) +
+        static_cast<int>(longHorizon) +
+        static_cast<int>(longFlight) +
+        static_cast<int>(longDistance);
 
     const float openFraction = weights.TerrainCorridorBoost &&
                                !HasRecentEvasiveTurn(motion, weights)
@@ -292,10 +302,13 @@ inline SDK::HitChance ApplyPredictionHorizonConfidence(
     const bool hasSteeringOpportunity =
         effectiveSteeringDistance >= hitEnvelope;
 
-    return hasSteeringOpportunity &&
-           (longHorizon || longFlight || longDistance)
-        ? std::min(confidence, SDK::HitChance::Medium)
-        : confidence;
+    if (hasSteeringOpportunity &&
+        (extremeHorizon || riskFactorCount >= 2)) {
+        return std::min(adjustedConfidence, SDK::HitChance::Low);
+    }
+    return hasSteeringOpportunity && riskFactorCount > 0
+        ? std::min(adjustedConfidence, SDK::HitChance::Medium)
+        : adjustedConfidence;
 }
 
 inline bool IsMovementLockType(int type) {

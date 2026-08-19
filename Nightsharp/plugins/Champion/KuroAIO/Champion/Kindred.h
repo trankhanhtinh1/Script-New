@@ -1114,6 +1114,8 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
 
+    E.Range = player.AttackRange();
+
     if (Key(MenuRoot, "FastE", false) && FastBlackE()) {
         return;
     }

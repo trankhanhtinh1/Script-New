@@ -31,7 +31,7 @@ inline constexpr ChampionProfile Smolder = [] {
         SDK::SpellSlot::Q, "Super Scorcher Breath", CastKind::EnemyTarget,
         Intent::Damage | Intent::Execute | Intent::AutoReset |
             Intent::Waveclear | Intent::Jungle | Intent::LastHit,
-        AllModes, 925.0f, 0.25f, 100.0f, 1300.0f, false,
+        AllModes, 550.0f, 0.25f, 100.0f, 1300.0f, false,
         SDK::DamageType::Physical, SDK::SpellType::Targeted);
     p.Spells[0].Aim = AimPolicy::TargetPosition;
     p.Spells[0].Priority = 98;

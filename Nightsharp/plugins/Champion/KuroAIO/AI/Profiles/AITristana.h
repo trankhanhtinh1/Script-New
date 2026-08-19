@@ -45,7 +45,7 @@ inline constexpr ChampionProfile Tristana = [] {
             Intent::Waveclear | Intent::Jungle | Intent::Objective,
         Mode::Combo | Mode::Harass | Mode::LaneClear | Mode::Jungle |
             Mode::Automatic,
-        750.0f, 0.25f, 300.0f, 2400.0f, false,
+        525.0f, 0.25f, 300.0f, 2400.0f, false,
         SDK::DamageType::Physical, SDK::SpellType::SkillshotCircle);
     p.Spells[2].Priority = 99;
     p.Spells[2].PreserveAutoAttack = false;
@@ -57,7 +57,7 @@ inline constexpr ChampionProfile Tristana = [] {
         Intent::Damage | Intent::Execute | Intent::Disengage |
             Intent::Peel | Intent::AntiGapcloser | Intent::Finisher,
         Mode::Combo | Mode::Flee | Mode::Automatic,
-        750.0f, 0.25f, 200.0f, 2000.0f, false,
+        525.0f, 0.25f, 200.0f, 2000.0f, false,
         SDK::DamageType::Magical, SDK::SpellType::SkillshotCircle);
     p.Spells[3].Priority = 100;
     p.Spells[3].PreserveAutoAttack = true;

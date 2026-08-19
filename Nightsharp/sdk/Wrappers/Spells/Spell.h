@@ -193,7 +193,8 @@ public:
     }
 
     bool CanCast(const AIBaseClient& unit) const {
-        return IsReady() && Extensions::IsValidTarget(unit, CurrentRange());
+        const float effectiveRange = CurrentRange() + (unit.IsValid() ? unit.BoundingRadius() : 0.0f);
+        return IsReady() && Extensions::IsValidTarget(unit, effectiveRange);
     }
 
     bool CanKill(const AIBaseClient& unit, DamageStage stage = DamageStage::Default) const {
@@ -235,7 +236,8 @@ public:
         }
 
         if (!IsSkillshot && !IsChargedSpell) {
-            if (RangeCheckSource().DistanceSqr2D(unit.Position()) > RangeSqr()) {
+            const float effectiveRange = CurrentRange() + (unit.IsValid() ? unit.BoundingRadius() : 0.0f);
+            if (RangeCheckSource().DistanceSqr2D(unit.Position()) > effectiveRange * effectiveRange) {
                 return CastStates::OutOfRange;
             }
 
@@ -349,7 +351,12 @@ public:
     }
 
     bool CastOnUnit(const AIBaseClient& unit) {
-        if (!IsReady() || SourcePosition().DistanceSqr2D(unit.Position()) > RangeSqr()) {
+        if (!IsReady()) {
+            return false;
+        }
+
+        const float effectiveRange = CurrentRange() + (unit.IsValid() ? unit.BoundingRadius() : 0.0f);
+        if (SourcePosition().DistanceSqr2D(unit.Position()) > effectiveRange * effectiveRange) {
             return false;
         }
 

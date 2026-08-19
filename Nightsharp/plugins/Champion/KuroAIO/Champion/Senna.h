@@ -189,16 +189,18 @@ static void UpdateSpellData() {
     if (passiveStacks >= 400) {
         Q.Range = 1100.0f;
     } else {
-        Q.Range = 600.0f + static_cast<float>((passiveStacks / 20) * 25) +
-                  player.BoundingRadius();
+        Q.Range = std::max(600.0f, player.AttackRange()) + player.BoundingRadius();
     }
 }
 
 static bool ValidQCastTarget(const AIBaseClient& unit) {
     const auto player = Player();
-    return player.IsValid() && unit.IsValid() && !unit.IsDead() &&
-           !SameUnit(player, unit) && unit.IsVisible() && unit.IsTargetable() &&
-           player.Position().DistanceSqr2D(unit.Position()) <= Q.Range * Q.Range;
+    if (!player.IsValid() || !unit.IsValid() || unit.IsDead() ||
+        SameUnit(player, unit) || !unit.IsVisible() || !unit.IsTargetable()) {
+        return false;
+    }
+    const float reach = Q.Range + unit.BoundingRadius();
+    return player.Position().DistanceSqr2D(unit.Position()) <= reach * reach;
 }
 
 static std::vector<AIBaseClient> QCastTargets() {

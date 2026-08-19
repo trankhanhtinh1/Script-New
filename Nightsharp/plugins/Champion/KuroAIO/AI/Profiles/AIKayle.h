@@ -52,10 +52,10 @@ inline constexpr ChampionProfile Kayle = [] {
         Intent::Damage | Intent::Execute | Intent::AutoReset | Intent::Finisher,
         Mode::Combo | Mode::Harass | Mode::LaneClear | Mode::Jungle |
             Mode::LastHit | Mode::Automatic,
-        550.0f, 0.0f, 0.0f, FLT_MAX, false,
+        525.0f, 0.0f, 0.0f, FLT_MAX, false,
         SDK::DamageType::Magical, SDK::SpellType::SkillshotLine);
     p.Spells[2].Priority = 97;
-    p.Spells[2].TriggerRange = 550.0f;
+    p.Spells[2].TriggerRange = 525.0f;
     p.Spells[2].WeaveAfterAttack = true;
     p.Spells[2].PreserveAutoAttack = false;
     p.Spells[2].AllowOnMinions = true;

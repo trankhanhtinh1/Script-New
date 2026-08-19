@@ -101,16 +101,20 @@ inline float RDamage(const AIHeroClient& target, bool center = false) {
     return player.CalculatePhysicalDamage(target,
         RRawDamage(SpellRank(3), player.BonusAttackDamage(), center));
 }
+inline float SmolderQRange() {
+    const auto player = GameObjects::Player();
+    return player.IsValid() ? player.AttackRange() : 550.0f;
+}
+
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(0, mode) ||
         PreserveAttack(reactive, Lethal(target, QDamage(target)))) return false;
-    const Vector3 aim = PredictPosition(target, kQDelay);
-    if (!aim.IsValid() || aim.IsZero() ||
-        player.Position().Distance2D(aim) > kQRange + target.BoundingRadius()) return false;
-    if (!Engine::ControllerCastPosition(0, aim)) return false;
+    const float qReach = SmolderQRange() + target.BoundingRadius();
+    if (player.Position().Distance2D(target.Position()) > qReach) return false;
+    if (!Engine::ControllerCastUnit(0, target)) return false;
     LastCastTick[0] = Now();
-    LastQAim = aim;
+    LastQAim = target.Position();
     return true;
 }
 inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) {

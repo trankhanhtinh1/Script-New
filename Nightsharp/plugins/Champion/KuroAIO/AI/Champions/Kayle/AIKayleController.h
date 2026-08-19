@@ -194,9 +194,15 @@ inline bool CastW(const AIHeroClient& requested, Mode mode, bool reactive = fals
     return true;
 }
 
+inline float KayleERange() {
+    const auto player = GameObjects::Player();
+    return player.IsValid() ? std::max(525.0f, player.AttackRange()) : 525.0f;
+}
+
 inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || EnemyBlocked(target) || !InRange(target, kERange) ||
+    const float eRange = KayleERange();
+    if (!player.IsValid() || EnemyBlocked(target) || !InRange(target, eRange) ||
         !Ready(2, mode, reactive) || !Throttle(2, 65)) return false;
     const bool lethal = LethalWithE(target);
     const bool low = target.HealthPercent() <= Slider(TacticsMenu, "EExecuteHP", 42);

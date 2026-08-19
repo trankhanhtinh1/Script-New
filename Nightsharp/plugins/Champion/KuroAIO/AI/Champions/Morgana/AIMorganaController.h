@@ -115,16 +115,17 @@ inline bool SafeRPosition(const AIHeroClient& target, bool defensive) {
 }
 
 inline Vector3 QAim(const AIHeroClient& target) {
-    if (!Engine::ValidEnemy(target, kQRange)) return {};
-    Vector3 aim = PredictPosition(target, kQDelay);
-    if (Engine::RuntimeSpells[0]) {
-        const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
-        if (prediction.Hitchance >= SDK::HitChance::High &&
-            prediction.GetCastPosition().IsValid() &&
-            !prediction.GetCastPosition().IsZero())
-            aim = prediction.GetCastPosition();
+    if (!Engine::ValidEnemy(target, kQRange) ||
+        !Engine::RuntimeSpells[0]) {
+        return {};
     }
-    return aim;
+    const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
+    const Vector3 aim = prediction.GetCastPosition();
+    return prediction.Hitchance >= SDK::HitChance::High &&
+           aim.IsValid() &&
+           !aim.IsZero()
+        ? aim
+        : Vector3{};
 }
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
@@ -444,7 +445,7 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Pin Morgana mechanics to Riot 26.15 and CommunityDragon 16.15",
     "Preserve selected enemy before orbwalker and selector fallback",
-    "Aim Dark Binding with prediction, 70-width contact and projectile-wall rejection",
+    "Require High prediction for Dark Binding, including delay and projectile flight",
     "Stop Q at the first collision instead of treating it as a free line",
     "Never replace an ordinary attack windup with nonreactive Q or W",
     "Place Tormented Shadow inside the 325-radius zone and respect 900 range",

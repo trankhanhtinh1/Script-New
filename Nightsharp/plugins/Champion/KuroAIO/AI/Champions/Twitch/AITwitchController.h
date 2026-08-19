@@ -74,11 +74,6 @@ inline float ContaminateDamage(const AIBaseClient& target) {
         player, target, physical, magical);
 }
 
-inline bool SafeAdditionalAuto(const AIHeroClient& target) {
-    return LocalAttackReadySoon(target, 260) &&
-           !IsEscaping(target, 0.45f) &&
-           target.Health() + target.AllShield() > AutoDamage(target);
-}
 
 inline bool EscapingContaminateRange(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
@@ -167,19 +162,11 @@ inline ContaminateContext BuildContaminateContext(
     context.Lethal = ContaminateDamage(target) >=
         target.Health() + target.AllShield();
     context.EscapingRange = EscapingContaminateRange(target);
-    context.SafeAdditionalAuto = SafeAdditionalAuto(target);
-    const float remaining = PoisonRemainingMs(target);
-    const float expiryWindow = static_cast<float>(std::max(
-        520, Orbwalker::AttackCooldownRemaining() +
-                 SDK::Game::Ping() + 220));
-    context.PoisonExpiring = remaining > 0.0f &&
-        remaining <= expiryWindow;
     return context;
 }
 
-inline AIHeroClient BestContaminateTarget(Mode mode) {
+inline AIHeroClient BestContaminateTarget(Mode mode, bool lethalOnly) {
     if (!CanUse(2, mode) || !Engine::RuntimeSpells[2]) return {};
-    const auto player = GameObjects::Player();
     AIHeroClient best{};
     float bestScore = -FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -188,7 +175,9 @@ inline AIHeroClient BestContaminateTarget(Mode mode) {
         const int stacks = PoisonStacks(enemy);
         if (stacks <= 0) continue;
         const auto context = BuildContaminateContext(enemy);
-        if (!ShouldContaminate(context)) continue;
+        if (lethalOnly ? !context.Lethal : !ShouldContaminate(context)) {
+            continue;
+        }
         float score = context.Lethal ? 1000.0f : 0.0f;
         score += static_cast<float>(stacks) * 120.0f;
         score -= enemy.HealthPercent();
@@ -203,10 +192,10 @@ inline AIHeroClient BestContaminateTarget(Mode mode) {
     return best;
 }
 
-inline bool CastE(Mode mode) {
+inline bool CastE(Mode mode, bool lethalOnly = false) {
     if (!CanUse(2, mode) ||
         !CastThrottlePassed(LastECastTick, 35)) return false;
-    const auto target = BestContaminateTarget(mode);
+    const auto target = BestContaminateTarget(mode, lethalOnly);
     if (!target.IsValid() || !Engine::ControllerCastSelf(2)) return false;
     LastECastTick = Now();
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
@@ -406,7 +395,7 @@ inline bool TryAntiGapcloser() {
 
 inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    return CastE(Mode::Automatic);
+    return CastE(Mode::Automatic, true);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
@@ -504,7 +493,7 @@ inline void BuildMenu(Menu* root) {
     VenomMenu = TacticsMenu->AddSubMenu(new Menu(
         "VenomLogic", "Deadly Venom / Contaminate"));
     VenomMenu->Add(new MenuSeparator(
-        "HoldE", "E waits for lethal, 6 stacks or range loss"));
+        "HoldE", "E waits for lethal, 6 stacks or 3-stack range loss"));
     AmbushMenu = TacticsMenu->AddSubMenu(new Menu(
         "AmbushLogic", "Ambush Safety"));
     AmbushMenu->Add(new MenuSeparator(
@@ -535,9 +524,9 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Reject targets outside every current attack/W/E/Q-approach route",
     "Calculate Contaminate from the live one-to-six venom stack count",
-    "Hold E while another safe attack can add useful venom",
-    "Cast E on lethal, six stacks or imminent 1200-range loss",
-    "Force a reachable one-to-five-stack venom target through the orbwalker",
+    "Hold E at one to five stacks while the target remains reachable",
+    "Cast E on lethal, six stacks or three-stack 1200-range loss",
+    "Use automatic E only when Contaminate is lethal",
     "Redirect BeforeAttack to the owned venom target",
     "Clear focus after each attack, E cast, mode exit and unload",
     "Throw W only when attacks cannot catch the target or while fleeing",
@@ -555,8 +544,8 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AITwitch.md";
     controller.ImplementationSummary =
-        "Stack-aware mixed E damage, venom orbwalker focus, range-loss execute, "
-        "safe Q approach, predictive W peel and BeforeAttack R activation.";
+        "Stack-aware mixed E kill secure, six-stack or three-stack range-loss "
+        "detonation, venom focus, safe Q, predictive W and BeforeAttack R.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

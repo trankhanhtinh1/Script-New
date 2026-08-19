@@ -21,7 +21,7 @@ inline constexpr ChampionProfile MissFortune = [] {
             Intent::LastHit | Intent::Jungle | Intent::Finisher,
         Mode::Combo | Mode::Harass | Mode::LaneClear | Mode::Jungle |
             Mode::LastHit | Mode::Automatic,
-        650.0f, 0.25f, 70.0f, 1400.0f, false,
+        550.0f, 0.25f, 70.0f, 1400.0f, false,
         SDK::DamageType::Physical, SDK::SpellType::SkillshotLine);
     p.Spells[0].Priority = 96;
     p.Spells[0].WeaveAfterAttack = true;

@@ -100,8 +100,8 @@ inline constexpr ChampionProfile Twitch = [] {
     p.ThemeSpeed = 0.96f;
     p.TacticalSummary =
         "Maintain a reachable venom target through the orbwalker, delay E until "
-        "lethal/six stacks/range loss, use W only when attacks cannot do the job, "
-        "and activate R before the attack whose extra range or piercing matters.";
+        "lethal/six stacks/three-stack range loss, use W only when attacks cannot "
+        "do the job, and activate R before the attack whose range or piercing matters.";
     p.ResearchSummary =
         "Ported from TestOrbwalker Twitch.cs and checked against current "
         "CommunityDragon E stack formula, 1200 E range and +300 R range.";

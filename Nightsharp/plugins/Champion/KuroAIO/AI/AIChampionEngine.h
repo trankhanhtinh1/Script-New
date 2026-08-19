@@ -424,6 +424,83 @@ inline SpellSpec ResolveSpellSpec(int index, const std::string& runtimeName) {
     return resolved;
 }
 
+inline float GetDynamicSpellRange(int index) {
+    if (!ActiveProfile || index < 0 || index >= 4) return 0.0f;
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) return ResolvedSpecs[index].Range;
+
+    const SDK::ChampionId champId = ActiveProfile->ChampionId;
+    const auto& spec = ResolvedSpecs[index];
+
+    switch (champId) {
+    case SDK::ChampionId::MissFortune:
+        if (index == 0) { // Q (Double Up) - equal to Miss Fortune's basic attack range
+            return player.AttackRange();
+        }
+        break;
+    case SDK::ChampionId::Tristana:
+        if (index == 2 || index == 3) { // E (Explosive Charge), R (Buster Shot) - scales with passive/attack range
+            return player.AttackRange();
+        }
+        break;
+    case SDK::ChampionId::Kayle:
+        if (index == 2) { // E (Starfire Spellblade) - ranged attack range (minimum 525)
+            return std::max(525.0f, player.AttackRange());
+        }
+        break;
+    case SDK::ChampionId::Smolder:
+        if (index == 0) { // Q (Super Scorcher Breath) - equal to basic attack range
+            return player.AttackRange();
+        }
+        break;
+    case SDK::ChampionId::Senna:
+        if (index == 0) { // Q (Piercing Darkness) - equal to attack range
+            return player.AttackRange();
+        }
+        break;
+    case SDK::ChampionId::Kindred:
+        if (index == 2) { // E (Mounting Dread) - equal to attack range
+            return player.AttackRange();
+        }
+        break;
+    case SDK::ChampionId::KogMaw:
+        if (index == 3) { // R (Living Artillery)
+            const int rank = player.Spellbook().GetSpell(SDK::SpellSlot::R).Level();
+            return rank > 0 ? (1300.0f + 250.0f * static_cast<float>(rank - 1)) : 1300.0f;
+        }
+        break;
+    case SDK::ChampionId::Warwick:
+        if (index == 3) { // R (Infinite Duress)
+            return std::max(550.0f, 2.5f * player.MoveSpeed());
+        }
+        break;
+    case SDK::ChampionId::Chogath:
+        if (index == 3) { // R (Feast)
+            return 175.0f + std::max(0.0f, player.BoundingRadius() - 65.0f);
+        }
+        break;
+    default:
+        break;
+    }
+
+    const auto instance = player.Spellbook().GetSpell(spec.Slot);
+    if (instance.IsValid()) {
+        const float nativeRange = instance.CastRange();
+        if (std::isfinite(nativeRange) && nativeRange > 1.0f && nativeRange < 10000.0f) {
+            return nativeRange;
+        }
+    }
+    return spec.Range > 1.0f ? spec.Range : FLT_MAX;
+}
+
+inline void UpdateDynamicSpellRanges() {
+    for (int index = 0; index < 4; ++index) {
+        if (RuntimeSpells[index]) {
+            RuntimeSpells[index]->Range = GetDynamicSpellRange(index);
+        }
+    }
+}
+
 inline void ConfigureRuntimeSpell(int index, bool force = false) {
     if (!ActiveProfile || index < 0 || index >= 4) {
         return;
@@ -439,6 +516,7 @@ inline void ConfigureRuntimeSpell(int index, bool force = false) {
     }
     const std::string runtimeName = instance.Name();
     if (!force && RuntimeSpells[index] && runtimeName == RuntimeSpellNames[index]) {
+        RuntimeSpells[index]->Range = GetDynamicSpellRange(index);
         return;
     }
     ResolvedSpecs[index] = ResolveSpellSpec(index, runtimeName);
@@ -448,11 +526,7 @@ inline void ConfigureRuntimeSpell(int index, bool force = false) {
     RuntimeSpells[index] = nullptr;
     RuntimeSpellNames[index] = runtimeName;
 
-    float range = spec.Range > 1.0f ? spec.Range : FLT_MAX;
-    const float nativeRange = instance.IsValid() ? instance.CastRange() : 0.0f;
-    if (std::isfinite(nativeRange) && nativeRange > 1.0f && nativeRange < 10000.0f) {
-        range = nativeRange;
-    }
+    float range = GetDynamicSpellRange(index);
 
     auto* spell = new SDK::Spell(spec.Slot, range);
     spell->DamageType = spec.Damage;
@@ -507,6 +581,7 @@ inline void RefreshRuntimeSpells() {
     for (int index = 0; index < 4; ++index) {
         ConfigureRuntimeSpell(index, false);
     }
+    UpdateDynamicSpellRanges();
 }
 
 inline float MaximumTargetRange() {
@@ -1560,8 +1635,10 @@ inline bool TryCast(const SpellSpec& spec,
             casted = RuntimeSpells[index]->Cast();
         }
         break;
-    case CastKind::EnemyTarget:
-        if (ValidEnemy(target, RuntimeSpells[index]->CurrentRange()) &&
+    case CastKind::EnemyTarget: {
+        const float targetRadius = target.IsValid() ? target.BoundingRadius() : 0.0f;
+        const float reachRange = RuntimeSpells[index]->CurrentRange() + targetRadius;
+        if (ValidEnemy(target, reachRange) &&
             !ProjectileWallBlocksCast(index, target.Position()) &&
             KuroExecutionAllowed(
                 spec, index, mode, target, player.Position(),
@@ -1569,17 +1646,21 @@ inline bool TryCast(const SpellSpec& spec,
             casted = RuntimeSpells[index]->CastOnUnit(target);
         }
         break;
+    }
     case CastKind::AllyTarget:
-    case CastKind::AnyTarget:
+    case CastKind::AnyTarget: {
+        const float targetRadius = target.IsValid() ? target.BoundingRadius() : 0.0f;
+        const float reachRange = RuntimeSpells[index]->CurrentRange() + targetRadius;
         if (target.IsValid() &&
             (!target.IsEnemy() ||
-             !ProjectileWallBlocksCast(index, target.Position())) &&
+             (ValidEnemy(target, reachRange) && !ProjectileWallBlocksCast(index, target.Position()))) &&
             KuroExecutionAllowed(
                 spec, index, mode, target, player.Position(),
                 target.Position())) {
             casted = RuntimeSpells[index]->CastOnUnit(target);
         }
         break;
+    }
     case CastKind::Line:
     case CastKind::Circle:
     case CastKind::Cone:

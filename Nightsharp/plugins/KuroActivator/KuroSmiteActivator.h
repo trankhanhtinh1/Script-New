@@ -28,6 +28,7 @@ class KuroSmiteActivator final : public KuroActivatorComponent {
 public:
     static constexpr int kCastCacheMs = 500;
     static constexpr int kReuseMs = 150;
+    static constexpr int kSlotRefreshMs = 1000;
 
     KuroSmiteActivator() = default;
     KuroSmiteActivator(const KuroSmiteActivator&) = delete;

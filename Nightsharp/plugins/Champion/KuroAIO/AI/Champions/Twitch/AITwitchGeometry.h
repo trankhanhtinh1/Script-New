@@ -54,16 +54,13 @@ struct ContaminateContext {
     int Stacks = 0;
     bool Lethal = false;
     bool EscapingRange = false;
-    bool SafeAdditionalAuto = false;
-    bool PoisonExpiring = false;
 };
 
 inline bool ShouldContaminate(const ContaminateContext& context) {
     const int stacks = VenomStacks(context.Stacks);
     if (stacks <= 0) return false;
-    if (context.Lethal || context.PoisonExpiring || stacks >= 6) return true;
-    return context.EscapingRange &&
-           (stacks >= 3 || !context.SafeAdditionalAuto);
+    if (context.Lethal || stacks >= 6) return true;
+    return context.EscapingRange && stacks >= 3;
 }
 
 struct CaskContext {

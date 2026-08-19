@@ -123,6 +123,14 @@ inline bool BounceBlocked(const AIBaseClient& primary,
     return false;
 }
 
+inline float DoubleUpTargetRange(const AIBaseClient& target = {}) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) return 550.0f;
+    return target.IsValid()
+        ? ControllerHelpers::AutoAttackRange(target)
+        : (player.AttackRange() + 65.0f);
+}
+
 inline AIBaseClient FindBouncePrimary(const AIHeroClient& desired,
                                       bool* routeBlocked = nullptr,
                                       bool* guaranteedCritical = nullptr) {
@@ -140,7 +148,7 @@ inline AIBaseClient FindBouncePrimary(const AIHeroClient& desired,
         const float predictedHealth = SDK::HealthPrediction::GetPrediction(
             primary, 350, 0);
         if (!ControllerHelpers::ValidHostileUnitInGameplayRange(
-                primary, 650.0f) || predictedHealth <= 0.0f ||
+                primary, DoubleUpTargetRange(primary)) || predictedHealth <= 0.0f ||
             ControllerHelpers::ProjectileWallBlocksFromPlayer(
                 primary.Position(), 70.0f) ||
             primary.Position().Distance2D(desiredPosition) >
@@ -189,7 +197,7 @@ inline AIBaseClient ResolveDoubleUpRoute(const AIHeroClient& target,
                                          bool& direct,
                                          bool& bounceBlocked,
                                          bool& guaranteedCritical) {
-    const bool directAvailable = Engine::ValidEnemy(target, 650.0f);
+    const bool directAvailable = Engine::ValidEnemy(target, DoubleUpTargetRange(target));
     auto primary = FindBouncePrimary(
         target, &bounceBlocked, &guaranteedCritical);
     const bool useBounce = ShouldUseBounceRoute(
