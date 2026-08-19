@@ -23,7 +23,7 @@ struct SilverBoltAdvance {
 };
 
 // Silver Bolts applies a marker to the same target on each attack and consumes
-// the third marker.  Modeling multiple attacks keeps event and polling paths
+// the third marker. Modeling multiple attacks keeps event and polling paths
 // deterministic when a frame contains more than one attack notification.
 inline SilverBoltAdvance AdvanceSilverBolts(int startingStacks,
                                             int attacks) {

@@ -1,6 +1,6 @@
 #pragma once
 
-// Maokai-owned geometry and deterministic mechanics.  The controller owns live
+// Maokai-owned geometry and deterministic mechanics. The controller owns live
 // object/event state; this header owns sapling zones, Q displacement, W arrival,
 // E missile timing and the accelerating R root-wave model.
 

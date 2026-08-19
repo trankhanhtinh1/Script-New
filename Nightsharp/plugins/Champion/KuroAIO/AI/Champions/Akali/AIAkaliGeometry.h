@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure geometry for Akali's one-trick controller.  None of these helpers read
+// Pure geometry for Akali's one-trick controller. None of these helpers read
 // live game memory, which lets the cone edge, passive-ring path, E backflip and
 // both Perfect Execution paths be regression tested outside League.
 
@@ -36,7 +36,7 @@ inline bool ContainsInsensitive(const char* value, const char* token) {
 
 // EnsoulSharp exposes the passive ring through skin-qualified particle names
 // (for example Akali_..._P_Indicator_Circle_Self), while the native buff can
-// be absent for a few frames.  Keep the matcher pure so object-event tracking
+// be absent for a few frames. Keep the matcher pure so object-event tracking
 // can be regression-tested without a live game.
 inline bool IsPassiveRingSpawnObjectName(const char* name) {
     return ContainsInsensitive(name, "akali_") &&
@@ -63,9 +63,9 @@ struct ConeHit {
 };
 
 // Five Point Strike is represented by five fanned missiles rather than a
-// mathematically perfect sector.  The two outer knives reach slightly farther
+// mathematically perfect sector. The two outer knives reach slightly farther
 // in world space; experienced Akali players aim a corner at targets just
-// beyond the middle knife.  This model keeps the documented 500/350 cone and
+// beyond the middle knife. This model keeps the documented 500/350 cone and
 // grants only a conservative 45-unit edge extension.
 inline ConeHit FivePointHit(const Vec3& source,
                             const Vec3& castDirection,

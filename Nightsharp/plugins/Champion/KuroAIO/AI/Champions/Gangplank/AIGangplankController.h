@@ -371,7 +371,6 @@ inline void Farm(Mode mode) {
     (void)Engine::TryFarm(mode);
 }
 
-
 inline void ReconcileState() {
     RefreshBarrels();
     PassiveState = NormalizeTrialByFire(PassiveState, Now());
@@ -464,7 +463,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (!IsLocalPlayer(args.Sender)) return;
     (void)args;
 }
-
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
@@ -598,7 +596,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnObjectCreate = &OnObjectCreate;

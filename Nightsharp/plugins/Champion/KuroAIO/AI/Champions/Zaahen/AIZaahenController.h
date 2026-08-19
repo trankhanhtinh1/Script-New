@@ -326,10 +326,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (ControllerHelpers::TextContainsAny(args.BuffName, {"ZaahenPassiveRevive"})) PassiveReviving = false;
     RefreshPassive();
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!args.Sender.IsValid() || !IsLocalPlayer(args.Sender)) return;
-    RefreshPassive();
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
     LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
@@ -426,7 +422,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<

@@ -523,7 +523,6 @@ inline void ObserveLocalSpell(
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (CurtainActive()) {
         args.Process = false;
@@ -537,7 +536,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
             OwnedFocusTargetId, OwnedFocusUntil);
     }
 }
-
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;

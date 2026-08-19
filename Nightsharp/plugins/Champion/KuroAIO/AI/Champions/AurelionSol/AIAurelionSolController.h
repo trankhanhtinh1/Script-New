@@ -1917,8 +1917,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-
-
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (ControllerHelpers::CaptureGapcloser(
@@ -1928,7 +1926,6 @@ inline void OnGapcloser(
         IncomingThreatUntil = std::max(IncomingThreatUntil, Now() + 850);
     }
 }
-
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (QActive && Bool(BreathMenu, "ProtectChannel", true)) {
@@ -2441,7 +2438,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1200, 250, 6000>;

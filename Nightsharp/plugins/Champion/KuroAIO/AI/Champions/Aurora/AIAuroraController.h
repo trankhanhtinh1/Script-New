@@ -2370,8 +2370,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-
-
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     if (!CaptureAfterAttack(
             args, LastAfterAttackTargetId, LastAfterAttackTick)) return;
@@ -2895,7 +2893,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
     return controller;

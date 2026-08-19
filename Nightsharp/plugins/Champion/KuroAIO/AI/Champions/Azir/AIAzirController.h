@@ -393,12 +393,12 @@ inline bool NearEnemyTurret(const Vector3& position,
                             float padding = 0.0f) {
     if (!position.IsValid() || position.IsZero()) return false;
     // for (const auto& turret : GameObjects::EnemyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) continue;
-    //     const float range = std::max(775.0f, turret.AttackRange()) +
-    //                         std::max(0.0f, padding);
-    //     if (turret.Position().DistanceSqr2D(position) <= range * range) {
-    //         return true;
-    //     }
+    // if (!turret.IsValid() || turret.IsDead()) continue;
+    // const float range = std::max(775.0f, turret.AttackRange()) +
+    // std::max(0.0f, padding);
+    // if (turret.Position().DistanceSqr2D(position) <= range * range) {
+    // return true;
+    // }
     // }
     return false;
 }
@@ -1470,7 +1470,7 @@ inline bool TryAdvanceSequence(Mode mode) {
     }
 
     if (ActiveSequence.Phase == SequencePhase::AwaitRWindow) {
-        // Q has a 0.25 second cast lock.  Casting R earlier is the common
+        // Q has a 0.25 second cast lock. Casting R earlier is the common
         // revenant/shuffle failure that leaves the wall behind Azir.
         if (now - LastQCastTick < 245 ||
             !CanAdvanceSequence(ActiveSequence, now, 235)) return false;
@@ -1898,7 +1898,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 
 inline bool TryFarm(Mode mode) {
     // OrbwalkerKuro's soldier-aware last-hit path is more precise and does
-    // not spend mana.  The champion controller intentionally delegates it.
+    // not spend mana. The champion controller intentionally delegates it.
     if (mode == Mode::LastHit) return false;
     if (Bool(FarmMenu, "HoldForChampion", true) &&
         HasEnemyChampionNear(static_cast<float>(
@@ -2011,7 +2011,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     CurrentPosture = DeterminePosture(mode, target);
 
     if (TryManualShuffle()) return true;
-    // A manual spell means the player owns the immediate continuation.  Do
+    // A manual spell means the player owns the immediate continuation. Do
     // not auto-complete their E-Q or E-Q-R input behind their back.
     if (PlayerOverrideUntil >= Now()) return false;
     if (TryReactiveDefense(mode)) return true;
@@ -2160,7 +2160,6 @@ inline void OnDoCast(
         args, LastAfterAttackTargetId, LastAfterAttackTick);
 }
 
-
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     if (!CaptureAfterAttack(
             args, LastAfterAttackTargetId, LastAfterAttackTick)) return;
@@ -2201,8 +2200,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
             : Now();
     }
 }
-
-
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
@@ -2791,7 +2788,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackEvent<&LastBeforeAttackTargetId, &LastBeforeAttackTick>;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

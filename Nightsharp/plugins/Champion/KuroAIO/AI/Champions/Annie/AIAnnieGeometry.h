@@ -48,7 +48,7 @@ struct PassiveEvent {
     PassiveSpell Spell = PassiveSpell::None;
     PassiveEventKind Kind = PassiveEventKind::DamageLanding;
     // Spell shields consume a primed Pyromania proc even though they block
-    // the stun.  Other immunity states can instead leave the event invalid.
+    // the stun. Other immunity states can instead leave the event invalid.
     bool CanConsume = true;
     bool CanApplyStun = true;
 };
@@ -68,7 +68,7 @@ inline bool IsDamagingPassiveSpell(PassiveSpell spell) {
 
 // Simulates the actual distinction that makes advanced Annie sequencing
 // possible: W/E/R add their stack on cast, Q adds its stack only on missile
-// hit, and the first primed damaging spell to land owns the stun.  A Q which
+// hit, and the first primed damaging spell to land owns the stun. A Q which
 // consumes Pyromania does not immediately rebuild a stack from that same hit.
 inline PassiveResolution SimulatePyromania(
     int startingStacks,
@@ -166,7 +166,7 @@ inline Vec3 IncinerateResolveOrigin(const Vec3& castOrigin,
         : castOrigin;
 }
 
-// Circle-versus-sector test.  Target radius expands both the radial edge and
+// Circle-versus-sector test. Target radius expands both the radial edge and
 // the angular edge; a center just behind Annie is hit only when its gameplay
 // circle overlaps the cone's apex.
 inline bool IncinerateHits(const Vec3& origin,
@@ -295,7 +295,7 @@ inline float TibbersAttackRawDamage(int rank, float abilityPower) {
            std::max(0.0f, abilityPower) * 0.10f;
 }
 
-// The live pet exposes five discrete attack-speed stages while enraged.  The
+// The live pet exposes five discrete attack-speed stages while enraged. The
 // values below are the observed PC values corresponding to zero through four
 // attacks consumed; after the fifth attack Tibbers returns to 0.625.
 inline float TibbersEnrageAttackSpeed(int attacksAlreadyMade) {

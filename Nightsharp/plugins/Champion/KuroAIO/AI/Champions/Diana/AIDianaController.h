@@ -340,8 +340,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { OnBuffAdd(args); }
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs&) {}
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
@@ -459,7 +457,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

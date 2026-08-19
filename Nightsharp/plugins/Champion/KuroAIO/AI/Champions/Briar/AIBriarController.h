@@ -452,12 +452,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs &a) {
   if (Engine::TextContains(a.BuffName, "BriarR"))
     CurrentRState = RState::Ready;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs &a) {
-  if (a.EndTime <= Game::Time())
-    OnBuffRemove(a);
-  else
-    OnBuffAdd(a);
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) {
   if (!a.Target.IsValid())
     return;
@@ -542,7 +536,7 @@ inline constexpr ChampionController Controller = [] {
   c.OnDoCast = &OnDoCast;
   c.OnBuffAdd = &OnBuffAdd;
   c.OnBuffRemove = &OnBuffRemove;
-  c.OnBuffUpdate = &OnBuffUpdate;
+
   c.OnBeforeAttack = &OnBeforeAttack;
   c.OnAfterAttack = &OnAfterAttack;
   c.OnGapcloser = &OnGapcloser;

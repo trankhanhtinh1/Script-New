@@ -436,7 +436,6 @@ inline void ObserveSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     RefreshRuntimeRange();
 }
 
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("CorkiOneTrick", "Corki missile and package mechanics"));
@@ -517,7 +516,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &ObserveSpell;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnAfterAttack =
         &CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 700, 900>;

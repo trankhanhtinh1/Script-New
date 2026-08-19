@@ -1,7 +1,7 @@
 #pragma once
 
 // Deterministic Ambessa mechanics used by both the live one-trick controller
-// and the standalone regression test.  The live layer owns prediction,
+// and the standalone regression test. The live layer owns prediction,
 // NavMesh queries and player-input arbitration; this file owns the parts that
 // are easy to get subtly wrong: Q edge/first-target geometry, R's farthest
 // target rule, passive energy/dash math and the current 26.14 damage model.
@@ -75,7 +75,7 @@ inline float PassiveDashSpeed(int championLevel, float movementSpeed) {
 }
 
 // A buffered order inside the minimum travel threshold is modeled as a
-// deliberate no-dash/hold branch.  A valid movement order farther away is
+// deliberate no-dash/hold branch. A valid movement order farther away is
 // clamped to Ambessa's real 350-unit travel; terrain truncation is performed
 // by the live controller because this pure layer must not query NavMesh.
 inline Vec3 PassiveDashEndpoint(const Vec3& origin,
@@ -148,7 +148,7 @@ inline Q1Region ClassifyQ1(const Vec3& origin,
     if (forward < -radius || distance > kQ1OuterRadius + radius) {
         return Q1Region::Miss;
     }
-    // Damage region follows the target's nearest edge.  This avoids calling a
+    // Damage region follows the target's nearest edge. This avoids calling a
     // large champion at 300 range an edge hit when its body overlaps Q's inner
     // half-damage area.
     const float nearestEdge = std::max(0.0f, distance - radius);

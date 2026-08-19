@@ -1190,8 +1190,7 @@ inline constexpr ChampionController Controller = [] {
       &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
   c.OnBuffRemove =
       &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-  c.OnBuffUpdate =
-      &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
   c.OnBeforeAttack = &OnBeforeAttack;
   c.OnAfterAttack = &OnAfterAttack;
   c.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<

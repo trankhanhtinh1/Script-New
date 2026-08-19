@@ -678,7 +678,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args, bool added) 
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (QCharging() || EActive || RChannelActive) {
         args.Process = false; return;
@@ -702,7 +701,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
     }
 }
-
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -821,7 +819,7 @@ inline constexpr ChampionController Controller = [] {
     controller.BuildMenu = &BuildMenu; controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw; controller.OnProcessSpell = &ObserveLocalSpell;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>; controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack; controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 825, 1100>; controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1400, 250, 5000>;
     return controller;

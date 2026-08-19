@@ -349,12 +349,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "highlander")) HighlanderActive = false;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!IsLocalPlayer(args.Sender)) return;
-    if (Engine::TextContains(args.BuffName, "meditate") && args.EndTime <= Game::Time()) Meditating = false;
-    if (Engine::TextContains(args.BuffName, "highlander") && args.EndTime <= Game::Time()) HighlanderActive = false;
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) {
         LastAttackTargetId = static_cast<int>(args.Target.NetworkId());
@@ -418,7 +412,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

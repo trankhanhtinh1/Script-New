@@ -89,7 +89,6 @@ inline bool BravadoReady() {
         BravadoWindowOpen(Now(), BravadoExpireTick);
 }
 
-
 inline AIHeroClient SelectBastionAlly(bool defensive = false) {
     const auto linked = LinkedAlly();
     if (linked.IsValid()) return linked;
@@ -410,10 +409,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         RObservedActive = false;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    OnBuffAdd(args);
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     (void)CaptureBeforeAttack(args, LastAutoTargetId, LastAutoTick);
 }
@@ -538,7 +533,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

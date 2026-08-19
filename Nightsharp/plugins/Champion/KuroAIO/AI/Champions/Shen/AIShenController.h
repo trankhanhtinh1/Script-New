@@ -404,11 +404,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         PassiveReady = false; PassiveShieldUntil = 0; PassiveShieldAmount = 0.0f;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "shenpassiveshield")) {
-        PassiveReady = true; PassiveShieldUntil = Now() + 4000;
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) { LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now(); }
 }
@@ -474,7 +469,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

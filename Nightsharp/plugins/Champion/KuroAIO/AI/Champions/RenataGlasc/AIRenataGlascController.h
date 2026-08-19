@@ -389,7 +389,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "RenataR")) RActiveUntil = 0;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { OnBuffAdd(args); }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs&) {}
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs&) {}
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs&) {}
@@ -487,7 +486,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackTargetEvent<&LastAutoTargetId>;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<

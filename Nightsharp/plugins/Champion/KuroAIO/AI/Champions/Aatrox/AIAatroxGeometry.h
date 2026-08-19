@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure, live-memory-free Aatrox Q geometry.  Kept separate so the exact model
+// Pure, live-memory-free Aatrox Q geometry. Kept separate so the exact model
 // used by the controller can be compiled and exercised as a standalone test.
 
 #include "../../AIGeometry.h"

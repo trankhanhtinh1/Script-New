@@ -322,7 +322,6 @@ inline void OnBuffState(const SDK::Events::BuffEventArgs& args, bool added) {
 
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, true); }
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, true); }
 
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     const auto player = GameObjects::Player();
@@ -441,7 +440,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

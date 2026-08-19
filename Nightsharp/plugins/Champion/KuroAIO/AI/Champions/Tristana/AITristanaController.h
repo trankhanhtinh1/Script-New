@@ -33,7 +33,7 @@ inline constexpr int kCombatWAfterRLockMs = 900;
 inline constexpr int kCombatWRetryThrottleMs = 400;
 inline constexpr float kMinimumRocketJumpDisplacement = 200.0f;
 
-// Buster Shot displaces the target.  A jump request immediately after it is
+// Buster Shot displaces the target. A jump request immediately after it is
 // based on stale target state and usually becomes an accidental second commit.
 inline bool RecentBusterShot(int lockMs = kCombatWAfterRLockMs) {
     const int now = Now();
@@ -130,7 +130,7 @@ inline SDK::KuroTargetSelector::ScoreContribution ScoreTristanaTarget(
 inline void EnsureTristanaTargetProvider() {
     auto* service = SDK::KuroTargetSelector::ActiveService();
     if (!service) {
-        // Kuro may be inactive while the object is still alive.  Unregister in
+        // Kuro may be inactive while the object is still alive. Unregister in
         // that case, but never dereference a service after its plugin unload.
         if (TristanaProviderService && TristanaProviderToken &&
             SDK::KuroTargetSelector::LiveService() ==
@@ -174,7 +174,7 @@ inline float TargetedRange() {
 
 inline void RefreshDynamicRanges() {
     // Spell::CastOnUnit performs a center-distance check, while the live game
-    // data marks E/R as using bounding boxes.  Keep a neutral display/default
+    // data marks E/R as using bounding boxes. Keep a neutral display/default
     // allowance here; each actual cast below installs the exact target radius.
     const float range = TargetedRange() + 65.0f;
     if (Engine::RuntimeSpells[2]) Engine::RuntimeSpells[2]->Range = range;
@@ -733,7 +733,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         ReleaseTristanaFocus();
     }
 }
-
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;

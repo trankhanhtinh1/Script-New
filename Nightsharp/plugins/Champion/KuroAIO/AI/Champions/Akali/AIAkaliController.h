@@ -30,7 +30,7 @@ using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::UnitByNetworkId;
 using ControllerHelpers::ValidHostileUnit;
 
-// A deliberately explicit state machine.  Akali's damage does not come from
+// A deliberately explicit state machine. Akali's damage does not come from
 // casting four slots in order: every spell hit asks whether the player should
 // cash a passive kama, spend W's only safety window, take E2, or preserve R2.
 enum class Sequence : int {
@@ -87,7 +87,7 @@ inline R2Purpose LastR2Purpose = R2Purpose::None;
 inline int SequenceTargetId = 0;
 inline int SequenceExpireTick = 0;
 
-// Passive is observed from the real buff whenever available.  The short
+// Passive is observed from the real buff whenever available. The short
 // candidate window lets the controller draw the intended ring immediately
 // after a very-high-confidence hit, but it never hard-locks casts based on a
 // prediction alone.
@@ -203,7 +203,7 @@ inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
 }
 
 // Do not put Akali's last escape (W/R2) into a point-click suppress/stun zone
-// unless the player explicitly permits a lethal gamble.  The list is small on
+// unless the player explicitly permits a lethal gamble. The list is small on
 // purpose: broad "any enemy R" heuristics make assassins unusably passive.
 inline bool HasPointClickLockdownAt(const Vector3& position) {
     return Bool(ExecutionMenu, "RespectLockdown", true) &&
@@ -311,7 +311,7 @@ inline float R2Damage(const AIHeroClient& target) {
         target, SDK::DamageStage::SecondCast);
     if (damage <= 1.0f) {
         // Old runtime spell data sometimes reports Rb's minimum cast in the
-        // default stage.  The multiplier is live-kit based and capped at 3x.
+        // default stage. The multiplier is live-kit based and capped at 3x.
         damage = Engine::RuntimeSpells[3]->GetDamage(target) *
                  R2ExecuteMultiplier(target.HealthPercent());
     }
@@ -835,7 +835,7 @@ inline bool TryR2Execute(const AIHeroClient& target, Mode mode) {
     const bool lowEnough = target.HealthPercent() <=
         Slider(ExecutionMenu, "R2HealthThreshold", 44);
     if (!lethal && !lowEnough) return false;
-    // R2 is famous for its delayed execute.  Holding it through the lockout
+    // R2 is famous for its delayed execute. Holding it through the lockout
     // is intentional; only spend nonlethal R2 when the window is ending.
     if (!lethal && RWindowExpireTick - now >
         Slider(ExecutionMenu, "NonlethalR2BeforeExpiryMs", 700)) return false;
@@ -866,7 +866,7 @@ inline bool TryPassiveWeave(const AIHeroClient& fallback, Mode mode) {
         if (PassiveWeaponExpireTick <= now) PassiveWeaponExpireTick = now + kPassiveWeaponMs;
         if (Engine::ValidEnemy(target) && TargetInPassiveAaRange(target)) {
             // Cooperation rule: do not overwrite the player's empowered AA
-            // with Q/E.  Orbwalker remains free to attack and move.
+            // with Q/E. Orbwalker remains free to attack and move.
             ActiveSequence = Sequence::PassiveKama;
             SequenceTargetId = static_cast<int>(target.NetworkId());
             SequenceExpireTick = PassiveWeaponExpireTick;
@@ -1051,7 +1051,7 @@ inline bool TryCombo(const AIHeroClient& target) {
         if (CastQ(target, Mode::Combo, Engine::IsHardCrowdControlled(target))) return true;
     }
 
-    // E1 after Q tip/CC is an actual hit route.  Otherwise it is withheld;
+    // E1 after Q tip/CC is an actual hit route. Otherwise it is withheld;
     // Akali mains do not donate Shuriken Flip into a free dodge.
     if (E1Available() && (LastQWasTip || Engine::IsHardCrowdControlled(target) ||
         target.IsDashing())) {
@@ -1076,7 +1076,7 @@ inline bool TryCombo(const AIHeroClient& target) {
 inline bool TryHarass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || TargetCannotBeDamaged(target)) return false;
     if (TryPassiveWeave(target, Mode::Harass)) return true;
-    // Harass reserves energy for a real escape.  No automatic R, no W for a
+    // Harass reserves energy for a real escape. No automatic R, no W for a
     // small trade, and E only after tip slow, CC, dash endpoint, or a committed
     // enemy cast observed by the event stream.
     if (CurrentResource() < QCost() + std::max(ECost(), 30.0f)) return false;
@@ -1339,7 +1339,7 @@ inline void RefreshState() {
     if (RWindowActive && now > RWindowExpireTick) ClearRWindow();
     if (!rRuntime && RWindowActive && R1CastTick > 0 && now - R1CastTick > 1000 &&
         now < R2UnlockTick) {
-        // The recast name can lag for a few frames after R1.  Do not clear the
+        // The recast name can lag for a few frames after R1. Do not clear the
         // window until the real expiry; R2's 2.5 sec static lock is expected.
     }
 
@@ -1353,7 +1353,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     CurrentPosture = DeterminePosture(selected);
     const AIHeroClient threat = NearestEnemyToPlayer(selected, 1300.0f);
 
-    // Safety responses outrank damage branches.  A fleeing one-trick Akali
+    // Safety responses outrank damage branches. A fleeing one-trick Akali
     // must retain the player-owned movement and choose a safe E/R route first.
     if (mode == Mode::Flee) {
         (void)TryFlee(selected);
@@ -1501,22 +1501,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         (Engine::TextContains(args.BuffName, "AkaliE") ||
          Engine::TextContains(args.BuffName, "akaliemark"))) {
         if (!ESecondCastAvailable()) ClearEMark();
-    }
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "AkaliPWeapon") &&
-        args.EndTime > Game::Time()) {
-        PassiveWeaponReady = true;
-        PassiveWeaponExpireTick = SDK::Variables::TickCount() +
-            ControllerHelpers::RemainingMilliseconds(
-                args.EndTime, kPassiveWeaponMs, 150, 5000);
-    }
-    if (static_cast<int>(args.Sender.NetworkId) == EMarkTargetId &&
-        Engine::TextContains(args.BuffName, "AkaliE") && args.EndTime > Game::Time()) {
-        EMarkExpireTick = SDK::Variables::TickCount() +
-            ControllerHelpers::RemainingMilliseconds(
-                args.EndTime, kEWindowMs, 150, 4500);
     }
 }
 
@@ -1909,7 +1893,7 @@ inline constexpr ChampionController Controller = [] {
             &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser =

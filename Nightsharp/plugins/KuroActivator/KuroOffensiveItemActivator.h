@@ -95,8 +95,7 @@ public:
 
         const SDK::OrbwalkingMode mode = SDK::Orbwalker::ActiveMode();
         const bool allowHarass = useInHarass_ && useInHarass_->Value;
-        const bool modeAllowed = mode == SDK::OrbwalkingMode::Combo ||
-                                 (allowHarass && mode == SDK::OrbwalkingMode::Mixed);
+        const bool modeAllowed = IsOffensiveItemMode(mode, allowHarass);
         if (!modeAllowed) return;
 
         if (now - lastUseTick_ < kReuseMs) return;

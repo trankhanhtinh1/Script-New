@@ -2961,8 +2961,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnAfterAttack =
         &ControllerHelpers::CaptureAfterAttackEvent<
             &LastAfterAttackTargetId, &LastAfterAttackTick>;

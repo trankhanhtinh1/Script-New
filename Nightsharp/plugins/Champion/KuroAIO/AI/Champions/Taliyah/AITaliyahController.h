@@ -756,7 +756,7 @@ inline void RegisterQCast(QForm form, int targetId) {
         seconds, NextGroundZoneId);
     if (transition.CreatedZoneId != 0) ++NextGroundZoneId;
     LastQForm = form;
-    // The pre-cast ledger is authoritative.  The explicit form argument is
+    // The pre-cast ledger is authoritative. The explicit form argument is
     // retained for missile reconciliation and manual-cast telemetry.
     if (transition.Form != form) LastQForm = transition.Form;
     LastQCastTick = now;
@@ -942,7 +942,7 @@ inline EPlan BuildEPlan(const AIBaseClient& target,
             ChampionMobilityReady(AIHeroClient(target.Address()));
         context.TargetCommitted = target.IsHero() &&
             TargetCommitted(static_cast<int>(target.NetworkId()));
-        // Once W has been issued, its cooldown is expected.  `afterW` means
+        // Once W has been issued, its cooldown is expected. `afterW` means
         // that the displacement conversion is already committed, not absent.
         context.WReady = Ready(1) || afterW;
         context.QReady = Ready(0);
@@ -993,12 +993,12 @@ inline Vector3 NearestAlliedTurretDirection(const Vector3& center) {
     Vector3 best{};
     // float bestDistance = FLT_MAX;
     // for (const auto& turret : GameObjects::AllyTurrets()) {
-    //     if (!turret.IsValid() || turret.IsDead()) continue;
-    //     const float distance = center.Distance2D(turret.Position());
-    //     if (distance < bestDistance && distance <= 1800.0f) {
-    //         bestDistance = distance;
-    //         best = SharedGeometry::Direction2D(center, turret.Position());
-    //     }
+    // if (!turret.IsValid() || turret.IsDead()) continue;
+    // const float distance = center.Distance2D(turret.Position());
+    // if (distance < bestDistance && distance <= 1800.0f) {
+    // bestDistance = distance;
+    // best = SharedGeometry::Direction2D(center, turret.Position());
+    // }
     // }
     return best;
 }
@@ -1076,7 +1076,7 @@ inline WPlan BuildWPlan(const AIBaseClient& target,
         directions.push_back(Vector3{ field.Direction.z, 0.0f,
                                      -field.Direction.x });
     } else if (planEAfter && Ready(2)) {
-        // W starts now; E is queued after W's 0.25 cast.  The field therefore
+        // W starts now; E is queued after W's 0.25 cast. The field therefore
         // has only its early rows when W erupts at 0.75 seconds.
         field = BuildMinefield(
             player.Position(), center,
@@ -1145,7 +1145,7 @@ inline WPlan BuildWPlan(const AIBaseClient& target,
             HasSpellShieldOrImmunity(target);
         context.TargetImmune = target.IsHero() &&
             IsCommonUntargetableOrImmune(target);
-        // Thin-wall displacements are a real Taliyah technique.  Do not map a
+        // Thin-wall displacements are a real Taliyah technique. Do not map a
         // wall endpoint to invalid automatically; runtime confidence and the
         // target capsule still gate the cast.
         context.DestinationTerrain = false;
@@ -2018,9 +2018,6 @@ inline void OnProcessSpell(
         args, LastLocalAutoTargetId, LastLocalAutoTick);
 }
 
-
-
-
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (CaptureGapcloser(
@@ -2033,7 +2030,6 @@ inline void OnGapcloser(
         }
     }
 }
-
 
 inline bool BuffContains(const SDK::Events::BuffEventArgs& args,
                          std::initializer_list<const char*> tokens) {
@@ -2065,7 +2061,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
         RChannelUntil = ControllerHelpers::BuffExpireTick(args, 1800);
     }
 }
-
 
 inline bool MissileNameContains(
     const SDK::Events::ObjectEventArgs& args,
@@ -2636,7 +2631,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastLocalAutoTargetId, &LastLocalAutoTick>;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackEvent<&LastBeforeAttackTargetId, &LastBeforeAttackTick>;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &OnGapcloser;

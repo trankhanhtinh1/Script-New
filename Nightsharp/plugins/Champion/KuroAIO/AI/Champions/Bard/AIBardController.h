@@ -241,7 +241,7 @@ inline EPlan LastEPlan = {};
 inline RPlan LastRPlan = {};
 
 // Q candidate generation traces terrain and then evaluates every angular
-// candidate.  Cache the completed result briefly so posture branches that ask
+// candidate. Cache the completed result briefly so posture branches that ask
 // for the same target do not repeat those wall/projectile scans.
 struct QPlanCacheEntry {
     int Tick = 0;
@@ -731,7 +731,7 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
         std::max(0.0f,
             origin.Distance2D(targetPosition) -
             target.BoundingRadius() - kQHalfWidth) / kQMissileSpeed;
-    // Impact timing is independent of the angular candidate.  Build one
+    // Impact timing is independent of the angular candidate. Build one
     // object/prediction snapshot lazily after the first clear ray, then share
     // it across all remaining candidate evaluations.
     std::vector<QUnit> units;
@@ -2191,7 +2191,7 @@ inline void ObserveLocalSpell(
     SequenceTargetId = EventTargetId(args);
     SequenceExpireTick = PlayerOverrideUntil + 120;
 
-    // A manual R remains player-owned.  Optional assistance starts only
+    // A manual R remains player-owned. Optional assistance starts only
     // after the ownership window and only times Q against the actual Bard R
     // stasis buff; it never changes the cast center or issues movement.
     if (slot == 3 && Bool(RMenu, "AssistManualR", true)) {
@@ -2255,8 +2255,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     }
     LastBeforeAttackHadMeep = false;
 }
-
-
 
 inline bool BuffNameIs(const SDK::Events::BuffEventArgs& args,
                        std::initializer_list<const char*> names) {
@@ -2330,7 +2328,6 @@ inline void UpdateBardBuffState(
         }
     }
 }
-
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid()) return;
@@ -2936,7 +2933,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBardBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 900, 1250>;

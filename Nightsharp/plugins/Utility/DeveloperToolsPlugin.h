@@ -181,7 +181,6 @@ public:
     bool logAnimation_ = false;
     bool logBuffAdd_ = false;
     bool logBuffRemove_ = false;
-    bool logBuffUpdate_ = false;
     bool logNewPath_ = false;
     char logNameFilter_[64] = {};
     int activeTabIdx_ = 0;
@@ -490,7 +489,6 @@ public:
     SDK::UI::MenuBool* menuLogAnimation_ = nullptr;
     SDK::UI::MenuBool* menuLogBuffAdd_ = nullptr;
     SDK::UI::MenuBool* menuLogBuffRemove_ = nullptr;
-    SDK::UI::MenuBool* menuLogBuffUpdate_ = nullptr;
     SDK::UI::MenuBool* menuLogNewPath_ = nullptr;
 
 private:
@@ -1152,7 +1150,6 @@ private:
     static void OnPlayAnimationEvent(const SDK::Events::PlayAnimationEventArgs& args);
     static void OnBuffAddEvent(const SDK::Events::BuffEventArgs& args);
     static void OnBuffRemoveEvent(const SDK::Events::BuffEventArgs& args);
-    static void OnBuffUpdateEvent(const SDK::Events::BuffEventArgs& args);
     static void OnNewPathEvent(const SDK::Events::NewPathEventArgs& args);
     static void OnObjectDelete(const SDK::Events::ObjectEventArgs& args);
 
@@ -1218,7 +1215,6 @@ inline void DeveloperToolsPlugin::OnLoad() {
     SDK::Events::AddOnPlayAnimation(&DeveloperToolsPlugin::OnPlayAnimationEvent);
     SDK::Events::AddOnBuffAdd(&DeveloperToolsPlugin::OnBuffAddEvent);
     SDK::Events::AddOnBuffRemove(&DeveloperToolsPlugin::OnBuffRemoveEvent);
-    SDK::Events::AddOnBuffUpdate(&DeveloperToolsPlugin::OnBuffUpdateEvent);
     SDK::Events::AddOnNewPath(&DeveloperToolsPlugin::OnNewPathEvent);
     SDK::Events::AddOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
 
@@ -1264,7 +1260,6 @@ inline void DeveloperToolsPlugin::OnLoad() {
     menuLogAnimation_ = loggerEvents->Add(new SDK::UI::MenuBool("EvAnimation", "OnPlayAnimation", logAnimation_));
     menuLogBuffAdd_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffAdd", "OnBuffAdd", logBuffAdd_));
     menuLogBuffRemove_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffRemove", "OnBuffRemove", logBuffRemove_));
-    menuLogBuffUpdate_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffUpdate", "OnBuffUpdate", logBuffUpdate_));
     menuLogNewPath_ = loggerEvents->Add(new SDK::UI::MenuBool("EvNewPath", "OnNewPath", logNewPath_));
 
     menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
@@ -1282,7 +1277,6 @@ inline void DeveloperToolsPlugin::OnUnload() {
     SDK::Events::RemoveOnPlayAnimation(&DeveloperToolsPlugin::OnPlayAnimationEvent);
     SDK::Events::RemoveOnBuffAdd(&DeveloperToolsPlugin::OnBuffAddEvent);
     SDK::Events::RemoveOnBuffRemove(&DeveloperToolsPlugin::OnBuffRemoveEvent);
-    SDK::Events::RemoveOnBuffUpdate(&DeveloperToolsPlugin::OnBuffUpdateEvent);
     SDK::Events::RemoveOnNewPath(&DeveloperToolsPlugin::OnNewPathEvent);
     SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPlugin::OnObjectDelete);
 
@@ -1768,20 +1762,6 @@ inline void DeveloperToolsPlugin::OnBuffRemoveEvent(const SDK::Events::BuffEvent
     }
 }
 
-inline void DeveloperToolsPlugin::OnBuffUpdateEvent(const SDK::Events::BuffEventArgs& args) {
-    if (s_instance && s_instance->enabled_) {
-        const std::uint32_t netId = static_cast<std::uint32_t>(args.Sender.NetworkId);
-        if (s_instance->IsEventLogOpen(netId)) {
-            char details[256];
-            std::snprintf(details, sizeof(details), "Buff: %s | Count: %d", 
-                          args.BuffName ? args.BuffName : "Unknown", args.Count);
-            s_instance->LogEventForObject(netId, "BuffUpdate", details);
-        }
-        s_instance->DispatchTabEvent(
-            &DevTools::IDeveloperTab::OnBuffUpdateEvent, args, "buff-update");
-    }
-}
-
 inline void DeveloperToolsPlugin::OnNewPathEvent(const SDK::Events::NewPathEventArgs& args) {
     if (s_instance && s_instance->enabled_) {
         const std::uint32_t netId = static_cast<std::uint32_t>(args.Sender.NetworkId);
@@ -1839,7 +1819,6 @@ inline void DeveloperToolsPlugin::SyncMenuSettings() {
     if (menuLogAnimation_) logAnimation_ = menuLogAnimation_->Value;
     if (menuLogBuffAdd_) logBuffAdd_ = menuLogBuffAdd_->Value;
     if (menuLogBuffRemove_) logBuffRemove_ = menuLogBuffRemove_->Value;
-    if (menuLogBuffUpdate_) logBuffUpdate_ = menuLogBuffUpdate_->Value;
     if (menuLogNewPath_) logNewPath_ = menuLogNewPath_->Value;
 }
 
@@ -1876,7 +1855,6 @@ inline void DeveloperToolsPlugin::DestroyNativeMenu() {
         menuLogAnimation_ = nullptr;
         menuLogBuffAdd_ = nullptr;
         menuLogBuffRemove_ = nullptr;
-        menuLogBuffUpdate_ = nullptr;
         menuLogNewPath_ = nullptr;
     }
 }

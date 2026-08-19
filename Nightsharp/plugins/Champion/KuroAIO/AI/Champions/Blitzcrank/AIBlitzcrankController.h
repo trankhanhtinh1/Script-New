@@ -1934,7 +1934,6 @@ inline void OnGapcloser(
     }
 }
 
-
 inline bool BuffNameContains(
     const SDK::Events::BuffEventArgs& args,
     std::initializer_list<const char*> tokens) {
@@ -2001,7 +2000,6 @@ inline void UpdateBuffState(
         MarkTracker.Synchronize(id, removed ? 0 : std::max(1, args.Count), Now());
     }
 }
-
 
 inline void OnMissileCreate(
     const SDK::Events::ObjectEventArgs& args) {
@@ -2499,7 +2497,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

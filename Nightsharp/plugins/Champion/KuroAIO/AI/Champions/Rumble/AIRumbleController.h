@@ -650,7 +650,7 @@ inline constexpr ChampionController Controller = [] {
     controller.BuildMenu = &BuildMenu; controller.OnUpdate = &OnUpdate;
     controller.OnDraw = &OnDraw; controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>; controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardExpiringBuffStateEvent<&UpdateBuffState>;
+
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>; controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1500, 250, 6000>;
     return controller;

@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Controllers::Tristana::Geometry {
 
 inline float DynamicTargetedRange(float currentAttackRange) {
     // Draw a Bead modifies the live attack range and E/R follow that same
-    // value.  Target bounding radius is applied by the caller exactly once.
+    // value. Target bounding radius is applied by the caller exactly once.
     return std::max(0.0f, currentAttackRange);
 }
 

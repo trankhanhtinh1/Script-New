@@ -3,11 +3,11 @@
 // Deterministic Taliyah mechanics and one-trick policy.
 //
 // Runtime prediction, NavMesh/turret queries, game-object discovery and casts
-// live in AITaliyahController.  This layer owns the mechanics that are easy to
+// live in AITaliyahController. This layer owns the mechanics that are easy to
 // get subtly wrong: accelerating versus fixed-speed Q interception, first-body
 // AoE splash, Worked Ground creation/consumption, the six-row 22-mine E field,
 // W displacement direction, E-W versus W-E timing, branch mana and manual R
-// wall split safety.  Keeping these rules pure makes the controller auditable
+// wall split safety. Keeping these rules pure makes the controller auditable
 // without a running League client.
 
 #include "../../AIGeometry.h"
@@ -100,7 +100,7 @@ inline float QMonsterFlatDamage(int rank) {
 
 inline float QMonsterVolleyRawDamage(int rank, float abilityPower) {
     if (rank <= 0) return 0.0f;
-    // Riot labels the jungle modifier as flat damage per rock.  The ordinary
+    // Riot labels the jungle modifier as flat damage per rock. The ordinary
     // five-rock base/AP payload is 1 + 4*0.4 = 2.6, while all five missiles
     // receive the flat monster payload.
     return QVolleyRawDamage(rank, abilityPower) +
@@ -185,7 +185,7 @@ inline float RRange(int rank) {
 }
 
 // Distance measured after the missile is released (the 0.25 second cast is
-// intentionally separate).  Normal Q decelerates from 3600 toward 1500;
+// intentionally separate). Normal Q decelerates from 3600 toward 1500;
 // within its 1000 range it remains in the deceleration phase.
 inline float QProjectileDistance(float projectileSeconds, bool bigRock) {
     const float seconds = std::max(0.0f, projectileSeconds);
@@ -295,7 +295,7 @@ inline QContact ContactWithQBody(const Vec3& origin,
     const float maximumSeconds = QProjectileTravelSeconds(kQRange, bigRock);
 
     // A 480 Hz bracket is comfortably smaller than the time needed for the
-    // fastest projectile to cross the smallest legal capsule.  Bisection then
+    // fastest projectile to cross the smallest legal capsule. Bisection then
     // recovers the first entry instead of merely the closest sample.
     constexpr int samples = 256;
     float previousTime = 0.0f;
@@ -539,10 +539,10 @@ struct Minefield {
 
 // Riot exposes 22 mines in six rows (2 in the first, then 4 in each of five
 // rows), 85 radius and 0.17 seconds between rows, but the server-side lateral
-// offsets are not in the client bin.  These centers reconstruct the visible
+// offsets are not in the client bin. These centers reconstruct the visible
 // trapezoid conservatively: exact row count/timing/radius are live data, while
 // the increasing half-width prevents the planner from claiming contacts in
-// gaps near the sides.  Runtime W casts still require prediction confidence.
+// gaps near the sides. Runtime W casts still require prediction confidence.
 inline Minefield BuildMinefield(const Vec3& origin,
                                 const Vec3& castPosition,
                                 float castAtSeconds = 0.0f) {
@@ -672,7 +672,7 @@ inline MineContactSummary CountMineContacts(
     std::array<bool, kERows> rows = {};
     for (const Candidate& candidate : candidates) {
         // Multiple overlapping circles in one row are a single path event for
-        // a capsule moving through the lane.  Count distinct rows first; this
+        // a capsule moving through the lane. Count distinct rows first; this
         // avoids exaggerating a lateral graze into the 2.5x damage cap.
         if (rows[static_cast<std::size_t>(candidate.Row)]) continue;
         rows[static_cast<std::size_t>(candidate.Row)] = true;

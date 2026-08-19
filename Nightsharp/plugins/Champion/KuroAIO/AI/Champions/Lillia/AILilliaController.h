@@ -95,7 +95,6 @@ inline bool EBlockedByMinion(const Vec3& origin, const Vec3& aim,
     return false;
 }
 
-
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false,
                   bool lethal = false) {
     const auto player = GameObjects::Player();
@@ -375,7 +374,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffAdd;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     return controller;

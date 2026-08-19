@@ -1,6 +1,6 @@
 #pragma once
 
-// Brand-only geometry and deterministic damage/state rules.  Runtime target
+// Brand-only geometry and deterministic damage/state rules. Runtime target
 // validity, prediction and casts remain in AIBrandController.h.
 #include "../../AIGeometry.h"
 

@@ -302,11 +302,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime <= Game::Time()) OnBuffRemove(args);
-    else OnBuffAdd(args);
-}
-
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     IncomingThreatTargetId = static_cast<int>(args.NetworkId);
     IncomingThreatUntil = std::max(IncomingThreatUntil, Now() + 700);
@@ -435,7 +430,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

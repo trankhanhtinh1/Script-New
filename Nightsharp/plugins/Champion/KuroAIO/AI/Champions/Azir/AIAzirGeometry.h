@@ -1,6 +1,6 @@
 #pragma once
 
-// Deterministic Azir mechanics and one-trick decisions.  Runtime object
+// Deterministic Azir mechanics and one-trick decisions. Runtime object
 // discovery, prediction and spell casts live in AIAzirController; this file
 // owns the soldier formation, late-Q, drift, collision, R wall and Sun Disc
 // policies so the difficult parts remain independently testable.

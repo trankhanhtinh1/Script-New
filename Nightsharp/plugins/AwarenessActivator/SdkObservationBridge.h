@@ -52,7 +52,6 @@ public:
         ok = (SDK::Events::hook.OnMissileDelete += &OnMissileDelete) && ok;
         ok = (SDK::Events::hook.OnBuffAdd += &OnBuffAdd) && ok;
         ok = (SDK::Events::hook.OnBuffRemove += &OnBuffRemove) && ok;
-        ok = (SDK::Events::hook.OnBuffUpdate += &OnBuffUpdate) && ok;
         ok = (SDK::Events::hook.OnNewPath += &OnNewPath) && ok;
         ok = (SDK::Events::hook.OnTeleportRaw += &OnTeleportRaw) && ok;
         ok = (SDK::Events::hook.OnDoCast += &OnDoCast) && ok;
@@ -76,7 +75,6 @@ public:
         SDK::Events::hook.OnMissileDelete -= &OnMissileDelete;
         SDK::Events::hook.OnBuffAdd -= &OnBuffAdd;
         SDK::Events::hook.OnBuffRemove -= &OnBuffRemove;
-        SDK::Events::hook.OnBuffUpdate -= &OnBuffUpdate;
         SDK::Events::hook.OnNewPath -= &OnNewPath;
         SDK::Events::hook.OnTeleportRaw -= &OnTeleportRaw;
         SDK::Events::hook.OnDoCast -= &OnDoCast;
@@ -1601,7 +1599,6 @@ private:
     static void OnMissileDelete(const SDK::Events::ObjectEventArgs& args) { if (active_) active_->HandleMissileDelete(args); }
     static void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { if (active_) active_->HandleBuff(args, EventType::BuffAdded); }
     static void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { if (active_) active_->HandleBuff(args, EventType::BuffRemoved); }
-    static void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { if (active_) active_->HandleBuff(args, EventType::BuffUpdated); }
     static void OnNewPath(const SDK::Events::NewPathEventArgs& args) { if (active_) active_->HandlePath(args); }
     static void OnTeleportRaw(const SDK::Events::TeleportRawEventArgs& args) { if (active_) active_->HandleTeleport(args); }
     static void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) { if (active_) active_->HandleSpell(args, EventType::SpellCastStarted); }

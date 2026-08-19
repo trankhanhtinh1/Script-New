@@ -317,7 +317,6 @@ inline void OnBuffState(const SDK::Events::BuffEventArgs& args, bool added) {
 }
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, true); }
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, false); }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { OnBuffState(args, true); }
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
@@ -437,7 +436,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

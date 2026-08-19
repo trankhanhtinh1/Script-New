@@ -39,7 +39,7 @@ inline constexpr bool MarkActive(const MarkState& state, int now) {
     return state.Stacks > 0 && state.ExpireTick > now;
 }
 
-// A mark that reaches three stacks is consumed by the stun.  The caller may
+// A mark that reaches three stacks is consumed by the stun. The caller may
 // retain the returned state as an event-reconciled snapshot until the next
 // mark is observed; no SDK objects are needed for this transition.
 inline constexpr MarkState ApplyMark(MarkState state, int now,

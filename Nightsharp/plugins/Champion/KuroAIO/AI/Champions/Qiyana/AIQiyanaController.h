@@ -61,8 +61,8 @@ inline bool EWasManual = false;
 inline bool RWasManual = false;
 
 // Terrain queries are backed by the shared NavGrid and are comparatively
-// expensive.  Qiyana's decision loop can ask the same segment/terrain set
-// several times while trying Q/E/R fallbacks in one update.  Keep very short
+// expensive. Qiyana's decision loop can ask the same segment/terrain set
+// several times while trying Q/E/R fallbacks in one update. Keep very short
 // identity-aware caches so repeated probes share the result without allowing
 // a moving target to reuse an old route for long enough to change the cast.
 struct SegmentWallCache {
@@ -135,7 +135,7 @@ inline bool HasProjectileWall(const Vector3& start, const Vector3& end) {
         ProjectileWallCache.End.Distance2D(end) <= 18.0f;
     if (reusable) return ProjectileWallCache.Result;
 
-    // FindWallCollision walks the NavGrid cells once.  Preserve the old
+    // FindWallCollision walks the NavGrid cells once. Preserve the old
     // projectile margins (the first/last 20 units belong to the caster and
     // target hitboxes) while replacing the repeated fixed 18-unit samples.
     const Vec3 direction = Direction2D(start, end);
@@ -429,7 +429,7 @@ inline std::vector<TerrainZone> RZones(const Vector3& source, const Vector3& end
     if (direction.IsZero()) return zones;
 
     // Find the first wall with one grid traversal, then only sample water and
-    // brush before that contact.  The old loop called IsWall for every 28-unit
+    // brush before that contact. The old loop called IsWall for every 28-unit
     // step and then performed another grid traversal once a wall was found.
     const float endDistance = source.Distance2D(end);
     const float queryDistance = std::min(kRRange, endDistance);
@@ -640,7 +640,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "Passive")) PassiveState = {};
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !HasElement()) return;
     const auto target = HeroByNetworkId(static_cast<int>(args.Target.NetworkId()));
@@ -800,7 +799,7 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnObjectCreate = &OnObjectCreate;

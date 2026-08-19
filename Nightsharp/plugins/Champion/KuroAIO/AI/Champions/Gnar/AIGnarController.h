@@ -579,7 +579,6 @@ inline void UpdateTransformBuff(const SDK::Events::BuffEventArgs& args,
     }
 }
 
-
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!MissileEventIsLocal(args) || !IsQMissile(args)) return;
     QMissileNetworkId = args.MissileNetworkId != 0
@@ -754,7 +753,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateTransformBuff, true>;
+
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 650, 1100>;
     controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick>;

@@ -1,6 +1,6 @@
 #pragma once
 
-// Deterministic Anivia mechanics.  The live controller owns prediction,
+// Deterministic Anivia mechanics. The live controller owns prediction,
 // target value, buff/object tracking and input arbitration; this file keeps
 // Flash Frost's two hit regions, Frostbite's impact race, Crystallize's real
 // occupied segment and Glacial Storm's growth/ticks independently testable.
@@ -91,7 +91,7 @@ inline Vec3 FlashFrostPosition(const Vec3& origin,
         0.0f, kFlashFrostRange);
 }
 
-// Positive means the missile center has passed the target center.  Anivia
+// Positive means the missile center has passed the target center. Anivia
 // normally wants a small positive overshoot while the 225-radius explosion
 // still covers the target, securing both Q damage instances.
 inline float FlashFrostOvershoot(const Vec3& origin,
@@ -264,7 +264,7 @@ inline Vec3 WallDisplacementDestination(
     float championDisplacement = kCrystallizeChampionDisplacement) {
     if (!wall.Valid || !target.IsValid()) return target;
     float side = WallSignedSide(wall, target);
-    // Exactly centered units are displaced away from the caster.  A live
+    // Exactly centered units are displaced away from the caster. A live
     // plan avoids relying on this tie by offsetting the wall a few units.
     const float sign = side < -0.5f ? -1.0f : 1.0f;
     const float fromPlane = std::fabs(side);

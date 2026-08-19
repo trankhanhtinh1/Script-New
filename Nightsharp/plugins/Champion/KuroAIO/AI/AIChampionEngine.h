@@ -2340,12 +2340,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (Loaded && ActiveController && ActiveController->OnBuffUpdate) {
-        ActiveController->OnBuffUpdate(args);
-    }
-}
-
 inline bool ObjectMatchesProfile(const SDK::Events::ObjectEventArgs& args) {
     if (!ActiveProfile || !ActiveProfile->TrackedObjectToken ||
         !ActiveProfile->TrackedObjectToken[0]) {
@@ -2588,7 +2582,6 @@ inline void OnGameLoad(const ChampionProfile& profile,
     SDK::Events::hook.OnMissileCreate += &OnMissileCreate;
     SDK::Events::hook.OnBuffAdd += &OnBuffAdd;
     SDK::Events::hook.OnBuffRemove += &OnBuffRemove;
-    SDK::Events::hook.OnBuffUpdate += &OnBuffUpdate;
     Orbwalker::OnBeforeAttack += &OnBeforeAttack;
     Orbwalker::OnAfterAttack += &OnAfterAttackRelay;
     Drawing::OnDraw += &OnDraw;
@@ -2613,7 +2606,6 @@ inline void OnUnload() {
     SDK::Events::hook.OnMissileCreate -= &OnMissileCreate;
     SDK::Events::hook.OnBuffAdd -= &OnBuffAdd;
     SDK::Events::hook.OnBuffRemove -= &OnBuffRemove;
-    SDK::Events::hook.OnBuffUpdate -= &OnBuffUpdate;
     Orbwalker::OnBeforeAttack -= &OnBeforeAttack;
     Orbwalker::OnAfterAttack -= &OnAfterAttackRelay;
     Drawing::OnDraw -= &OnDraw;

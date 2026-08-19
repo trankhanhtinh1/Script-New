@@ -57,7 +57,7 @@ inline Vector3 WallAnchor = {};
 inline Vector3 PlannedLanding = {};
 inline Vector3 ArenaCenter = {};
 
-// Hookshot planning fans out over NavMesh wall rays.  The update path can ask
+// Hookshot planning fans out over NavMesh wall rays. The update path can ask
 // for the same plan more than once (combo/harass/flee checks), so retain one
 // movement-aware result briefly and avoid rebuilding all rays every tick.
 inline int HookshotPlanCacheTick = 0;
@@ -635,7 +635,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

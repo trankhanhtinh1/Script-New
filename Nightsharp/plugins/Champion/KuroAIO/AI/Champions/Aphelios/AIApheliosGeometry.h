@@ -110,7 +110,7 @@ inline Weapon WeaponFromRuntimeName(const char* name) {
 }
 
 // Older EnsoulSharp builds expose Calibrum's target mark as ...RangeBuff,
-// while newer/native event feeds commonly use ...RangeDebuff.  Both identify
+// while newer/native event feeds commonly use ...RangeDebuff. Both identify
 // the same consume-on-attack state and must drive one mark state machine.
 inline bool IsCalibrumMarkBuffName(const char* name) {
     return ContainsInsensitive(name, "aphelioscalibrumbonusrangebuff") ||
@@ -118,7 +118,7 @@ inline bool IsCalibrumMarkBuffName(const char* name) {
 }
 
 // Main/off-hand manager buff stacks are an independent ammo observation path
-// used by the C# implementation.  Prefer whichever live hand is present while
+// used by the C# implementation. Prefer whichever live hand is present while
 // rejecting unrelated or corrupt stack counters.
 inline int ObservedWeaponAmmo(bool managerPresent,
                               int managerStacks,
@@ -190,7 +190,7 @@ struct AmmoTransition {
 
 // Weapon disposal is deterministic: the off-hand moves to main, the first
 // queued gun moves to off-hand, and the empty gun returns at the queue tail
-// with 50 ammo.  Runtime reconciliation may later override an unknown queue.
+// with 50 ammo. Runtime reconciliation may later override an unknown queue.
 inline AmmoTransition ConsumeMainAmmo(WeaponState& state, int amount) {
     AmmoTransition result{};
     if (!IsWeapon(state.Main) || amount <= 0) return result;

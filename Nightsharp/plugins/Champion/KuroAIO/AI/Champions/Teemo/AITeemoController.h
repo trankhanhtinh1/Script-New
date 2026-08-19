@@ -330,7 +330,6 @@ inline void OnLoad() {
 
 inline void OnUnload() { TacticsMenu = nullptr; OnLoad(); }
 
-
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!IsLocalPlayer(args.Sender)) return;
     if (args.IsAutoAttack && args.TargetNetworkId != 0) {
@@ -358,13 +357,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     for (std::size_t i = 0; i < PoisonTargetId.size(); ++i) {
         if (PoisonTargetId[i] == id && PoisonBuffName(args.BuffName)) PoisonExpireTick[i] = 0;
     }
-}
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) || !PoisonBuffName(args.BuffName)) return;
-    ObservePoison(static_cast<int>(args.Sender.NetworkId),
-        args.EndTime > Game::Time()
-            ? static_cast<int>((args.EndTime - Game::Time()) * 1000.0f)
-            : 0);
 }
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
@@ -466,7 +458,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

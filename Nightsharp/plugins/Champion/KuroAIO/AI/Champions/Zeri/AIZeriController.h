@@ -382,8 +382,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ZeriMechanics", "Zeri Mechanics"));

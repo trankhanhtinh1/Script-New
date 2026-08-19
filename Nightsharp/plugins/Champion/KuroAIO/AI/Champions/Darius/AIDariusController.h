@@ -373,28 +373,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         (Engine::TextContains(args.BuffName, "NoxianMight") ||
          Engine::TextContains(args.BuffName, "DariusHemoMax"))) NoxianMight = false;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime <= Game::Time()) {
-        OnBuffRemove(args);
-        return;
-    }
-    if (!args.Sender.IsValid()) return;
-    if (Engine::TextContains(args.BuffName, "DariusHemo")) {
-        const int id = static_cast<int>(args.Sender.NetworkId);
-        const int index = HemoIndex(id);
-        if (index >= 0) {
-            HemoExpiry[static_cast<std::size_t>(index)] = Now() + kHemorrhageDurationMs;
-            const auto target = HeroByNetworkId(id);
-            const int live = MaximumBuffCount(target, {
-                "DariusHemo", "DariusHemoMarker", "DariusHemoVisual", "DariusHemoMax"});
-            if (live > 0)
-                HemoStacks[static_cast<std::size_t>(index)] =
-                    std::clamp(live, 0, kMaximumHemorrhageStacks);
-        }
-        return;
-    }
-    OnBuffAdd(args);
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
     LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
@@ -464,7 +442,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

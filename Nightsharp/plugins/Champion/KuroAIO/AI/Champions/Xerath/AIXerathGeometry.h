@@ -71,7 +71,6 @@ inline constexpr bool RuntimeMissingPastGrace(
            nowTick - missingSinceTick > std::max(0, graceMilliseconds);
 }
 
-
 inline bool LineHits(const Vec3& origin, const Vec3& endpoint, const Vec3& target,
                      float width, float targetRadius = 0.0f) {
     if (endpoint.IsZero() || target.IsZero() ||

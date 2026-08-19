@@ -38,7 +38,6 @@ public:
 
         const bool buffAdd = SDK::Events::hook.OnBuffAdd += &PlayerEventFilterPlugin::OnBuffAdd;
         const bool buffRemove = SDK::Events::hook.OnBuffRemove += &PlayerEventFilterPlugin::OnBuffRemove;
-        const bool buffUpdate = SDK::Events::hook.OnBuffUpdate += &PlayerEventFilterPlugin::OnBuffUpdate;
         const bool objectNew = SDK::Events::hook.OnCreateObject += &PlayerEventFilterPlugin::OnObjectCreate;
         const bool objectDel = SDK::Events::hook.OnDeleteObject += &PlayerEventFilterPlugin::OnObjectDelete;
         const bool missileNew = SDK::Events::hook.OnMissileCreate += &PlayerEventFilterPlugin::OnMissileCreate;
@@ -51,7 +50,7 @@ public:
 
         Appendf(
             "[PlayerEventFilter] loaded doCast=%d processSpell=%d playAnimation=%d stopCast=%d "
-            "newPath=%d buffAdd=%d buffRemove=%d buffUpdate=%d objectNew=%d objectDel=%d "
+            "newPath=%d buffAdd=%d buffRemove=%d objectNew=%d objectDel=%d "
             "missileNew=%d missileDel=%d damage=%d finishCast=%d\r\n",
             doCast ? 1 : 0,
             processSpell ? 1 : 0,
@@ -60,7 +59,6 @@ public:
             newPath ? 1 : 0,
             buffAdd ? 1 : 0,
             buffRemove ? 1 : 0,
-            buffUpdate ? 1 : 0,
             objectNew ? 1 : 0,
             objectDel ? 1 : 0,
             missileNew ? 1 : 0,
@@ -77,7 +75,6 @@ public:
         SDK::Events::hook.OnMissileCreate -= &PlayerEventFilterPlugin::OnMissileCreate;
         SDK::Events::hook.OnDeleteObject -= &PlayerEventFilterPlugin::OnObjectDelete;
         SDK::Events::hook.OnCreateObject -= &PlayerEventFilterPlugin::OnObjectCreate;
-        SDK::Events::hook.OnBuffUpdate -= &PlayerEventFilterPlugin::OnBuffUpdate;
         SDK::Events::hook.OnBuffRemove -= &PlayerEventFilterPlugin::OnBuffRemove;
         SDK::Events::hook.OnBuffAdd -= &PlayerEventFilterPlugin::OnBuffAdd;
 
@@ -124,8 +121,6 @@ public:
                     ReadCounter(m_buffAddReceived),    ReadCounter(m_buffAddLocal));
         ImGui::Text("OnBuffRemove:    %lld / %lld",
                     ReadCounter(m_buffRemoveReceived), ReadCounter(m_buffRemoveLocal));
-        ImGui::Text("OnBuffUpdate:    %lld / %lld",
-                    ReadCounter(m_buffUpdateReceived), ReadCounter(m_buffUpdateLocal));
         ImGui::Text("OnCreateObject:  %lld / %lld",
                     ReadCounter(m_objectNewReceived), ReadCounter(m_objectNewLocal));
         ImGui::Text("OnDeleteObject:  %lld / %lld",
@@ -169,8 +164,6 @@ private:
     volatile long long m_buffAddLocal = 0;
     volatile long long m_buffRemoveReceived = 0;
     volatile long long m_buffRemoveLocal = 0;
-    volatile long long m_buffUpdateReceived = 0;
-    volatile long long m_buffUpdateLocal = 0;
     volatile long long m_objectNewReceived = 0;
     volatile long long m_objectNewLocal = 0;
     volatile long long m_objectDelReceived = 0;
@@ -406,8 +399,6 @@ private:
         InterlockedExchange64(&m_buffAddLocal, 0);
         InterlockedExchange64(&m_buffRemoveReceived, 0);
         InterlockedExchange64(&m_buffRemoveLocal, 0);
-        InterlockedExchange64(&m_buffUpdateReceived, 0);
-        InterlockedExchange64(&m_buffUpdateLocal, 0);
         InterlockedExchange64(&m_objectNewReceived, 0);
         InterlockedExchange64(&m_objectNewLocal, 0);
         InterlockedExchange64(&m_objectDelReceived, 0);
@@ -755,10 +746,6 @@ private:
     static void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         if (s_instance) s_instance->HandleBuffEvent(
             "OnBuffRemove", args, s_instance->m_buffRemoveReceived, s_instance->m_buffRemoveLocal);
-    }
-    static void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-        if (s_instance) s_instance->HandleBuffEvent(
-            "OnBuffUpdate", args, s_instance->m_buffUpdateReceived, s_instance->m_buffUpdateLocal);
     }
     static void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
         if (s_instance) s_instance->HandleObjectEvent(

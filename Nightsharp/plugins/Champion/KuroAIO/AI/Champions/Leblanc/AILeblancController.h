@@ -642,7 +642,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args, bool added) 
     }
 }
 
-
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid() || !ObjectEventIsAllied(args)) return;
     const auto player = GameObjects::Player();
@@ -667,14 +666,12 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (Engine::ValidEnemy(tether)) (void)RedirectBeforeAttackToFocus(args, tether);
 }
 
-
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (ControllerHelpers::CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
             GapcloserExpireTick, 760.0f, 900)) {
         IncomingHardCCUntil = std::max(IncomingHardCCUntil, Now() + 650);
     }
 }
-
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -787,7 +784,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnGapcloser = &OnGapcloser;

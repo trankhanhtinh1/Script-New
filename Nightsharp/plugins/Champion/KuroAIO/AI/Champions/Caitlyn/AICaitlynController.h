@@ -418,7 +418,6 @@ inline void ObserveLocalSpell(
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     const auto focus = OwnedOrbwalkerFocus(
         OwnedFocusTargetId, OwnedFocusUntil, kHeadshotTrapRange);
@@ -428,7 +427,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
             OwnedFocusTargetId, OwnedFocusUntil);
     }
 }
-
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;

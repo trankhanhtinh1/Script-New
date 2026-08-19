@@ -75,7 +75,7 @@ inline int QMissiles(bool evolved) {
     return evolved ? kEvolvedQMissiles : kBaseQMissiles;
 }
 
-// Isolated Q assigns all missiles to one champion.  Subsequent missiles deal
+// Isolated Q assigns all missiles to one champion. Subsequent missiles deal
 // 25% of the first missile's damage; ordinary multi-target casts only deliver
 // one missile to a given unit.
 inline float QDamageForTarget(float perMissileDamage,
@@ -88,7 +88,7 @@ inline float QDamageForTarget(float perMissileDamage,
     return first * (1.0f + 0.25f * static_cast<float>(count - 1));
 }
 
-// Level-scaled passive explosion model from the pinned CDragon data.  Missing
+// Level-scaled passive explosion model from the pinned CDragon data. Missing
 // health is clamped because live target telemetry can be stale or over 100%.
 inline float PlasmaDamage(int level, int stacks,
                           float abilityPower,
@@ -109,7 +109,7 @@ inline float RRange(int rank) {
     static constexpr std::array<float, 4> ranges = {
         0.0f, 2000.0f, 2500.0f, 3000.0f,
     };
-    // Runtime data has 2000/2500/3000 effective cast ranges.  Rank zero stays
+    // Runtime data has 2000/2500/3000 effective cast ranges. Rank zero stays
     // zero so an unlearned ultimate cannot be treated as castable.
     return std::clamp(RankValue(ranges, rank), 0.0f, kRMaxRange);
 }

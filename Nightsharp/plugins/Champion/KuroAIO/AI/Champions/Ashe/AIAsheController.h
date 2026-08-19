@@ -1835,7 +1835,6 @@ inline void OnGapcloser(
     }
 }
 
-
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!MissileEventIsLocal(args) ||
         !IsArrowMissileName(args.SpellName, args.MissileName)) return;
@@ -2384,8 +2383,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick, 1900, 250, 6000>;

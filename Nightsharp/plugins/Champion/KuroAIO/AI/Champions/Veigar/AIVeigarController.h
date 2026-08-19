@@ -367,12 +367,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (static_cast<int>(args.Sender.NetworkId) == CageStunnedTargetId &&
         Engine::TextContains(args.BuffName, "veigareventhorizonstun")) CageStunnedTargetId = 0;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "veigarpassive") && args.Count >= 0)
-        PassiveStacks = std::clamp(args.Count, 0, 10000);
-    if (static_cast<int>(args.Sender.NetworkId) == CageStunnedTargetId && args.EndTime <= Game::Time())
-        CageStunnedTargetId = 0;
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
 }
@@ -455,7 +449,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

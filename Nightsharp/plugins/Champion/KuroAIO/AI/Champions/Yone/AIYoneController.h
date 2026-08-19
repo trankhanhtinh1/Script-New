@@ -70,7 +70,6 @@ inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
            target.HasBuff("KayleR") || target.HasBuff("kindredrnodeathbuff");
 }
 
-
 inline void ReconcileState() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
@@ -370,14 +369,12 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !SpiritActive) return;
     const auto target = HeroByNetworkId(static_cast<int>(args.Target.NetworkId()));
     if (!Engine::ValidEnemy(target)) return;
     if (target.HealthPercent() > 70.0f && Orbwalker::IsWindingUp()) args.Process = true;
 }
-
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -496,7 +493,7 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     return controller;

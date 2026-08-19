@@ -188,7 +188,7 @@ inline bool CastThrottleReady(int index, bool fastFollowup = false) {
 
 inline bool TargetDisplacementImmune(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return true;
-    // Narrow live-buff list.  W still stuns several displacement-immune casts,
+    // Narrow live-buff list. W still stuns several displacement-immune casts,
     // but spending the engage for no reposition/Q guarantee is normally bad.
     static constexpr std::array<const char*, 15> buffs = {
         "OlafRagnarok", "SionR", "MalphiteR", "ViR",
@@ -301,7 +301,7 @@ inline float WallThicknessFrom(const Vector3& wallPoint,
                                const Vector3& direction,
                                float maximum = 420.0f) {
     if (!wallPoint.IsValid() || direction.IsZero()) return 0.0f;
-    // NavMesh::IsWall is a native/grid query.  A 12-unit probe produced up to
+    // NavMesh::IsWall is a native/grid query. A 12-unit probe produced up to
     // 36 calls for every candidate W, while a 18-unit probe keeps the same
     // wall-contact semantics with at most 24 calls.
     constexpr float step = 18.0f;
@@ -1451,15 +1451,15 @@ inline void ObserveEnemyCast(const SDK::Events::ProcessSpellEventArgs& args) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     // if (args.Sender.Type ==
-    //         ::Core::Objects::ObjectType::AITurretClient &&
-    //     args.IsAutoAttack &&
-    //     args.TargetNetworkId == static_cast<std::uint32_t>(player.NetworkId())) {
-    //     TurretAggroUntil = Now() + 1800;
-    //     ++TurretShotsObserved;
-    //     RecentIncomingDamage = std::max(
-    //         RecentIncomingDamage, player.MaxHealth() * 0.18f);
-    //     IncomingThreatUntil = Now() + 1800;
-    //     return;
+    // ::Core::Objects::ObjectType::AITurretClient &&
+    // args.IsAutoAttack &&
+    // args.TargetNetworkId == static_cast<std::uint32_t>(player.NetworkId())) {
+    // TurretAggroUntil = Now() + 1800;
+    // ++TurretShotsObserved;
+    // RecentIncomingDamage = std::max(
+    // RecentIncomingDamage, player.MaxHealth() * 0.18f);
+    // IncomingThreatUntil = Now() + 1800;
+    // return;
     // }
 
     const auto analysis = AnalyzeEnemyCast(args, 220.0f, 115.0f);
@@ -1598,10 +1598,6 @@ inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     if (ShouldCleanseBuff(args, reason)) {
         (void)CastR(reason, Mode::Automatic, true);
     }
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender)) UpdateLocalBuffState(args, false);
 }
 
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
@@ -1986,7 +1982,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser =

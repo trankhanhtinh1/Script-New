@@ -1,6 +1,6 @@
 #pragma once
 
-// Deterministic Alistar mechanics.  The live controller owns target/ally
+// Deterministic Alistar mechanics. The live controller owns target/ally
 // selection and NavMesh queries; this file keeps the easily-confused kit
 // math testable: Headbutt's radius-adjusted travel, full versus buffered
 // knockback, Pulverize coverage, Trample pulse/AA timing and R mitigation.
@@ -164,7 +164,7 @@ inline int MillisecondsToNextTramplePulse(
 }
 
 // A high-level Alistar trick: begin the attack at four stacks when its impact
-// occurs after the fifth pulse.  The on-hit then consumes the newly-created
+// occurs after the fifth pulse. The on-hit then consumes the newly-created
 // empowered attack without adding an avoidable half-second gap.
 inline bool FourStackAttackWillStun(int observedStacks,
                                     int millisecondsToNextPulse,

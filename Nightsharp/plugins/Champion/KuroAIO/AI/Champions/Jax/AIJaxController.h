@@ -364,7 +364,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const bool targetsPlayer = args.TargetNetworkId ==
             static_cast<std::uint32_t>(player.NetworkId());
         // const bool turretAttack = args.Sender.Type ==
-        //     ::Core::Objects::ObjectType::AITurretClient;
+        // ::Core::Objects::ObjectType::AITurretClient;
         const bool turretAttack = false;
         if (args.IsAutoAttack && targetsPlayer) {
             IncomingBasicAttackUntil = now + 650;
@@ -442,7 +442,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         RExpireTick = 0;
     }
 }
-
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
@@ -578,7 +577,7 @@ inline constexpr ChampionController Controller = [] {
         &LastLocalAutoTargetId, &LastLocalAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

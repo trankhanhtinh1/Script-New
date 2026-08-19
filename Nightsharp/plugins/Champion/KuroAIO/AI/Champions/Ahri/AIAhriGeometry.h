@@ -1,7 +1,7 @@
 #pragma once
 
 // Pure, live-memory-free geometry shared by Ahri's controller and standalone
-// tests.  The return Orb follows the segment from its current position to
+// tests. The return Orb follows the segment from its current position to
 // Ahri's post-dash position, so a correct R is a segment-interception problem.
 
 #include "../../AIGeometry.h"
@@ -32,7 +32,7 @@ inline float ReturnHitScore(const Vec3& orbPosition,
         return 0.0f;
     }
     const float centered = 1.0f - projection.Distance / hitRadius;
-    // Prefer an actual path crossing.  A target sitting at an endpoint can
+    // Prefer an actual path crossing. A target sitting at an endpoint can
     // still be hit, but the timing is less robust under movement/ping.
     const float interior = 0.65f +
         0.35f * (1.0f - std::min(1.0f, std::fabs(projection.T - 0.5f) * 2.0f));

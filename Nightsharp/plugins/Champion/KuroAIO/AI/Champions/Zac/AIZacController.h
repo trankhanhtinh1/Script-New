@@ -341,10 +341,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     else if (Engine::TextContains(args.BuffName, "zacr")) { CurrentRState = RState::Ready; RBounceCount = 0; }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime <= Game::Time()) OnBuffRemove(args); else OnBuffAdd(args);
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) { LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now(); }
 }
@@ -403,7 +399,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnLoad = &OnLoad; controller.OnUnload = &OnUnload; controller.BuildMenu = &BuildMenu;
     controller.OnUpdate = &OnUpdate; controller.OnDraw = &OnDraw; controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &OnDoCast; controller.OnBuffAdd = &OnBuffAdd; controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate; controller.OnBeforeAttack = &OnBeforeAttack; controller.OnAfterAttack = &OnAfterAttack;
+    controller.OnBeforeAttack = &OnBeforeAttack; controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser; controller.OnInterruptable = &OnInterruptable;
     controller.OnObjectCreate = &OnObjectCreate; controller.OnObjectDelete = &OnObjectDelete;
     controller.OnMissileCreate = &OnMissileCreate; controller.OnMissileDelete = &OnMissileDelete;

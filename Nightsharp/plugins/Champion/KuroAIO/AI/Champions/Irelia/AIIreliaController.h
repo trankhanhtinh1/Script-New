@@ -761,7 +761,7 @@ inline constexpr ChampionController Controller = [] {
                                                       &LastAutoTick>;
   c.OnBuffAdd = &OnBuffAdd;
   c.OnBuffRemove = &OnBuffRemove;
-  c.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
+
   c.OnBeforeAttack = &OnBeforeAttack;
   c.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
   c.OnGapcloser = &OnGapcloser;

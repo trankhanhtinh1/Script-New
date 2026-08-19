@@ -115,7 +115,7 @@ private:
             return;
         }
 
-        if (smiteSlot_ == -1 || now - smiteRefreshedAt_ >= kSlotRefreshMs) {
+        if (smiteSlot_ == -1 || now - smiteRefreshedAt_ >= kCastCacheMs) {
             smiteRefreshedAt_ = now;
             smiteName_[0] = '\0';
             smiteSlot_ = FindSummonerSlot(player, "smite");

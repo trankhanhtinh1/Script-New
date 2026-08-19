@@ -326,7 +326,6 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
     }
 }
 
-
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     if (IsLocalPlayer(args.Sender)) {
@@ -344,11 +343,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         QRecastUntil = 0;
         QTargetId = 0;
     }
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime <= Game::Time()) OnBuffRemove(args);
-    else OnBuffAdd(args);
 }
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
@@ -435,7 +429,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

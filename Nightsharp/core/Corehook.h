@@ -578,7 +578,6 @@ namespace Hooks {
     constexpr uintptr_t OnUpdateChargeableSpell = ::Offset::Hooks::OnUpdateChargeableSpell;
     constexpr uintptr_t OnBuffAdd               = ::Offset::Hooks::OnBuffAdd;
     constexpr uintptr_t OnBuffRemove            = ::Offset::Hooks::OnBuffRemove;
-    constexpr uintptr_t OnBuffUpdate            = ::Offset::Hooks::OnBuffUpdate;
     constexpr uintptr_t OnCreate                = ::Offset::Hooks::OnCreate;
     constexpr uintptr_t OnDelete                = ::Offset::Hooks::OnDelete;
     constexpr uintptr_t OnMissileCreate         = ::Offset::Hooks::OnMissileCreate;
@@ -609,7 +608,6 @@ enum HookId : int {
     Hud_OnDisconnect,
     OnBuffAdd,
     OnBuffRemove,
-    OnBuffUpdate,
     OnDamage,
     OnDoCast,
     OnFinishCast,
@@ -646,7 +644,6 @@ inline constexpr HookSpec kHookSpecs[HookCount] = {
     { "Hud_OnDisconnect",        Offsets::Hud_OnDisconnect },
     { "OnBuffAdd",               Offsets::OnBuffAdd },
     { "OnBuffRemove",            Offsets::OnBuffRemove },
-    { "OnBuffUpdate",            Offsets::OnBuffUpdate },
     { "OnDamage",                Offsets::OnDamage },
     { "OnDoCast",                Offsets::OnDoCast },
     { "OnFinishCast",            Offsets::OnFinishCast },
@@ -827,9 +824,6 @@ inline const char* InstallNote(HookId id) {
     if (id == OnBuffRemove) {
         return "SpellBuffRemove event bridge";
     }
-    if (id == OnBuffUpdate) {
-        return "BuffCounterSet event bridge; stack/count refresh candidate";
-    }
     if (id == OnCreate) {
         return "AssignNetworkId; RCX object, RDX networkId. Call original first";
     }
@@ -880,7 +874,6 @@ inline bool IsEventGated(HookId id) {
         case OnTeleport:
         case OnBuffAdd:
         case OnBuffRemove:
-        case OnBuffUpdate:
         case OnCreate:
         case OnDelete:
         case OnMissileCreate:
@@ -1306,7 +1299,6 @@ extern "C" __declspec(dllexport) inline const uintptr_t g_CoreHookTestRVAs[] = {
     CoreHookTest::Offsets::Hud_OnDisconnect,
     CoreHookTest::Offsets::OnBuffAdd,
     CoreHookTest::Offsets::OnBuffRemove,
-    CoreHookTest::Offsets::OnBuffUpdate,
     CoreHookTest::Offsets::OnDamage,
     CoreHookTest::Offsets::OnDoCast,
     CoreHookTest::Offsets::OnFinishCast,

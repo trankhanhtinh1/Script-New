@@ -634,7 +634,7 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& intended,
             static_cast<std::size_t>(selectedIndex)].Id;
         const AIHeroClient selected = HeroByNetworkId(selectedId);
         if (!Engine::ValidEnemy(selected)) continue;
-        // R is a blink and is not clipped like Drakehound's Step.  Evaluate
+        // R is a blink and is not clipped like Drakehound's Step. Evaluate
         // the predicted behind-target point directly; if it is terrain the
         // candidate remains unsafe instead of inventing a passive-style stop.
         const Vector3 selectedPosition = champions[
@@ -887,7 +887,7 @@ inline bool TryQuickAnimationCancel(const AIHeroClient& fallback,
     const bool close = distance <= kERadius + target.BoundingRadius() + 35.0f;
     if (!burst || !close || ShouldWeaveAuto(target, true)) return false;
     // Casting E during the Q forgiveness window deliberately replaces the
-    // queued movement order.  This is the fast no-dash QE branch demonstrated
+    // queued movement order. This is the fast no-dash QE branch demonstrated
     // by Ambessa specialists; the following E owns a fresh player dash window.
     PlannedDashChoice = DashChoice::NoDash;
     ActiveSequence = Sequence::QuickQE;
@@ -1353,20 +1353,20 @@ inline void ObserveIncomingCast(
     const int now = Now();
 
     // if (args.Sender.Type == ::Core::Objects::ObjectType::AITurretClient &&
-    //     args.IsAutoAttack &&
-    //     (args.TargetNetworkId ==
-    //          static_cast<std::uint32_t>(player.NetworkId()) ||
-    //      args.Target.NetworkId ==
-    //          static_cast<std::uint32_t>(player.NetworkId()))) {
-    //     IncomingFromTurret = true;
-    //     IncomingDamage = std::max(
-    //         IncomingDamage, player.MaxHealth() * 0.16f);
-    //     IncomingThreatUntil = now + 1400;
-    //     IncomingImpactTick = now + 420;
-    //     if (Bool(WMenu, "ReactiveShield", true)) {
-    //         (void)TryEmergencyW({}, Mode::Automatic);
-    //     }
-    //     return;
+    // args.IsAutoAttack &&
+    // (args.TargetNetworkId ==
+    // static_cast<std::uint32_t>(player.NetworkId()) ||
+    // args.Target.NetworkId ==
+    // static_cast<std::uint32_t>(player.NetworkId()))) {
+    // IncomingFromTurret = true;
+    // IncomingDamage = std::max(
+    // IncomingDamage, player.MaxHealth() * 0.16f);
+    // IncomingThreatUntil = now + 1400;
+    // IncomingImpactTick = now + 420;
+    // if (Bool(WMenu, "ReactiveShield", true)) {
+    // (void)TryEmergencyW({}, Mode::Automatic);
+    // }
+    // return;
     // }
 
     const auto analysis = AnalyzeEnemyCast(
@@ -1511,7 +1511,7 @@ inline void ObserveLocalAbility(
         return;
     }
 
-    // Live buff events replace this fallback count.  It exists because some
+    // Live buff events replace this fallback count. It exists because some
     // SDK builds omit a one-frame buff add when the cast and attack land in
     // the same event batch.
     PassiveStacks = std::min(3, PassiveStacks + 1);
@@ -1604,10 +1604,6 @@ inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
         RActive = true;
         ActiveSequence = Sequence::RFollowup;
     }
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender)) UpdatePlayerBuff(args, false);
 }
 
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
@@ -2100,7 +2096,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser =

@@ -197,7 +197,7 @@ inline int RuntimeRushCharges() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return 0;
     // Before the first cast Ahri's recast ammo field is build-dependent and
-    // can legitimately read zero.  Readiness represents the initial three-
+    // can legitimately read zero. Readiness represents the initial three-
     // cast activation; only trust ammo once the recast window is active.
     if (!RActive) {
         return Engine::RuntimeSpells[3] && Engine::RuntimeSpells[3]->IsReady()
@@ -283,7 +283,7 @@ inline float ComboDamage(const AIHeroClient& target, bool includeReservedRush) {
         damage += QOutgoingDamage(target) + QReturnDamage(target);
     }
     if (Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsReady()) {
-        // First flame deals full damage; the two follow-ups are reduced.  A
+        // First flame deals full damage; the two follow-ups are reduced. A
         // conservative 1.6 multiplier avoids spending R on optimistic W math.
         damage += Engine::RuntimeSpells[1]->GetDamage(target) * 1.60f;
     }
@@ -509,7 +509,7 @@ inline bool CastQ(const AIHeroClient& target,
         player.Position(), castPosition, predicted, target.BoundingRadius());
     if (Bool(OrbMenu, "TipDoubleHit", true) && LastTipScore >=
         static_cast<float>(Slider(OrbMenu, "TipConfidence", 62)) / 100.0f) {
-        // Keep the cast collinear and at full travel length.  The target is at
+        // Keep the cast collinear and at full travel length. The target is at
         // the turnaround zone, causing outbound and return hits to nearly stack.
         const Vector3 direction = Direction2D(player.Position(), predicted);
         if (!direction.IsZero()) castPosition = player.Position() + direction * kQRange;
@@ -1188,7 +1188,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         if (TryPeel(peel, mode)) return true;
     }
 
-    // Run this before the combat-mode returns.  It is intentionally below
+    // Run this before the combat-mode returns. It is intentionally below
     // return-Q redirection and reactive peel, but above a fresh offensive
     // sequence so the reserved charge actually remains an exit resource.
     if ((mode == Mode::Combo || mode == Mode::Harass || mode == Mode::None) &&
@@ -1327,23 +1327,13 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "AhriTumble") &&
-        args.EndTime > Game::Time()) {
-        RActive = true;
-        RWindowExpireTick = SDK::Variables::TickCount() +
-            ControllerHelpers::RemainingMilliseconds(
-                args.EndTime, kRWindowMs, 250, 20000);
-    }
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     const int now = SDK::Variables::TickCount();
     if (CharmTargetId != 0 && now < CharmExpireTick &&
         CharmExpireTick - now <= 310 && Engine::RuntimeSpells[0] &&
         Engine::RuntimeSpells[0]->IsReady() && !QActive) {
         // A late AA would consume the guaranteed Charm window and lose both Q
-        // passes.  This is the narrow exception to normal AA preservation.
+        // passes. This is the narrow exception to normal AA preservation.
         args.Process = false;
     }
 }
@@ -1628,7 +1618,7 @@ inline constexpr ChampionController Controller = [] {
             &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack =
         &ControllerHelpers::CaptureAfterAttackEvent<

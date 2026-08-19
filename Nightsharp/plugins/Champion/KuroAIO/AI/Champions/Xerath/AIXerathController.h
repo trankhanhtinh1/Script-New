@@ -594,18 +594,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         EStunnedTargetId = EStunUntil = 0;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) &&
-        (Engine::TextContains(args.BuffName, "RRampUp") ||
-         Engine::TextContains(args.BuffName, "LocusOfPower2") ||
-         Engine::TextContains(args.BuffName, "xerathrshots"))) {
-        if (RChanneling) RRuntimeMissingSince = 0;
-    }
-    if (static_cast<int>(args.Sender.NetworkId) == EStunnedTargetId &&
-        args.EndTime <= Game::Time()) {
-        EStunnedTargetId = EStunUntil = 0;
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) LastAutoTargetId = static_cast<int>(args.Target.NetworkId());
     if (QCharging || RChanneling) args.Process = false;
@@ -674,7 +662,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

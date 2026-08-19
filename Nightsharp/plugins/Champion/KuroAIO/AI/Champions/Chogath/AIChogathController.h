@@ -306,7 +306,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "Vorpal") ||
         Engine::TextContains(args.BuffName, "ChogathE")) VorpalEnabled = false;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) { OnBuffAdd(args); }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
     // Feast's cast is winding-up protected by Riot data; never cancel a manual
@@ -404,7 +403,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

@@ -688,7 +688,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || FlurryStacks <= 0) return;
     if (CurrentResource() < 80.0f && ESecondCast() && TempestMarkExpireTick - Now() > 500) args.Process = true;
@@ -834,7 +833,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     return controller;

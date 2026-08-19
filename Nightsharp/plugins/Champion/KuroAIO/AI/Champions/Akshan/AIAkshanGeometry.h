@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure geometry and deterministic damage helpers for Akshan.  Live terrain
+// Pure geometry and deterministic damage helpers for Akshan. Live terrain
 // lookup, target selection and cast ownership stay in AIAkshanController;
 // this file models the kit pieces that are easy to get subtly wrong:
 // Avengerang's per-hit extension and return line, Heroic Swing's orbit and
@@ -68,7 +68,7 @@ struct QOutboundResult {
 };
 
 // The outbound missile starts at its script range and gains ExtensionDistance
-// once per unit struck.  Sorting intersections before growing the reach makes
+// once per unit struck. Sorting intersections before growing the reach makes
 // chained minion lines deterministic and prevents a far target from granting
 // its own range before the boomerang can physically reach it.
 inline QOutboundResult SimulateQOutbound(

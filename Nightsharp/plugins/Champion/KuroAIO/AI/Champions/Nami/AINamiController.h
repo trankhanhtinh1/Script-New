@@ -415,14 +415,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         EEmpowerUntil = 0; EEmpowerAllyId = 0; EEmpowerHits = 0;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!args.Sender.IsValid() || !Engine::TextContains(args.BuffName, "NamiE")) return;
-    const AIHeroClient sender(args.Sender.Ptr);
-    if (Engine::ValidAlly(sender) &&
-        static_cast<int>(args.Sender.NetworkId) == EEmpowerAllyId) {
-        EEmpowerUntil = std::max(EEmpowerUntil, Now() + 6000);
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) {
         LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now();
@@ -488,7 +480,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

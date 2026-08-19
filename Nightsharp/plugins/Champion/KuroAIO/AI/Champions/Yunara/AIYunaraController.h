@@ -447,7 +447,6 @@ inline void UpdateBuffState(
     }
 }
 
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu(
@@ -529,8 +528,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserUntil, 700, 850>;

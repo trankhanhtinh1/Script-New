@@ -1,6 +1,6 @@
 #pragma once
 
-// Deterministic Aurelion Sol mechanics and decisions.  The runtime controller
+// Deterministic Aurelion Sol mechanics and decisions. The runtime controller
 // supplies prediction, spell/buff telemetry, terrain and threat samples; this
 // file keeps the live Stardust arithmetic, first-body Q beam, continuous-burst
 // clock, W route value, E execute/stacking and both R impact shapes testable.
@@ -29,7 +29,7 @@ inline constexpr float kQTapLockoutSeconds = 1.0f;
 inline constexpr float kQCooldownSeconds = 3.0f;
 inline constexpr float kQMonsterPercentCap = 300.0f;
 inline constexpr float kQSplashModifier = 0.50f;
-// The server-side splash shape is not exported as a targeter.  Runtime plans
+// The server-side splash shape is not exported as a targeter. Runtime plans
 // may override this empirical neighborhood; first-body ordering never depends
 // on it.
 inline constexpr float kDefaultQSplashRadius = 185.0f;

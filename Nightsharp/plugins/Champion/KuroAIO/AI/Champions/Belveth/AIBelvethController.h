@@ -2107,7 +2107,6 @@ inline void OnDoCast(
     }
 }
 
-
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     int targetId = 0;
     int tick = 0;
@@ -2208,8 +2207,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
         }
     }
 }
-
-
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid() || !IsCoralObject(args) ||
@@ -2747,7 +2744,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
     controller.OnInterruptable = &OnInterruptable;

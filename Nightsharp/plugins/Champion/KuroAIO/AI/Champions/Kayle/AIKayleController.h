@@ -432,17 +432,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         RProtectedTargetId = 0;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!IsLocalPlayer(args.Sender)) return;
-    if (Engine::TextContains(args.BuffName, "kaylepassive") && args.Count >= 0) {
-        PassiveStacks = std::clamp(args.Count, 0, kPassiveStackCap);
-        PassiveConfirmed = true;
-    }
-    if (Engine::TextContains(args.BuffName, "kayler") && args.EndTime > Game::Time()) {
-        RInvulnerabilityActive = true;
-        RExpireTick = Now() + ControllerHelpers::RemainingMilliseconds(args.EndTime, kRInvulnerabilityMs, 100, 3500);
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     (void)CaptureAfterAttack(args, LastBeforeAttackTargetId, LastAfterAttackTick);
 }
@@ -497,7 +486,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

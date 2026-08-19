@@ -43,7 +43,7 @@ inline bool QLineHits(const Vec3& start, const Vec3& end, const Vec3& target,
         std::max(0.0f, targetRadius) + kQWidth * 0.5f;
 }
 
-// Q stops on the first unit collision.  The caller supplies the first
+// Q stops on the first unit collision. The caller supplies the first
 // collision distance when the prediction service reports one; a negative
 // distance means no collision was found.
 inline bool QCollisionFree(float targetDistance, float firstCollisionDistance,
@@ -60,7 +60,7 @@ inline bool ZoneContains(const Vec3& center, const Vec3& target,
 }
 
 // Tormented Shadow scales from its base damage to double damage at 100%
-// missing health.  Keep this pure so W placement and tests share the same
+// missing health. Keep this pure so W placement and tests share the same
 // missing-health gate without depending on runtime hero objects.
 inline float WMissingHealthMultiplier(float healthPercent) {
     return 1.0f + std::clamp(100.0f - healthPercent, 0.0f, 100.0f) / 100.0f;

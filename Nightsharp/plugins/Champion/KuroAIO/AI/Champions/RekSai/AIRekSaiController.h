@@ -386,7 +386,7 @@ inline constexpr ChampionController Controller = [] {
     c.OnProcessSpell = &OnProcessSpell;
     c.OnBuffAdd = &OnBuffAdd;
     c.OnBuffRemove = &OnBuffRemove;
-    c.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     c.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackTargetEvent<&LastAutoTargetId>;
     c.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     c.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;

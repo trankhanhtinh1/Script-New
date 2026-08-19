@@ -174,7 +174,6 @@ inline bool CastWAtPosition(const Vector3& position, Mode mode) {
     return true;
 }
 
-
 inline ThreatKind ActiveThreat() {
     if (HardCcUntil > Now()) return ThreatKind::HardCrowdControl;
     if (ThreatUntil > Now()) return ThreatKind::Damage;
@@ -242,7 +241,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
 
 inline bool RecastSoulShackles(const AIHeroClient& target) {
     // Soul Shackles has an automatic delayed stun rather than a second user
-    // button.  RecastPending models that branch so polling cannot issue a
+    // button. RecastPending models that branch so polling cannot issue a
     // fresh R while chains are still active; it clears after the stun window.
     const auto player = GameObjects::Player();
     if (!RActive || !player.IsValid() || Now() < RStunReadyTick ||
@@ -489,7 +488,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackTargetEvent<&LastAutoTargetId>;
     controller.OnInterruptable = &OnInterruptable;

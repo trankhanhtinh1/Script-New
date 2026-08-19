@@ -529,7 +529,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     (void)args;
 }
 
-
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     Vector3 endpoint{};

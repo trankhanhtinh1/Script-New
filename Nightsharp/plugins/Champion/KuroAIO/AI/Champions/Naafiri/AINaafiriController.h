@@ -737,7 +737,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!args.Sender.IsValid() || !ObjectEventIsAllied(args) ||
         !IsPackmateName(args.Sender.Name, args.Sender.CharacterName)) return;
@@ -761,7 +760,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
         args.Process = false;
     }
 }
-
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -926,7 +924,7 @@ inline constexpr ChampionController Controller = [] {
         &LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnObjectCreate = &OnObjectCreate;

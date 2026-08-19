@@ -317,17 +317,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Engine::TextContains(args.BuffName, "undyingrage")) RActive = false;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!IsLocalPlayer(args.Sender) ||
-        !Engine::TextContains(args.BuffName, "undyingrage")) return;
-    if (args.EndTime > Game::Time()) {
-        RActive = true;
-        RExpireTick = Now() + static_cast<int>((args.EndTime - Game::Time()) * 1000.0f);
-    } else {
-        RActive = false;
-    }
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) {
         LastAttackTargetId = static_cast<int>(args.Target.NetworkId());
@@ -388,7 +377,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

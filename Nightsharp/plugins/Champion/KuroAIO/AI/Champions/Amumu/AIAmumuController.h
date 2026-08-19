@@ -535,7 +535,7 @@ inline BandagePlan BuildBandagePlan(
         0.0f, centerDistance - intended.BoundingRadius() -
                   kBandageHalfWidth);
     const float impactDelay = BandageMissileSeconds(provisionalEntry);
-    // This snapshot is independent of the angular offset.  Build it lazily
+    // This snapshot is independent of the angular offset. Build it lazily
     // (only after the first clear projectile ray) and then reuse it for all
     // remaining offsets, removing up to eight full object-list scans.
     std::vector<LineUnit> units;
@@ -1289,7 +1289,7 @@ inline bool HandleBandageSequence(Mode mode,
     if (ActiveSequence == Sequence::ArrivalCurseWeave &&
         Engine::ValidEnemy(contact)) {
         if (!HasCurse(contact) && InAutoAttackRange(contact)) {
-            // Q issues a game-side AA order.  Preserve it unless R urgency
+            // Q issues a game-side AA order. Preserve it unless R urgency
             // explicitly armed the suppression branch.
             return false;
         }
@@ -2634,8 +2634,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser =

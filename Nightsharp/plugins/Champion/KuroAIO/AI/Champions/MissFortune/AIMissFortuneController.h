@@ -644,7 +644,7 @@ inline bool TryPendingUltimate(Mode mode) {
         PendingUltimateManual = false;
         return true;
     }
-    // Keep the short E -> R plan stable while Make It Rain is landing.  The
+    // Keep the short E -> R plan stable while Make It Rain is landing. The
     // orbwalker still moves/attacks; only unrelated controller casts wait.
     return true;
 }
@@ -757,8 +757,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
         (void)CastW(focus, LastMode);
     }
 }
-
-
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;

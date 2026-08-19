@@ -111,7 +111,6 @@ inline void ReconcileAblaze(int now) {
     }
 }
 
-
 inline bool Ready(int slot, Mode mode, bool reactive = false) {
     return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
            Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode) &&
@@ -404,13 +403,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (args.Sender.IsValid() && Engine::TextContains(args.BuffName, "brandablaze"))
         ClearStacks(static_cast<int>(args.Sender.NetworkId));
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.Sender.IsValid() && Engine::TextContains(args.BuffName, "brandablaze")) {
-        const int id = static_cast<int>(args.Sender.NetworkId);
-        const int index = IndexFor(id);
-        if (index >= 0) AblazeExpiry[static_cast<std::size_t>(index)] = Now() + kAblazeDurationMs;
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (args.Target.IsValid()) { LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now(); }
 }
@@ -473,7 +465,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

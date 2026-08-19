@@ -472,8 +472,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     CatchIntent = false;
 }
 
-
-
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!ControllerHelpers::ObjectEventIsAllied(args) || !IsAxeObject(args)) return;
     const int id = ObjectId(args);

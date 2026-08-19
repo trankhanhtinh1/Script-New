@@ -71,7 +71,6 @@ inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
            target.HasBuff("ChronoShift");
 }
 
-
 inline int SpellRank(int slot) {
     if (slot < 0 || slot >= 4 || !Engine::RuntimeSpells[slot]) return 1;
     return std::clamp(Engine::RuntimeSpells[slot]->Level(), 1, slot == 3 ? 3 : 5);
@@ -197,7 +196,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     const Vector3 direction = Direction2D(player.Position(), toward.IsZero() ? cursor : toward);
     if (direction.IsZero()) return false;
     Vector3 endpoint = player.Position() + direction * std::min(kERange, player.Position().Distance2D(toward));
-    // Reuse the first wall query.  The old path queried the same endpoint
+    // Reuse the first wall query. The old path queried the same endpoint
     // twice whenever it was already a wall, and could then rescan the whole
     // 800-unit corridor on every E evaluation.
     bool endpointWall = !endpoint.IsZero() && SDK::NavMesh::IsWall(endpoint);
@@ -371,7 +370,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "TalonE")) Terrain = {};
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !ShadowAssault.Active) return;
     const auto target = HeroByNetworkId(static_cast<int>(args.Target.NetworkId()));
@@ -470,7 +468,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardLocalActiveBuffEvent<&OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     return controller;

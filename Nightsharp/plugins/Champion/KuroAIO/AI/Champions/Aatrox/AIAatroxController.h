@@ -24,7 +24,7 @@ using ControllerHelpers::InAutoAttackRange;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SpellEnabled;
 
-// The Q hitboxes are intentionally modeled per cast.  They are not ordinary
+// The Q hitboxes are intentionally modeled per cast. They are not ordinary
 // line skillshots: Q1 is a long rectangle with a far-edge sweetspot, Q2 is a
 // widening trapezoid, and Q3 is a circle centered in front of Aatrox.
 enum class Sequence : int {
@@ -1047,7 +1047,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
 }
 
-
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
     const int now = SDK::Variables::TickCount();
     if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "aatroxr")) {
@@ -1078,17 +1077,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (static_cast<int>(args.Sender.NetworkId) == WTargetId &&
-        Engine::TextContains(args.BuffName, "aatroxw") &&
-        args.EndTime > Game::Time()) {
-        WExpectedPullTick = SDK::Variables::TickCount() +
-            ControllerHelpers::RemainingMilliseconds(
-                args.EndTime, 250, 250, 2200);
-        WStateExpireTick = WExpectedPullTick + 400;
-    }
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     const int now = SDK::Variables::TickCount();
     if (AvailableQStage == QStage::Third && WTargetId != 0 &&
@@ -1099,7 +1087,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
         args.Process = false;
     }
 }
-
 
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
@@ -1319,7 +1306,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &PendingAutoResetTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &PendingAutoResetTick>;
     controller.OnGapcloser = &OnGapcloser;

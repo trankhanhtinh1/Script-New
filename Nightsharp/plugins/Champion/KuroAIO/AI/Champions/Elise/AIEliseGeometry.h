@@ -11,7 +11,6 @@ namespace Plugins::KuroAIO::AI::Controllers::Elise::Geometry {
 using ::Plugins::KuroAIO::AI::SharedGeometry::ProjectPointToSegment2D;
 using ::Plugins::KuroAIO::AI::SharedGeometry::Direction2D;
 
-
 enum class Form { Human, Spider, Unknown };
 enum class RappelPhase { Ready, Rising, Descending };
 

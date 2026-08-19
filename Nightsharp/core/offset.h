@@ -488,8 +488,7 @@ namespace BuffScriptInstanceLayout {
 
 namespace BuffEventLayout {
     // OnBuffAdd/OnBuffRemove receive AIBaseClient::eventComponent
-    // (hero + 0x2B0) in R9. OnBuffUpdate omits it and is resolved through
-    // the per-unit event-bridge pointer cached from add/remove.
+    // (hero + 0x2B0) in R9.
     constexpr auto OwnerComponent = 0x2B0; //48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? 89 BB ? ? ? ? 48 89 BB ? ? ? ? 48 89 BB ? ? ? ? E8
 } // namespace BuffEventLayout
 
@@ -574,7 +573,6 @@ namespace SpellBookLayout {
         constexpr uintptr_t OnUpdateChargeableSpell = ControlRuntime::UpdateChargeableSpell;
         constexpr uintptr_t OnBuffAdd               = 0x221AF0; //E8 ? ? ? ? 48 8D 4D ? E8 ? ? ? ? 4C 8B B4 24 ? ? ? ? 4C 8B AC 24 ? ? ? ? 4C 8B A4 24 ? ? ? ? 48 85 FF
         constexpr uintptr_t OnBuffRemove            = 0x221B80; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8B AC 24 ? ? ? ? 48 8B 8C 24
-        constexpr uintptr_t OnBuffUpdate            = 0; //E8 ? ? ? ? 48 8D 4C 24 ? E8 ? ? ? ? 4C 8B 74 24 ? 48 8B 74 24
         // AssignNetworkId: writes networkId to obj+0xBC, inserts into
         // ObjectManager tree, then calls post-init vfunc. Hook this instead
         // of the raw tree-insert so the object is fully ready when event fires.

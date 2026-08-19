@@ -338,7 +338,7 @@ private:
 
 enum class EventType : std::uint8_t {
     ObjectCreated = 0, ObjectDeleted, SpellCastStarted, SpellCastCompleted,
-    SpellCastCancelled, BuffAdded, BuffRemoved, BuffUpdated, VisibilityChanged,
+    SpellCastCancelled, BuffAdded, BuffRemoved, VisibilityChanged,
     InventoryChanged, SummonerSpellChanged, ObjectiveSpawned, ObjectiveKilled,
     WardPlaced, WardDestroyed, UnitDied, UnitRespawned, TeleportStarted,
     TeleportEnded, RecallStarted, RecallEnded, ChannelInterrupted, PathChanged,

@@ -344,7 +344,7 @@ inline int LiveQAmmo(const AIHeroClient& player) {
     if (!q.IsValid()) return -1;
     const int ammo = q.Ammo();
     const int maximum = q.MaxAmmo();
-    // Ordinary charge spells often report MaxAmmo 1-3.  Accept only the
+    // Ordinary charge spells often report MaxAmmo 1-3. Accept only the
     // characteristic Moonlight-sized reservoir so those counters cannot
     // corrupt the five-gun model.
     if (maximum < 40 || maximum > 60 || ammo < 0 || ammo > maximum) return -1;
@@ -1518,7 +1518,7 @@ inline bool TrySmartHandSwap(const AIHeroClient& target,
     if (!QReadyFor(State.Main)) offScore += 0.45f;
     if (Engine::ValidEnemy(target) && HasCalibrumMark(target)) {
         const Weapon markOffhand = DesiredMarkOffhand(target, context);
-        // Mark attacks fire the current off-hand.  If the desired effect is
+        // Mark attacks fire the current off-hand. If the desired effect is
         // already off-hand, preserve it; if it is main-hand, Phase first.
         if (markOffhand == State.Main) offScore += 2.0f;
         else if (markOffhand == State.Offhand) mainScore += 1.3f;
@@ -3207,8 +3207,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser =

@@ -161,7 +161,6 @@ inline bool CastEReturn(const AIHeroClient& ally, Mode mode, bool reactive = tru
     return true;
 }
 
-
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
                   bool defensive = false) {
     const auto player = GameObjects::Player();
@@ -384,7 +383,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackTargetEvent<&LastAutoTargetId>;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<

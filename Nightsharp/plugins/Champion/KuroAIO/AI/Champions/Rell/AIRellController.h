@@ -55,7 +55,6 @@ enum class Sequence : std::uint8_t {
     PlayerOwned,
 };
 
-
 inline Menu* TacticsMenu = nullptr;
 inline Menu* QMenu = nullptr;
 inline Menu* WMenu = nullptr;
@@ -613,7 +612,7 @@ inline constexpr ChampionController Controller = [] {
     c.OnDoCast = &OnDoCast;
     c.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     c.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    c.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     c.OnBeforeAttack = &OnBeforeAttack;
     c.OnAfterAttack = &OnAfterAttack;
     c.OnGapcloser = &OnGapcloser;

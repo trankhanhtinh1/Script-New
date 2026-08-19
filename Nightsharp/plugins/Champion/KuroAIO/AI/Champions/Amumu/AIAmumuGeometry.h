@@ -1,6 +1,6 @@
 #pragma once
 
-// Deterministic Amumu mechanics.  The live controller supplies prediction,
+// Deterministic Amumu mechanics. The live controller supplies prediction,
 // target value, NavMesh/turret state and spell events; this file keeps the
 // first-collision Q model, Q arrival clock, R coverage/quality, Curse order,
 // W ticks and E attack-refund arithmetic independently testable.
@@ -50,7 +50,7 @@ inline float RayPerpendicular(const Vec3& origin,
 }
 
 // Distance along the ray at which the projectile's collision capsule first
-// touches a unit.  Ordering by center distance is wrong for large monsters or
+// touches a unit. Ordering by center distance is wrong for large monsters or
 // offset units, so the controller uses this entry distance instead.
 inline float BandageEntryDistance(
     const Vec3& origin,

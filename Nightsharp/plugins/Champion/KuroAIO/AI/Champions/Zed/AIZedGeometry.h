@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure Zed mechanics.  This header deliberately has no game, menu or SDK
+// Pure Zed mechanics. This header deliberately has no game, menu or SDK
 // dependency so collision, shadow and death-mark safety can be tested in
 // isolation from live-object telemetry.
 #include "../../AIGeometry.h"

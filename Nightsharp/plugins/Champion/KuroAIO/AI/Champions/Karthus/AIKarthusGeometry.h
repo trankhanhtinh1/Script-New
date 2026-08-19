@@ -1,6 +1,6 @@
 #pragma once
 
-// Karthus-specific deterministic mechanics.  Runtime target selection,
+// Karthus-specific deterministic mechanics. Runtime target selection,
 // prediction and event ownership remain in AIKarthusController.h; this header
 // owns Lay Waste isolation, Wall of Pain's finite wall/debuff, Defile's
 // sustain economy and Requiem/death-passive timing so those boundaries remain

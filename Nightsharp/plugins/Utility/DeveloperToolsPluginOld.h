@@ -101,7 +101,6 @@ public:
         SDK::Events::AddOnPlayAnimation(&DeveloperToolsPluginOld::OnPlayAnimationEvent);
         SDK::Events::AddOnBuffAdd(&DeveloperToolsPluginOld::OnBuffAddEvent);
         SDK::Events::AddOnBuffRemove(&DeveloperToolsPluginOld::OnBuffRemoveEvent);
-        SDK::Events::AddOnBuffUpdate(&DeveloperToolsPluginOld::OnBuffUpdateEvent);
         SDK::Events::AddOnNewPath(&DeveloperToolsPluginOld::OnNewPathEvent);
         SDK::Events::AddOnDeleteObject(&DeveloperToolsPluginOld::OnObjectDelete);
 
@@ -147,7 +146,6 @@ public:
         menuLogAnimation_ = loggerEvents->Add(new SDK::UI::MenuBool("EvAnimation", "OnPlayAnimation", logAnimation_));
         menuLogBuffAdd_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffAdd", "OnBuffAdd", logBuffAdd_));
         menuLogBuffRemove_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffRemove", "OnBuffRemove", logBuffRemove_));
-        menuLogBuffUpdate_ = loggerEvents->Add(new SDK::UI::MenuBool("EvBuffUpdate", "OnBuffUpdate", logBuffUpdate_));
         menuLogNewPath_ = loggerEvents->Add(new SDK::UI::MenuBool("EvNewPath", "OnNewPath", logNewPath_));
 
         menuInspector_ = menu_->Add(new SDK::UI::MenuRuntime("LiveInspector", "Open Live Object Inspector", &OnMenuBridge, this, 620.0f));
@@ -174,7 +172,6 @@ public:
         SDK::Events::RemoveOnPlayAnimation(&DeveloperToolsPluginOld::OnPlayAnimationEvent);
         SDK::Events::RemoveOnBuffAdd(&DeveloperToolsPluginOld::OnBuffAddEvent);
         SDK::Events::RemoveOnBuffRemove(&DeveloperToolsPluginOld::OnBuffRemoveEvent);
-        SDK::Events::RemoveOnBuffUpdate(&DeveloperToolsPluginOld::OnBuffUpdateEvent);
         SDK::Events::RemoveOnNewPath(&DeveloperToolsPluginOld::OnNewPathEvent);
         SDK::Events::RemoveOnDeleteObject(&DeveloperToolsPluginOld::OnObjectDelete);
         ClearTrackedObjects();
@@ -218,7 +215,6 @@ public:
         if (menuLogAnimation_) logAnimation_ = menuLogAnimation_->Value;
         if (menuLogBuffAdd_) logBuffAdd_ = menuLogBuffAdd_->Value;
         if (menuLogBuffRemove_) logBuffRemove_ = menuLogBuffRemove_->Value;
-        if (menuLogBuffUpdate_) logBuffUpdate_ = menuLogBuffUpdate_->Value;
         if (menuLogNewPath_) logNewPath_ = menuLogNewPath_->Value;
     }
 
@@ -866,7 +862,6 @@ public:
                 { "OnPlayAnimation",    &logAnimation_,    &menuLogAnimation_ },
                 { "OnBuffAdd",          &logBuffAdd_,      &menuLogBuffAdd_ },
                 { "OnBuffRemove",       &logBuffRemove_,   &menuLogBuffRemove_ },
-                { "OnBuffUpdate",       &logBuffUpdate_,   &menuLogBuffUpdate_ },
                 { "OnNewPath",          &logNewPath_,      &menuLogNewPath_ },
             };
             ImGui::Columns(2, "EventToggleColumns", false);
@@ -1014,7 +1009,6 @@ private:
     bool logAnimation_ = false;
     bool logBuffAdd_ = false;
     bool logBuffRemove_ = false;
-    bool logBuffUpdate_ = false;
     bool logNewPath_ = false;
     char logNameFilter_[64] = {};
     bool logAutoScroll_ = true;
@@ -1774,12 +1768,6 @@ private:
         }
     }
 
-    static void OnBuffUpdateEvent(const SDK::Events::BuffEventArgs& args) {
-        if (s_instance && s_instance->logBuffUpdate_) {
-            s_instance->LogBuffEvent("BuffUpdate", args);
-        }
-    }
-
     static void OnNewPathEvent(const SDK::Events::NewPathEventArgs& args) {
         auto* self = s_instance;
         if (!self || !self->enabled_ || !self->logEnabled_ || !self->logNewPath_) {
@@ -1970,7 +1958,6 @@ private:
             menuLogAnimation_ = nullptr;
             menuLogBuffAdd_ = nullptr;
             menuLogBuffRemove_ = nullptr;
-            menuLogBuffUpdate_ = nullptr;
             menuLogNewPath_ = nullptr;
         }
     }
@@ -2002,7 +1989,6 @@ private:
     SDK::UI::MenuBool* menuLogAnimation_ = nullptr;
     SDK::UI::MenuBool* menuLogBuffAdd_ = nullptr;
     SDK::UI::MenuBool* menuLogBuffRemove_ = nullptr;
-    SDK::UI::MenuBool* menuLogBuffUpdate_ = nullptr;
     SDK::UI::MenuBool* menuLogNewPath_ = nullptr;
 };
 

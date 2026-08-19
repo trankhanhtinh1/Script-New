@@ -27,7 +27,6 @@ namespace Hooks {
     inline constexpr HookId Hud_OnDisconnect = ::CoreHookTest::Hud_OnDisconnect;
     inline constexpr HookId OnBuffAdd = ::CoreHookTest::OnBuffAdd;
     inline constexpr HookId OnBuffRemove = ::CoreHookTest::OnBuffRemove;
-    inline constexpr HookId OnBuffUpdate = ::CoreHookTest::OnBuffUpdate;
     inline constexpr HookId OnDamage = ::CoreHookTest::OnDamage;
     inline constexpr HookId OnDoCast = ::CoreHookTest::OnDoCast;
     inline constexpr HookId OnFinishCast = ::CoreHookTest::OnFinishCast;
@@ -750,7 +749,7 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        constexpr int argCount = 4;
         for (int i = 0; i < argCount; ++i) {
             if (LooksLikeObject(args[i])) {
                 return args[i];
@@ -766,7 +765,7 @@ namespace detail {
             raw.R8,
             raw.R9
         };
-        const int argCount = raw.Id == Hooks::OnBuffUpdate ? 3 : 4;
+        constexpr int argCount = 4;
         for (int i = 0; i < argCount; ++i) {
             if (!LooksLikeObject(args[i]) && LooksLikeBuff(args[i])) {
                 return args[i];
@@ -1060,8 +1059,7 @@ namespace detail {
             args.Object = ReadObjectIdentity(rcx);
         } else if (id != Hooks::OnGameUpdate &&
                    id != Hooks::OnBuffAdd &&
-                   id != Hooks::OnBuffRemove &&
-                   id != Hooks::OnBuffUpdate) {
+                   id != Hooks::OnBuffRemove) {
             args.Object = ReadObject(rcx);
         }
         return args;
@@ -1390,20 +1388,6 @@ inline BuffEventArgs DecodeBuffEvent(const RawEventArgs& raw) {
                 args.Sender = detail::ReadObject(owner);
                 detail::RememberBuffBridgeOwner(args.EventBridge, owner);
             }
-        }
-    } else if (raw.Id == Hooks::OnBuffUpdate) {
-        auto decodeCount = [](uintptr_t value) -> int {
-            return value <= static_cast<uintptr_t>(::CoreBuffs::Detail::kMaxStackCount)
-                ? static_cast<int>(value)
-                : 0;
-        };
-
-        args.Count = decodeCount(raw.Stack0);
-        if (args.Count <= 0) {
-            args.Count = decodeCount(raw.R9);
-        }
-        if (args.Count <= 0) {
-            args.Count = decodeCount(raw.Stack1);
         }
     }
 
@@ -2157,7 +2141,6 @@ NS_CORE_EVENT_FORWARD(OnHudDisconnect, Hud_OnDisconnect)
 NS_CORE_EVENT_FORWARD(OnHud_OnDisconnect, Hud_OnDisconnect)
 NS_CORE_EVENT_FORWARD(OnBuffAdd, OnBuffAdd)
 NS_CORE_EVENT_FORWARD(OnBuffRemove, OnBuffRemove)
-NS_CORE_EVENT_FORWARD(OnBuffUpdate, OnBuffUpdate)
 NS_CORE_EVENT_FORWARD(OnDamage, OnDamage)
 NS_CORE_EVENT_FORWARD(OnDoCast, OnDoCast)
 NS_CORE_EVENT_FORWARD(OnFinishCast, OnFinishCast)

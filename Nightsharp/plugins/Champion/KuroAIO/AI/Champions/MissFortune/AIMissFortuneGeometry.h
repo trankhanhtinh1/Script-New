@@ -76,7 +76,7 @@ inline float MakeItRainRaw(int rank, float abilityPower) {
 }
 
 inline float MakeItRainSecureFraction(bool targetImmobile) {
-    // E is a two-second DoT.  Kill-secure must not assume every tick lands;
+    // E is a two-second DoT. Kill-secure must not assume every tick lands;
     // hard control earns most of the duration, while a mobile slowed target
     // is credited with only the first reliable portion.
     return targetImmobile ? 0.85f : 0.60f;
@@ -85,9 +85,9 @@ inline float MakeItRainSecureFraction(bool targetImmobile) {
 inline int ConservativeBulletTimeHits(int rank, bool targetControlled) {
     const int waves = BulletTimeWaves(rank);
     if (waves <= 0) return 0;
-    // Do not call a full three-second channel lethal.  A slowed/rooted target
+    // Do not call a full three-second channel lethal. A slowed/rooted target
     // is credited with roughly two thirds of the waves; a mobile target with
-    // less than half.  Crits remain upside and are not required for execute.
+    // less than half. Crits remain upside and are not required for execute.
     const float fraction = targetControlled ? 0.65f : 0.45f;
     return std::max(1, static_cast<int>(
         static_cast<float>(waves) * fraction));

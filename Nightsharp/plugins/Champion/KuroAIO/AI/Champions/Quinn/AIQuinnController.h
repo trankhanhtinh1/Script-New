@@ -398,7 +398,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &CaptureLocalAutoAttackEvent<&LastAttackTargetId, &LastAttackTick>;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&OnBuff, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&OnBuff, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&OnBuff, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<

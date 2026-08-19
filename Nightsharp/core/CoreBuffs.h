@@ -313,10 +313,6 @@ namespace CoreBuffs {
         }
     }
 
-    inline void ApplyBuffUpdateEvent(uintptr_t obj, const char* name, int count, uintptr_t buffAddress) {
-        ApplyBuffAddEvent(obj, name, count, buffAddress);
-    }
-
     inline float ResolveGameTime() {
         // Same cached time source as SDK::Game::Time() — keeps the frame
         // snapshot cache key consistent no matter which API is used.

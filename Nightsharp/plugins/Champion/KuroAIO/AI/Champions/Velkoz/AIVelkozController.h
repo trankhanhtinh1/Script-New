@@ -340,12 +340,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Engine::TextContains(args.BuffName, "VelkozR")) RActive = false;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!args.Sender.IsValid()) return;
-    if (Engine::TextContains(args.BuffName, "VelkozResearch"))
-        ApplyRayMark(StateFor(static_cast<int>(args.Sender.NetworkId)), Now());
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (RActive) args.Process = false;
     if (args.Target.IsValid()) {
@@ -447,7 +441,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

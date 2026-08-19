@@ -268,10 +268,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs &a) {
   if (!IsLocalPlayer(a.Sender))
     return;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs &a) {
-  if (IsLocalPlayer(a.Sender) && a.EndTime > Game::Time())
-    OnBuffAdd(a);
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) {
   if (!a.Target.IsValid())
     return;
@@ -372,7 +368,7 @@ inline constexpr ChampionController Controller = [] {
                                                       &LastAutoTick>;
   controller.OnBuffAdd = &OnBuffAdd;
   controller.OnBuffRemove = &OnBuffRemove;
-  controller.OnBuffUpdate = &OnBuffUpdate;
+
   controller.OnBeforeAttack = &OnBeforeAttack;
   controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
   return controller;

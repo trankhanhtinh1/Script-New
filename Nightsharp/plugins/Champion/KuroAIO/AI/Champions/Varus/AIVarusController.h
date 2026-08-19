@@ -595,8 +595,6 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
 }
 
-
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu(

@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure Sion mechanics and geometry.  Runtime prediction, navmesh queries and
+// Pure Sion mechanics and geometry. Runtime prediction, navmesh queries and
 // spell ownership stay in AISionController; this header is safe to include
 // from a standalone boundary test.
 #include "../../AIGeometry.h"

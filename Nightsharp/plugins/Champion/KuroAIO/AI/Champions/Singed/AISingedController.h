@@ -333,14 +333,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         RExpireTick = 0;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "insanitypotion") &&
-        args.EndTime <= Game::Time()) {
-        PotionActive = false;
-        ControllerPotionIntent = false;
-        RExpireTick = 0;
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs&) {}
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs&) {}
 
@@ -384,7 +376,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

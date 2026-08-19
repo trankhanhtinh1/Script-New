@@ -365,10 +365,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         CurrentForm = Form::Human; CurrentRappel = RappelPhase::Ready;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (!args.Sender.IsValid()) return;
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "EliseSpider")) ReconcileForm();
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
     const auto target = Engine::EnemyByNetworkId(static_cast<int>(args.Target.NetworkId()));
@@ -484,7 +480,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnGapcloser = &OnGapcloser;

@@ -459,7 +459,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     }
 }
 
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KalistaMechanics", "Kalista Mechanics"));

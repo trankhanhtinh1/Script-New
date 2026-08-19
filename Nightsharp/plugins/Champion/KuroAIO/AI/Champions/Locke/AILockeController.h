@@ -277,11 +277,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (id == QMarkTargetId && Engine::TextContains(args.BuffName, "LockeQ")) { QMarkTargetId = 0; QMarkStacks = 0; }
     if (id == RMarkTargetId && Engine::TextContains(args.BuffName, "LockeR")) RMarkTargetId = 0;
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (IsLocalPlayer(args.Sender) && Engine::TextContains(args.BuffName, "LockeW") && args.EndTime > Game::Time()) {
-        WActive = true; WExpireTick = Now() + ControllerHelpers::RemainingMilliseconds(args.EndTime, 4000, 250, 6000);
-    }
-}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     const int now = Now();
     if (QMarkTargetId != 0 && now < QMarkExpireTick && QMarkExpireTick - now < 300 &&
@@ -351,7 +346,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnLoad = &OnLoad; controller.OnUnload = &OnUnload; controller.BuildMenu = &BuildMenu; controller.OnUpdate = &OnUpdate; controller.OnDraw = &OnDraw;
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;
-    controller.OnBuffAdd = &OnBuffAdd; controller.OnBuffRemove = &OnBuffRemove; controller.OnBuffUpdate = &OnBuffUpdate; controller.OnBeforeAttack = &OnBeforeAttack;
+    controller.OnBuffAdd = &OnBuffAdd; controller.OnBuffRemove = &OnBuffRemove; controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEnd, &GapcloserExpireTick, 425, 700>;
     controller.OnInterruptable = &ControllerHelpers::CaptureInterruptableEvent<&InterruptTargetId, &InterruptExpireTick>;

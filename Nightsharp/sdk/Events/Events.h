@@ -312,7 +312,6 @@ namespace detail {
     inline bool MissileDeleteRawSubscribed = false;
     inline bool BuffAddRawSubscribed = false;
     inline bool BuffRemoveRawSubscribed = false;
-    inline bool BuffUpdateRawSubscribed = false;
     inline bool NewPathRawSubscribed = false;
     inline bool IntegerPropertyChangeRawSubscribed = false;
     inline bool TeleportRawSubscribed = false;
@@ -357,11 +356,6 @@ namespace detail {
         0,
         nscrash::TraceTag::BuffHandlerEnter,
         nscrash::TraceTag::BuffHandlerExit};
-    inline EventList<BuffEventArgs> BuffUpdateHandlers{
-        "BuffUpdate",
-        0,
-        nscrash::TraceTag::BuffHandlerEnter,
-        nscrash::TraceTag::BuffHandlerExit};
     inline EventList<NewPathEventArgs> NewPathHandlers{ "NewPath" };
     inline EventList<IntegerPropertyChangeEventArgs> IntegerPropertyChangeHandlers{ "IntegerPropertyChange" };
     inline EventList<TeleportRawEventArgs> TeleportHandlers{ "Teleport" };
@@ -378,7 +372,6 @@ namespace detail {
     inline PendingEventQueue<ObjectEventArgs, 512> PendingMissileDeletes;
     inline PendingEventQueue<BuffEventArgs, 512> PendingBuffAdds;
     inline PendingEventQueue<BuffEventArgs, 512> PendingBuffRemoves;
-    inline PendingEventQueue<BuffEventArgs, 512> PendingBuffUpdates;
     inline PendingEventQueue<NewPathEventArgs, 256> PendingNewPaths;
     inline PendingEventQueue<IntegerPropertyChangeEventArgs, 256> PendingIntegerPropertyChanges;
     inline PendingEventQueue<TeleportRawEventArgs, 128> PendingTeleports;
@@ -825,25 +818,6 @@ namespace detail {
                 buffArgs.BuffName);
             BuffRemoveHandlers.Fire(buffArgs);
         }
-        for (int i = 0; i < kMaxQueuedEventsPerFrame &&
-                        PendingBuffUpdates.Pop(buffArgs, &buffRemaining); ++i) {
-            NightSharpDebug::CrashTrace::RecordExtended(
-                nscrash::TraceTag::BuffQueuePop,
-                buffArgs.BuffTraceHookId,
-                buffArgs.BuffTraceSerial,
-                buffArgs.BuffAddress,
-                buffArgs.Sender.Ptr,
-                buffArgs.Sender.NetworkId,
-                static_cast<std::uint64_t>(i),
-                static_cast<std::uint64_t>(buffRemaining),
-                buffArgs.EventBridge,
-                buffArgs.OwnerComponent,
-                (static_cast<std::uint64_t>(
-                     static_cast<std::uint32_t>(buffArgs.Type)) << 32) |
-                    static_cast<std::uint32_t>(buffArgs.Count),
-                buffArgs.BuffName);
-            BuffUpdateHandlers.Fire(buffArgs);
-        }
 
         NewPathEventArgs pathArgs = {};
         for (int i = 0; i < kMaxQueuedEventsPerFrame &&
@@ -1049,24 +1023,6 @@ namespace detail {
         }
     }
 
-    inline void OnRawBuffUpdate(const CoreHookArgs& raw) {
-        if (!CanDeliverRawEvents()) {
-            return;
-        }
-        TraceBuffDecodeBegin(raw);
-        BuffEventArgs args = ::Core::Events::DecodeBuffEvent(raw);
-        args.BuffTraceHookId = static_cast<std::uint32_t>(raw.Id);
-        (void)TraceDecodedBuff(nscrash::TraceTag::BuffDecodeComplete, args);
-        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyBegin, args);
-        CoreBuffs::ApplyBuffUpdateEvent(args.Sender.Ptr, args.BuffName, args.Count, args.BuffAddress);
-        (void)TraceDecodedBuff(nscrash::TraceTag::BuffApplyComplete, args);
-        if (BuffUpdateHandlers.HasHandlers()) {
-            args.BuffTraceSerial =
-                TraceDecodedBuff(nscrash::TraceTag::BuffQueueEnqueue, args);
-            PendingBuffUpdates.Push(args);
-        }
-    }
-
     inline void OnRawNewPath(const CoreHookArgs& raw) {
         if (!CanDeliverRawEvents() || !HasNewPathConsumers()) {
             return;
@@ -1171,7 +1127,6 @@ namespace detail {
                MissileDeleteRawSubscribed ||
                BuffAddRawSubscribed ||
                BuffRemoveRawSubscribed ||
-               BuffUpdateRawSubscribed ||
                NewPathRawSubscribed ||
                IntegerPropertyChangeRawSubscribed ||
                TeleportRawSubscribed ||
@@ -1255,12 +1210,6 @@ namespace detail {
     inline void ReleaseBuffRemoveRawIfUnused() {
         if (!BuffRemoveHandlers.HasHandlers() && !CoreBuffs::IsEventCacheEnabled()) {
             (void)ReleaseRawSubscribed(Hooks::OnBuffRemove, &OnRawBuffRemove, BuffRemoveRawSubscribed);
-        }
-    }
-
-    inline void ReleaseBuffUpdateRawIfUnused() {
-        if (!BuffUpdateHandlers.HasHandlers() && !CoreBuffs::IsEventCacheEnabled()) {
-            (void)ReleaseRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
         }
     }
 
@@ -1365,16 +1314,8 @@ namespace detail {
         return EnsureGameUpdateRawSubscribed() &&
                EnsureRawSubscribed(Hooks::OnBuffRemove, &OnRawBuffRemove, BuffRemoveRawSubscribed);
     }
-    inline bool EnsureBuffUpdateRawSubscribed() {
-        return EnsureGameUpdateRawSubscribed() &&
-               EnsureRawSubscribed(Hooks::OnBuffUpdate, &OnRawBuffUpdate, BuffUpdateRawSubscribed);
-    }
 
     inline void EnsureBuffEventCacheSubscribed() {
-        // OnBuffUpdate đã được loại bỏ (RVA = 0, hook không install được).
-        // Chỉ cần OnBuffAdd + OnBuffRemove để bật EventCache — OnBuffUpdate
-        // không bắt buộc vì ApplyBuffUpdateEvent chỉ là alias của ApplyBuffAddEvent
-        // (cập nhật count/stack), thông tin này đã được OnBuffAdd cung cấp.
         const bool ok =
             EnsureBuffAddRawSubscribed() &&
             EnsureBuffRemoveRawSubscribed();
@@ -1473,7 +1414,6 @@ inline void Reset() {
     detail::PendingMissileDeletes.Clear();
     detail::PendingBuffAdds.Clear();
     detail::PendingBuffRemoves.Clear();
-    detail::PendingBuffUpdates.Clear();
     detail::PendingNewPaths.Clear();
     detail::PendingIntegerPropertyChanges.Clear();
     detail::PendingTeleports.Clear();
@@ -1488,7 +1428,6 @@ inline void Reset() {
     detail::MissileDeleteHandlers.Clear();
     detail::BuffAddHandlers.Clear();
     detail::BuffRemoveHandlers.Clear();
-    detail::BuffUpdateHandlers.Clear();
     detail::NewPathHandlers.Clear();
     detail::IntegerPropertyChangeHandlers.Clear();
     detail::TeleportHandlers.Clear();
@@ -1509,7 +1448,6 @@ inline void Reset() {
     detail::MissileDeleteRawSubscribed = false;
     detail::BuffAddRawSubscribed = false;
     detail::BuffRemoveRawSubscribed = false;
-    detail::BuffUpdateRawSubscribed = false;
     detail::NewPathRawSubscribed = false;
     detail::IntegerPropertyChangeRawSubscribed = false;
     detail::TeleportRawSubscribed = false;
@@ -1676,20 +1614,6 @@ inline bool RemoveOnBuffRemove(void(*handler)(const BuffEventArgs&)) {
     return removed;
 }
 inline bool OnBuffRemove(void(*handler)(const BuffEventArgs&)) { return AddOnBuffRemove(handler); }
-
-inline bool AddOnBuffUpdate(void(*handler)(const BuffEventArgs&)) {
-    Initialize();
-    return detail::EnsureBuffUpdateRawSubscribed() &&
-           detail::BuffUpdateHandlers.Add(handler);
-}
-inline bool RemoveOnBuffUpdate(void(*handler)(const BuffEventArgs&)) {
-    const bool removed = detail::BuffUpdateHandlers.Remove(handler);
-    if (removed) {
-        detail::ReleaseBuffUpdateRawIfUnused();
-    }
-    return removed;
-}
-inline bool OnBuffUpdate(void(*handler)(const BuffEventArgs&)) { return AddOnBuffUpdate(handler); }
 
 inline bool AddOnNewPath(void(*handler)(const NewPathEventArgs&)) {
     Initialize();
@@ -1897,7 +1821,6 @@ struct HookEvents {
     EventSlot<ObjectEventArgs> OnMissileDelete{ &AddOnMissileDelete, &RemoveOnMissileDelete };
     EventSlot<BuffEventArgs> OnBuffAdd{ &AddOnBuffAdd, &RemoveOnBuffAdd };
     EventSlot<BuffEventArgs> OnBuffRemove{ &AddOnBuffRemove, &RemoveOnBuffRemove };
-    EventSlot<BuffEventArgs> OnBuffUpdate{ &AddOnBuffUpdate, &RemoveOnBuffUpdate };
     EventSlot<NewPathEventArgs> OnNewPath{ &AddOnNewPath, &RemoveOnNewPath };
     EventSlot<IntegerPropertyChangeEventArgs> OnIntegerPropertyChange{
         &AddOnIntegerPropertyChange,

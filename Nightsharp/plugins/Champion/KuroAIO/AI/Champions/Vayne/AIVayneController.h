@@ -295,7 +295,6 @@ inline void ObserveBuff(const SDK::Events::BuffEventArgs& args, bool added) {
     }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || !args.Target.IsHero()) return;
     const AIHeroClient target(args.Target.Handle());
@@ -312,7 +311,6 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
         RefreshBoltObservation(target);
     }
 }
-
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -382,7 +380,7 @@ inline constexpr ChampionController Controller = [] {
         &LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&ObserveBuff, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&ObserveBuff, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&ObserveBuff, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 575, 700>;

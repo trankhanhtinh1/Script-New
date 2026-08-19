@@ -233,7 +233,6 @@ inline int RootedUntilTick = 0;
 inline int WarpChannelUntil = 0;
 inline int LastWeaveOpportunityTick = 0;
 
-
 inline bool IsQEvent(const SDK::Events::ProcessSpellEventArgs& args) {
     return SpellSlotOrEventNameContainsAny(
         args, SDK::SpellSlot::Q,
@@ -1813,9 +1812,6 @@ inline void OnProcessSpell(
     else ObserveEnemySpell(args);
 }
 
-
-
-
 inline void OnGapcloser(
     const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     if (!CaptureGapcloser(
@@ -1829,7 +1825,6 @@ inline void OnGapcloser(
             window->MobilitySpentUntil, Now() + 3500);
     }
 }
-
 
 inline bool BuffContains(const SDK::Events::BuffEventArgs& args,
                          const char* token) {
@@ -1885,9 +1880,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
         else if (ActiveSequence == Sequence::RealmWarpChannel) ClearSequence();
     }
 }
-
-
-
 
 inline const char* PostureName(Posture posture) {
     switch (posture) {
@@ -2394,7 +2386,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnProcessSpell;
     controller.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackEvent<&LastBeforeAttackTargetId, &LastBeforeAttackTick>;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAfterAttackTargetId, &LastAfterAttackTick>;
     controller.OnGapcloser = &OnGapcloser;

@@ -395,7 +395,6 @@ public:
             }
             break;
         case EventType::BuffAdded:
-        case EventType::BuffUpdated:
             if (subject && event.visibleAtEvent) ApplyBuffEvent(*subject, event, true);
             break;
         case EventType::BuffRemoved:

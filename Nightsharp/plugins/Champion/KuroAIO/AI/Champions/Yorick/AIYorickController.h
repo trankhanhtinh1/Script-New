@@ -344,10 +344,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Maiden = MaidenState::Dead;
     }
 }
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime <= Game::Time()) OnBuffRemove(args);
-    else OnBuffAdd(args);
-}
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) { ManualOwnershipUntil = std::max(ManualOwnershipUntil, Now() + 700); (void)args; }
 inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) { ManualOwnershipUntil = std::max(ManualOwnershipUntil, Now() + 700); (void)args; }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) { if (args.Target.IsValid()) { LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now(); } }
@@ -457,7 +453,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

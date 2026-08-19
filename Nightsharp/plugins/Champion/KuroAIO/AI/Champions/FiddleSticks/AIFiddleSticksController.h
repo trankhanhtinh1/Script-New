@@ -465,11 +465,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime > Game::Time()) OnBuffAdd(args);
-    else OnBuffRemove(args);
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (WChannel || RChannel) { args.Process = false; return; }
     if (!args.Target.IsValid()) return;
@@ -607,7 +602,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

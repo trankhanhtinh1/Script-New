@@ -407,7 +407,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnInterruptable = &OnInterruptable;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     controller.OnBeforeAttack = &ControllerHelpers::CaptureBeforeAttackTargetEvent<&LastAutoTargetId>;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnDoCast = &OnDoCast;

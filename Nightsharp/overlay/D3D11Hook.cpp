@@ -742,13 +742,16 @@ static void Render() {
             NightSharpPerf::ScopedTimer timer("SDK::Drawing::DispatchEndScene");
             SDK::Drawing::DispatchEndScene();
         }
+    }
 
-        // Menu + PermaShow render
-        {
-            PublishRuntimePhase("d3d11hook-render-menu");
-            NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
-            RenderMenuSafe();
-        }
+    // Menu + PermaShow render — intentionally decoupled from g_bootstrapDone so
+    // the menu still renders (and stays toggleable via F1) even if the
+    // plugin/SDK bootstrap faults. Game-memory/plugin work stays gated above;
+    // the menu render itself is additionally __try-wrapped in RenderMenuSafe().
+    {
+        PublishRuntimePhase("d3d11hook-render-menu");
+        NightSharpPerf::ScopedTimer timer("NightSharpMenu::Render");
+        RenderMenuSafe();
     }
 
     NightSharpDebug::SetPhase("d3d11hook-render-status-overlays");

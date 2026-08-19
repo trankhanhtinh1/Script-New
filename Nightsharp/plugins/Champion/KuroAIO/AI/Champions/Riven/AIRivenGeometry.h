@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure Riven mechanics.  No SDK objects or live state are required here so
+// Pure Riven mechanics. No SDK objects or live state are required here so
 // Q timing, hit shapes, execute arithmetic, and endpoint policy remain testable.
 #include "../../AIGeometry.h"
 

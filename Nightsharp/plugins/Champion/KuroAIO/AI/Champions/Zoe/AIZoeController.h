@@ -83,7 +83,6 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
            target.HasBuff("FizzE") || target.HasBuff("zhonyasringshield");
 }
 
-
 using ControllerHelpers::PreserveAttack;
 
 inline bool RuntimeWStolen() {
@@ -474,7 +473,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Engine::TextContains(args.BuffName, "ZoePortalJump")) RActive = false;
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid() || SleepTargetId == 0 || Now() >= SleepExpireTick) return;
     if (static_cast<int>(args.Target.NetworkId()) == SleepTargetId &&
@@ -621,7 +619,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &ControllerHelpers::ForwardBuffEvent<OnBuffAdd>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnDoCast = &CaptureLocalAutoAttackEvent<
         &LastAutoTargetId, &LastAutoTick>;

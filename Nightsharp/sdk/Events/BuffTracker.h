@@ -34,7 +34,7 @@ inline void Dispatch(const ::SDK::Events::BuffEventArgs& args) {
     }
 }
 
-inline void OnBuffUpdateThunk(const ::SDK::Events::BuffEventArgs& args) {
+inline void OnBuffAddThunk(const ::SDK::Events::BuffEventArgs& args) {
     __try {
         Dispatch(args);
     } __except (1) {
@@ -45,7 +45,7 @@ inline void OnBuffUpdateThunk(const ::SDK::Events::BuffEventArgs& args) {
 
 inline void Initialize() {
     if (!detail::s_registered) {
-        ::SDK::Events::OnBuffUpdate(&detail::OnBuffUpdateThunk);
+        ::SDK::Events::OnBuffAdd(&detail::OnBuffAddThunk);
         detail::s_registered = true;
     }
 }
@@ -54,7 +54,7 @@ inline void Update() {
 }
 
 inline void Reset() {
-    ::SDK::Events::RemoveOnBuffUpdate(&detail::OnBuffUpdateThunk);
+    ::SDK::Events::RemoveOnBuffAdd(&detail::OnBuffAddThunk);
     for (int i = 0; i < detail::s_count; ++i) {
         detail::s_handlers[i] = nullptr;
     }
@@ -62,7 +62,7 @@ inline void Reset() {
     detail::s_registered = false;
 }
 
-inline void OnBuffUpdate(BuffCallback cb) {
+inline void OnBuffAdd(BuffCallback cb) {
     Initialize();
     if (cb && detail::s_count < detail::kMaxCallbacks) {
         detail::s_handlers[detail::s_count++] = std::move(cb);
@@ -70,8 +70,8 @@ inline void OnBuffUpdate(BuffCallback cb) {
 }
 
 inline void OnBuffGain(BuffCallback cb) {
-    OnBuffUpdate([cb](const AIBaseClient& sender,
-                      const ::SDK::Events::BuffEventArgs& args) {
+    OnBuffAdd([cb](const AIBaseClient& sender,
+                   const ::SDK::Events::BuffEventArgs& args) {
         if (cb && args.Count > 0) {
             cb(sender, args);
         }
@@ -79,8 +79,8 @@ inline void OnBuffGain(BuffCallback cb) {
 }
 
 inline void OnBuffLose(BuffCallback cb) {
-    OnBuffUpdate([cb](const AIBaseClient& sender,
-                      const ::SDK::Events::BuffEventArgs& args) {
+    OnBuffAdd([cb](const AIBaseClient& sender,
+                   const ::SDK::Events::BuffEventArgs& args) {
         if (cb && args.Count == 0) {
             cb(sender, args);
         }

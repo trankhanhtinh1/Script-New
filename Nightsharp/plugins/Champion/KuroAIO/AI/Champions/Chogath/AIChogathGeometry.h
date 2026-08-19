@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure Cho'Gath geometry and patch data.  Runtime target selection, spell
+// Pure Cho'Gath geometry and patch data. Runtime target selection, spell
 // ownership and NavMesh/turret queries stay in AIChogathController.h.
 #include "../../AIGeometry.h"
 
@@ -45,7 +45,7 @@ inline constexpr float WRawDamage(int rank, float abilityPower) {
         0.70f * std::max(0.0f, abilityPower);
 }
 
-// Live Vorpal Spikes is an attack reset/toggle.  The percentage is max-health
+// Live Vorpal Spikes is an attack reset/toggle. The percentage is max-health
 // magic damage and gains 0.5 percentage points per Feast stack, capped by the
 // three empowered attacks in the current E window.
 inline constexpr float EPercentMaxHealth(int rank, int feastStacks) {

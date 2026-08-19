@@ -77,7 +77,7 @@ inline bool ReturnHits(const Vec3& origin,
                        const Vec3& target,
                        float targetRadius,
                        float width = kQWidth) {
-    // The return projectile traverses the exact reverse segment.  Keeping this
+    // The return projectile traverses the exact reverse segment. Keeping this
     // separate prevents the common mistake of treating it as an outgoing-only
     // line and allows callers to evaluate the second hit independently.
     return SegmentHits(outboundEnd, origin, target, targetRadius, width);

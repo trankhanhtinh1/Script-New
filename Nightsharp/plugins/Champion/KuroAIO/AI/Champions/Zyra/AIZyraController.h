@@ -22,7 +22,6 @@ using ControllerHelpers::Now;
 using ControllerHelpers::UnitByNetworkId;
 using ControllerHelpers::PlayerManaPercent;
 
-
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::PreferredEnemyTarget;
@@ -347,11 +346,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (IsLocalPlayer(args.Sender) && TextContainsAny(args.BuffName, {"ZyraR", "zyraroot"})) ROwned = false;
 }
 
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    if (args.EndTime > Game::Time()) OnBuffAdd(args);
-    else OnBuffRemove(args);
-}
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (ROwned) args.Process = false;
     (void)args;
@@ -489,7 +483,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;

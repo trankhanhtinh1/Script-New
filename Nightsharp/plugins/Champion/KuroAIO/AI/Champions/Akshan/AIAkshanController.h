@@ -38,7 +38,7 @@ using ControllerHelpers::UnitByNetworkId;
 using ControllerHelpers::ValidHostileUnit;
 
 // The controller intentionally models player-facing states rather than a
-// Q-W-E-R priority list.  Akshan's next correct action depends on whether his
+// Q-W-E-R priority list. Akshan's next correct action depends on whether his
 // second shot is still cancellable, which Q leg is live, whether E is a hook,
 // orbit or dismount, and how many R bullets survive the current blocker line.
 enum class Sequence : int {
@@ -177,7 +177,7 @@ inline int CommittedEnemyUntil = 0;
 inline int IncomingLineThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 
-// Akshan's controller has several deliberately rich geometry solvers.  Keep
+// Akshan's controller has several deliberately rich geometry solvers. Keep
 // their cadence independent from render/update FPS so a 144/240 Hz client does
 // not repeat identical object, prediction and terrain work every game tick.
 inline int LastTrackedQScanTick = 0;
@@ -313,7 +313,7 @@ inline bool HasPriorityMark(const AIBaseClient& target) {
 
 inline float TotalCritMultiplier(const AIHeroClient& player) {
     // Patch 26.1 raised base crit damage to 200%; current Infinity Edge adds
-    // 30% bonus crit damage.  Akshan E/R consume only a fraction of that bonus.
+    // 30% bonus crit damage. Akshan E/R consume only a fraction of that bonus.
     return SDK::Items::HasItem(player, SDK::ItemId::Infinity_Edge) ? 2.30f : 2.00f;
 }
 
@@ -881,7 +881,7 @@ inline Vector3 BestDismountFrom(const Vector3& swingPosition,
         const bool escape = purpose == SwingPurpose::Escape;
         int enemies = 0;
         int allies = 0;
-        // Rank cheap geometry/team-count candidates first.  Spellbook/buff
+        // Rank cheap geometry/team-count candidates first. Spellbook/buff
         // hazard queries are intentionally deferred until the final ordering,
         // instead of being repeated for every point of every sampled orbit.
         if (!SafePoint(candidate, target, lethal, escape, -1,
@@ -934,7 +934,7 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
     if (damagePlan && !priorityMarked &&
         NearbyNonTargetUnits(target) > 0) {
         // E fires at the nearest visible unit unless a recent Akshan hit marks
-        // the intended champion.  Never spend the swing into a minion lottery.
+        // the intended champion. Never spend the swing into a minion lottery.
         return best;
     }
 
@@ -955,7 +955,7 @@ inline SwingPlan ComputeSwingPlan(const AIHeroClient& target,
         AddUniqueDirection(anchorDirections, Rotate2D(toTarget, -0.75f * kPi));
     }
     // Sixteen radial probes plus cursor/target-biased probes cover terrain at
-    // 22.5 degree intervals.  The former 48-probe sweep repeated thousands of
+    // 22.5 degree intervals. The former 48-probe sweep repeated thousands of
     // orbit and safety reads and was the source of 100-540 ms update spikes.
     constexpr int radialSamples = 16;
     for (int i = 0; i < radialSamples; ++i) {
@@ -1252,7 +1252,7 @@ inline bool CastE1(const AIHeroClient& target,
     ActiveSwingPurpose = purpose;
     ActiveSequence = Sequence::HookPending;
     // Prevent only the orbwalker's next synthetic move from instantly turning
-    // E1 into E2.  A physical player command remains authoritative.
+    // E1 into E2. A physical player command remains authoritative.
     Orbwalker::SetMovePauseTime(130 + Game::Ping() / 2);
     if (Engine::ControllerCastPosition(2, plan.Anchor)) {
         E1CastTick = Now();
@@ -1270,7 +1270,7 @@ inline bool StartPlannedSwing() {
         !CastThrottleReady(2, true)) {
         return false;
     }
-    // E2 direction is locked by the cursor side at this exact cast.  Use the
+    // E2 direction is locked by the cursor side at this exact cast. Use the
     // researched side point, then immediately return movement authority.
     if (Engine::ControllerCastPosition(2, PlannedE2Cursor)) {
         E2CastTick = Now();
@@ -1632,7 +1632,7 @@ inline bool HandleRChannel(const AIHeroClient& fallback, Mode mode) {
     if (ESwinging()) {
         if (lethal && !line.HardBlocked && elapsedMs >= 500) {
             // A legacy E/R edge can issue an attack order and break the orbit
-            // if R is released inside AA range.  Dismount first in that case.
+            // if R is released inside AA range. Dismount first in that case.
             if (InAutoAttackRange(target, 15.0f) && Now() >= E3UnlockTick) {
                 (void)DismountSwing(target, true);
                 return true;
@@ -1809,7 +1809,7 @@ inline bool TryCombo(const AIHeroClient& target) {
     const bool recentlyCompletedDouble = LastSecondShotTick > 0 &&
         now - LastSecondShotTick <= Slider(PassiveMenu, "WeaveWindowMs", 430);
 
-    // The dominant 26.1+ damage pattern is AA-AA-Q.  Let the orbwalker begin
+    // The dominant 26.1+ damage pattern is AA-AA-Q. Let the orbwalker begin
     // the attack and protect its second shot before inserting Q.
     if (inAa && Orbwalker::CanAttack() && !recentlyCompletedDouble &&
         !Engine::IsHardCrowdControlled(target)) {
@@ -2180,7 +2180,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     CurrentPosture = DeterminePosture(selected);
     const AIHeroClient target = ResolveCombatTarget(selected);
 
-    // A recast state owns the decision loop.  Issuing unrelated commands here
+    // A recast state owns the decision loop. Issuing unrelated commands here
     // can release E in the wrong direction or cancel Comeuppance.
     if (RChannelActive || RReleaseAvailable()) {
         (void)HandleRChannel(target, mode == Mode::None
@@ -2391,33 +2391,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         NameEquals(args.BuffName, "AkshanWHuntMark")) {
         ScoundrelTargetId = 0;
         ScoundrelVictimCount = 0;
-    }
-}
-
-inline void OnBuffUpdate(const SDK::Events::BuffEventArgs& args) {
-    const int now = Now();
-    if (IsLocalPlayer(args.Sender) &&
-        IsWCamouflageBuffName(args.BuffName)) {
-        WCamouflaged = true;
-        WLastSeenTick = now;
-    }
-    if (IsLocalPlayer(args.Sender) && IsRChannelBuffName(args.BuffName)) {
-        RChannelActive = true;
-        if (RChannelStartTick <= 0) RChannelStartTick = now;
-    }
-    if (!IsLocalPlayer(args.Sender) &&
-        NameEquals(args.BuffName, "AkshanPassiveDebuff")) {
-        LastDamagedTargetId = static_cast<int>(args.Sender.NetworkId);
-        LastDamagedTargetUntil = now + kPassiveDebuffMs;
-    }
-    if (!IsLocalPlayer(args.Sender) &&
-        NameEquals(args.BuffName, "AkshanWHuntMark")) {
-        const int id = static_cast<int>(args.Sender.NetworkId);
-        const AIHeroClient enemy = HeroByNetworkId(id);
-        if (Engine::ValidEnemy(enemy)) {
-            ScoundrelTargetId = id;
-            ScoundrelVictimCount = std::max(1, ScoundrelStacks(enemy));
-        }
     }
 }
 
@@ -2896,11 +2869,11 @@ inline constexpr ChampionController Controller = [] {
     controller.OnDoCast = &OnDoCast;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
-    controller.OnBuffUpdate = &OnBuffUpdate;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
     controller.OnGapcloser = &OnGapcloser;
-    // Akshan has no hard interrupt.  The channel is still a high-value
+    // Akshan has no hard interrupt. The channel is still a high-value
     // commitment window for Q/E/R, but the controller never pretends to CC it.
     controller.OnInterruptable =
         &ControllerHelpers::CaptureInterruptableEvent<

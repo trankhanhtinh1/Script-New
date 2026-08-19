@@ -38,7 +38,6 @@ struct ChampionController {
     void (*OnDoCast)(const SDK::Events::ProcessSpellEventArgs& args) = nullptr;
     void (*OnBuffAdd)(const SDK::Events::BuffEventArgs& args) = nullptr;
     void (*OnBuffRemove)(const SDK::Events::BuffEventArgs& args) = nullptr;
-    void (*OnBuffUpdate)(const SDK::Events::BuffEventArgs& args) = nullptr;
     void (*OnBeforeAttack)(SDK::OrbwalkingActionArgs& args) = nullptr;
     void (*OnAfterAttack)(SDK::OrbwalkingActionArgs& args) = nullptr;
     void (*OnGapcloser)(

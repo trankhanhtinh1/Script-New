@@ -1,6 +1,6 @@
 #pragma once
 
-// Pure Smolder mechanics.  Runtime target selection, prediction, terrain and
+// Pure Smolder mechanics. Runtime target selection, prediction, terrain and
 // threat telemetry stay in AISmolderController.h; this header owns only
 // deterministic stack, damage, reach and endpoint safety decisions.
 #include "../../AIGeometry.h"
@@ -69,7 +69,7 @@ inline constexpr float QExplosionRadius(int stacks) {
 }
 inline constexpr int StackGainForHit(bool champion, bool largeMinion,
                                      bool epicMonster) {
-    // Champion spells and attacks use one Dragon Practice stack.  Large
+    // Champion spells and attacks use one Dragon Practice stack. Large
     // minions/epic monsters also award one; ordinary units are deliberately
     // rejected here so a runtime caller cannot fabricate passive progress.
     return (champion || largeMinion || epicMonster) ? 1 : 0;

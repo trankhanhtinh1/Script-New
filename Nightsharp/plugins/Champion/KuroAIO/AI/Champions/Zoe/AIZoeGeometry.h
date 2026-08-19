@@ -1,6 +1,6 @@
 #pragma once
 
-// Zoe mechanics are intentionally represented as pure X/Z calculations.  The
+// Zoe mechanics are intentionally represented as pure X/Z calculations. The
 // controller supplies live wall, prediction and unit telemetry; tests can use
 // the same collision, reach and timing rules without an SDK process.
 #include "../../AIGeometry.h"

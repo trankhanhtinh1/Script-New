@@ -605,14 +605,10 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs &a, bool add) {
   }
 }
 
-
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs &a) {
   if (Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsCharging())
     a.Process = false;
 }
-
-
-
 
 inline void OnDraw() {
   if (!Bool(TacticsMenu, "DrawRanges", false))
@@ -718,7 +714,7 @@ inline constexpr ChampionController Controller = [] {
   c.OnProcessSpell = &OnProcessSpell;
   c.OnBuffAdd = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
   c.OnBuffRemove = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, false>;
-  c.OnBuffUpdate = &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuff, true>;
+
   c.OnBeforeAttack = &OnBeforeAttack;
   c.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
   c.OnGapcloser = &ControllerHelpers::CaptureGapcloserEvent<&GapcloserTargetId, &GapcloserEndpoint, &GapcloserExpireTick, 700, 950>;

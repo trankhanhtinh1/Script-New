@@ -226,7 +226,7 @@ inline Vector3 RRelocateCenter = {};
 inline StormPlan LastStormPlan = {};
 
 // BuildStormPlan evaluates many candidate centers and performs a NavMesh wall
-// query for each one.  Several posture branches can request the same plan in
+// query for each one. Several posture branches can request the same plan in
 // one update, so keep a bounded, movement-aware cache of the result.
 struct StormPlanCacheEntry {
     int Tick = 0;
@@ -3105,8 +3105,7 @@ inline constexpr ChampionController Controller = [] {
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
     controller.OnBuffRemove =
         &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, false>;
-    controller.OnBuffUpdate =
-        &ControllerHelpers::ForwardBuffStateEvent<&UpdateBuffState, true>;
+
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack =
         &ControllerHelpers::CaptureAfterAttackEvent<
