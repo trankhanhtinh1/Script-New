@@ -21,9 +21,6 @@ inline constexpr float kMaximumChargeSeconds = 0.80f;
 inline constexpr float kWRange = 600.0f;
 inline constexpr float kESpearRadius = 525.0f;
 inline constexpr float kEShieldSlamRadius = 375.0f;
-inline constexpr float kRRange = 5500.0f;
-inline constexpr float kRFullDamageRadius = 125.0f;
-inline constexpr float kRDamageRadius = 450.0f;
 
 inline float EffectiveDistance(float centerDistance, float targetRadius) {
     return std::max(0.0f, centerDistance - std::max(0.0f, targetRadius));
@@ -72,12 +69,10 @@ struct QTapContext {
     bool InTapRange = false;
     bool AttackWindingUp = false;
     bool Lethal = false;
-    bool ManualOwnership = false;
 };
 
 inline bool ShouldTapQ(const QTapContext& context) {
     return context.Ready && context.PredictionHigh && context.InTapRange &&
-           !context.ManualOwnership &&
            (!context.AttackWindingUp || context.Lethal);
 }
 
@@ -89,12 +84,11 @@ struct QChargeStartContext {
     bool Execute = false;
     bool FirstBodyClear = false;
     bool AttackWindingUp = false;
-    bool ManualOwnership = false;
 };
 
 inline bool ShouldStartQCharge(const QChargeStartContext& context) {
     if (!context.Ready || !context.PredictionHigh ||
-        !context.InThrowRange || context.ManualOwnership) {
+        !context.InThrowRange) {
         return false;
     }
     if (context.AttackWindingUp && !context.Execute) return false;
@@ -148,11 +142,10 @@ struct EContext {
     bool PlayerLow = false;
     bool Fleeing = false;
     bool AttackWindingUp = false;
-    bool ManualOwnership = false;
 };
 
 inline bool ShouldCastE(const EContext& context) {
-    return context.Ready && !context.ManualOwnership &&
+    return context.Ready &&
            (context.ThreatCommitted || context.PlayerLow || context.Fleeing) &&
            context.SourceInFront &&
            (!context.AttackWindingUp || context.ThreatCommitted ||
@@ -212,46 +205,7 @@ inline EmpoweredSpell ChooseEmpoweredSpell(const PassiveContext& context) {
     return EmpoweredSpell::None;
 }
 
-inline float RDamageScale(float distanceFromCenter) {
-    if (!std::isfinite(distanceFromCenter) || distanceFromCenter < 0.0f ||
-        distanceFromCenter > kRDamageRadius) {
-        return 0.0f;
-    }
-    if (distanceFromCenter <= kRFullDamageRadius) return 1.0f;
-    const float progress = (distanceFromCenter - kRFullDamageRadius) /
-        (kRDamageRadius - kRFullDamageRadius);
-    return 1.0f - 0.5f * std::clamp(progress, 0.0f, 1.0f);
-}
 
-struct RLandingContext {
-    bool ManualRequested = false;
-    bool DestinationValid = false;
-    bool DestinationWalkable = false;
-    bool InRange = false;
-    bool BeyondLocalCombat = false;
-    bool TargetPredictedInside = false;
-    bool EnemyTurret = false;
-    bool EscapeRoute = false;
-    bool Lethal = false;
-    int NearbyEnemies = 0;
-    int MaximumEnemies = 2;
-    int AlliedFollowup = 0;
-};
-
-inline bool RLandingSafe(const RLandingContext& context) {
-    if (!context.ManualRequested || !context.DestinationValid ||
-        !context.DestinationWalkable || !context.InRange ||
-        !context.BeyondLocalCombat || !context.TargetPredictedInside) {
-        return false;
-    }
-    if (context.EnemyTurret && !context.Lethal) return false;
-    if (context.NearbyEnemies > std::max(1, context.MaximumEnemies) &&
-        !context.Lethal) {
-        return false;
-    }
-    return context.Lethal || context.AlliedFollowup > 0 ||
-           context.EscapeRoute;
-}
 
 struct AutomaticContext {
     bool Defensive = false;

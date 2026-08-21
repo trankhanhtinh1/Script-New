@@ -35,7 +35,6 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int ForcePulseCharges = 0;
@@ -69,8 +68,7 @@ inline void ReconcileState() {
     if (player.HasBuff("NetherBladeBuff") || player.HasBuff("netherbladebuff"))
         NetherBladeArmedUntil = std::max(NetherBladeArmedUntil, now + 650);
 }
-inline bool SafeEndpoint(const Vec3& endpoint, bool defensive, bool lethal,
-                         bool manual) {
+inline bool SafeEndpoint(const Vec3& endpoint, bool defensive, bool lethal) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const int enemies = Engine::CountEnemiesAt(endpoint, 280.0f);
@@ -78,7 +76,7 @@ inline bool SafeEndpoint(const Vec3& endpoint, bool defensive, bool lethal,
         endpoint.IsValid() && !endpoint.IsZero(),
         endpoint.IsValid() && SDK::NavMesh::IsWall(endpoint),
         endpoint.IsValid() && Engine::UnderEnemyTurret(endpoint),
-        Engine::UnderEnemyTurret(player.Position()), lethal, defensive, manual,
+        Engine::UnderEnemyTurret(player.Position()), lethal, defensive,
         enemies, Slider(RMenu, "MaximumEnemies", 2), RiftwalkStacks,
         Slider(RMenu, "ReserveStacks", 1)};
     return SafeBlinkEndpoint(context);
@@ -150,7 +148,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
     return true;
 }
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool defensive = false, bool manual = false, bool lethal = false) {
+                  bool defensive = false, bool lethal = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 110) ||
         PlayerMobilityLocked() || PreserveAttack(reactive, lethal) ||
@@ -161,7 +159,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
         : validTarget ? PredictPosition(target, kRDelay) : player.Position() + Direction2D(
             player.Position(), player.Position() + Vector3{1.0f, 0.0f, 0.0f}) * kRRange;
     const Vector3 endpoint = ClampBlinkEndpoint(player.Position(), requested);
-    if (!SafeEndpoint(endpoint, defensive, lethal, manual) ||
+    if (!SafeEndpoint(endpoint, defensive, lethal) ||
         ControllerHelpers::ProjectileWallBlocksFromPlayer(endpoint, 40.0f)) return false;
     const float requiredMana = RiftwalkCost(player.MaxMana(), RiftwalkStacks);
     if (CurrentResource() + 0.5f < requiredMana + (lethal || defensive ? 0.0f :
@@ -174,7 +172,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
 }
 inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target) || Protected(target)) return false;
-    if (Lethal(target, RDamage(target)) && CastR(target, mode, true, false, false, true)) return true;
+    if (Lethal(target, RDamage(target)) && CastR(target, mode, true, false, true)) return true;
     if (Lethal(target, WDamage(target)) && CastW(target, mode, true, true)) return true;
     if (Lethal(target, EDamage(target)) && CastE(target, mode, true, true)) return true;
     return Lethal(target, QDamage(target)) && CastQ(target, mode, true, true);
@@ -184,7 +182,7 @@ inline void Combo(const AIHeroClient& target) {
     if (CastQ(target, Mode::Combo)) return;
     if (CastW(target, Mode::Combo)) return;
     if (HasForcePulseCharges(ForcePulseCharges) && CastE(target, Mode::Combo)) return;
-    (void)CastR(target, Mode::Combo, false, false, false, false);
+    (void)CastR(target, Mode::Combo, false, false, false);
 }
 inline void Harass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || PlayerManaPercent() < Slider(TacticsMenu, "HarassMana", 55)) return;
@@ -193,13 +191,12 @@ inline void Harass(const AIHeroClient& target) {
 }
 inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target)) (void)CastQ(target, Mode::Flee, true, false);
-    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true, true, true, false);
+    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true, true, false);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected,
+    const AIHeroClient target = Engine::SelectTarget(
         mode == Mode::Flee ? 900.0f : kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastQ(target, mode, true, false)) return true;
@@ -228,8 +225,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     ForcePulseCharges = AddForcePulseCast(ForcePulseCharges);
     if (IsLocalPlayer(args.Sender)) {
         LastCastTick[slot] = now;
-        if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         if (slot == 2) ForcePulseCharges = 0;
         if (slot == 3) {
             RiftwalkStacks = NextRiftwalkStacks(RiftwalkStacks);
@@ -275,7 +270,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KassadinTactics", "Kassadin stack tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("NullSphere", "Null Sphere shield and projectile"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("NetherBlade", "Nether Blade reset"));
@@ -291,7 +285,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     LastCastTick = {};
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    LastAutoTargetId = LastAutoTick = IncomingThreatUntil = IncomingHardCCUntil = 0;
     ForcePulseCharges = RiftwalkStacks = RiftwalkLastCastTick = NetherBladeArmedUntil = 0;
     LastMode = Mode::None;
 }
@@ -306,17 +300,17 @@ inline constexpr const char* Scenarios[] = {
     "Use Null Sphere's 650 range, 1400 projectile and wall collision checks",
     "Use Null Sphere magic shield reactively against an observed incoming threat",
     "Reset Nether Blade through an in-range empowered attack and preserve AA windup",
-    "Track Nether Blade buff and manual ownership from events plus polling",
+    "Track Nether Blade buff and empowered reset state from events plus polling",
     "Track Riftwalk's 15-second stack window and clamp at four stacks",
     "Include maximum-mana Riftwalk cost and damage scaling in every gate",
     "Reserve configurable mana and Riftwalk stacks before aggressive blinks",
     "Clamp Riftwalk to the 500 range endpoint and reject wall endpoints",
     "Reject unsafe enemy turret, excessive enemy-count and mobility-locked endpoints",
-    "Allow lethal, defensive and manual exceptions to endpoint density rules",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Allow lethal and defensive exceptions to endpoint density rules",
+    "Use autonomous target selection before orbwalker and selector fallback",
     "Reject invalid, invulnerable and spell-shielded targets",
     "Preserve AA windup except reactive or lethal casts",
-    "Yield to manual Q W E and R ownership before controller decisions",
+    "Resume after each observed Q W E or R event",
     "Combo sequences shielded Q, Nether Blade reset, charged E and Riftwalk",
     "Harass uses Q and charged E while respecting mana floor",
     "LaneClear Jungle and LastHit delegate to shared farm policy",

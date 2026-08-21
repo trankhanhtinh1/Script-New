@@ -14,7 +14,7 @@ inline constexpr ChampionProfile Sion = [] {
     p.Mechanics = Mechanic::Charge | Mechanic::Recast | Mechanic::Revive |
                   Mechanic::WallInteraction | Mechanic::MissingHealth |
                   Mechanic::AutoWeave;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::AllIn;
     p.PreferredCombatDistance = 250.0f;
     p.EngageHealthPercent = 58.0f;
     p.DefensiveHealthPercent = 34.0f;
@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Sion = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SionPassive";
@@ -110,7 +109,7 @@ inline constexpr ChampionProfile Sion = [] {
         Step(SDK::SpellSlot::W, StepRule::RequireTarget, 420, 1100));
     p.Flee = Plan("Zombie-aware retreat",
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup, 0, 850),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 80, 3000),
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition, 80, 3000),
         Step(SDK::SpellSlot::W, StepRule::RequirePlayerLow, 140, 700));
     return p;
 }();

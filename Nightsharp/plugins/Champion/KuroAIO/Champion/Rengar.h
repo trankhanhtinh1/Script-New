@@ -69,7 +69,7 @@ static bool IsImmovableOrCC(const AIHeroClient& target) {
 static void CastComboQ(const AIHeroClient& target) {
     if (!Q.IsReady() || !ValidHeroTarget(target)) return;
 
-    const bool use3Q = Key(QSettingsMenu, "Use3Q", false);
+    const bool use3Q = Bool(QSettingsMenu, "Use3Q", false);
     const auto player = Player();
     const bool dashing = SDK::Extensions::IsDashing(player);
 
@@ -92,7 +92,7 @@ static void CastComboW(const AIHeroClient& target) {
     if (!W.IsReady() || !ValidHeroTarget(target)) return;
 
     const auto player = Player();
-    const bool use3Q = Key(QSettingsMenu, "Use3Q", false);
+    const bool use3Q = Bool(QSettingsMenu, "Use3Q", false);
     const bool dashing = SDK::Extensions::IsDashing(player);
 
     if ((!dashing || use3Q) && Bool(WSettingsMenu, "UseW", true) && !IsEmp()) {
@@ -121,7 +121,7 @@ static void CastComboE(const AIHeroClient& target) {
 
     const auto player = Player();
     const bool dashing = SDK::Extensions::IsDashing(player);
-    const bool use3Q = Key(QSettingsMenu, "Use3Q", false);
+    const bool use3Q = Bool(QSettingsMenu, "Use3Q", false);
 
     // Allow E in mid-air during dash/leap when not holding Emp, or during Fast 3Q
     if (QCanAttack(target, 100.0f) && IsEmp() && !dashing && !use3Q) {
@@ -328,22 +328,22 @@ static void OnDraw() {
 
     const Vector3 pos = player.Position();
 
-    if (Bool(DrawMenu, "DrawW", true) && W.IsReady()) {
+    if (Bool(DrawMenu, "DrawW", false) && W.IsReady()) {
         Drawing::DrawCircle(pos, W.Range, 0xFFFFAA00u, 1.5f, 64);
     }
 
-    if (Bool(DrawMenu, "DrawE", true) && E.IsReady()) {
+    if (Bool(DrawMenu, "DrawE", false) && E.IsReady()) {
         Drawing::DrawCircle(pos, E.Range, 0xFFD90429u, 1.5f, 64);
     }
 
-    if (Bool(DrawMenu, "DrawLeap", true)) {
+    if (Bool(DrawMenu, "DrawLeap", false)) {
         const float leapRange = IsLeaping() ? 725.0f : 0.0f;
         if (leapRange > 0.0f) {
             Drawing::DrawCircle(pos, leapRange, 0xFFFF6B00u, 2.0f, 64);
         }
     }
 
-    if (Bool(DrawMenu, "DrawTarget", true) && ValidHeroTarget(CurrentTarget)) {
+    if (Bool(DrawMenu, "DrawTarget", false) && ValidHeroTarget(CurrentTarget)) {
         Vec2 playerScreen{}, targetScreen{};
         if (Drawing::WorldToScreen(pos, playerScreen) && Drawing::WorldToScreen(CurrentTarget.Position(), targetScreen)) {
             Drawing::DrawLine(playerScreen, targetScreen, 0xFFD90429u, 2.0f);
@@ -361,7 +361,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("UseE", "Use E Bola Strike", true));
 
     QSettingsMenu = MenuRoot->AddSubMenu(new Menu("QSettings", "Q Savagery Settings"));
-    QSettingsMenu->Add(new MenuKeyBind("Use3Q", "Fast 3Q Combo", SDK::Keys::A, KeyBindType::Toggle))->Permashow();
+    QSettingsMenu->Add(new MenuBool("Use3Q", "Fast 3Q Combo", false));
 
     WSettingsMenu = MenuRoot->AddSubMenu(new Menu("WSettings", "W Battle Roar Settings"));
     WSettingsMenu->Add(new MenuBool("UseW", "Use W in Combo", true));
@@ -386,19 +386,16 @@ static void BuildMenu() {
     ClearMenu->Add(new MenuBool("LaneQ", "Lane Q", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Drawings"));
-    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", true));
-    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", true));
-    DrawMenu->Add(new MenuBool("DrawLeap", "Draw Leap Range", true));
-    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Current Target Line", true));
+    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", false));
+    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", false));
+    DrawMenu->Add(new MenuBool("DrawLeap", "Draw Leap Range", false));
+    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Current Target Line", false));
 
     MenuRoot->Attach();
 }
 
 static void RemoveMenu() {
     if (!MenuRoot) return;
-    if (auto* item = QSettingsMenu ? QSettingsMenu->Get<MenuKeyBind>("Use3Q") : nullptr) {
-        item->RemovePermashow();
-    }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;
     ComboMenu = nullptr;

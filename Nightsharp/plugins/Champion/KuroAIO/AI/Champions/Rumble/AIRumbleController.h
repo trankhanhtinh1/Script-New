@@ -22,7 +22,6 @@ using ControllerHelpers::InAutoAttackRange;
 using ControllerHelpers::IsCommonUntargetableOrImmune;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
-using ControllerHelpers::OrbwalkerHeroTarget;
 using ControllerHelpers::PredictionAtLeast;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
@@ -56,7 +55,6 @@ inline int GapcloserTargetId = 0;
 inline int GapcloserExpireTick = 0;
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline Mode LastKnownMode = Mode::None;
@@ -310,7 +308,7 @@ inline RLine BestRLine(const AIHeroClient& primary, int& hitCount) {
 }
 
 inline bool CastR(const AIHeroClient& target, Mode mode,
-                  bool defensive = false, bool manual = false) {
+                  bool defensive = false) {
     if (!Ready(3, mode) || !CastThrottleReady(3, defensive) ||
         TargetCannotBeDamaged(target) || PreserveAttack(defensive)) return false;
     int hits = 0;
@@ -321,10 +319,10 @@ inline bool CastR(const AIHeroClient& target, Mode mode,
     const RSafetyContext safety{
         Engine::UnderEnemyTurret(player.Position()),
         Engine::UnderEnemyTurret(target.Position()), lethal, defensive,
-        mode == Mode::Automatic && !manual,
+        mode == Mode::Automatic,
         Engine::CountAlliesAt(target.Position(), 900.0f) > 0, hits };
     if (!RCastSafe(safety)) return false;
-    if (!manual && !defensive && hits < Slider(EqualizerMenu, "MinimumTargets", 2) &&
+    if (!defensive && hits < Slider(EqualizerMenu, "MinimumTargets", 2) &&
         !lethal) return false;
     if (!Engine::ControllerCastVector(3, line.Start, line.End)) return false;
     LastRLine = line;
@@ -332,10 +330,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode,
     return true;
 }
 
-inline AIHeroClient CooperativeTarget(const AIHeroClient& selected) {
-    if (Engine::ValidEnemy(selected, kRRange + kRLineLength)) return selected;
-    const auto orbTarget = OrbwalkerHeroTarget(kRRange + kRLineLength);
-    if (Engine::ValidEnemy(orbTarget)) return orbTarget;
+inline AIHeroClient CooperativeTarget() {
     return Engine::SelectTarget(kRRange + kRLineLength);
 }
 
@@ -468,15 +463,11 @@ inline bool TryAutomatic(const AIHeroClient& target) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileState();
     LastKnownMode = mode;
-    const AIHeroClient target = CooperativeTarget(selected);
+    const AIHeroClient target = CooperativeTarget();
     const AIHeroClient threat = NearestEnemyToPlayer(target, 950.0f);
-    if (Key(EqualizerMenu, "ManualR", false) && Engine::ValidEnemy(target)) {
-        (void)CastR(target, mode == Mode::None ? Mode::Automatic : mode, false, true);
-        return true;
-    }
-    if (PlayerOverrideUntil > Now()) return true;
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
     if (mode == Mode::Automatic || mode == Mode::None) { (void)TryAutomatic(target); return true; }
     if (TryDefensive(threat, mode) || TryKillSecure(target, mode)) return true;
@@ -505,7 +496,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     if (args.Slot < 0 || args.Slot >= 4) return;
     if (!Engine::WasControllerCast(args.Slot)) {
-        PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         if (args.Slot == 0) { LastQCastTick = now; QActiveUntil = now + 3000; }
         else if (args.Slot == 1) { LastWCastTick = now; ShieldUntil = now + 1500; }
         else if (args.Slot == 2) LastECastTick = now;
@@ -555,8 +545,8 @@ inline void OnDraw() {
     if (Drawing::WorldToScreen(player.Position(), screen)) {
         char state[160]{};
         _snprintf_s(state, _TRUNCATE,
-            "Rumble | %.0f heat | %s | E %d/2%s", ObservedHeat,
-            HeatBandName(), EAmmo, PlayerOverrideUntil > Now() ? " | manual" : "");
+            "Rumble | %.0f heat | %s | E %d/2", ObservedHeat,
+            HeatBandName(), EAmmo);
         Drawing::DrawText(screen.x - 150.0f, screen.y - 110.0f,
             0xFFFFFFFFu, state);
     }
@@ -564,25 +554,22 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("RumbleOneTrick", "Rumble heat and Equalizer tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
-    HeatMenu = TacticsMenu->AddSubMenu(new Menu("HeatBands", "Cold, Danger Zone and intentional overheat"));
+    TacticsMenu = root->AddSubMenu(new Menu("RumbleOneTrick", "Rumble heat and Equalizer"));
+    HeatMenu = TacticsMenu->AddSubMenu(new Menu("HeatBands", "Cold, danger, overheat"));
     HeatMenu->Add(new MenuBool("PrimeDangerWithW", "Prime Danger Zone with useful W", true));
-    HeatMenu->Add(new MenuBool("AllowComboOverheat", "Allow lethal close-range combo overheat", true));
-    HeatMenu->Add(new MenuBool("AllowJungleOverheat", "Allow overheat while attacking jungle", true));
+    HeatMenu->Add(new MenuBool("AllowComboOverheat", "Allow lethal combo overheat", true));
+    HeatMenu->Add(new MenuBool("AllowJungleOverheat", "Allow jungle overheat", true));
     HeatMenu->Add(new MenuSlider("HarassHeatCeiling", "Stop harass at heat", 120, 50, 140));
     ShieldMenu = TacticsMenu->AddSubMenu(new Menu("ScrapShield", "W shield, speed and heat setup"));
     ShieldMenu->Add(new MenuBool("DefensiveW", "Use W for incoming danger", true));
     ShieldMenu->Add(new MenuSlider("EmergencyHP", "Emergency W health (%)", 34, 10, 75));
-    HarpoonMenu = TacticsMenu->AddSubMenu(new Menu("ElectroHarpoon", "E prediction and two-charge economy"));
+    HarpoonMenu = TacticsMenu->AddSubMenu(new Menu("ElectroHarpoon", "E prediction and charge economy"));
     HarpoonMenu->Add(new MenuBool("ReserveCharge", "Reserve last unpaired harpoon", true));
     HarpoonMenu->Add(new MenuBool("Peel", "Use E to peel", true));
-    EqualizerMenu = TacticsMenu->AddSubMenu(new Menu("Equalizer", "R escape-path line and turret safety"));
-    EqualizerMenu->Add(new MenuKeyBind("ManualR", "Place scored R on selected target [T]",
-        SDK::Keys::T, KeyBindType::Press));
+    EqualizerMenu = TacticsMenu->AddSubMenu(new Menu("Equalizer", "R escape path and turret safety"));
     EqualizerMenu->Add(new MenuSlider("MinimumTargets", "Minimum R targets", 2, 1, 5));
     EqualizerMenu->Add(new MenuSlider("FleeRHP", "Defensive R below health (%)", 28, 5, 65));
-    FarmMenu = TacticsMenu->AddSubMenu(new Menu("RumbleFarm", "Heat-aware lane, jungle and last hit"));
+    FarmMenu = TacticsMenu->AddSubMenu(new Menu("RumbleFarm", "Heat-aware farm and last hit"));
     FarmMenu->Add(new MenuSlider("QMinimumMinions", "Minimum lane minions for Q", 3, 1, 7));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("RumbleCoach", "State and placement overlays"));
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw ranges and heat state", false));
@@ -595,7 +582,7 @@ inline void OnLoad() {
     LastHeatPollTick = LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     QActiveUntil = ShieldUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
-    PlayerOverrideUntil = LastAutoTargetId = LastAutoTick = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     LastKnownMode = Mode::None; GapcloserEnd = LastQAim = LastEAim = {}; LastRLine = {};
     ReconcileState(true);
 }
@@ -608,7 +595,7 @@ inline constexpr const char* Scenarios[] = {
     "Read Riot 26.15 and CommunityDragon 16.15 as the pinned Summoner's Rift baseline",
     "Classify Cold below 50, Danger Zone from 50, and Overheat at 150 heat",
     "Reconcile heat from the resource bar and overheat/danger buffs every poll",
-    "Reconcile manual spell events without double-applying controller heat",
+    "Reconcile local spell events without double-applying controller heat",
     "Treat first Electro Harpoon as 20 heat and paired second harpoon as free",
     "Reject ordinary casts that would accidentally overheat",
     "Allow planned overheat only for lethal close-range autos, jungle DPS or emergency defense",
@@ -630,9 +617,8 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear, Jungle and LastHit own heat-aware farm decisions",
     "Flee uses W speed, E slow and only defensive Equalizer placement",
     "Automatic mode permits defense, interrupt pressure and kill secure but never engage",
-    "Preserve selected target first and cooperate with the orbwalker target second",
     "Preserve auto-attack windup before nonreactive spell casts",
-    "Yield after manual Q, W, E or R and re-plan from polled heat and ammo",
+    "Reconcile observed spell state while keeping all casts autonomous",
     "Never automate summoner spells or item actives",
     "Keep profile metadata separate from the owned decision loop",
 };

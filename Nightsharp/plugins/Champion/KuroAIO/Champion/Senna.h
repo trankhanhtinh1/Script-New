@@ -321,28 +321,6 @@ static std::vector<AIHeroClient> InjuredAllies(float range, float maximumHealthP
     return allies;
 }
 
-static bool FastHeal() {
-    for (const auto& ally : InjuredAllies(ExtraQRange, 100.0f)) {
-        if (TryHealAlly(ally)) {
-            return true;
-        }
-    }
-
-    const auto player = Player();
-    if (!player.IsValid() || player.HealthPercent() >= 100.0f) {
-        return false;
-    }
-
-    for (const auto& ward : GameObjects::AllyWards()) {
-        const AIBaseClient wardTarget(ward.Handle());
-        if (ValidQCastTarget(wardTarget) &&
-            !QWallBlocks(wardTarget.Position(), 30.0f) &&
-            Q.CastOnUnit(wardTarget)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 static bool HealAllyLogic() {
     if (!Q.IsReady()) {
@@ -354,9 +332,6 @@ static bool HealAllyLogic() {
         return false;
     }
 
-    if (Key(HealMenu, "FastHeal") && FastHeal()) {
-        return true;
-    }
 
     if (mode == 1 && !IsComboMode()) {
         return false;
@@ -760,14 +735,9 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     (void)HealAllyLogic();
     (void)AutoRLogic();
 
-    const bool autoHarass = Key(HarassMenu, "AutoHarass");
-    if (autoHarass && !IsComboMode()) {
-        Harass();
-    }
-
     if (IsComboMode()) {
         Combo();
-    } else if (IsHarassMode() && !autoHarass) {
+    } else if (IsHarassMode()) {
         Harass();
     } else if (IsClearMode()) {
         if (!AutoPickSoul() && !LaneClear()) {
@@ -782,17 +752,17 @@ static void OnDraw() {
         return;
     }
 
-    if (Bool(DrawMenu, "DrawQ", true) && Q.IsReady()) {
+    if (Bool(DrawMenu, "DrawQ", false) && Q.IsReady()) {
         Drawing::DrawCircle(player.Position(), Q.Range, 0xFFFF5555u, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawExtendedQ", true) && Q.IsReady()) {
+    if (Bool(DrawMenu, "DrawExtendedQ", false) && Q.IsReady()) {
         Drawing::DrawCircle(player.Position(), ExtraQRange, 0xFFFFA500u, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawW", true) && W.IsReady()) {
+    if (Bool(DrawMenu, "DrawW", false) && W.IsReady()) {
         Drawing::DrawCircle(player.Position(), W.Range, 0xFF777777u, 1.5f, 64);
     }
 
-    if (!Bool(DrawMenu, "DrawSouls", true)) {
+    if (!Bool(DrawMenu, "DrawSouls", false)) {
         return;
     }
 
@@ -862,21 +832,11 @@ static void BuildMenu() {
         { "Always", "Combo Only", "Disabled" },
         0))->Permashow();
     HealMenu->Add(new MenuSlider("QHealHealth", "Ally Health <= %", 15, 0, 100));
-    HealMenu->Add(new MenuKeyBind(
-        "FastHeal",
-        "Fast Heal Lowest Health Ally",
-        SDK::Keys::A,
-        KeyBindType::Press))->Permashow();
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass", "Harass Settings"));
     HarassMenu->Add(new MenuBool("UseQ", "Use Q", true));
     HarassMenu->Add(new MenuBool("UseExtendedQ", "Use Extended Q", true));
     HarassMenu->Add(new MenuSlider("Mana", "Minimum Mana %", 40, 0, 100));
-    HarassMenu->Add(new MenuKeyBind(
-        "AutoHarass",
-        "Auto Harass",
-        SDK::Keys::T,
-        KeyBindType::Toggle))->Permashow();
 
     ClearMenu = MenuRoot->AddSubMenu(new Menu("Clear", "Lane Clear Settings"));
     ClearMenu->Add(new MenuBool("UseQ", "Use Q", true));
@@ -889,10 +849,10 @@ static void BuildMenu() {
     JungleMenu->Add(new MenuBool("UseW", "Use W", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawExtendedQ", "Draw Extended Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", true));
-    DrawMenu->Add(new MenuBool("DrawSouls", "Draw Soul Timers", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawExtendedQ", "Draw Extended Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", false));
+    DrawMenu->Add(new MenuBool("DrawSouls", "Draw Soul Timers", false));
 
     MenuRoot->Attach();
 }
@@ -909,12 +869,6 @@ static void RemoveMenu() {
         item->RemovePermashow();
     }
     if (auto* item = HealMenu ? HealMenu->Get<MenuList>("QHealMode") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = HealMenu ? HealMenu->Get<MenuKeyBind>("FastHeal") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = HarassMenu ? HarassMenu->Get<MenuKeyBind>("AutoHarass") : nullptr) {
         item->RemovePermashow();
     }
 

@@ -118,12 +118,11 @@ struct QReleaseContext {
     bool TargetValid = false;
     bool Lethal = false;
     bool Interrupt = false;
-    bool Manual = false;
     float ChargeSeconds = 0.0f;
 };
 
 inline bool ShouldReleaseQ(const QReleaseContext& context) {
-    if (!context.Charging || !context.ControllerOwned || context.Manual ||
+    if (!context.Charging || !context.ControllerOwned ||
         !context.AimValid || context.WallBlocked || context.TurretRisk ||
         !context.TargetValid || context.ChargeSeconds < kQMinimumChargeSeconds) {
         return false;
@@ -145,10 +144,10 @@ struct WDetonationContext {
     bool TargetInRadius = false;
     bool Lethal = false;
     bool IncomingThreat = false;
-    bool Manual = false;
 };
+
 inline bool ShouldDetonateW(const WDetonationContext& context) {
-    if (!context.ShieldActive || !context.ControllerOwned || context.Manual ||
+    if (!context.ShieldActive || !context.ControllerOwned ||
         !context.TargetValid || !context.TargetInRadius) return false;
     return context.Lethal || context.IncomingThreat;
 }
@@ -195,12 +194,12 @@ struct RCollisionContext {
     bool TargetValid = false;
     bool Lethal = false;
     bool Interrupt = false;
-    bool Manual = false;
     int PredictedEnemies = 0;
     int MinimumTargets = 1;
 };
+
 inline bool ShouldCommitR(const RCollisionContext& context) {
-    if (!context.Active || !context.ControllerOwned || context.Manual ||
+    if (!context.Active || !context.ControllerOwned ||
         context.WallAhead || context.TurretRisk || !context.TargetValid ||
         !context.PredictedCollision) return false;
     return context.Lethal || context.Interrupt ||

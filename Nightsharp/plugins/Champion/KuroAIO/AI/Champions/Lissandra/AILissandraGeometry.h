@@ -110,16 +110,16 @@ struct RPolicyContext {
     bool IncomingBurst = false;
     bool EnemyInsideRadius = false;
     bool AttackWindingUp = false;
-    bool Manual = false;
+    bool Defensive = false;
 };
 inline bool ShouldCastTargetR(const RPolicyContext& c) {
     if (!c.Ready || !c.TargetValid || c.TargetProtected || !c.TargetInsideRange) return false;
-    if (c.AttackWindingUp && !c.TargetLethal && !c.Manual) return false;
-    return c.TargetLethal || c.Manual || c.EnemyInsideRadius;
+    if (c.AttackWindingUp && !c.TargetLethal && !c.Defensive) return false;
+    return c.TargetLethal || c.Defensive || c.EnemyInsideRadius;
 }
 inline bool ShouldCastSelfR(const RPolicyContext& c) {
     if (!c.Ready || c.TargetProtected) return false;
-    return c.Manual || c.SelfLow || c.IncomingBurst || c.EnemyInsideRadius;
+    return c.Defensive || c.SelfLow || c.IncomingBurst || c.EnemyInsideRadius;
 }
 struct AutomaticContext {
     bool IncomingBurst = false;

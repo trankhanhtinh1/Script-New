@@ -20,7 +20,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::Ready;
 using ControllerHelpers::Slider;
 using ControllerHelpers::SpellEnabled;
@@ -49,7 +48,6 @@ inline int ETargetId = 0;
 inline bool ERecastReady = false;
 inline bool RCharging = false;
 inline int RCastTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline int LastAutoTargetId = 0;
@@ -289,11 +287,11 @@ inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target, kRMaxRange)) (void)CastR({}, Mode::Flee, true);
 }
 
-inline void Automatic(const AIHeroClient& selected) {
+inline void Automatic(const AIHeroClient& fallback) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     AIHeroClient threat = HeroByNetworkId(IncomingThreatTargetId);
-    if (!Engine::ValidEnemy(threat, kQRange)) threat = selected;
+    if (!Engine::ValidEnemy(threat, kQRange)) threat = fallback;
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(threat, kERange) &&
         CastE(threat, Mode::Automatic, true)) return;
     if (Engine::ValidEnemy(threat, kQRange) &&
@@ -301,7 +299,7 @@ inline void Automatic(const AIHeroClient& selected) {
         CastQ(threat, Mode::Automatic, true)) return;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileMount();
     ReconcileQ();
     ReconcileE();
@@ -309,9 +307,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
             static_cast<int>(kRMaxChargeSeconds * 1000.0f) + kRChargeGraceMs) {
         RCharging = false;
     }
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(
-        selected, mode == Mode::Flee ? kRMaxRange : kQRange);
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? kRMaxRange : kQRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -334,16 +331,12 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
             Engine::TextContains(args.ScriptName, "KledDisMount");
         if (dismountSpell) Mount = MountState::Dismounted;
         const int slot = static_cast<int>(args.Slot);
-        const bool owned = slot >= 0 && slot <= 3 && Engine::WasControllerCast(slot);
-        if (slot >= 0 && slot <= 3 && !owned) {
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
-        }
-        if (slot == 0 && !owned && Mounted()) {
+        if (slot == 0 && Mounted()) {
             QTargetId = static_cast<int>(args.TargetNetworkId);
             QCastTick = now;
             QTetherExpireTick = now + static_cast<int>(kQTetherSeconds * 1000.0f);
             QChainActive = QTargetId != 0;
-        } else if (slot == 2 && !owned) {
+        } else if (slot == 2) {
             const bool recast = Engine::TextContains(args.SpellName, "KledE2") ||
                 Engine::TextContains(args.ScriptName, "KledE2");
             if (recast) {
@@ -353,7 +346,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                 ETargetId = static_cast<int>(args.TargetNetworkId);
                 ERecastReady = false;
             }
-        } else if (slot == 3 && !owned) {
+        } else if (slot == 3) {
             RCharging = true;
             RCastTick = now;
         }
@@ -453,7 +446,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KledTactics", "Kled courage tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1400));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Bear Trap on a Rope"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Violent Tendencies"));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Joust"));
@@ -476,7 +468,6 @@ inline void ResetState() {
     ClearE();
     RCharging = false;
     RCastTick = 0;
-    ManualOwnershipUntil = 0;
     IncomingThreatUntil = 0;
     IncomingThreatTargetId = 0;
     LastAutoTargetId = 0;
@@ -503,15 +494,15 @@ inline constexpr const char* Scenarios[] = {
     "Reject wall, turret and over-committed E endpoints unless the cast is lethal",
     "Charge R only to a valid endpoint inside the live rank-based global range",
     "Reject R wall, turret and enemy-count unsafe endpoints before committing movement",
-    "Prefer the selected enemy, then orbwalker target, then engine fallback",
+    "Use autonomous target selection before orbwalker and engine fallback",
     "Preserve AA windup except reactive peel or verified lethal responses",
-    "Yield after manual Q/W/E/R input for a bounded ownership window",
+    "Resume after observed Q/W/E/R events while preserving AA windup",
     "Automatic mode only responds to bounded threats or verified Q kill-secure",
     "Combo opens with safe charge, then Q tether, Joust and W cadence follow-through",
     "Harass uses Q and E only when mounted, reachable and safe",
     "LaneClear, Jungle and LastHit use shared farm policy without inventing courage",
     "Reconcile stale Q, E and R state every update instead of trusting local casts forever",
-    "Draw Q and E ranges without taking movement ownership",
+    "Draw Q and E ranges without issuing movement orders",
     "Never automate items, summoners or turret dives",
 };
 

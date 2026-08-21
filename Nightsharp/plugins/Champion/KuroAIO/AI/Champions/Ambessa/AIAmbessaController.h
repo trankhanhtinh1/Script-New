@@ -71,7 +71,6 @@ enum class DashChoice : int {
     TowardTarget,
     SideStep,
     Backward,
-    Cursor,
     Escape,
 };
 
@@ -87,7 +86,7 @@ enum class UltimateReason : int {
 
 struct Q2CastPlan {
     Vector3 Aim = {};
-    int SelectedFirstId = 0;
+    int PrimaryFirstId = 0;
     int HitCount = 0;
     bool IntendedFirst = false;
     bool Valid = false;
@@ -97,11 +96,11 @@ struct UltimatePlan {
     Vector3 Aim = {};
     Vector3 Landing = {};
     int IntendedTargetId = 0;
-    int SelectedTargetId = 0;
+    int PrimaryTargetId = 0;
     int EnemiesAtLanding = 0;
     int AlliesAtLanding = 0;
     float Score = -FLT_MAX;
-    bool IntendedSelected = false;
+    bool IntendedPrimary = false;
     bool Safe = false;
     bool Valid = false;
 };
@@ -225,17 +224,6 @@ inline bool InEnhancedAttackRange(const AIBaseClient& target,
             EnhancedAttackRange(target) + padding;
 }
 
-inline bool CursorConsentsTo(const Vector3& position,
-                             float minimumDot = -0.10f) {
-    const auto player = GameObjects::Player();
-    if (!player.IsValid() || !position.IsValid()) return false;
-    const Vector3 targetDirection = SharedGeometry::Direction2D(
-        player.Position(), position);
-    const Vector3 cursorDirection = SharedGeometry::Direction2D(
-        player.Position(), Game::CursorPos());
-    return !targetDirection.IsZero() && !cursorDirection.IsZero() &&
-           targetDirection.Dot(cursorDirection) >= minimumDot;
-}
 
 inline Vector3 ClipPassiveDashToTerrain(const Vector3& origin,
                                         const Vector3& desired) {
@@ -300,18 +288,13 @@ inline DashChoice ChooseDashChoice(const AIHeroClient& target,
     if (!player.IsValid() || PlayerMobilityLocked()) {
         return DashChoice::NoDash;
     }
-    const Vector3 cursorEndpoint = DirectionEndpoint(
-        player.Position(), Game::CursorPos());
-    if (!DashEndpointSafe(cursorEndpoint, target, false)) {
-        return DashChoice::NoDash;
-    }
     if (Bool(PassiveMenu, "BaitAntiDash", true) &&
         HasReadyDashHazardAt(player.Position())) {
         return DashChoice::NoDash;
     }
     if (posture == Posture::Escape) return DashChoice::Escape;
     if (posture == Posture::Kite) return DashChoice::Backward;
-    if (!target.IsValid()) return DashChoice::Cursor;
+    if (!target.IsValid()) return DashChoice::NoDash;
 
     const float distance = player.Position().Distance2D(target.Position());
     if (posture == Posture::Chase && distance > 360.0f) {
@@ -329,7 +312,7 @@ inline DashChoice ChooseDashChoice(const AIHeroClient& target,
     if (distance <= 225.0f && !Engine::IsHardCrowdControlled(target)) {
         return DashChoice::SideStep;
     }
-    return DashChoice::Cursor;
+    return DashChoice::NoDash;
 }
 
 inline Vector3 EndpointForDashChoice(DashChoice choice,
@@ -341,8 +324,10 @@ inline Vector3 EndpointForDashChoice(DashChoice choice,
         choice == DashChoice::PlayerOwned) {
         return origin;
     }
-    Vector3 desired = Game::CursorPos();
-    if (target.IsValid()) {
+    Vector3 desired = origin;
+    if (choice == DashChoice::Escape) {
+        desired = Game::CursorPos();
+    } else if (target.IsValid()) {
         const Vector3 toward = SharedGeometry::Direction2D(
             origin, target.Position());
         if (choice == DashChoice::TowardTarget) {
@@ -350,17 +335,14 @@ inline Vector3 EndpointForDashChoice(DashChoice choice,
         } else if (choice == DashChoice::Backward) {
             desired = origin - toward * kPassiveDashMaximum;
         } else if (choice == DashChoice::SideStep) {
-            const Vector3 cursorDirection = SharedGeometry::Direction2D(
-                origin, Game::CursorPos());
-            const float side = SharedGeometry::Cross2D(
-                toward, cursorDirection) >= 0.0f ? 1.0f : -1.0f;
             desired = origin + SharedGeometry::Rotate2D(
-                toward, side * SharedGeometry::kPi * 0.5f) *
+                toward, SharedGeometry::kPi * 0.5f) *
                 kPassiveDashMaximum;
         }
     }
     return DirectionEndpoint(origin, desired);
 }
+
 
 inline void PlanPlayerOwnedDash(int slot,
                                 const AIHeroClient& target,
@@ -561,7 +543,7 @@ inline Q2CastPlan BuildQ2Plan(const AIHeroClient& target,
         }
         const int first = FirstQ2TargetIndex(
             player.Position(), direction, units);
-        const int selectedId = first >= 0
+        const int primaryId = first >= 0
             ? units[static_cast<std::size_t>(first)].Id
             : 0;
         int hits = 0;
@@ -573,14 +555,14 @@ inline Q2CastPlan BuildQ2Plan(const AIHeroClient& target,
             }
         }
         const bool intendedFirst =
-            selectedId == static_cast<int>(target.NetworkId());
+            primaryId == static_cast<int>(target.NetworkId());
         float score = (intendedFirst ? 1000.0f : 0.0f) +
                       static_cast<float>(hits) * 12.0f -
                       std::fabs(offset) * 260.0f;
         if (score > bestScore) {
             bestScore = score;
             best.Aim = player.Position() + direction * kQ2Range;
-            best.SelectedFirstId = selectedId;
+            best.PrimaryFirstId = primaryId;
             best.HitCount = hits;
             best.IntendedFirst = intendedFirst;
             best.Valid = true;
@@ -627,26 +609,26 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& intended,
                       intendedPosition, intended.BoundingRadius())) {
             continue;
         }
-        const int selectedIndex = FarthestRTargetIndex(
+        const int primaryIndex = FarthestRTargetIndex(
             player.Position(), direction, champions);
-        if (selectedIndex < 0) continue;
-        const int selectedId = champions[
-            static_cast<std::size_t>(selectedIndex)].Id;
-        const AIHeroClient selected = HeroByNetworkId(selectedId);
-        if (!Engine::ValidEnemy(selected)) continue;
+        if (primaryIndex < 0) continue;
+        const int primaryId = champions[
+            static_cast<std::size_t>(primaryIndex)].Id;
+        const AIHeroClient primary = HeroByNetworkId(primaryId);
+        if (!Engine::ValidEnemy(primary)) continue;
         // R is a blink and is not clipped like Drakehound's Step. Evaluate
         // the predicted behind-target point directly; if it is terrain the
         // candidate remains unsafe instead of inventing a passive-style stop.
-        const Vector3 selectedPosition = champions[
-            static_cast<std::size_t>(selectedIndex)].Position;
+        const Vector3 primaryPosition = champions[
+            static_cast<std::size_t>(primaryIndex)].Position;
         const Vector3 landing = RLandingPoint(
-            player.Position(), selectedPosition);
+            player.Position(), primaryPosition);
         const int enemies = Engine::CountEnemiesAt(landing, 650.0f);
         const int allies = Engine::CountAlliesAt(landing, 850.0f);
-        const bool selectedIntended =
-            selectedId == static_cast<int>(intended.NetworkId());
+        const bool primaryIntended =
+            primaryId == static_cast<int>(intended.NetworkId());
         const bool turret = Engine::UnderEnemyTurret(landing);
-        const bool lethalDive = selectedIntended &&
+        const bool lethalDive = primaryIntended &&
             ConservativeKillable(intended, true) &&
             Bool(Engine::ComboMenu, "AllowTurretDive", true);
         const bool safe = !SDK::NavMesh::IsWall(landing) &&
@@ -654,23 +636,23 @@ inline UltimatePlan BuildUltimatePlan(const AIHeroClient& intended,
             (!turret || lethalDive) &&
             (defensive || allies > 0 || enemies <= 1 ||
              ConservativeKillable(intended, true));
-        float score = (selectedIntended ? 2000.0f : -1800.0f) +
+        float score = (primaryIntended ? 2000.0f : -1800.0f) +
                       static_cast<float>(allies) * 145.0f -
                       static_cast<float>(enemies) * 220.0f -
                       std::fabs(offset) * 180.0f;
         if (turret && !lethalDive) score -= 2000.0f;
-        if (selected.AttackRange() >= 450.0f) score += 110.0f;
-        if (selected.HealthPercent() <= 45.0f) score += 150.0f;
+        if (primary.AttackRange() >= 450.0f) score += 110.0f;
+        if (primary.HealthPercent() <= 45.0f) score += 150.0f;
         if (!safe) score -= 1200.0f;
         if (!best.Valid || score > best.Score) {
             best.Aim = player.Position() + direction * kRRange;
             best.Landing = landing;
             best.IntendedTargetId = static_cast<int>(intended.NetworkId());
-            best.SelectedTargetId = selectedId;
+            best.PrimaryTargetId = primaryId;
             best.EnemiesAtLanding = enemies;
             best.AlliesAtLanding = allies;
             best.Score = score;
-            best.IntendedSelected = selectedIntended;
+            best.IntendedPrimary = primaryIntended;
             best.Safe = safe;
             best.Valid = true;
         }
@@ -821,7 +803,7 @@ inline bool CastR(const AIHeroClient& target,
         return false;
     }
     UltimatePlan plan = BuildUltimatePlan(target, defensive);
-    if (!plan.Valid || !plan.IntendedSelected ||
+    if (!plan.Valid || !plan.IntendedPrimary ||
         (!plan.Safe && !defensive)) {
         LastRPlan = plan;
         return false;
@@ -920,17 +902,6 @@ inline bool TryInterrupt() {
         target, UltimateReason::Interrupt, Mode::Automatic, false, true);
 }
 
-inline bool TryManualR(const AIHeroClient& fallback) {
-    if (!Key(Engine::AutomaticMenu, "ManualR", false) || !Ready(3)) {
-        return false;
-    }
-    AIHeroClient target = fallback;
-    if (!Engine::ValidEnemy(target, kRRange + 80.0f)) {
-        target = Engine::SelectTarget(kRRange + 80.0f);
-    }
-    return Engine::ValidEnemy(target) && CastR(
-        target, UltimateReason::LongCatch, Mode::Automatic, false, true);
-}
 
 inline bool TrySmartR(const AIHeroClient& target, Mode mode) {
     if (!Ready(3) || !Engine::ValidEnemy(target) ||
@@ -953,15 +924,14 @@ inline bool TrySmartR(const AIHeroClient& target, Mode mode) {
         target.HealthPercent() <= Slider(RMenu, "IsolateHp", 72) &&
         (Engine::CountAlliesAt(target.Position(), 900.0f) >= 1 ||
          ConservativeKillable(target, true));
-    if (isolate && CursorConsentsTo(target.Position(), -0.05f)) {
+    if (isolate) {
         CurrentPosture = Posture::Isolate;
         return CastR(target, UltimateReason::IsolateCarry, mode);
     }
     const bool catchTarget = Bool(RMenu, "LongCatch", true) &&
         distance > 650.0f &&
         distance <= kRRange + target.BoundingRadius() &&
-        target.HealthPercent() <= Slider(RMenu, "CatchHp", 58) &&
-        CursorConsentsTo(target.Position(), 0.25f);
+        target.HealthPercent() <= Slider(RMenu, "CatchHp", 58);
     return catchTarget && CastR(
         target, UltimateReason::LongCatch, mode);
 }
@@ -1319,18 +1289,16 @@ inline void RefreshState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredSelected) {
+    (void)ignoredSelected;
     RefreshState();
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target)) {
-        target = Engine::SelectTarget();
-    }
+    AIHeroClient target = Engine::SelectTarget();
     LastDecisionTargetId = target.IsValid()
         ? static_cast<int>(target.NetworkId())
         : 0;
     CurrentPosture = SelectPosture(mode, target);
 
-    if (TryManualR(target) || TryInterrupt() ||
+    if (TryInterrupt() ||
         TryEmergencyW(target, Mode::Automatic) ||
         TryReactiveGapcloser(target)) {
         return true;
@@ -1345,7 +1313,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     if (mode == Mode::None) return TryJungle();
     return false;
 }
-
 inline void ObserveIncomingCast(
     const SDK::Events::ProcessSpellEventArgs& args) {
     const auto player = GameObjects::Player();
@@ -1687,7 +1654,6 @@ inline const char* DashName(DashChoice choice) {
     case DashChoice::TowardTarget: return "forward";
     case DashChoice::SideStep: return "side";
     case DashChoice::Backward: return "back";
-    case DashChoice::Cursor: return "cursor";
     case DashChoice::Escape: return "escape";
     default: return "player";
     }
@@ -1710,13 +1676,13 @@ inline void OnDraw() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
-    if (Bool(CoachMenu, "DrawQ1", true)) {
+    if (Bool(CoachMenu, "DrawQ1", false)) {
         Drawing::DrawCircle(player.Position(), kQ1InnerRadius,
                             0x668D2735u, 1.3f, 64);
         Drawing::DrawCircle(player.Position(), kQ1OuterRadius,
                             0xCCEF5B68u, 2.0f, 64);
     }
-    if (Bool(CoachMenu, "DrawDash", true) &&
+    if (Bool(CoachMenu, "DrawDash", false) &&
         PlannedDashEndpoint.IsValid() &&
         PendingDashWindowUntil >= Now()) {
         const std::uint32_t color =
@@ -1732,18 +1698,18 @@ inline void OnDraw() {
         Drawing::DrawCircle(
             PlannedDashEndpoint, 44.0f, color, 2.2f, 40);
     }
-    if (Bool(CoachMenu, "DrawQ2", true) &&
+    if (Bool(CoachMenu, "DrawQ2", false) &&
         LastQ2Plan.Valid && LastQ2Plan.Aim.IsValid()) {
         Drawing::DrawLine(
             player.Position(), LastQ2Plan.Aim,
             LastQ2Plan.IntendedFirst ? 0xFF58D68Du : 0xFFFFA94Du,
             2.0f);
     }
-    if (Bool(CoachMenu, "DrawR", true) &&
+    if (Bool(CoachMenu, "DrawR", false) &&
         LastRPlan.Valid && LastRPlan.Aim.IsValid()) {
         Drawing::DrawLine(
             player.Position(), LastRPlan.Aim,
-            LastRPlan.IntendedSelected && LastRPlan.Safe
+            LastRPlan.IntendedPrimary && LastRPlan.Safe
                 ? 0xFFDA70D6u
                 : 0xFFFF5F6Du,
             2.4f);
@@ -1751,36 +1717,15 @@ inline void OnDraw() {
             LastRPlan.Landing, 65.0f,
             LastRPlan.Safe ? 0xFFDA70D6u : 0xFFFF5F6Du,
             2.3f, 44);
-        const AIHeroClient selected = HeroByNetworkId(
-            LastRPlan.SelectedTargetId);
-        if (selected.IsValid()) {
+        const AIHeroClient primary = HeroByNetworkId(
+            LastRPlan.PrimaryTargetId);
+        if (primary.IsValid()) {
             Drawing::DrawCircle(
-                selected.Position(), selected.BoundingRadius() + 48.0f,
-                LastRPlan.IntendedSelected
+                primary.Position(), primary.BoundingRadius() + 48.0f,
+                LastRPlan.IntendedPrimary
                     ? 0xFFDA70D6u
                     : 0xFFFF5F6Du,
                 2.6f, 48);
-        }
-    }
-    if (Bool(CoachMenu, "DrawState", true)) {
-        Vec2 screen{};
-        if (Drawing::WorldToScreen(player.Position(), screen)) {
-            char state[320]{};
-            _snprintf_s(
-                state, sizeof(state), _TRUNCATE,
-                "Ambessa one-trick | %s | E %.0f | P %d%s | Q%s %dms | dash %s%s | R %s",
-                PostureName(CurrentPosture), CurrentResource(200.0f), PassiveStacks,
-                PassiveStacks > 0 ? " AA" : "",
-                Q2IsLive() ? "2" : "1",
-                Q2IsLive() && Q2ExpireTick > 0
-                    ? std::max(0, Q2ExpireTick - Now())
-                    : 0,
-                DashName(PlannedDashChoice),
-                PassiveDashObserved ? " observed" : "",
-                UltimateReasonName(LastUltimateReason));
-            Drawing::DrawText(
-                screen.x - 205.0f, screen.y - 118.0f,
-                0xFFFFD8DCu, state);
         }
     }
 }
@@ -1800,7 +1745,7 @@ inline void BuildMenu(Menu* root) {
         "Abilities are assisted;"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "DrakehoundStep", "Dash/no-dash and empowered-AA economy"));
+        "Dash choice and empowered AA"));
     PassiveMenu->Add(new MenuBool(
         "AlwaysWeaveInRange", "Weave empowered AA when a", true));
     PassiveMenu->Add(new MenuBool(
@@ -1828,7 +1773,7 @@ inline void BuildMenu(Menu* root) {
         "The coach marks a no-dash"));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
-        "CunningSweep", "Q1 blade edge and Q2 first-target control"));
+        "Q1 edge and Q2 target control"));
     QMenu->Add(new MenuBool(
         "RequireEdge", "Hold Q1 body hit unless it", true));
     QMenu->Add(new MenuBool(
@@ -1844,7 +1789,7 @@ inline void BuildMenu(Menu* root) {
         "Q1: 180 degree, 275 body/400"));
 
     WMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Repudiation", "Shield interception and empowered slam"));
+        "Shield intercept and slam"));
     WMenu->Add(new MenuBool(
         "ReactiveShield", "Time W into champion, turret", true));
     WMenu->Add(new MenuSlider(
@@ -1866,7 +1811,7 @@ inline void BuildMenu(Menu* root) {
         "W is counted as 150% damage"));
 
     EMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Lacerate", "Slow, reposition and real second-strike state"));
+        "Slow, reposition and E strikes"));
     EMenu->Add(new MenuBool("UseInCombo", "Use E for contact/all-in", true));
     EMenu->Add(new MenuBool("UseInHarass", "E slow harass target", true));
     EMenu->Add(new MenuBool("UseInFlee", "E pursuer on player dash", true));
@@ -1876,7 +1821,7 @@ inline void BuildMenu(Menu* root) {
         "The second E is projected"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
-        "PublicExecution", "Farthest-target selection and landing safety"));
+        "Target choice and landing safety"));
     RMenu->Add(new MenuBool("Execute", "R when R is uniquely to", true));
     RMenu->Add(new MenuBool("IsolateCarry", "R carry all-in", true));
     RMenu->Add(new MenuSlider("IsolateHp", "Carry HP for isolation (%)", 72, 25, 100));

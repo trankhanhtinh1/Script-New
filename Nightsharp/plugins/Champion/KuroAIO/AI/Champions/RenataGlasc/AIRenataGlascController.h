@@ -34,10 +34,8 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
 inline int LastEnemyThreatUntil = 0;
 inline int LastHardCcThreatUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int QGrabbedTargetId = 0;
 inline int QRecastExpireTick = 0;
 inline int WTargetId = 0;
@@ -66,11 +64,7 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kRRange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range = kRRange) {
     return Engine::SelectTarget(range);
 }
 
@@ -94,17 +88,14 @@ inline AIHeroClient SelectAlly(bool defensive = false) {
     float bestScore = -FLT_MAX;
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally, 800.0f) || ally.NetworkId() == player.NetworkId()) continue;
-        const bool selected = static_cast<int>(ally.NetworkId()) == SelectedAllyId;
         const int nearby = Engine::CountEnemiesAt(ally.Position(), 700.0f);
         const float score = (100.0f - std::clamp(ally.HealthPercent(), 0.0f, 100.0f)) * 1.7f +
             std::max(0.0f, ally.TotalAttackDamage()) * 0.75f +
             std::max(0.0f, ally.AP()) * 0.45f +
-            static_cast<float>(std::max(0, nearby)) * 240.0f +
-            (selected ? 500.0f : 0.0f);
+            static_cast<float>(std::max(0, nearby)) * 240.0f;
         if (score > bestScore) { best = ally; bestScore = score; }
     }
     if (!best.IsValid() && defensive) best = player;
-    if (best.IsValid()) SelectedAllyId = static_cast<int>(best.NetworkId());
     return best;
 }
 
@@ -122,7 +113,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) 
     if (QRecastReady && QGrabbedTargetId != 0 && now <= QRecastExpireTick) {
         const auto grabbed = AllyById(QGrabbedTargetId);
         if (!grabbed.IsValid() || !Engine::ValidEnemy(grabbed)) return false;
-        const Vector3 desired = Game::CursorPos().IsValid() ? Game::CursorPos() : player.Position();
+        const Vector3 desired = PredictPosition(grabbed, 0.20f);
         const Vector3 endpoint = QRecastEndpoint(grabbed.Position(), desired);
         if (!QRecastReachable(grabbed.Position(), endpoint) ||
             ControllerHelpers::ProjectileWallBlocks(
@@ -164,7 +155,6 @@ inline bool CastW(const AIHeroClient& requested, Mode mode, bool reactive = fals
     WActiveUntil = Now() + static_cast<int>(kWDurationSeconds * 1000.0f);
     WDeathTick = 0;
     WReviveObserved = false;
-    SelectedAllyId = WTargetId;
     LastCastTick[1] = Now();
     return true;
 }
@@ -295,11 +285,12 @@ inline void ReconcileState() {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
-    if (RActiveUntil > Now() || ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = SelectEnemy(selected, kRRange);
+    if (RActiveUntil > Now()) return true;
+    const AIHeroClient target = SelectEnemy(kRRange);
     if (mode == Mode::Automatic) { DefensiveAutomatic(target); return true; }
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -323,7 +314,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             const int previousCastTick = LastCastTick[static_cast<std::size_t>(slot)];
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 0) {
@@ -408,7 +398,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RenataTactics", "Renata support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("AllyHealth", "Automatic ally health threshold", 65, 10, 95));
     TacticsMenu->Add(new MenuSlider("PlayerHealth", "Automatic player health threshold", 42, 10, 95));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Handshake and throw"));
@@ -428,8 +417,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    LastEnemyThreatUntil = LastHardCcThreatUntil = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    LastEnemyThreatUntil = LastHardCcThreatUntil = 0;
     QGrabbedTargetId = QRecastExpireTick = WTargetId = WActiveUntil = WDeathTick = 0;
     ELastDirectionTick = RActiveUntil = PassiveMarkedTargetId = PassiveMarkExpireTick = 0;
     LastQEndpoint = LastREndpoint = {};
@@ -444,7 +433,6 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin all mechanics to Riot 26.15 and CommunityDragon 16.15 Renata metadata",
-    "Prefer the selected enemy before orbwalker fallback and preserve selected ally intent",
     "Apply Leverage mark damage to first champion attack and reconcile mark consumption",
     "Handshake uses predicted collision, line width, projectile wall and first-blocker gates",
     "Q recast throws only a confirmed grabbed target toward a reachable safe endpoint",
@@ -461,7 +449,6 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear Jungle and LastHit delegate only after Renata mana floor is met",
     "Flee bails out an ally, shields through E, handshakes pursuer and peels with R",
     "Reconcile Q recast, W bailout, R channel and threat windows through polling and events",
-    "Preserve auto-attack windup and yield ownership after manual spell casts",
     "Expose complete load menu update draw spell buff attack object and missile callbacks",
 };
 

@@ -33,10 +33,8 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
 inline int LastEnemyThreatUntil = 0;
 inline int LastHardCcThreatUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int RActiveUntil = 0;
 inline int PixLinkedAllyId = 0;
 inline int PixActiveUntil = 0;
@@ -61,14 +59,6 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kQRange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
-}
-
 inline AIHeroClient SelectAlly(bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
@@ -77,18 +67,16 @@ inline AIHeroClient SelectAlly(bool defensive = false) {
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally, kERange) ||
             ally.NetworkId() == player.NetworkId()) continue;
-        const bool selected = static_cast<int>(ally.NetworkId()) == SelectedAllyId;
         const int nearby = Engine::CountEnemiesAt(ally.Position(), 700.0f);
         const float score = AllyPriority(ally.HealthPercent(),
                                          ally.TotalAttackDamage(), ally.AP(),
-                                         nearby, selected);
+                                         nearby);
         if (score > bestScore) {
             best = ally;
             bestScore = score;
         }
     }
     if (!best.IsValid() && defensive) return player;
-    if (best.IsValid()) SelectedAllyId = static_cast<int>(best.NetworkId());
     return best;
 }
 
@@ -178,7 +166,6 @@ inline bool CastE(const AIHeroClient& enemy, Mode mode, bool reactive = false) {
                 PixPosition = PixTransferPosition(player.Position(), ally.Position(), true);
                 PixLinkedAllyId = static_cast<int>(ally.NetworkId());
                 PixActiveUntil = Now() + 2200;
-                SelectedAllyId = static_cast<int>(ally.NetworkId());
                 LastCastTick[2] = Now();
                 return true;
             }
@@ -277,21 +264,19 @@ inline void ReconcileState() {
         RActiveUntil = std::max(RActiveUntil, now + 350);
     else if (RActiveUntil > now && now - LastCastTick[3] > 500)
         RActiveUntil = 0;
-    if (player.HasBuff("LuluW"))
-        ManualOwnershipUntil = std::max(ManualOwnershipUntil, now + 250);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
-    if (RActiveUntil > Now() || ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = SelectEnemy(selected, kQRange);
+    if (RActiveUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(kQRange);
     if (mode == Mode::Automatic && DefensiveAutomatic(target)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, kWRange + 150.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, kWRange + 150.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -311,8 +296,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 2 && args.CastPosition.IsValid()) {
                 PixPosition = args.CastPosition;
@@ -358,7 +341,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LuluTactics", "Lulu Pix tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("AllyHealth", "Automatic ally health threshold", 62, 10, 95));
     TacticsMenu->Add(new MenuSlider("PlayerHealth", "Automatic player health threshold", 44, 10, 95));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Glitterlance dual bolts"));
@@ -380,8 +362,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    LastEnemyThreatUntil = LastHardCcThreatUntil = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    LastEnemyThreatUntil = LastHardCcThreatUntil = 0;
     RActiveUntil = PixActiveUntil = PixLinkedAllyId = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = {};
@@ -396,13 +378,13 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin all mechanics to Riot 26.15 and CommunityDragon 16.15 Lulu metadata",
-    "Prefer selected enemy target, then orbwalker target, then engine fallback",
+    "Use autonomous Engine target selection for every combat route",
     "Track Pix position and linked ally through Help Pix transfer events and polling",
     "Model both Lulu and Pix Glitterlance bolt origins with prediction and target radius",
     "Reject Glitterlance through projectile walls and preserve auto-attack windup",
     "Use Whimsy polymorph against enemy threats and speed for ally rescue or flee",
     "Do not speed an ally into an unsafe turret or excessive enemy cluster",
-    "Score shield targets by missing health, carry value, threat and selected continuity",
+    "Score shield targets by missing health, carry value and local threat",
     "Use Help Pix offensively only for marked, low-health or multi-ally damage value",
     "Transfer Pix to the shielded ally or damaged enemy for the next Q dual bolts",
     "Require Wild Growth health safety and a meaningful ally or player threat",
@@ -414,7 +396,7 @@ inline constexpr const char* Scenarios[] = {
     "Harass preserves mana floor and avoids low-value polymorph or E damage",
     "LaneClear Jungle and LastHit delegate only after Lulu mana floor is met",
     "Flee uses Whimsy speed posture, shield transfer, Q peel and safe Wild Growth",
-    "Yield manual spell ownership for a bounded window and reconcile missed events",
+    "Reconcile local spell casts and missed events without yielding the decision loop",
     "Expose complete load menu update draw spell buff attack and cast callbacks",
 };
 

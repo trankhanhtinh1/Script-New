@@ -35,7 +35,6 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int InterruptTargetId = 0;
@@ -180,7 +179,7 @@ inline bool ReleaseQ(const AIHeroClient& fallback, Mode mode, bool reactive = fa
         true, true, aim.IsValid() && !aim.IsZero(),
         prediction.Hitchance >= SDK::HitChance::High, wall, turret,
         Engine::ValidEnemy(target), Lethal(target, 0), interrupt ||
-            IncomingHardCcUntil > Now(), reactive, charge};
+            IncomingHardCcUntil > Now(), charge};
     if (charge < static_cast<float>(Slider(QMenu, "MinimumChargeMs", 260)) / 1000.0f &&
         !context.Lethal && !context.Interrupt) return false;
     if (!ShouldReleaseQ(context)) return false;
@@ -217,7 +216,7 @@ inline bool DetonateW(const AIHeroClient& target, Mode mode, bool reactive = fal
         !SpellEnabled(1, mode) || !Throttle(1) || Protected(target)) return false;
     const WDetonationContext context{
         true, true, true, true, Lethal(target, 1),
-        reactive || IncomingThreatUntil > Now(), false};
+        reactive || IncomingThreatUntil > Now()};
     if (!ShouldDetonateW(context)) return false;
     if (!Engine::ControllerCastSelf(1)) return false;
     WActive = false;
@@ -277,7 +276,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
         true, true, hits > 0, SDK::NavMesh::IsWallBetween(player.Position(), aim,
             kRHalfWidth), Engine::UnderEnemyTurret(aim) &&
             !Engine::UnderEnemyTurret(player.Position()), Engine::ValidEnemy(target),
-        Lethal(target, 3), interrupt || InterruptTargetId != 0, reactive,
+        Lethal(target, 3), interrupt || InterruptTargetId != 0,
         hits, Slider(RMenu, "MinimumTargets", 1)};
     if (!ShouldCommitR(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
@@ -331,7 +330,7 @@ inline void Farm(Mode mode) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.ManaPercent() < Slider(FarmMenu, "Mana", 35)) return;
     if (QCharging) {
-        const auto target = ControllerHelpers::PreferredEnemyTarget({}, kQRange);
+        const auto target = Engine::SelectTarget(kQRange);
         (void)ReleaseQ(target, mode);
         return;
     }
@@ -346,16 +345,15 @@ inline bool TryInterrupt(const AIHeroClient& fallback, Mode mode) {
     return Engine::ValidEnemy(target) && CastR(target, mode, true, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f :
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f :
         std::max(kRMaximumRange, kERange));
     if (PassiveZombie) {
         RunZombie(target);
         return true;
     }
-    if (PlayerOverrideUntil > Now()) return true;
     if (QCharging) {
         if (QOwned) (void)ReleaseQ(target, mode, false,
             IncomingHardCcUntil > Now());
@@ -394,8 +392,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
         const bool ours = Engine::WasControllerCast(slot);
-        if (!ours) PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 0) {
             QCharging = true;
@@ -470,7 +466,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SionOneTrick", "Sion juggernaut tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("Passive", "Glory in Death"));
     PassiveMenu->Add(new MenuBool("PreserveZombieTarget", "Preserve zombie attack target", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Decimating Smash charge"));
@@ -490,7 +485,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCcUntil = InterruptTargetId = InterruptExpireTick = 0;
     LastMode = Mode::None;
     QCharging = QOwned = WActive = WOwned = EFirstBodyObserved = false;
@@ -506,12 +501,12 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Q charge/release timing, range and damage to Riot 26.15 / CommunityDragon 16.15",
-    "Start and release only controller-owned Q; never release a manually held channel",
+    "Start and release only controller-owned Q; never release an externally held channel",
     "Predict Q impact and reject walls, enemy turret-only endpoints and protected targets",
     "Preserve an ordinary attack windup unless Q is reactive, interrupting or lethal",
     "Reconcile Q charging from spell state plus local cast and buff events",
     "Start W as a shield under incoming pressure and detonate only in its live radius",
-    "Keep W detonation controller-owned and avoid burning a manual shield",
+    "Keep W detonation controller-owned and avoid burning an externally held shield",
     "Predict W explosion targets and reject spell-shielded or invulnerable enemies",
     "Use E prediction with first-body collision and minion projectile semantics",
     "Reject E through projectile walls, unsafe turret endpoints and invalid geometry",
@@ -523,11 +518,11 @@ inline constexpr const char* Scenarios[] = {
     "Capture interrupt windows and prefer R collision over blind long-range casting",
     "Enter Glory in Death from passive buff/death polling and suppress normal spell casts",
     "Preserve zombie attack intent without inventing movement or spell APIs",
-    "Preserve selected target before orbwalker and selector fallback in every mode",
+    "Use the autonomous engine-selected target in every mode",
     "LaneClear Jungle and LastHit delegate to shared farm policy without R automation",
     "Flee prefers reactive E peel then a safe R route and shield fallback",
     "Automatic mode permits only defensive, interrupting or lethal R/W decisions",
-    "Yield after observed manual Q W E or R ownership through the shared engine window",
+    "Protect active Q W and R channels through event and polling reconciliation",
     "Keep profile metadata, pure geometry and runtime decision loop independently auditable",
 };
 inline constexpr ChampionController Controller = [] {

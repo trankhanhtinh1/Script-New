@@ -55,17 +55,12 @@ inline int ECastTick = 0;
 inline int RCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserExpireTick = 0;
 inline Vector3 GapcloserEndpoint = {};
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 
 using ControllerHelpers::Now;
 
@@ -287,7 +282,6 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool force = false) {
     if (Orbwalker::IsWindingUp() && !force && !Lethal(target, QDamage(target))) return false;
     if (!Engine::ControllerCastUnit(0, target)) return false;
     QCastTick = Now();
-    QWasManual = false;
     AvailableMimic = MimicKind::Q;
     SigilMark = { static_cast<int>(target.NetworkId()),
         Now() + static_cast<int>(kQMarkDurationSeconds * 1000.0f), false };
@@ -310,7 +304,6 @@ inline bool CastWReturn(const AIHeroClient& target, Mode mode, bool force = fals
     if (!force && !ShouldReturn(context)) return false;
     if (!Engine::ControllerCastSelf(1)) return false;
     WCastTick = Now();
-    WWasManual = false;
     WReturnActive = false;
     WReturnExpireTick = 0;
     WReturnOrigin = {};
@@ -334,7 +327,6 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool fleeing = false,
     const Vector3 origin = player.Position();
     if (!Engine::ControllerCastPosition(1, endpoint)) return false;
     WCastTick = Now();
-    WWasManual = false;
     WReturnActive = true;
     WReturnOrigin = origin;
     WReturnExpireTick = Now() + static_cast<int>(kWReturnSeconds * 1000.0f);
@@ -358,10 +350,8 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool mimic = false,
     if (!Engine::ControllerCastPosition(index, aim)) return false;
     if (mimic) {
         RCastTick = Now();
-        RWasManual = false;
     } else {
         ECastTick = Now();
-        EWasManual = false;
         AvailableMimic = MimicKind::E;
     }
     return true;
@@ -376,7 +366,6 @@ inline bool CastRQ(const AIHeroClient& target, Mode mode, bool force = false) {
     if (Orbwalker::IsWindingUp() && !force && !Lethal(target, damage)) return false;
     if (!Engine::ControllerCastUnit(3, target)) return false;
     RCastTick = Now();
-    RWasManual = false;
     SigilMark = { static_cast<int>(target.NetworkId()),
         Now() + static_cast<int>(kQMarkDurationSeconds * 1000.0f), true };
     return true;
@@ -398,7 +387,6 @@ inline bool CastRWReturn(const AIHeroClient& target, Mode mode, bool force = fal
     if (!force && !ShouldReturn(context)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     RCastTick = Now();
-    RWasManual = false;
     RReturnActive = false;
     RReturnExpireTick = 0;
     RReturnOrigin = {};
@@ -422,7 +410,6 @@ inline bool CastRW(const AIHeroClient& target, Mode mode, bool fleeing = false,
     const Vector3 origin = player.Position();
     if (!Engine::ControllerCastPosition(3, endpoint)) return false;
     RCastTick = Now();
-    RWasManual = false;
     RReturnActive = true;
     RReturnOrigin = origin;
     RReturnExpireTick = Now() + static_cast<int>(kWReturnSeconds * 1000.0f);
@@ -510,9 +497,9 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return Engine::ValidEnemy(threat) && CastE(threat, Mode::Flee, false, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    AIHeroClient target = selected;
+    AIHeroClient target = Engine::SelectTarget(kERange + 120.0f);
     const auto tether = TetherTarget();
     if (Engine::ValidEnemy(tether, kERange + 160.0f)) target = tether;
     if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(kERange + 120.0f);
@@ -521,7 +508,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         (void)TryFlee(threat);
         return true;
     }
-    if (PlayerOverrideUntil > Now()) return true;
     if (TryReturns(target, mode)) return true;
     if (TryReactive()) return true;
     if (TryKillSecure(target, mode)) return true;
@@ -553,8 +539,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
     const std::string name = args.SpellName;
     const Vector3 origin = args.StartPosition.IsValid() && !args.StartPosition.IsZero()
         ? args.StartPosition : player.Position();
@@ -562,13 +546,11 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         ? args.TargetNetworkId : args.Target.NetworkId);
     if (slot == 0) {
         QCastTick = now;
-        QWasManual = !owned;
         AvailableMimic = MimicKind::Q;
         if (targetId != 0) SigilMark = { targetId,
             now + static_cast<int>(kQMarkDurationSeconds * 1000.0f), false };
     } else if (slot == 1) {
         WCastTick = now;
-        WWasManual = !owned;
         if (IsReturnName(name)) {
             WReturnActive = false;
             WReturnOrigin = {};
@@ -581,11 +563,9 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         }
     } else if (slot == 2) {
         ECastTick = now;
-        EWasManual = !owned;
         AvailableMimic = MimicKind::E;
     } else if (slot == 3) {
         RCastTick = now;
-        RWasManual = !owned;
         const MimicKind observed = MimicFromName(name, AvailableMimic);
         if (observed == MimicKind::W) {
             if (IsReturnName(name)) {
@@ -694,7 +674,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LeblancOneTrick", "LeBlanc mimic mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana reserve", 40, 0, 200));
     DistortionMenu = TacticsMenu->AddSubMenu(new Menu("DistortionSafety", "Distortion return safety"));
     DistortionMenu->Add(new MenuSlider("MaxDashEnemies", "Maximum enemies at landing", 2, 1, 5));
@@ -702,9 +681,9 @@ inline void BuildMenu(Menu* root) {
     DistortionMenu->Add(new MenuSlider("ReturnHP", "Return below health percent", 32, 10, 70));
     DistortionMenu->Add(new MenuBool("HarassW", "Use safe W to detonate Sigil", true));
     ChainMenu = TacticsMenu->AddSubMenu(new Menu("ChainTether", "Ethereal Chains tether"));
-    ChainMenu->Add(new MenuSeparator("PreserveTether", "Keep current position when return would break tether"));
+    ChainMenu->Add(new MenuSeparator("PreserveTether", "Keep tether on return"));
     MimicMenu = TacticsMenu->AddSubMenu(new Menu("MimicState", "Q/W/E Mimic routing"));
-    MimicMenu->Add(new MenuSeparator("ObservedMimic", "Mimic follows spell events and runtime polling"));
+    MimicMenu->Add(new MenuSeparator("ObservedMimic", "Track mimic spell events"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("LeblancFarm", "Conservative farm"));
     FarmMenu->Add(new MenuSlider("ManaReserve", "Mana reserve", 100, 0, 300));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("LeblancCoach", "State visualization"));
@@ -722,10 +701,9 @@ inline void OnLoad() {
     PassiveClonePosition = {};
     PassiveCooldownUntil = PassiveTriggerUntil = 0;
     QCastTick = WCastTick = ECastTick = RCastTick = 0;
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = IncomingHardCCUntil = 0;
+    LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = {};
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     ReconcileState();
 }
 
@@ -751,16 +729,16 @@ inline constexpr const char* Scenarios[] = {
     "Return on low health, crowd control, unsafe landing or lost target",
     "Preserve safe lethal continuation instead of snapping back prematurely",
     "Track Mirror Image activation, cooldown and allied clone create/delete/polling",
-    "Expire clone ownership after eight seconds and never identify the player as clone",
+    "Expire clone tracking after eight seconds and never identify the player as clone",
     "Combo opens Q and detonates through a safe W/E/Mimic route",
     "Harass respects mana reserve and closes its safe Distortion trade",
     "Clear modes never spend R or strand a return pad",
     "Flee uses safe returns before creating a new W or Mimic-W route",
     "Automatic mode permits kill secure, tether preservation and defensive return only",
     "React to gapclosers and interruptible channels with collision-safe E",
-    "Yield after manual Q/W/E/R while retaining observed state",
+    "Resume after observed Q/W/E/R events while retaining state",
     "Never automate summoners, items or passive clone movement",
-    "Keep metadata separate from the champion-owned decision loop",
+    "Keep metadata separate from the autonomous decision loop",
 };
 
 inline constexpr ChampionController Controller = [] {

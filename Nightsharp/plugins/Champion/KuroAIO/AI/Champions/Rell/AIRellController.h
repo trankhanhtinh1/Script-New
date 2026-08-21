@@ -52,7 +52,6 @@ enum class Sequence : std::uint8_t {
     TetherStun,
     PullChannel,
     QHeal,
-    PlayerOwned,
 };
 
 inline Menu* TacticsMenu = nullptr;
@@ -83,7 +82,6 @@ inline int LastRCastTick = 0;
 inline float LastQHealEstimate = 0.0f;
 inline float LastShatterPercent = 0.0f;
 inline int RChannelEndTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -92,7 +90,6 @@ inline Vector3 GapcloserEndpoint = {};
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
 
-inline constexpr int kManualOwnershipMs = 520;
 inline constexpr int kTetherGraceMs = 650;
 inline constexpr int kRChannelMs = 2000;
 
@@ -158,8 +155,8 @@ inline AIHeroClient TetheredAlly() {
     return selected.IsValid() ? selected : AIHeroClient{};
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    return PreferredEnemyTarget(selected, range);
+inline AIHeroClient SelectEnemy(float range) {
+    return Engine::SelectTarget(range);
 }
 
 inline bool AllySafe(const AIHeroClient& ally, bool urgent = false) {
@@ -384,16 +381,17 @@ inline bool TryFarm(Mode mode) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileMountState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
     if (RChannelActive && Now() >= RChannelEndTick) RChannelActive = false;
-    const auto target = SelectEnemy(selected, std::max(kQRange, kRRadius) + 100.0f);
+    const auto target = SelectEnemy(std::max(kQRange, kRRadius) + 100.0f);
     const auto threat = ControllerHelpers::NearestEnemyToPlayer(target, 900.0f);
     CurrentPosture = mode == Mode::Flee ? Posture::Flee :
         (RChannelActive ? Posture::Teamfight :
          (CurrentMount == MountState::Mounted ? Posture::MountedEngage : Posture::DismountedPeel));
-    if (PlayerOverrideUntil >= Now() || RChannelActive) return true;
+    if (RChannelActive) return true;
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
         CurrentPosture = mode == Mode::Jungle ? Posture::JungleFarm : Posture::LaneFarm;
         (void)TryFarm(mode);
@@ -424,26 +422,20 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + kManualOwnershipMs;
     if (IsQEvent(args)) {
         LastQCastTick = now;
         LastQTargetId = static_cast<int>(args.TargetNetworkId ? args.TargetNetworkId : args.Target.NetworkId);
-        if (!owned) ActiveSequence = Sequence::PlayerOwned;
     } else if (IsWEvent(args)) {
         LastWCastTick = now;
         WCrashPending = CurrentMount == MountState::Mounted;
-        if (!owned) ActiveSequence = Sequence::PlayerOwned;
     } else if (IsEEvent(args)) {
         LastECastTick = now;
         ETethered = true;
         if (args.TargetNetworkId) TetheredAllyId = static_cast<int>(args.TargetNetworkId);
-        if (!owned) ActiveSequence = Sequence::PlayerOwned;
     } else if (IsREvent(args)) {
         LastRCastTick = now;
         RChannelActive = true;
         RChannelEndTick = now + kRChannelMs;
-        if (!owned) ActiveSequence = Sequence::PlayerOwned;
     }
 }
 
@@ -532,7 +524,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RellOneTrick", "Rell one-trick mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", kManualOwnershipMs, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("ShatteringStrike", "Q prediction, shatter and heal"));
     QMenu->Add(new MenuSlider("MaxQEnemies", "Maximum Q endpoint enemies", 3, 1, 6));
     QMenu->Add(new MenuSlider("HarassMana", "Minimum harass mana (%)", 55, 15, 90));
@@ -561,7 +552,7 @@ inline void OnLoad() {
     TetheredAllyId = LastQTargetId = LastWTargetId = LastETargetId = LastRTargetId = 0;
     LastAutoTargetId = LastAutoTick = LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     LastQHealEstimate = LastShatterPercent = 0.0f;
-    RChannelEndTick = PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCcUntil = 0;
+    RChannelEndTick = IncomingThreatUntil = IncomingHardCcUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEndpoint = {};
     InterruptTargetId = InterruptExpireTick = 0;
@@ -574,8 +565,6 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Reconcile mounted and dismounted Ferromancy from both buffs and polling",
-    "Select the player's selected enemy first, then orbwalker target and engine fallback",
-    "Preserve movement, attack-move, Flash and manual spell ownership during controller windows",
     "Use Q predicted line impact with width, range, projectile-wall and spell-shield gates",
     "Heal missing health while shattering the target's stolen resistances on confirmed Q hit",
     "Crash W only on a reachable endpoint with turret, enemy-count and unsafe-dash gates",

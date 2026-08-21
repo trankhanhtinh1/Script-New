@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Pyke = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 68;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.TrackedObjectToken = "PykeEStunTrail";
@@ -30,14 +29,19 @@ inline constexpr ChampionProfile Pyke = [] {
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15 baseline; Q charge and throw, W camouflage, E returning trail, and R execute/share behavior are reconciled from spell and buff telemetry.";
 
-    p.Spells[0] = Spell(SDK::SpellSlot::Q, "Bone Skewer", CastKind::Direction,
-        Intent::Damage | Intent::CrowdControl | Intent::Setup | Intent::Finisher,
-        AllModes, 750.0f, 0.20f, 70.0f, 2000.0f, false,
+    p.Spells[0] = Spell(SDK::SpellSlot::Q, "Bone Skewer", CastKind::ChargedLine,
+        Intent::Damage | Intent::CrowdControl | Intent::Setup | Intent::Finisher |
+            Intent::Channel,
+        AllModes, 1100.0f, 0.25f, 70.0f, 2000.0f, true,
         SDK::DamageType::Physical, SDK::SpellType::SkillshotLine);
     p.Spells[0].Aim = AimPolicy::Prediction;
     p.Spells[0].Priority = 90;
     p.Spells[0].Hitchance = SDK::HitChance::High;
-
+    p.Spells[0].ChargeMinRange = 400;
+    p.Spells[0].ChargeMaxRange = 1100;
+    p.Spells[0].ChargeDurationSeconds = 1.0f;
+    p.Spells[0].ChargeBuffName = "PykeQ";
+    p.Spells[0].PreserveAutoAttack = true;
     p.Spells[1] = Spell(SDK::SpellSlot::W, "Ghostwater", CastKind::Self,
         Intent::Buff | Intent::Mobility | Intent::Vision | Intent::Setup |
             Intent::Disengage | Intent::Peel,
@@ -59,8 +63,8 @@ inline constexpr ChampionProfile Pyke = [] {
     p.Spells[3] = Spell(SDK::SpellSlot::R, "Death from Below", CastKind::Position,
         Intent::Damage | Intent::Execute | Intent::Finisher | Intent::AllyUtility,
         Mode::Combo | Mode::Flee | Mode::Automatic,
-        750.0f, 0.20f, 180.0f, 0.0f, false,
-        SDK::DamageType::Physical, SDK::SpellType::SkillshotCircle);
+        750.0f, 0.50f, 180.0f, 0.0f, false,
+        SDK::DamageType::True, SDK::SpellType::SkillshotCircle);
     p.Spells[3].Aim = AimPolicy::Prediction;
     p.Spells[3].Priority = 100;
     p.Spells[3].MinimumAoeTargets = 1;
@@ -77,7 +81,7 @@ inline constexpr ChampionProfile Pyke = [] {
     p.Flee = Plan("Ghostwater escape",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 700),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 85, 650),
-        Step(SDK::SpellSlot::Q, StepRule::ManualAssistOnly, 140, 800));
+        Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireSafePosition, 140, 800));
     return p;
 }();
 

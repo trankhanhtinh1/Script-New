@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Orianna = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 62;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.TrackedObjectToken = "OriannaBall";
@@ -74,7 +73,7 @@ inline constexpr ChampionProfile Orianna = [] {
     p.Flee = Plan("Protect and dissonance peel",
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 0, 800),
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 60, 850),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 150, 1000));
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::RequireMultiTarget, 150, 1000));
     return p;
 }();
 

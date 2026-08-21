@@ -103,11 +103,10 @@ struct ProjectileContext {
     bool CrossesPlayer = false;
     bool HardCrowdControl = false;
     bool Lethal = false;
-    bool Manual = false;
 };
 inline bool ShouldReflect(const ProjectileContext& context) {
     return context.Valid && (context.TargetsPlayer || context.CrossesPlayer) &&
-        (context.HardCrowdControl || context.Lethal || context.Manual);
+        (context.HardCrowdControl || context.Lethal);
 }
 
 struct UltimateContext {
@@ -116,25 +115,22 @@ struct UltimateContext {
     bool HasMarks = false;
     bool Execute = false;
     bool Defensive = false;
-    bool Manual = false;
     int MarkedTargets = 0;
     int MinimumTargets = 1;
 };
 inline bool ShouldCastUltimate(const UltimateContext& context) {
     if (!context.Ready || !context.TargetValid || !context.HasMarks) return false;
-    return context.Execute || context.Defensive || context.Manual ||
+    return context.Execute || context.Defensive ||
         context.MarkedTargets >= std::max(1, context.MinimumTargets);
 }
 
 struct AutomaticContext {
-    bool ManualOwnership = false;
     bool IncomingProjectile = false;
     bool IncomingHardCC = false;
     bool Execute = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership &&
-        (context.IncomingProjectile || context.IncomingHardCC || context.Execute);
+    return context.IncomingProjectile || context.IncomingHardCC || context.Execute;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Mel::Geometry

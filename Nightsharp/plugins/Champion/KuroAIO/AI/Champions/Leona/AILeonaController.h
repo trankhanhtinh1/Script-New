@@ -38,7 +38,6 @@ inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int ProtectedAllyId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int WActiveUntil = 0;
 inline int EActiveUntil = 0;
 inline int RActiveUntil = 0;
@@ -62,12 +61,6 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
-    return Engine::SelectTarget(range);
-}
 
 inline AIHeroClient SelectAlly(bool defensive) {
     const auto ally = SelectProtectionAlly(
@@ -250,21 +243,19 @@ inline void ReconcileState() {
     }
     if (EActiveUntil < now) EActiveUntil = 0;
     if (QArmedUntil < now) QArmedUntil = 0;
-    if (ManualOwnershipUntil < now) ManualOwnershipUntil = 0;
     if (GapcloserExpireTick < now) GapcloserTargetId = 0;
     if (InterruptExpireTick < now) InterruptTargetId = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     const auto player = GameObjects::Player();
-    const AIHeroClient target = SelectEnemy(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kRRange);
     if (mode == Mode::Automatic && DefensiveAutomatic(target)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 900.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, 900.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -282,12 +273,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) {
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-            }
-            LastCastTick[slot] = now;
-        }
+        if (slot >= 0 && slot < 4) LastCastTick[slot] = now;
         return;
     }
     const auto analysis = AnalyzeEnemyCast(args);
@@ -327,7 +313,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LeonaTactics", "Leona engage and peel tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("AllyHealthThreshold", "Protect ally below health %", 48, 10, 90));
     TacticsMenu->Add(new MenuSlider("PlayerHealthThreshold", "Defend self below health %", 36, 10, 90));
     TacticsMenu->Add(new MenuSlider("AllyFollowRange", "Required ally follow range", 900, 450, 1400));
@@ -352,7 +337,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     std::fill(LastCastTick.begin(), LastCastTick.end(), 0);
     LastAutoTargetId = LastAutoTick = ProtectedAllyId = 0;
-    ManualOwnershipUntil = WActiveUntil = EActiveUntil = RActiveUntil = 0;
+    WActiveUntil = EActiveUntil = RActiveUntil = 0;
     QArmedUntil = LastThreatUntil = LastHardCcUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEnd = LastECast = LastRCast = {};
@@ -365,13 +350,13 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Leona to Riot 26.15 and CommunityDragon 16.15 records",
-    "Select explicit enemy, then orbwalker hero target, then engine fallback",
+    "Use autonomous engine target selection for every champion route",
     "Reset Shield of Daybreak into the next attack only in a real windup or urgent stun",
     "Preserve valuable auto-attack windups unless Q stun or peel is urgent",
     "Arm Eclipse before Zenith Blade enters a dangerous enemy cluster",
     "Track Eclipse resistance stance from buff events and polling reconciliation",
     "Predict Zenith Blade and reject projectile-wall blocked lines",
-    "Require the selected champion to be the first valid Zenith Blade champion hit",
+    "Require the first valid Zenith Blade champion hit",
     "Reject Zenith Blade landing under a turret or above enemy density limits",
     "Predict Solar Flare impact after its delay and include target radius",
     "Require Solar Flare AOE count, lethal payoff or ally-safe peel conversion",
@@ -380,7 +365,7 @@ inline constexpr const char* Scenarios[] = {
     "Use Solar Flare to peel a threatened ally without abandoning the player",
     "Gate every engage by turret state, enemy count, mobility hazards and resources",
     "Use distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic branches",
-    "Yield ownership after observed manual Q W E or R casts",
+    "Reconcile local spell casts while preserving cooldown and stance state",
     "Reconcile hostile casts and hard crowd-control windows for automatic peel",
     "Expose process-spell, buff, attack, gapcloser, interrupt and polling callbacks",
     "Use deterministic Q W E and R damage and boundary geometry in standalone tests",

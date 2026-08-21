@@ -96,7 +96,6 @@ inline constexpr ChampionProfile Rakan = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 42;
-    p.PreferSelectedTarget = true;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "RakanPassiveShield";
     p.FormBuff = "RakanE";

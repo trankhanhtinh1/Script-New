@@ -83,11 +83,10 @@ inline bool WCanStun(float distance, bool targetProtected = false) {
 
 inline bool EEndpointSafe(bool endpointWalkable, bool endpointUnderTurret,
                           bool playerUnderTurret, int enemiesAtEndpoint,
-                          int maximumEnemies, bool lethal, bool fleeing,
-                          bool cursorIntent, bool manualConsent = false) {
-    if (!endpointWalkable || !cursorIntent) return false;
-    if (!fleeing && endpointUnderTurret && !playerUnderTurret && !lethal && !manualConsent) return false;
-    return fleeing || lethal || manualConsent || enemiesAtEndpoint <= std::max(1, maximumEnemies);
+                          int maximumEnemies, bool lethal, bool fleeing) {
+    if (!endpointWalkable) return false;
+    if (!fleeing && endpointUnderTurret && !playerUnderTurret && !lethal) return false;
+    return fleeing || lethal || enemiesAtEndpoint <= std::max(1, maximumEnemies);
 }
 
 struct Body {
@@ -148,17 +147,12 @@ inline bool MayCastR(const RContext& c) {
 }
 
 struct ModeContext {
-    bool SelectedTarget = false;
-    bool OrbwalkerTarget = false;
     bool AttackWindingUp = false;
     bool Lethal = false;
-    bool ManualAssist = false;
 };
 
 inline bool MayUseAbility(const ModeContext& c) {
-    if (c.ManualAssist) return false;
-    if (c.AttackWindingUp && !c.Lethal) return false;
-    return c.SelectedTarget || c.OrbwalkerTarget;
+    return !(c.AttackWindingUp && !c.Lethal);
 }
 
 struct AutomaticContext {

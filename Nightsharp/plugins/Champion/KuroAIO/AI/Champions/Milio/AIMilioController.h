@@ -39,7 +39,6 @@ inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int SelectedAllyId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int EnemyThreatUntil = 0;
 inline int HardCcThreatUntil = 0;
 inline int InterruptUntil = 0;
@@ -52,12 +51,6 @@ inline bool Throttle(int slot, int delay = 55) {
     return ControllerHelpers::CastThrottleReady(LastCastTick, slot, delay);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
-}
 
 inline AIHeroClient SelectAlly(bool includePlayer = false) {
     const auto player = GameObjects::Player();
@@ -244,17 +237,16 @@ inline void Farm(Mode mode) {
         (void)Engine::TryFarm(mode);
 }
 
-inline void Automatic(const AIHeroClient& selected) {
+inline void Automatic(const AIHeroClient& target) {
     if (CastR(Mode::Automatic, true)) return;
     if (CastE(Mode::Automatic, true)) return;
     if (CastW(Mode::Automatic, true)) return;
-    if (Engine::ValidEnemy(selected) && HardCcThreatUntil > Now())
-        (void)CastQ(selected, Mode::Automatic, true);
+    if (Engine::ValidEnemy(target) && HardCcThreatUntil > Now())
+        (void)CastQ(target, Mode::Automatic, true);
 }
 
 inline void ReconcileState() {
     const int now = Now();
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
     if (EnemyThreatUntil <= now) EnemyThreatUntil = 0;
     if (HardCcThreatUntil <= now) HardCcThreatUntil = 0;
     if (InterruptUntil <= now) InterruptUntil = 0;
@@ -264,10 +256,9 @@ inline void ReconcileState() {
     if (HasAnyBuff(player, {"MilioPassive", "MilioPBuff"})) PassivePrimed = true;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = SelectEnemy(selected, mode == Mode::Flee ? 1000.0f : kQRange);
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kQRange);
     if (mode == Mode::Automatic) Automatic(target);
     else if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -290,8 +281,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                     : (observed == ECharges ? EChargesAfterCast(ECharges) : observed);
             }
             if (slot == 0 || slot == 1 || slot == 2 || slot == 3) PassivePrimed = true;
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -357,8 +346,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("MilioTactics", "Milio support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1400));
-    TacticsMenu->Add(new MenuSlider("MaxNearbyEnemies", "Maximum nearby enemies for support casts", 3, 0, 5));
+    TacticsMenu->Add(new MenuSlider("MaxNearbyEnemies", "Support cast enemy limit", 3, 0, 5));
     TacticsMenu->Add(new MenuSlider("MaxTurretEnemies", "Maximum enemies under turret", 2, 0, 5));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Ultra Mega Fire Kick"));
     QMenu->Add(new MenuSlider("MaxNearbyEnemies", "Maximum nearby enemies for Q", 2, 0, 5));
@@ -371,7 +359,7 @@ inline void BuildMenu(Menu* root) {
     RMenu->Add(new MenuSlider("ThreatHealth", "Threatened ally health %", 70, 20, 95));
     RMenu->Add(new MenuSlider("EmergencyHealth", "Emergency heal health %", 38, 10, 70));
     RMenu->Add(new MenuSlider("MinimumThreatEnemies", "Minimum nearby enemies for threat", 1, 0, 5));
-    RMenu->Add(new MenuSlider("MaxNearbyEnemies", "Maximum nearby enemies when non-urgent", 3, 0, 5));
+    RMenu->Add(new MenuSlider("MaxNearbyEnemies", "Non-urgent enemy limit", 3, 0, 5));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("MilioFarm", "Resource-safe farm"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 42, 0, 90));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("MilioCoach", "Visual coaching"));
@@ -381,7 +369,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    ManualOwnershipUntil = EnemyThreatUntil = HardCcThreatUntil = InterruptUntil = 0;
+    EnemyThreatUntil = HardCcThreatUntil = InterruptUntil = 0;
     ECharges = kEMaxCharges;
     PassivePrimed = false;
     LastQAim = LastCamp = {};
@@ -397,7 +385,7 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile passive empowerment and Warm Hugs charge state from buff events and polling",
     "Predict Ultra Mega Fire Kick contact with 1200 speed and reject projectile-wall paths",
     "Model Q first-contact collision, 140 kick displacement and 250 landing splash boundary",
-    "Respect selected enemy first, then orbwalker target, then engine fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Place Cozy Campfire on a valid ally within 650 cast range and keep the 350 camp radius useful",
     "Use Warm Hugs as a two-charge shield only for missing health, incoming damage, hard crowd control or flee",
     "Reconcile E ammo from runtime spell state and consume exactly one charge per cast",
@@ -405,7 +393,6 @@ inline constexpr const char* Scenarios[] = {
     "Reserve R for hard crowd control or threatened low-health allies and apply ally threat policy",
     "Reject non-urgent casts under unsafe turret or excessive enemy density",
     "Preserve auto attack windup unless an urgent defensive reaction is active",
-    "Yield to manual Q W E R ownership before polling decisions resume",
     "Automatic mode is defensive and never starts a fresh engage without a threat window",
     "Combo prioritizes Q setup, W camp sustain, E shield and R cleanse/heal",
     "Harass uses predicted Q before W sustain and never spends R offensively",

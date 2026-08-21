@@ -6,7 +6,10 @@
 #include "../../Profiles/AIVelkoz.h"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <string>
+#include <vector>
 
 namespace Plugins::KuroAIO::AI::Controllers::Velkoz {
 
@@ -27,22 +30,30 @@ using ControllerHelpers::SpellEventNameContains;
 
 inline Menu* TacticsMenu = nullptr;
 inline Menu* QMenu = nullptr;
-inline Menu* WMenu = nullptr;
 inline Menu* EMenu = nullptr;
 inline Menu* RMenu = nullptr;
 inline Menu* FarmMenu = nullptr;
 
+inline SDK::Spell QSplitSpell{SDK::SpellSlot::Q, kQSplitRange};
+inline SDK::Spell QExtendedSpell{SDK::SpellSlot::Q, kQExtendedRange};
 inline std::array<int, 32> OrganicIds{};
 inline std::array<DeconstructionState, 32> OrganicStates{};
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
-inline int PendingWTargetId = 0;
-inline int PendingWStartTick = 0;
-inline WStage PendingWStage = WStage::None;
+inline int QMissileNetworkId = 0;
+inline int QCastTick = 0;
+inline int QLastSeenTick = 0;
+inline int QPlannedTargetId = 0;
+inline int QSplitRequestTick = 0;
+inline Vector3 QMissileStart{};
+inline Vector3 QMissileEnd{};
+inline Vector3 QMissilePosition{};
+inline bool QActive = false;
+inline bool QSplitRequested = false;
 inline int RTargetId = 0;
 inline int RStartTick = 0;
+inline int RLastAimTick = 0;
 inline bool RActive = false;
 inline bool RControllerOwned = false;
 inline int InterruptTargetId = 0;
@@ -105,15 +116,184 @@ inline bool Ready(int slot, Mode mode, bool reactive = false) {
 
 inline bool CanAct(bool reactive) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || Engine::IsPlayerCrowdControlled(player)) return false;
+    if (!player.IsValid() || player.Spellbook().IsChanneling() ||
+        Engine::IsPlayerCrowdControlled(player)) {
+        return false;
+    }
     return reactive || !ControllerHelpers::PreserveAttack(false);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range) {
     return Engine::SelectTarget(range);
+}
+
+inline bool IsPrimaryQMissileName(const char* spellName,
+                                  const char* missileName) {
+    const bool primary = Engine::TextContains(spellName, "VelkozQMissile") ||
+        Engine::TextContains(missileName, "VelkozQMissile");
+    const bool split = Engine::TextContains(spellName, "Split") ||
+        Engine::TextContains(missileName, "Split");
+    return primary && !split;
+}
+
+inline void ClearQFlight() {
+    QMissileNetworkId = 0;
+    QCastTick = 0;
+    QLastSeenTick = 0;
+    QPlannedTargetId = 0;
+    QMissileStart = {};
+    QMissileEnd = {};
+    QMissilePosition = {};
+    QActive = false;
+}
+
+inline void BeginQFlight(const Vector3& origin, const Vector3& endpoint,
+                         int targetId) {
+    const Vector3 direction = Direction2D(origin, endpoint);
+    if (direction.IsZero()) return;
+    QCastTick = QLastSeenTick = Now();
+    QPlannedTargetId = targetId;
+    QMissileStart = origin;
+    QMissileEnd = origin + direction * kQRange;
+    QMissilePosition = origin;
+    QActive = true;
+    QSplitRequested = false;
+    QSplitRequestTick = 0;
+}
+
+inline bool SpellPathBlocked(const SDK::Spell& spell,
+                             const Vector3& start,
+                             const Vector3& end,
+                             const AIHeroClient& intended) {
+    const auto collisions = spell.GetCollision(
+        start.To2D(), std::vector<Vector2>{end.To2D()});
+    for (const auto& collision : collisions) {
+        if (!collision.IsValid()) continue;
+        if (intended.IsValid() &&
+            collision.NetworkId() == intended.NetworkId()) {
+            continue;
+        }
+        return true;
+    }
+    return false;
+}
+
+inline void RefreshQFlight() {
+    if (!QActive) return;
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) {
+        ClearQFlight();
+        return;
+    }
+
+    bool found = false;
+    for (const auto& missile : GameObjects::Missiles()) {
+        if (!missile.IsValid() ||
+            missile.CasterNetworkId() != player.NetworkId()) {
+            continue;
+        }
+        const std::string spellName = missile.SpellName();
+        const std::string missileName = missile.MissileName();
+        if (!IsPrimaryQMissileName(spellName.c_str(), missileName.c_str())) {
+            continue;
+        }
+        found = true;
+        QMissileNetworkId = missile.NetworkId();
+        QMissilePosition = missile.Position();
+        QLastSeenTick = Now();
+        if (missile.StartPosition().IsValid() &&
+            !missile.StartPosition().IsZero()) {
+            QMissileStart = missile.StartPosition();
+        }
+        if (missile.EndPosition().IsValid() &&
+            !missile.EndPosition().IsZero()) {
+            QMissileEnd = missile.EndPosition();
+        }
+        break;
+    }
+
+    if (!found && QLastSeenTick > 0 &&
+        Now() - QLastSeenTick > 180 && Now() - QCastTick > 430) {
+        ClearQFlight();
+    }
+}
+
+inline bool TrySplitQTarget(const AIHeroClient& target) {
+    if (!Engine::ValidEnemy(target) || QMissilePosition.IsZero()) return false;
+    const Vector3 direction = Direction2D(QMissileStart, QMissileEnd);
+    if (direction.IsZero()) return false;
+
+    const Vector3 rough = PredictPosition(target, 0.05f);
+    const float travel = QMissilePosition.Distance2D(rough) / kQSplitSpeed;
+    const Vector3 predicted = PredictPosition(target, 0.05f + travel);
+    if (!predicted.IsValid() || predicted.IsZero() ||
+        QLineHits(QMissilePosition, QMissileEnd, predicted,
+                  target.BoundingRadius()) ||
+        !QSplitLineHits(QMissilePosition, direction, predicted,
+                        target.BoundingRadius()) ||
+        ControllerHelpers::ProjectileWallBlocks(
+            QMissilePosition, predicted, kQSplitWidth)) {
+        return false;
+    }
+
+    QSplitSpell.UpdateSourcePosition(QMissilePosition, QMissilePosition);
+    if (SpellPathBlocked(QSplitSpell, QMissilePosition, predicted, target) ||
+        !CastThrottleReady(0, true) ||
+        !Engine::ControllerCastSelf(0)) {
+        return false;
+    }
+    QSplitRequested = true;
+    QSplitRequestTick = Now();
+    QActive = false;
+    QMissileNetworkId = 0;
+    return true;
+}
+
+inline bool TrySplitQ() {
+    if (!QActive || QSplitRequested ||
+        !Bool(QMenu, "SplitBeam", true)) {
+        return false;
+    }
+    const auto planned = HeroByNetworkId(QPlannedTargetId);
+    if (TrySplitQTarget(planned)) return true;
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (planned.IsValid() &&
+            enemy.NetworkId() == planned.NetworkId()) {
+            continue;
+        }
+        if (TrySplitQTarget(enemy)) return true;
+    }
+    return false;
+}
+
+inline bool CastSideQ(const AIHeroClient& target,
+                      const Vector3& predicted) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || !Bool(QMenu, "SplitBeam", true)) return false;
+    for (const bool left : {true, false}) {
+        const QSideCast plan = BuildQSideCast(
+            player.Position(), predicted, left);
+        if (!plan.Valid ||
+            ControllerHelpers::ProjectileWallBlocks(
+                player.Position(), plan.SplitOrigin, kQWidth) ||
+            ControllerHelpers::ProjectileWallBlocks(
+                plan.SplitOrigin, predicted, kQSplitWidth) ||
+            SpellPathBlocked(*Engine::RuntimeSpells[0],
+                             player.Position(), plan.SplitOrigin, target)) {
+            continue;
+        }
+        QSplitSpell.UpdateSourcePosition(plan.SplitOrigin, plan.SplitOrigin);
+        if (SpellPathBlocked(QSplitSpell, plan.SplitOrigin,
+                             predicted, target)) {
+            continue;
+        }
+        if (!Engine::ControllerCastPosition(0, plan.Aim)) continue;
+        BeginQFlight(player.Position(), plan.Aim,
+                     static_cast<int>(target.NetworkId()));
+        LastCastTick[0] = Now();
+        return true;
+    }
+    return false;
 }
 
 inline bool SafeRayPosition(const Vector3& endpoint, bool lethal) {
@@ -140,18 +320,36 @@ inline bool LethalR(const AIHeroClient& target) {
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Engine::ValidEnemy(target, kQRange) ||
+    if (!player.IsValid() || QActive || QSplitRequested ||
+        !Engine::ValidEnemy(target, kQExtendedRange) ||
         !Ready(0, mode, reactive) || !CanAct(reactive) ||
-        ControllerHelpers::HasSpellShieldOrImmunity(target)) return false;
-    const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
-    const Vector3 aim = prediction.GetCastPosition();
-    if (!aim.IsValid() || aim.IsZero() || prediction.Hitchance < SDK::HitChance::High ||
-        !QLineHits(player.Position(), aim, target.Position(), target.BoundingRadius()) ||
-        !prediction.CollisionObjects.empty() ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kQWidth * 0.5f)) return false;
-    if (!Engine::ControllerCastPosition(0, aim)) return false;
-    LastCastTick[0] = Now();
-    return true;
+        ControllerHelpers::HasSpellShieldOrImmunity(target)) {
+        return false;
+    }
+
+    if (Engine::ValidEnemy(target, kQRange)) {
+        const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
+        const Vector3 aim = prediction.GetCastPosition();
+        if (aim.IsValid() && !aim.IsZero() &&
+            prediction.Hitchance >= SDK::HitChance::High &&
+            QLineHits(player.Position(), aim, target.Position(),
+                      target.BoundingRadius()) &&
+            prediction.CollisionObjects.empty() &&
+            !ControllerHelpers::ProjectileWallBlocksFromPlayer(
+                aim, kQWidth) &&
+            Engine::ControllerCastPosition(0, aim)) {
+            BeginQFlight(player.Position(), aim,
+                         static_cast<int>(target.NetworkId()));
+            LastCastTick[0] = Now();
+            return true;
+        }
+    }
+
+    const auto extendedPrediction = QExtendedSpell.GetPrediction(target);
+    const Vector3 predicted = extendedPrediction.GetCastPosition();
+    return extendedPrediction.Hitchance >= SDK::HitChance::High &&
+           predicted.IsValid() && !predicted.IsZero() &&
+           CastSideQ(target, predicted);
 }
 
 inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) {
@@ -161,30 +359,12 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
     const Vector3 aim = PredictPosition(target, kWDelay);
     if (!aim.IsValid() || aim.IsZero() ||
         !WLineHits(player.Position(), aim, target.Position(), target.BoundingRadius()) ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kWWidth * 0.5f)) return false;
+        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kWWidth)) return false;
     if (!Engine::ControllerCastPosition(1, aim)) return false;
-    PendingWTargetId = static_cast<int>(target.NetworkId());
-    PendingWStartTick = Now();
-    PendingWStage = WStage::First;
     LastCastTick[1] = Now();
     return true;
 }
 
-inline bool CastWSecond() {
-    if (PendingWStage != WStage::First || Now() - PendingWStartTick < 620) return false;
-    const auto target = HeroByNetworkId(PendingWTargetId);
-    const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Engine::ValidEnemy(target, kWRange)) {
-        PendingWStage = WStage::None; return false;
-    }
-    const Vector3 aim = WSecondEndpoint(player.Position(), target.Position());
-    if (!aim.IsValid() || ControllerHelpers::ProjectileWallBlocksFromPlayer(aim,
-        kWWidth * 0.5f)) return false;
-    if (!Engine::ControllerCastPosition(1, aim)) return false;
-    PendingWStage = WStage::Second;
-    LastCastTick[1] = Now();
-    return true;
-}
 
 inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
@@ -203,7 +383,10 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
     if (!player.IsValid() || !Engine::ValidEnemy(target, kRRange) || RActive ||
         !Ready(3, mode, reactive) || !CanAct(reactive) ||
         ControllerHelpers::HasSpellShieldOrImmunity(target)) return false;
-    if (!HasResearchMark(target) && !LethalR(target)) return false;
+    if (Bool(RMenu, "RequireResearch", true) &&
+        !HasResearchMark(target) && !LethalR(target)) {
+        return false;
+    }
     const Vector3 aim = PredictPosition(target, 0.12f);
     if (!aim.IsValid() || aim.IsZero() || !RLineHits(player.Position(), aim,
         target.Position(), target.BoundingRadius()) || !SafeRayPosition(aim, LethalR(target))) return false;
@@ -214,6 +397,26 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
     RControllerOwned = true;
     ApplyRayMark(StateFor(RTargetId), Now());
     return true;
+}
+
+inline bool AimR() {
+    if (!RActive || !Bool(RMenu, "AutoAim", true) ||
+        Now() - RLastAimTick < 30) {
+        return false;
+    }
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || !player.Spellbook().IsChanneling()) return false;
+    AIHeroClient target = HeroByNetworkId(RTargetId);
+    if (!Engine::ValidEnemy(target, kRRange)) target = SelectEnemy(kRRange);
+    Vector3 aim = Game::CursorPos();
+    if (Engine::ValidEnemy(target, kRRange)) {
+        const Vector3 predicted = PredictPosition(target, 0.30f);
+        if (predicted.IsValid() && !predicted.IsZero()) aim = predicted;
+    }
+    if (!aim.IsValid() || aim.IsZero()) return false;
+    RLastAimTick = Now();
+    return player.Spellbook().UpdateChargedSpell(
+        SDK::SpellSlot::R, aim, false);
 }
 
 inline void Combo(const AIHeroClient& target) {
@@ -244,8 +447,15 @@ inline void Flee(const AIHeroClient& target) {
 inline void Automatic(const AIHeroClient& target) {
     if (InterruptTargetId != 0 && InterruptUntil >= Now()) {
         const auto threat = HeroByNetworkId(InterruptTargetId);
-        if (Engine::ValidEnemy(threat, kERange) && CastE(threat, Mode::Automatic, true)) return;
-        if (Engine::ValidEnemy(threat, kQRange) && CastQ(threat, Mode::Automatic, true)) return;
+        if (Bool(EMenu, "Interrupt", true) &&
+            Engine::ValidEnemy(threat, kERange) &&
+            CastE(threat, Mode::Automatic, true)) {
+            return;
+        }
+        if (Engine::ValidEnemy(threat, kQRange) &&
+            CastQ(threat, Mode::Automatic, true)) {
+            return;
+        }
     }
     if (GapcloserTargetId != 0 && GapcloserUntil >= Now()) {
         const auto threat = HeroByNetworkId(GapcloserTargetId);
@@ -258,29 +468,45 @@ inline void ReconcileState() {
     const int now = Now();
     for (std::size_t i = 0; i < OrganicIds.size(); ++i) {
         if (OrganicIds[i] != 0 && OrganicStates[i].expiresAtMs > 0 &&
-            OrganicStates[i].expiresAtMs <= now) OrganicStates[i] = {};
+            OrganicStates[i].expiresAtMs <= now) {
+            OrganicStates[i] = {};
+        }
     }
-    if (PendingWStage == WStage::Second && now - PendingWStartTick > 1800)
-        PendingWStage = WStage::None;
+    if (QSplitRequested && now - QSplitRequestTick > 400) {
+        QSplitRequested = false;
+        QSplitRequestTick = 0;
+        ClearQFlight();
+    }
     if (RActive) {
         const auto player = GameObjects::Player();
         const bool interrupted = player.IsValid() &&
             (Engine::IsPlayerCrowdControlled(player) ||
              (now - RStartTick > 180 && !player.Spellbook().IsChanneling()));
-        if (interrupted || now - RStartTick > static_cast<int>(kRChannelSeconds * 1000.0f) + 300) {
-            RActive = false; RControllerOwned = false; RTargetId = 0;
+        if (interrupted ||
+            now - RStartTick >
+                static_cast<int>(kRChannelSeconds * 1000.0f) + 300) {
+            RActive = false;
+            RControllerOwned = false;
+            RTargetId = 0;
         }
     }
     if (InterruptUntil < now) InterruptTargetId = 0;
     if (GapcloserUntil < now) GapcloserTargetId = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PendingWStage == WStage::First) (void)CastWSecond();
-    if (ManualOwnershipUntil > Now()) return true;
+    RefreshQFlight();
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) return false;
+    if (RActive) {
+        (void)AimR();
+        return true;
+    }
+    if (player.Spellbook().IsChanneling()) return true;
+    if (TrySplitQ()) return true;
     const float range = mode == Mode::Flee ? 900.0f : kRRange;
-    const auto target = SelectEnemy(selected, range);
+    const auto target = SelectEnemy(range);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -299,11 +525,37 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
+            const bool controllerOwned = Engine::WasControllerCast(slot);
             LastCastTick[slot] = Now();
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = Now() + Slider(TacticsMenu, "ManualOwnershipMs", 560);
+            if (slot == 0) {
+                const bool split = QSplitRequested ||
+                    SpellEventNameContains(args, "VelkozQSplit");
+                if (split) {
+                    QSplitRequested = true;
+                    QSplitRequestTick = Now();
+                    QActive = false;
+                } else if (!controllerOwned) {
+                    const auto player = GameObjects::Player();
+                    const Vector3 origin =
+                        args.StartPosition.IsValid() &&
+                        !args.StartPosition.IsZero()
+                            ? args.StartPosition : player.Position();
+                    const Vector3 endpoint =
+                        args.CastPosition.IsValid() &&
+                        !args.CastPosition.IsZero()
+                            ? args.CastPosition : args.EndPosition;
+                    BeginQFlight(
+                        origin, endpoint,
+                        args.TargetNetworkId != 0
+                            ? static_cast<int>(args.TargetNetworkId)
+                            : static_cast<int>(args.Target.NetworkId));
+                }
+            }
             if (slot == 3) {
-                RActive = true; RControllerOwned = false; RTargetId = 0; RStartTick = Now();
+                RActive = true;
+                RControllerOwned = controllerOwned;
+                if (!controllerOwned) RTargetId = 0;
+                RStartTick = Now();
             }
         }
         return;
@@ -337,7 +589,11 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Engine::TextContains(args.BuffName, "VelkozDeconstruction"))
         ClearOrganic(static_cast<int>(args.Sender.NetworkId));
     if (IsLocalPlayer(args.Sender) &&
-        Engine::TextContains(args.BuffName, "VelkozR")) RActive = false;
+        Engine::TextContains(args.BuffName, "VelkozR")) {
+        RActive = false;
+        RControllerOwned = false;
+        RTargetId = 0;
+    }
 }
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
@@ -367,55 +623,90 @@ inline void OnObjectCreate(const SDK::Events::ObjectEventArgs&) {}
 inline void OnObjectDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void OnMissileCreate(const SDK::Events::ObjectEventArgs& args) {
     if (!MissileEventIsLocal(args)) return;
+    if (IsPrimaryQMissileName(args.SpellName, args.MissileName)) {
+        QActive = true;
+        QMissileNetworkId = args.MissileNetworkId != 0
+            ? static_cast<int>(args.MissileNetworkId)
+            : static_cast<int>(args.Sender.NetworkId);
+        QMissileStart = args.StartPosition.IsValid() &&
+                !args.StartPosition.IsZero()
+            ? args.StartPosition : QMissileStart;
+        QMissileEnd = args.EndPosition.IsValid() &&
+                !args.EndPosition.IsZero()
+            ? args.EndPosition : QMissileEnd;
+        QMissilePosition = args.Sender.Position.IsValid()
+            ? args.Sender.Position : QMissileStart;
+        QLastSeenTick = Now();
+        if (QCastTick <= 0) QCastTick = Now();
+    }
     if (Engine::TextContains(args.SpellName, "VelkozR") ||
-        Engine::TextContains(args.MissileName, "VelkozR")) RActive = true;
+        Engine::TextContains(args.MissileName, "VelkozR")) {
+        RActive = true;
+        if (RStartTick <= 0) RStartTick = Now();
+    }
 }
-inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
+inline void OnMissileDelete(const SDK::Events::ObjectEventArgs& args) {
+    if (!MissileEventIsLocal(args) ||
+        !IsPrimaryQMissileName(args.SpellName, args.MissileName)) {
+        return;
+    }
+    const int id = args.MissileNetworkId != 0
+        ? static_cast<int>(args.MissileNetworkId)
+        : static_cast<int>(args.Sender.NetworkId);
+    if (QMissileNetworkId == 0 || id == QMissileNetworkId) {
+        ClearQFlight();
+    }
+}
 inline void OnDraw() {}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("VelkozTactics", "Vel'Koz deconstruction tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 52, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Plasma Fission split beam"));
-    QMenu->Add(new MenuBool("SplitBeam", "Use split beam on miss or collision", true));
-    WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Void Rift two stages"));
-    WMenu->Add(new MenuBool("SecondStage", "Always fire second stage", true));
+    QMenu->Add(new MenuBool(
+        "SplitBeam", "Auto split Q, safe side casts", true));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Tectonic Disruption"));
     EMenu->Add(new MenuBool("Interrupt", "Use E against interruptible channels", true));
     RMenu = TacticsMenu->AddSubMenu(new Menu("R", "Life Form Disintegration Ray"));
     RMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at channel start", 3, 1, 5));
     RMenu->Add(new MenuBool("RequireResearch", "Require research mark", true));
+    RMenu->Add(new MenuBool("AutoAim", "Track the target while channeling R", true));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Farm", "Wave and jungle farming"));
     FarmMenu->Add(new MenuSlider("ClearMana", "Minimum farm mana percent", 35, 0, 90));
 }
 
 inline void OnLoad() {
-    OrganicIds.fill(0); OrganicStates.fill({}); LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
-    PendingWTargetId = PendingWStartTick = RTargetId = RStartTick = 0;
-    PendingWStage = WStage::None; RActive = RControllerOwned = false;
+    QSplitSpell.SetSkillshot(
+        0.05f, kQSplitWidth, kQSplitSpeed, true, SDK::SpellType::SkillshotLine);
+    QExtendedSpell.SetSkillshot(
+        0.50f, kQWidth, kQSpeed, false, SDK::SpellType::SkillshotLine);
+    OrganicIds.fill(0);
+    OrganicStates.fill({});
+    LastCastTick.fill(0);
+    QSplitRequested = false;
+    QSplitRequestTick = 0;
+    ClearQFlight();
+    RTargetId = RStartTick = RLastAimTick = 0;
+    RActive = RControllerOwned = false;
     InterruptTargetId = InterruptUntil = GapcloserTargetId = GapcloserUntil = 0;
     InterruptEndpoint = GapcloserEndpoint = {};
 }
 inline void OnUnload() {
-    TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = nullptr;
+    TacticsMenu = QMenu = EMenu = RMenu = FarmMenu = nullptr;
     OnLoad();
 }
 
 inline constexpr const char* Scenarios[] = {
     "Track Organic Deconstruction stacks per enemy with seven-second expiry and three-stack detonation",
     "Use confirmed passive buffs plus polling reconciliation instead of treating every cast as a hit",
-    "Aim Plasma Fission with prediction, collision ordering, split-beam geometry and projectile-wall safety",
-    "Keep Void Rift first and second line stages distinct and fire the second stage only after its delay",
+    "Aim Plasma Fission directly when clear, otherwise use collision-safe side casts out to 1485 range",
+    "Track the live Plasma Fission missile and recast only when a predicted target crosses a perpendicular split ray",
+    "Treat Void Rift's delayed eruption as automatic and never spend a second charge as a fake recast",
     "Use Tectonic Disruption as an 800-range 225-radius knockup zone for peel and channel interruption",
     "Require real target reach, hitchance, spell immunity and resource gates before each cast",
     "Reserve Life Form Disintegration Ray for researched or lethal targets and compute true-damage state",
     "Reject ray channels through walls, enemy turrets or unsafe enemy-count commitments",
-    "Interrupt and clear the ray on crowd control, silence, death, buff removal or channel expiry",
-    "Preserve ordinary attack windups and yield after observed manual Q, W, E or R ownership",
-    "Prefer selected enemy then orbwalker target before selector fallback",
     "Support Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic decisions",
     "Wire process-spell, do-cast, buff, attack, gapcloser, interruptable, object and missile callbacks",
     "Pin Riot 26.15 and CommunityDragon 16.15 spell geometry and true-damage research behavior",

@@ -56,7 +56,7 @@ inline int LastWCastTick = 0;
 inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
 inline int LastDecisionTargetId = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingOutsideThreatUntil = 0;
 inline int IncomingThreatId = 0;
 inline int GapcloserTargetId = 0;
@@ -442,8 +442,7 @@ inline bool TryFlee(const AIHeroClient& threat) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
-    ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
+    ReconcileState();
     const AIHeroClient target = CooperatingTarget(selected);
     if (Engine::ValidEnemy(target)) LastDecisionTargetId = static_cast<int>(target.NetworkId());
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1250.0f);
@@ -499,8 +498,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     const int slot = args.Slot;
     if (slot < 0 || slot >= 4) return;
-    const bool owned = Engine::WasControllerCast(slot);
-    if (!owned) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
+    const bool owned = Engine::WasControllerCast(slot);
     if (slot == 0) {
         LastQCastTick = now; Snips.Spend();
         if (args.EndPosition.IsValid() && !args.EndPosition.IsZero()) LastQAim = args.EndPosition;
@@ -574,8 +572,7 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("GwenOneTrick", "Gwen scissors and mist mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 520, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("GwenOneTrick", "Gwen scissors and mist mechanics"));
     TacticsMenu->Add(new MenuSlider("DefensiveHP", "Defensive rotation HP (%)", 36, 10, 75));
     SnipMenu = TacticsMenu->AddSubMenu(new Menu("GwenSnips", "Snip Snip! stack and center policy"));
     SnipMenu->Add(new MenuSlider("ComboStacks", "Combo Q minimum stacks", 3, 0, 4));
@@ -596,7 +593,7 @@ inline void BuildMenu(Menu* root) {
     FarmMenu->Add(new MenuSlider("LaneQHits", "Lane Q minimum hits", 3, 1, 7));
     FarmMenu->Add(new MenuSlider("JungleQHits", "Jungle Q minimum hits", 1, 1, 5));
     FarmMenu->Add(new MenuBool("JungleE", "E reset after jungle attack", true));
-    CoachMenu = TacticsMenu->AddSubMenu(new Menu("GwenCoach", "Center, boundary and endpoint drawing"));
+    CoachMenu = TacticsMenu->AddSubMenu(new Menu("GwenCoach", "Draw center, boundary, endpoint"));
     CoachMenu->Add(new MenuBool("DrawPlans", "Draw Q/W/E/R plans", false));
 }
 
@@ -604,7 +601,7 @@ inline void OnLoad() {
     Snips = {}; Mist = {}; Needles = {}; EEmpowered = false; EEmpoweredUntil = 0;
     LastAutoTargetId = LastAutoTick = LastStackAttackTick = 0;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
-    LastDecisionTargetId = ManualOwnershipUntil = 0;
+    LastDecisionTargetId = 0;
     IncomingOutsideThreatUntil = IncomingThreatId = 0;
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEndpoint = LastQAim = LastEEndpoint = LastRAim = {};
@@ -645,7 +642,7 @@ inline constexpr const char* Scenarios[] = {
     "Hold ordinary single-target R1 but preserve committed recasts",
     "Force a valid recast before the six-second window expires",
     "Retain selected or remembered target through recasts",
-    "Yield after manual Q W E or R without duplicate routes",
+    "Reconcile Q W E and R state without duplicate routes/",
     "Respect mana reserves, target protection and mitigated lethal checks",
     "Cover Combo Harass LaneClear Jungle LastHit Flee and Automatic modes",
     "Automatic mode permits only defense gapcloser lethal or expiring recast",

@@ -118,7 +118,6 @@ struct DashSafetyContext {
     bool StartedUnderEnemyTurret = false;
     bool PointClickThreat = false;
     bool DashHazard = false;
-    bool CursorAgrees = false;
     bool AllyTarget = false;
     bool AllyAlive = false;
     bool AllyInRange = false;
@@ -138,7 +137,7 @@ inline bool DashSafe(const DashSafetyContext& context) {
     if (context.EnemiesAtEndpoint > std::max(0, context.MaximumEnemies) &&
         context.EnemiesAtEndpoint > context.AlliesAtEndpoint + 1 &&
         !context.Defensive && !context.Lethal) return false;
-    return context.CursorAgrees || context.Defensive || context.Lethal || context.AllyTarget;
+    return true;
 }
 
 struct IsolationContext {
@@ -151,7 +150,6 @@ struct IsolationContext {
     bool LandingUnderEnemyTurret = false;
     bool PlayerUnderEnemyTurret = false;
     bool PlayerExitAvailable = false;
-    bool CursorAgrees = false;
     bool Lethal = false;
     int EnemiesBefore = 0;
     int EnemiesAfter = 0;
@@ -172,7 +170,6 @@ inline IsolationResult EvaluateIsolation(const IsolationContext& context) {
         !context.PlayerExitAvailable) return result;
     if (context.LandingUnderEnemyTurret && !context.PlayerUnderEnemyTurret &&
         !context.Lethal) return result;
-    if (!context.CursorAgrees && !context.Lethal) return result;
     const bool isolates = context.EnemiesAfter < context.EnemiesBefore ||
         context.SeparationGain >= 250.0f;
     const bool numericallySafe = context.EnemiesAfter <= context.AlliesAfter + 1;
@@ -189,10 +186,7 @@ inline IsolationResult EvaluateIsolation(const IsolationContext& context) {
 }
 
 struct ModeContext {
-    bool ManualOwnership = false;
     bool AttackWindingUp = false;
-    bool SelectedTarget = false;
-    bool OrbwalkerTarget = false;
     bool Defensive = false;
     bool Interrupt = false;
     bool KillSecure = false;
@@ -200,15 +194,13 @@ struct ModeContext {
 };
 
 inline bool MayUseAbility(const ModeContext& context) {
-    if (context.ManualOwnership) return false;
     if (context.AttackWindingUp && !context.Defensive &&
         !context.Interrupt && !context.KillSecure) return false;
-    return context.SelectedTarget || context.OrbwalkerTarget ||
-           context.Defensive || context.Interrupt;
+    return true;
 }
 
 inline bool AutomaticAllowed(const ModeContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
         (context.Defensive || context.Interrupt || context.KillSecure);
 }
 

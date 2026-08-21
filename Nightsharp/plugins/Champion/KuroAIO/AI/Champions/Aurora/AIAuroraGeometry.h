@@ -260,7 +260,6 @@ inline QReturnEvaluation EvaluateQReturn(
 
 struct QRecastContext {
     bool MarkActive = false;
-    bool ControllerOwned = false;
     bool AutoAttackWindup = false;
     bool TargetValid = false;
     bool TargetEscaping = false;
@@ -277,7 +276,7 @@ struct QRecastContext {
 };
 
 inline bool ShouldRecastQ(const QRecastContext& context) {
-    if (!context.MarkActive || !context.ControllerOwned) return false;
+    if (!context.MarkActive) return false;
     const bool urgent = context.RemainingSeconds <= 0.16f ||
                         context.LethalNow || context.TargetEscaping;
     if (context.AutoAttackWindup && !urgent) return false;

@@ -22,7 +22,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellRank;
 using ControllerHelpers::SpellEventNameContainsAny;
@@ -31,7 +30,6 @@ inline Menu* TacticsMenu = nullptr;
 inline Menu* FarmMenu = nullptr;
 inline Menu* UltimateMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserUntil = 0;
@@ -207,8 +205,7 @@ inline bool StartQ(const AIHeroClient& target, Mode mode, bool reactive = false)
     if (!player.IsValid() || QCharging || RuntimeQCharging() || RChanneling ||
         TargetBlocked(target) ||
         !Engine::ValidEnemy(target, kQMaxRange + 50.0f) || !Ready(0, mode) ||
-        !Throttle(0) || PreserveAttack(0, reactive) ||
-        ManualOverrideUntil > Now()) return false;
+        !Throttle(0) || PreserveAttack(0, reactive)) return false;
     Vector3 aim{};
     if (!BuildAim(0, target, kQDelay, kQMaxRange, aim)) return false;
     const Vector3 direction = Direction2D(player.Position(), aim);
@@ -322,8 +319,7 @@ inline bool StartR(const AIHeroClient& target, Mode mode, bool reactive = false)
     if (!player.IsValid() || QCharging || RChanneling || TargetBlocked(target) ||
         !Engine::ValidEnemy(target, kRRange) || !Ready(3, mode) ||
         !Throttle(3, 170) || PreserveAttack(3, reactive) ||
-        ManualOverrideUntil > Now() || IsOwnChannelUnsafe() ||
-        ControllerHelpers::PlayerMobilityLocked()) return false;
+        IsOwnChannelUnsafe() || ControllerHelpers::PlayerMobilityLocked()) return false;
     const bool lethal = Lethal(target, RDamage(target));
     const bool executeWindow = target.HealthPercent() <=
         ControllerHelpers::Slider(UltimateMenu, "RTargetHP", 48);
@@ -411,7 +407,6 @@ inline void ReconcileState() {
     if (EStunUntil <= now) EStunnedTargetId = EStunUntil = 0;
     if (GapcloserUntil <= now) GapcloserTargetId = GapcloserUntil = 0;
     if (InterruptUntil <= now) InterruptTargetId = InterruptUntil = 0;
-    if (ManualOverrideUntil <= now) ManualOverrideUntil = 0;
 }
 
 inline void Combo(const AIHeroClient& target) {
@@ -446,18 +441,18 @@ inline void Automatic(const AIHeroClient& target) {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     const Mode actionMode = mode == Mode::None ? Mode::Automatic : mode;
 
     if (RChanneling) {
         // Block only orbwalker-issued input; direct player movement remains
-        // authoritative and can still cancel a manually controlled channel.
+        // authoritative and can still cancel a player-controlled channel.
         Orbwalker::SetAttackPauseTime(180);
         Orbwalker::SetMovePauseTime(180);
         auto target = HeroByNetworkId(RTargetId);
         if (!Engine::ValidEnemy(target, kRRange) || TargetBlocked(target)) {
-            target = PreferredEnemyTarget(selected, kRRange);
+            target = Engine::SelectTarget(kRRange);
         }
         if (Engine::ValidEnemy(target, kRRange) && !TargetBlocked(target)) {
             RTargetId = static_cast<int>(target.NetworkId());
@@ -470,7 +465,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         auto target = HeroByNetworkId(QTargetId);
         if (!Engine::ValidEnemy(target, kQMaxRange + 50.0f) ||
             TargetBlocked(target)) {
-            target = PreferredEnemyTarget(selected, kQMaxRange + 50.0f);
+            target = Engine::SelectTarget(kQMaxRange + 50.0f);
         }
         if (Engine::ValidEnemy(target, kQMaxRange + 50.0f) &&
             !TargetBlocked(target)) {
@@ -480,8 +475,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         return true;
     }
 
-    if (ManualOverrideUntil > Now()) return true;
-    const auto target = PreferredEnemyTarget(selected, kRRange);
+    const auto target = Engine::SelectTarget(kRRange);
     if (actionMode == Mode::Automatic) Automatic(target);
     else if (actionMode == Mode::Flee) Flee(target);
     else if (actionMode == Mode::Combo) Combo(target);
@@ -497,7 +491,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 inline void OnLoad() {
     TacticsMenu = FarmMenu = UltimateMenu = nullptr;
     LastCastTick = {};
-    ManualOverrideUntil = LastAutoTargetId = GapcloserTargetId = GapcloserUntil = 0;
+    LastAutoTargetId = GapcloserTargetId = GapcloserUntil = 0;
     InterruptTargetId = InterruptUntil = 0; GapcloserEndpoint = {};
     ClearQState();
     LastWTargetId = 0; LastWCenter = {}; LastWCenterHit = false;
@@ -513,11 +507,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         const bool owned =
             slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-        if (!owned) {
-            ManualOverrideUntil = now +
-                ControllerHelpers::Slider(
-                    TacticsMenu, "ManualOwnershipMs", 600);
-        }
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = now;
         }
@@ -622,14 +611,13 @@ inline void OnDraw() {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("XerathTactics", "Xerath charge and safety policy"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 600, 150, 1400));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 0, 100));
     FarmMenu = root->AddSubMenu(new Menu("XerathFarm", "Charged beam and Eye farming"));
     FarmMenu->Add(new MenuSlider("LaneMana", "Lane-clear mana percent", 38, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleMana", "Jungle mana percent", 30, 0, 100));
     UltimateMenu = root->AddSubMenu(new Menu("XerathUltimate", "Artillery channel safety"));
-    UltimateMenu->Add(new MenuSlider("RTargetHP", "Allow artillery below target health percent", 48, 1, 100));
-    UltimateMenu->Add(new MenuSlider("MaxChannelEnemies", "Maximum enemies near Xerath while channeling", 2, 0, 5));
+    UltimateMenu->Add(new MenuSlider("RTargetHP", "Allow R below target HP %", 48, 1, 100));
+    UltimateMenu->Add(new MenuSlider("MaxChannelEnemies", "Max enemies while channeling", 2, 0, 5));
 }
 
 inline constexpr const char* Scenarios[] = {
@@ -637,8 +625,8 @@ inline constexpr const char* Scenarios[] = {
     "W outer 250 radius impact with 100 radius center sweet spot and 1.667 damage multiplier",
     "E 70-width first-collision line prediction, 1600 missile safety and distance-scaled stun",
     "R ten-second channel, 4/5/6 artillery ammo, 0.6 second trajectory and prior-hit ramp damage",
-    "R preserves controller ownership across phase-buff transitions and pauses orbwalker movement between shots",
-    "Selected target precedence, locked Q/R target continuity, fallback retargeting and shield-aware lethal checks",
+    "R preserves channel state across phase-buff transitions and pauses orbwalker movement between shots",
+    "Engine-selected target continuity, fallback retargeting and shield-aware lethal checks",
     "Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic interrupt/gapcloser routes",
 };
 
@@ -649,7 +637,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIXerath.md";
     controller.ImplementationSummary =
-        "Charge-aware Arcanopulse, center-sweet-spot Eye, first-collision Orb and ammo-tracked artillery channel with manual and anti-interrupt safety.";
+        "Charge-aware Arcanopulse, center-sweet-spot Eye, first-collision Orb and ammo-tracked artillery channel with channel and anti-interrupt safety.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

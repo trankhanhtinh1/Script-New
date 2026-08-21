@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Thresh = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 48;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "ThreshPassive";
@@ -31,11 +30,11 @@ inline constexpr ChampionProfile Thresh = [] {
     p.UltimateBuff = "ThreshRPenta";
     p.TrackedObjectToken = "ThreshLantern";
     p.TacticalSummary =
-        "Catcher support that banks souls for armor and shield scaling, hooks selected targets, "
+        "Catcher support that banks souls for armor and shield scaling, hooks reachable targets, "
         "rescues allies with Dark Passage, chooses directional Flay displacement and boxes unsafe chases.";
     p.ResearchSummary =
         "Riot 26.15 and CommunityDragon 16.15 data model soul armor, Q recast, lantern rescue, "
-        "directional E and a five-wall R cage with selected-target and allied-carry safety gates.";
+        "directional E and a five-wall R cage with reachable-target and allied-carry safety gates.";
 
     p.Spells[0] = Spell(SDK::SpellSlot::Q, "Death Sentence", CastKind::Line,
         Intent::Damage | Intent::CrowdControl | Intent::Engage | Intent::Disengage |
@@ -86,7 +85,7 @@ inline constexpr ChampionProfile Thresh = [] {
     p.Spells[3].MinimumAoeTargets = 2;
     p.Spells[3].PlayerHealthPercent = 42.0f;
 
-    p.Trade = Plan("hook selected target, flay direction and preserve lantern rescue",
+    p.Trade = Plan("hook a reachable target, flay direction and preserve lantern rescue",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 1000),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup, 120, 1100),
         Step(SDK::SpellSlot::W, StepRule::RequirePlayerLow, 180, 1300));

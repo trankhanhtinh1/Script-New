@@ -42,6 +42,24 @@ inline constexpr float kRRadius = 600.0f;
 inline constexpr float kRCastSeconds = 0.25f;
 inline constexpr float kRSilenceSeconds = 0.5f;
 inline constexpr float kRMarkIntervalSeconds = 1.0f;
+// Keep an inward buffer after target-radius overlap; R resolves after its
+// 0.25-second windup and edge-only candidates otherwise walk out on the server.
+inline constexpr float kRRangeSafetyMargin = 25.0f;
+
+inline float RReliableCenterRange(float targetRadius) {
+    if (!std::isfinite(targetRadius)) return 0.0f;
+    return std::max(
+        0.0f,
+        kRRadius + std::clamp(targetRadius, 0.0f, 200.0f) -
+            kRRangeSafetyMargin);
+}
+
+inline bool RContainsPredictedTarget(float predictedCenterDistance,
+                                     float targetRadius) {
+    return std::isfinite(predictedCenterDistance) &&
+        predictedCenterDistance >= 0.0f &&
+        predictedCenterDistance <= RReliableCenterRange(targetRadius);
+}
 inline constexpr float kManaBarrierHealthThreshold = 0.30f;
 inline constexpr float kManaBarrierMaximumManaRatio = 0.35f;
 inline constexpr float kManaBarrierDurationSeconds = 10.0f;

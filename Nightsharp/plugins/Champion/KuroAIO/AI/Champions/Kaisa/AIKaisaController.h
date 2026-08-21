@@ -184,21 +184,20 @@ inline bool BuildSafeREndpoint(const AIHeroClient& target,
     return safe;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false,
-                  bool peel = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool peel = false) {
     if (!Engine::RuntimeSpells[3] || !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target, kRMaxRange) ||
         !HasKaisaMark(target) || !CastThrottlePassed(LastCastTick[3], 90)) {
         return false;
     }
-    if (!manual && !CanUse(3, mode)) return false;
+    if (!CanUse(3, mode)) return false;
     SDK::PredictionOutput prediction{};
     if (!PredictionHits(3, target, SDK::HitChance::VeryHigh, false, &prediction)) return false;
     bool endpointSafe = false;
     if (!BuildSafeREndpoint(target, prediction, endpointSafe)) return false;
     const bool lethal = target.HealthPercent() <= 28.0f;
     const bool followup = CountAlliedFollowup(target.Position(), 750.0f, true) > 0;
-    if (!ShouldCastR(manual, lethal, peel, followup, endpointSafe)) return false;
+    if (!ShouldCastR(lethal, peel, followup, endpointSafe)) return false;
     if (!Engine::ControllerCastPosition(3, prediction.GetCastPosition())) return false;
     LastCastTick[3] = Now();
     return true;
@@ -229,9 +228,9 @@ inline MarksmanTargeting::TargetContext TargetFacts(const AIHeroClient& target,
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred, Mode mode) {
+inline AIHeroClient SelectSmartTarget(Mode mode) {
     const auto target = ControllerHelpers::SelectReachableEnemy(
-        preferred, kRMaxRange,
+        AIHeroClient{}, kRMaxRange,
         [mode](const AIHeroClient& enemy) { return TargetFacts(enemy, mode); });
     return target;
 }
@@ -250,38 +249,34 @@ inline void RefreshOrbwalkerFocus(Mode mode, const AIHeroClient& target) {
     }
 }
 
-inline bool TryAutomatic(const AIHeroClient& preferred) {
-    if (ManualUltimatePressed()) {
-        const auto target = SelectSmartTarget(preferred, Mode::Automatic);
-        if (Engine::ValidEnemy(target) && CastR(target, Mode::Automatic, true)) return true;
-    }
+inline bool TryAutomatic() {
     if (GapcloserExpireTick >= Now()) {
         if (CastE(Mode::Automatic, true)) return true;
     }
     if (InterruptExpireTick >= Now()) {
         const auto target = ControllerHelpers::HeroByNetworkId(InterruptTargetId);
-        if (Engine::ValidEnemy(target) && CastR(target, Mode::Automatic, false, true)) return true;
+        if (Engine::ValidEnemy(target) && CastR(target, Mode::Automatic, true)) return true;
     }
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic);
+    const auto target = SelectSmartTarget(Mode::Automatic);
     if (!Engine::ValidEnemy(target)) return false;
     return (QDamage(target) >= target.Health() + target.AllShield() &&
             CastQ(target, Mode::Automatic)) ||
            (PlasmaStacks(target) >= 3 && CastW(target, Mode::Automatic));
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     PollEvolutionState();
     PollPlasma();
-    if (TryAutomatic(preferred)) return true;
+    if (TryAutomatic()) return true;
     if (mode == Mode::Flee) return CastE(mode, true);
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
         ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
         return Engine::TryFarm(mode);
     }
     if (mode != Mode::Combo && mode != Mode::Harass) return false;
-    const auto target = SelectSmartTarget(preferred, mode);
+    const auto target = SelectSmartTarget(mode);
     if (!Engine::ValidEnemy(target)) return false;
     RefreshOrbwalkerFocus(mode, target);
     if (CastW(target, mode)) return true;
@@ -344,16 +339,16 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Poll Q/W/E evolution buffs and never assume an evolution from item stats",
     "Reconcile four Plasma marks from buff telemetry and expire stale local state",
-    "Add one Plasma stack after a confirmed basic attack on the owned target",
+    "Add one Plasma stack after a confirmed basic attack on the tracked target",
     "Apply two or three W marks only after a confirmed collision-aware cast",
     "Use isolated-target Q missile scaling without inventing multi-target hits",
     "Preserve an immediately available auto attack unless Q is lethal",
     "Use high-confidence W prediction and reject collision or projectile walls",
-    "Select the marked selected target when its Q/W/R route remains reachable",
+    "Select the highest-value reachable target for its Q/W/R route",
     "Require a marked target and current R reach before Killer Instinct",
     "Compute an R dash endpoint behind the predicted marked target",
     "Reject R endpoints in NavMesh walls, enemy turrets or excess enemy density",
-    "Allow manual R only through the same mark, reach and endpoint safety checks",
+    "Use policy-gated R through the same mark, reach and endpoint safety checks",
     "Use E defensively for gapclosers and offensively only with a real attack route",
     "Clear owned orbwalker focus on mode exit, invalid target or unload",
     "Use automatic branches for kill secure, interrupt, anti-gapcloser and farming",

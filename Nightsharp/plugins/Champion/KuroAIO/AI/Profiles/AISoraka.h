@@ -86,7 +86,6 @@ inline constexpr ChampionProfile Soraka = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 48;
-    p.PreferSelectedTarget = true;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SorakaPassive";
     p.MarkBuff = "SorakaQRegen";

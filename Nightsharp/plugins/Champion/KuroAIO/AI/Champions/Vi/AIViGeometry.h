@@ -208,6 +208,7 @@ inline bool RPathIntersects(const Vec3& origin,
 struct RPathContext {
     bool TargetValid = false;
     bool TargetProtected = false;
+    bool Defensive = false;
     bool EndpointWalkable = false;
     bool EndpointUnderEnemyTurret = false;
     bool EndpointDashHazard = false;
@@ -217,8 +218,6 @@ struct RPathContext {
     int AlliedFollowup = 0;
     int MaximumEnemies = 2;
     bool TargetLethal = false;
-    bool Defensive = false;
-    bool ManualConsent = false;
 };
 
 inline bool RLockOnPathSafe(const RPathContext& context) {
@@ -231,7 +230,7 @@ inline bool RLockOnPathSafe(const RPathContext& context) {
             std::max(1, context.MaximumEnemies + 1);
     }
     if (context.EndpointUnderEnemyTurret && !context.PlayerUnderEnemyTurret &&
-        !context.TargetLethal && !context.ManualConsent) {
+        !context.TargetLethal) {
         return false;
     }
     if (context.EnemiesAtEndpoint > std::max(1, context.MaximumEnemies) &&
@@ -239,11 +238,11 @@ inline bool RLockOnPathSafe(const RPathContext& context) {
         return false;
     }
     if (context.PathEnemies >= 2 && context.AlliedFollowup <= 0 &&
-        !context.TargetLethal && !context.ManualConsent) {
+        !context.TargetLethal) {
         return false;
     }
     return context.AlliedFollowup > 0 || context.TargetLethal ||
-        context.Defensive || context.ManualConsent;
+        context.Defensive;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Vi::Geometry

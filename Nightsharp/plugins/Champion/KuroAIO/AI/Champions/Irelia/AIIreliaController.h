@@ -28,8 +28,7 @@ inline Menu *TacticsMenu = nullptr, *QMenu = nullptr, *WMenu = nullptr,
             *CoachMenu = nullptr;
 inline int PassiveStacks = 0, PassiveExpireTick = 0;
 inline std::array<MarkRecord, 16> Marks{};
-inline bool WCharging = false, WManual = false, EFirstPlaced = false,
-            EManual = false;
+inline bool WCharging = false, EFirstPlaced = false;
 inline int WChargeStartTick = 0, WTargetId = 0, EFirstExpireTick = 0,
            ETargetId = 0;
 inline Vector3 EFirstPosition{}, LastEAim{}, LastRAim{};
@@ -38,7 +37,7 @@ inline int BladeWallExpireTick = 0, FocusTargetId = 0, IncomingThreatId = 0,
            IncomingThreatUntil = 0, IncomingImpactTick = 0,
            GapcloserTargetId = 0, GapcloserExpireTick = 0,
            InterruptTargetId = 0, InterruptExpireTick = 0,
-           PlayerOverrideUntil = 0, QCastTick = 0, WCastTick = 0, ECastTick = 0,
+           QCastTick = 0, WCastTick = 0, ECastTick = 0,
            RCastTick = 0, LastAutoTargetId = 0, LastAutoTick = 0;
 inline Vector3 GapcloserEnd{};
 
@@ -152,7 +151,7 @@ inline void ReconcileState() {
     WCharging = true;
     WChargeStartTick = now;
   } else if (!runtimeW && WCharging && now - WChargeStartTick > 100) {
-    WCharging = WManual = false;
+    WCharging = false;
     WChargeStartTick = WTargetId = 0;
   }
   if (ControllerHelpers::RuntimeNameContains(2, "IreliaE2") && !EFirstPlaced) {
@@ -160,7 +159,7 @@ inline void ReconcileState() {
     EFirstExpireTick = now + kERecastWindowMs;
   }
   if (EFirstPlaced && EFirstExpireTick && now >= EFirstExpireTick) {
-    EFirstPlaced = EManual = false;
+    EFirstPlaced = false;
     EFirstPosition = {};
     EFirstExpireTick = ETargetId = 0;
   }
@@ -236,14 +235,13 @@ inline bool StartW(const AIHeroClient &target, Mode mode, bool defensive) {
   }
   Engine::MarkSuccessfulCast(1);
   WCharging = true;
-  WManual = false;
   WChargeStartTick = WCastTick = Now();
   WTargetId =
       Engine::ValidEnemy(target) ? static_cast<int>(target.NetworkId()) : 0;
   return true;
 }
 inline bool ReleaseW(const AIHeroClient &fallback, bool impact = false) {
-  if (!WCharging || WManual || !Engine::RuntimeSpells[1])
+  if (!WCharging || !Engine::RuntimeSpells[1])
     return false;
   AIHeroClient target = HeroByNetworkId(WTargetId);
   if (!Engine::ValidEnemy(target, kWRange + 150))
@@ -316,7 +314,6 @@ inline bool CastE(const AIHeroClient &target, Mode mode, bool interrupt = false,
   ECastTick = Now();
   LastEAim = place;
   ETargetId = static_cast<int>(target.NetworkId());
-  EManual = false;
   if (!EFirstPlaced) {
     EFirstPlaced = true;
     EFirstPosition = place;
@@ -406,9 +403,7 @@ inline AIBaseClient BestQMinion(Mode mode, const AIHeroClient &chase = {}) {
   }
   return best;
 }
-inline AIHeroClient ResolveTarget(const AIHeroClient &selected) {
-  if (Engine::ValidEnemy(selected, kRRange + 100))
-    return selected;
+inline AIHeroClient ResolveTarget() {
   const auto focus = HeroByNetworkId(FocusTargetId);
   if (Engine::ValidEnemy(focus, kRRange + 100) && Marked(focus))
     return focus;
@@ -477,14 +472,10 @@ inline bool TryFlee(const AIHeroClient &t) {
     return true;
   return Engine::ValidEnemy(t) && StartW(t, Mode::Flee, true);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient &selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient &) {
   ReconcileState();
-  const auto target = ResolveTarget(selected);
+  const auto target = ResolveTarget();
   const auto threat = ControllerHelpers::NearestEnemyToPlayer(target, 1000);
-  if (WCharging && WManual)
-    return true;
-  if (PlayerOverrideUntil > Now())
-    return true;
   if (mode == Mode::Flee) {
     (void)TryFlee(threat);
     return true;
@@ -540,16 +531,11 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &args) {
     return;
   }
   const int slot = args.Slot;
-  const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-  if (!owned)
-    PlayerOverrideUntil =
-        now + SliderValue(TacticsMenu, "ManualOwnershipMs", 520);
   if (slot == 0)
     QCastTick = now;
   else if (slot == 1) {
     WCastTick = now;
     WCharging = true;
-    WManual = !owned;
     if (!WChargeStartTick)
       WChargeStartTick = now;
   } else if (slot == 2) {
@@ -562,7 +548,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &args) {
       EFirstExpireTick = 0;
     } else {
       EFirstPlaced = true;
-      EManual = !owned;
       EFirstPosition = args.EndPosition.IsValid() && !args.EndPosition.IsZero()
                            ? args.EndPosition
                            : args.CastPosition;
@@ -605,7 +590,7 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs &args) {
     if (Engine::TextContains(args.BuffName, "ireliapassive")) {
       PassiveStacks = PassiveExpireTick = 0;
     } else if (Engine::TextContains(args.BuffName, "ireliaw")) {
-      WCharging = WManual = false;
+      WCharging = false;
       WChargeStartTick = 0;
     }
   } else if (Engine::TextContains(args.BuffName, "ireliamark"))
@@ -647,8 +632,6 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu = root->AddSubMenu(
       new Menu("IreliaOneTrick", "Irelia blade dancer mechanics"));
-  TacticsMenu->Add(new MenuSlider(
-      "ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1200));
   TacticsMenu->Add(new MenuSlider("EmergencyHP", "Defensive W health threshold",
                                   32, 10, 75));
   TacticsMenu->Add(new MenuSlider("MaxDashEnemies",
@@ -683,13 +666,13 @@ inline void BuildMenu(Menu *root) {
 inline void OnLoad() {
   PassiveStacks = PassiveExpireTick = 0;
   Marks = {};
-  WCharging = WManual = EFirstPlaced = EManual = false;
+  WCharging = EFirstPlaced = false;
   WChargeStartTick = WTargetId = EFirstExpireTick = ETargetId = 0;
   EFirstPosition = LastEAim = LastRAim = {};
   LastBladeWall = {};
   BladeWallExpireTick = FocusTargetId = IncomingThreatId = IncomingThreatUntil =
       IncomingImpactTick = GapcloserTargetId = GapcloserExpireTick =
-          InterruptTargetId = InterruptExpireTick = PlayerOverrideUntil =
+          InterruptTargetId = InterruptExpireTick =
               QCastTick = WCastTick = ECastTick = RCastTick = LastAutoTargetId =
                   LastAutoTick = 0;
   GapcloserEnd = {};
@@ -713,10 +696,10 @@ inline constexpr const char *Scenarios[] = {
     "Require reset and cursor progress for flee Q",
     "Preserve mana for follow-up abilities",
     "Start W before targeted, crossing or gapcloser impact",
-    "Keep manually started W under player ownership",
+    "Keep W channel state from runtime and spell-event reconciliation",
     "Scale W damage across its full charge",
     "Model physical reduction and half magic reduction",
-    "Track E1 from owned and manual cast positions",
+    "Track E1 and E2 state from observed spell positions",
     "Recover E2 state by runtime-name polling",
     "Place E blades on opposite sides of prediction",
     "Require the finite blade segment to cross the hitbox",
@@ -728,13 +711,13 @@ inline constexpr const char *Scenarios[] = {
     "Track the perpendicular R blade wall",
     "Re-evaluate marked Q safety after R",
     "Hold unsafe nonlethal R-to-Q commits",
-    "Prefer selected, marked focus, orbwalker, then selector targets",
+    "Prefer marked focus, orbwalker, then autonomous selector targets",
     "Combo orders setup before reset dashes",
     "Harass avoids unmarked all-in Q",
     "Farm modes Q only reset units",
     "Flee uses cursor-progress reset nodes",
     "Automatic allows defense, interrupt and lethal Q only",
-    "Yield after manual spell input",
+    "Resume autonomous decisions after each observed spell event",
     "Never automate summoners or items",
     "Pin Riot 26.15 / CommunityDragon 16.15 data"};
 inline constexpr ChampionController Controller = [] {
@@ -745,7 +728,7 @@ inline constexpr ChampionController Controller = [] {
   c.ResearchArtifact = "AI/Research/AIIrelia.md";
   c.ImplementationSummary =
       "Passive-stack reconciliation, reset-safe Q routing, charged W "
-      "ownership, finite E stun geometry, R blade-wall tracking and safe mark "
+      "state, finite E stun geometry, R blade-wall tracking and safe mark "
       "dashes.";
   c.Scenarios = Scenarios;
   c.ScenarioCount = std::size(Scenarios);

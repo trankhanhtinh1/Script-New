@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Neeko = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 70;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "NeekoPassive";
@@ -79,7 +78,7 @@ inline constexpr ChampionProfile Neeko = [] {
     p.Flee = Plan("Clone retreat",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 700),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 80, 900),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly, 180, 1500));
+        Step(SDK::SpellSlot::R, StepRule::RequireMultiTarget | StepRule::RequireSafePosition, 180, 1500));
     return p;
 }();
 

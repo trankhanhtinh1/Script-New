@@ -53,7 +53,6 @@ enum class UltimateReason : int {
     Gapcloser,
     Interrupt,
     Flee,
-    Manual,
 };
 
 struct WPlan {
@@ -72,7 +71,6 @@ struct EPlan {
     int EnemiesAtEndpoint = 0;
     int AlliesAtEndpoint = 0;
     bool Challenged = false;
-    bool CursorAgrees = false;
     bool Safe = false;
     bool Valid = false;
 };
@@ -99,7 +97,6 @@ inline Sequence ActiveSequence = Sequence::None;
 inline UltimateReason LastUltimateReason = UltimateReason::None;
 inline Mode LastMode = Mode::None;
 inline int LastDecisionTargetId = 0;
-inline int ManualOwnershipUntil = 0;
 
 inline int PassiveCompletedAttacks = 0;
 inline int PassiveLastProcTick = 0;
@@ -198,14 +195,6 @@ inline bool InAttackRange(const AIBaseClient& target, float allowance = 35.0f) {
                target.BoundingRadius() + allowance;
 }
 
-inline bool CursorConsents(const Vector3& endpoint, float opposition = 220.0f) {
-    const auto player = GameObjects::Player();
-    const Vector3 cursor = Game::CursorPos();
-    if (!player.IsValid() || !cursor.IsValid() || cursor.IsZero() ||
-        !endpoint.IsValid()) return false;
-    return endpoint.Distance2D(cursor) <=
-           player.Position().Distance2D(cursor) + opposition;
-}
 
 inline float PassiveExpectedHeal() {
     const auto player = GameObjects::Player();
@@ -312,9 +301,8 @@ inline EPlan BuildEPlan(const AIBaseClient& target,
         return plan;
     plan.EnemiesAtEndpoint = Engine::CountEnemiesAt(plan.Endpoint, 650.0f);
     plan.AlliesAtEndpoint = CountAlliedFollowup(plan.Endpoint, 850.0f);
-    plan.CursorAgrees = CursorConsents(plan.Endpoint, escape ? 0.0f : 220.0f);
     plan.Safe = !Engine::UnderEnemyTurret(plan.Endpoint) &&
-                !HasReadyDashHazardAt(plan.Endpoint) && plan.CursorAgrees &&
+                !HasReadyDashHazardAt(plan.Endpoint) &&
                 plan.EnemiesAtEndpoint <= plan.AlliesAtEndpoint +
                     (escape ? 0 : 1);
     plan.Valid = true;
@@ -564,8 +552,8 @@ inline AIBaseClient BestEscapeChargeUnit(const AIHeroClient& pursuer) {
         ? best : AIBaseClient{};
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
-    const AIHeroClient pursuer = NearestEnemyToPlayer(selected, 1100.0f);
+inline bool TryFlee() {
+    const AIHeroClient pursuer = NearestEnemyToPlayer({}, 1100.0f);
     if (TryDefensiveR(Mode::Flee, UltimateReason::Flee)) return true;
     if (Bool(EMenu, "UseFlee", true)) {
         const AIBaseClient unit = BestEscapeChargeUnit(pursuer);
@@ -652,17 +640,16 @@ inline bool TryLaneW(Mode mode) {
            Engine::ControllerCastPosition(1, bestAim);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     LastMode = mode;
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(1150.0f);
+    AIHeroClient target = Engine::SelectTarget(1150.0f);
     LastDecisionTargetId = target.IsValid()
         ? static_cast<int>(target.NetworkId()) : 0;
     if (TryInterrupt() ||
         TryDefensiveR(Mode::Automatic, UltimateReason::OutsideDamage) ||
         TryGapcloser(target)) return true;
-    if (mode == Mode::Flee) return TryFlee(target);
+    if (mode == Mode::Flee) return TryFlee();
     if (mode == Mode::Combo) return TryCombo(target);
     if (mode == Mode::Harass) return TryHarass(target);
     if (mode == Mode::LaneClear || mode == Mode::LastHit) {
@@ -671,7 +658,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     }
     return mode == Mode::None && TryJungle();
 }
-
 inline void RecordCompletedAttack(int targetId,
                                   int tick,
                                   const char* spellName) {
@@ -735,11 +721,9 @@ inline void ObserveLocalSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     } else if (args.Slot == 3 || Engine::TextContains(args.SpellName, "XinZhaoR")) {
         RCastTick = now; RExpireTick = now + kRDurationMs; RActive = true;
         if (!Engine::WasControllerCast(3)) {
-            LastUltimateReason = UltimateReason::Manual;
             ActiveSequence = Sequence::CrescentDefense;
         }
     } else return;
-    if (!Engine::WasControllerCast(args.Slot)) ManualOwnershipUntil = now + 300;
 }
 
 inline void ObserveEnemySpell(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -796,7 +780,7 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     if (!CaptureAfterAttack(args, targetId, tick)) return;
     RecordCompletedAttack(targetId, tick, "");
     const AIBaseClient target(args.Target.Handle());
-    if (!target.IsValid() || QActive || ManualOwnershipUntil >= Now()) return;
+    if (!target.IsValid() || QActive) return;
     if ((LastMode == Mode::Combo && Bool(QMenu, "UseCombo", true)) ||
         (LastMode == Mode::Harass && Bool(QMenu, "UseHarass", true)) ||
         ((LastMode == Mode::LaneClear || LastMode == Mode::LastHit) &&
@@ -840,7 +824,7 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass minimum mana (%)", 44, 0, 100));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("Passive", "Determination cadence"));
     PassiveMenu->Add(new MenuSeparator("Heal", "Third attack heals from max HP + AP"));
-    PassiveMenu->Add(new MenuSeparator("Ownership", "Safe minion/monster heal procs remain player-owned"));
+    PassiveMenu->Add(new MenuSeparator("Ownership", "Player-owned minion/monster heals"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Three Talon Strike"));
     QMenu->Add(new MenuBool("UseCombo", "Use Q in combo", true));
     QMenu->Add(new MenuBool("UseHarass", "Use Q in harass", true));
@@ -854,7 +838,7 @@ inline void BuildMenu(Menu* root) {
     WMenu->Add(new MenuBool("GapcloseSlow", "Slow gapcloser", true));
     WMenu->Add(new MenuBool("UseFlee", "W pursuer while fleeing", true));
     WMenu->Add(new MenuBool("JungleW", "Use W on jungle", true));
-    WMenu->Add(new MenuSeparator("Geometry", "0.60s piercing thrust; slash is separate"));
+    WMenu->Add(new MenuSeparator("Geometry", "Thrust 0.60s; slash separate"));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Audacious Charge endpoint"));
     EMenu->Add(new MenuBool("UseChallengeE", "Use 1100 challenged E", true));
     EMenu->Add(new MenuBool("UseNormalE", "Use normal 650 E", true));
@@ -862,7 +846,7 @@ inline void BuildMenu(Menu* root) {
     EMenu->Add(new MenuBool("UseFlee", "Charge to escape unit", true));
     EMenu->Add(new MenuSlider("EscapeMinimumGain", "Minimum flee endpoint gain", 120, 0, 500));
     EMenu->Add(new MenuBool("JungleE", "Use E on jungle", true));
-    EMenu->Add(new MenuSeparator("Safety", "Endpoint checks cursor, turret, density and dash hazards"));
+    EMenu->Add(new MenuSeparator("Safety", "Endpoint turret/dash safety"));
     RMenu = TacticsMenu->AddSubMenu(new Menu("R", "Crescent Guard isolation"));
     RMenu->Add(new MenuBool("Isolation", "Use safe isolation R", true));
     RMenu->Add(new MenuSlider("IsolationScore", "Minimum isolation safety", 220, 0, 1000));
@@ -877,7 +861,7 @@ inline void BuildMenu(Menu* root) {
     RMenu->Add(new MenuBool("Interrupt", "Interrupt with R knockback", true));
     RMenu->Add(new MenuSlider("FleeEnemies", "Flee R enemies", 2, 1, 5));
     RMenu->Add(new MenuSlider("FleeHp", "Flee R HP (%)", 48, 10, 100));
-    RMenu->Add(new MenuSeparator("Rule", "500 sweep and 450 guard; challenged target stays"));
+    RMenu->Add(new MenuSeparator("Rule", "500 sweep, 450 guard; target stays"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Farm", "Lane and jungle cadence"));
     FarmMenu->Add(new MenuBool("JungleAbilities", "Use abilities on jungle", true));
     FarmMenu->Add(new MenuBool("LaneW", "Use W on lane", true));
@@ -888,7 +872,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     ActiveSequence = Sequence::None; LastUltimateReason = UltimateReason::None;
-    LastMode = Mode::None; LastDecisionTargetId = ManualOwnershipUntil = 0;
+    LastMode = Mode::None; LastDecisionTargetId = 0;
     PassiveCompletedAttacks = PassiveLastProcTick = 0; PassiveLastExpectedHeal = 0.0f;
     QActive = false; QStrikes = QCastTick = QExpireTick = QTargetId = LastQKnockupTick = 0;
     WCastTick = WTargetId = 0; LastWDirection = {}; LastWPlan = {};
@@ -930,8 +914,8 @@ inline constexpr const char* Scenarios[] = {
     "Use 650 normal E and 1100 E only against challenged targets",
     "Predict E target before computing its radius-adjusted endpoint",
     "Reject E into terrain, turret, anti-dash hazard or unsupported density",
-    "Reject automatic E opposite the player's cursor intent",
-    "Leave manual E authoritative while reconciling Challenge",
+    "Reject automatic E into unsafe endpoint density or terrain",
+    "Reconcile E and Challenge state from live events",
     "Preserve orbwalker ownership of the Q3 attack",
     "Model R's 500 sweep separately from its 450 guard circle",
     "Keep the challenged target while counting non-challenged knockbacks",
@@ -951,9 +935,9 @@ inline constexpr const char* Scenarios[] = {
     "Respect harass and lane mana gates",
     "Use jungle Q, W and E only through explicit toggles",
     "Count piercing W lane hits and predicted last hits",
-    "Preserve manual Q, W, E and R in the same state machine",
+    "Preserve Q, W, E and R state transitions in the same state machine",
     "Poll Q, dash, Challenge and R state to repair missed events",
-    "Never issue movement, attacks, Flash or force-target ownership",
+    "Never issue movement, attacks, Flash or force-target overrides",
 };
 
 inline constexpr ChampionController Controller = [] {

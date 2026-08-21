@@ -162,7 +162,6 @@ inline bool ShouldMakeItRain(const RainContext& context) {
 }
 
 struct BulletTimeContext {
-    bool Manual = false;
     bool SafeChannel = false;
     bool ValuableCone = false;
     bool TargetInCone = false;
@@ -176,7 +175,7 @@ struct BulletTimeContext {
 inline bool ShouldStartBulletTime(const BulletTimeContext& context) {
     if (!context.SafeChannel || !context.TargetInCone ||
         context.ProjectileWall) return false;
-    if (context.Manual || context.LethalChannel) return true;
+    if (context.LethalChannel) return true;
     if (context.BetterAttack) return false;
     return context.ValuableCone ||
            context.TargetsInCone >= std::max(1, context.MinimumTargets);

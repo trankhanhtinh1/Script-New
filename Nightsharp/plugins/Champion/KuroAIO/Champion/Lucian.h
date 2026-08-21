@@ -152,43 +152,6 @@ static Vector3 BestDashPosition(const Vector3& desiredPosition, float distance =
     return best;
 }
 
-// E luôn lao theo hướng con trỏ. Nếu điểm đích nằm trong tường thì rút ngắn dần
-// thay vì bỏ cast — E vẫn phải nổ để reset đòn đánh.
-static Vector3 CursorDashPosition(float distance = -1.0f) {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return {};
-    }
-
-    const Vector3 origin = player.Position();
-    const Vector3 cursor = Game::CursorPos();
-    if (origin.Distance2D(cursor) <= 1.0f) {
-        return {};
-    }
-
-    const float requested = std::clamp(
-        distance > 0.0f ? distance : E.Range, 30.0f, E.Range);
-    for (float step = requested; step >= 30.0f; step -= 40.0f) {
-        Vector3 candidate = origin.Extend(cursor, step);
-        candidate.y = NavMesh::GetHeightForPosition(candidate);
-        if (!NavMesh::IsWall(candidate)) {
-            return candidate;
-        }
-    }
-
-    Vector3 fallback = origin.Extend(cursor, 30.0f);
-    fallback.y = NavMesh::GetHeightForPosition(fallback);
-    return fallback;
-}
-
-// "Maximum" = luôn full tầm E, mặc định dừng đúng ở vị trí chuột.
-static float ComboDashDistance() {
-    const auto player = Player();
-    if (!player.IsValid() || List(ComboMenu, "EDistance", 0) == 1) {
-        return E.Range;
-    }
-    return player.Position().Distance2D(Game::CursorPos());
-}
 
 static bool CastE(const Vector3& position) {
     return E.IsReady() && !position.IsZero() && E.Cast(position);
@@ -365,7 +328,7 @@ static bool Killsteal() {
                 Q.Cast(enemy) == CastStates::SuccessfullyCasted) {
                 return true;
             }
-            if (!Key(HarassMenu, "AutoExtendedQ") && CastExtendedQThroughUnit(enemy)) {
+            if (CastExtendedQThroughUnit(enemy)) {
                 return true;
             }
         }
@@ -387,8 +350,7 @@ static void MarkPassiveSpellCast() {
     LastActionTick = SDK::Variables::TickCount();
 }
 
-// Mỗi đòn đánh xong phải nổ đúng một chiêu để nạp lại nội tại Lightslinger:
-// E lao tới con trỏ trước (reset đòn đánh), không được thì tới Q rồi W.
+// Weave E toward the chosen target without requiring cursor input.
 static bool ComboAfterAttack(const AIHeroClient& target) {
     const auto player = Player();
     if (!player.IsValid() || player.IsDead()) {
@@ -396,7 +358,7 @@ static bool ComboAfterAttack(const AIHeroClient& target) {
     }
 
     if (Bool(ComboMenu, "UseE", true) && E.IsReady() && !player.IsDashing() &&
-        CastE(CursorDashPosition(ComboDashDistance()))) {
+        CastE(BestDashPosition(target.Position(), E.Range))) {
         MarkPassiveSpellCast();
         return true;
     }
@@ -443,7 +405,8 @@ static bool Harass() {
     }
 
     if (Bool(HarassMenu, "UseE", false) && E.IsReady() && !HasPassive &&
-        CastE(CursorDashPosition(75.0f))) {
+        ValidHeroTarget(target, W.Range) &&
+        CastE(BestDashPosition(target.Position(), 75.0f))) {
         return true;
     }
 
@@ -452,8 +415,7 @@ static bool Harass() {
         if (CastDirectQ(target)) {
             return true;
         }
-        if (Bool(HarassMenu, "UseExtendedQ", true) &&
-            !Key(HarassMenu, "AutoExtendedQ") && ExtendedQLogic()) {
+        if (Bool(HarassMenu, "UseExtendedQ", true) && ExtendedQLogic()) {
             return true;
         }
     }
@@ -543,7 +505,7 @@ static bool JungleClear() {
             if (mob.IsValid() && mob.IsJungle() &&
                 mob.Health() > PassiveShotDamage(mob) +
                     Damage::GetAutoAttackDamage(Player(), mob)) {
-                if (CastE(CursorDashPosition(75.0f))) {
+                if (CastE(BestDashPosition(mob.Position(), 75.0f))) {
                     return true;
                 }
             }
@@ -565,7 +527,7 @@ static bool JungleClear() {
 }
 
 static bool SmartR() {
-    if (!Key(ComboMenu, "SmartR") || !R.IsReady() || IsRChanneling()) {
+    if (!Bool(ComboMenu, "SmartR", true) || !R.IsReady() || IsRChanneling()) {
         return false;
     }
     const auto target = GetPhysicalTarget(R.Range);
@@ -579,7 +541,6 @@ static bool SmartR() {
                Player().Position(), castPosition, R.Width * 0.5f) &&
            R.Cast(castPosition);
 }
-
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     UpdateQData();
     if (UpdateRControl()) {
@@ -611,12 +572,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     if (SmartR() || Killsteal()) {
-        LastActionTick = now;
-        return;
-    }
-
-    if (Key(HarassMenu, "AutoExtendedQ") && mode != OrbwalkingMode::Combo &&
-        ManaOkay(HarassMenu, 40) && Q.IsReady() && ExtendedQLogic()) {
         LastActionTick = now;
         return;
     }
@@ -705,10 +660,9 @@ static void OnNonKillableMinion(OrbwalkingActionArgs& args) {
     const float twoShotDamage = PassiveShotDamage(target) +
                                 Damage::GetAutoAttackDamage(Player(), target);
     if (target.Health() <= twoShotDamage) {
-        (void)CastE(CursorDashPosition(30.0f));
+        (void)CastE(BestDashPosition(target.Position(), 30.0f));
     }
 }
-
 static void Gapcloser_OnGapcloser(const GapCloserEventArgs& args) {
     if (!Loaded || !Bool(AntiGapMenu, "UseE", true) || !E.IsReady()) {
         return;
@@ -730,7 +684,7 @@ static void OnDraw() {
     if (!Loaded || !player.IsValid() || player.IsDead()) {
         return;
     }
-    if (Bool(DrawMenu, "ExtendedQ", true)) {
+    if (Bool(DrawMenu, "ExtendedQ", false)) {
         Drawing::DrawCircle(player.Position(), ExtendedQ.Range, 0xFFFFA500u, 1.5f, 64);
     }
     if (Bool(DrawMenu, "Q", false)) {
@@ -748,10 +702,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("UseQ", "Use Q", true));
     ComboMenu->Add(new MenuBool("UseW", "Use W", true));
     ComboMenu->Add(new MenuBool("UseE", "Use E", true));
-    ComboMenu->Add(new MenuList(
-        "EDistance", "E dash distance", { "To cursor", "Maximum" }, 0));
-    ComboMenu->Add(new MenuKeyBind(
-        "SmartR", "Smart R", SDK::Keys::T, KeyBindType::Press))->Permashow();
+    ComboMenu->Add(new MenuBool("SmartR", "Auto Smart R", true));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass", "Harass Settings"));
     HarassMenu->Add(new MenuBool("UseQ", "Use Q", true));
@@ -759,9 +710,6 @@ static void BuildMenu() {
     HarassMenu->Add(new MenuBool("UseW", "Use W", false));
     HarassMenu->Add(new MenuBool("UseE", "Use E", false));
     HarassMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 40, 0, 100));
-    HarassMenu->Add(new MenuKeyBind(
-        "AutoExtendedQ", "Auto Extended Q", SDK::Keys::G, KeyBindType::Toggle))->Permashow();
-
     LaneMenu = MenuRoot->AddSubMenu(new Menu("LaneClear", "Lane Clear Settings"));
     LaneMenu->Add(new MenuBool("UseQ", "Use Q", true));
     LaneMenu->Add(new MenuBool("UseW", "Use W", true));
@@ -781,7 +729,7 @@ static void BuildMenu() {
     AntiGapMenu->Add(new MenuBool("UseE", "Use E", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("ExtendedQ", "Draw Extended Q range", true));
+    DrawMenu->Add(new MenuBool("ExtendedQ", "Draw Extended Q range", false));
     DrawMenu->Add(new MenuBool("Q", "Draw Q range", false));
     DrawMenu->Add(new MenuBool("W", "Draw W range", false));
 
@@ -791,12 +739,6 @@ static void BuildMenu() {
 static void RemoveMenu() {
     if (!MenuRoot) {
         return;
-    }
-    if (auto* item = ComboMenu ? ComboMenu->Get<MenuKeyBind>("SmartR") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = HarassMenu ? HarassMenu->Get<MenuKeyBind>("AutoExtendedQ") : nullptr) {
-        item->RemovePermashow();
     }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;

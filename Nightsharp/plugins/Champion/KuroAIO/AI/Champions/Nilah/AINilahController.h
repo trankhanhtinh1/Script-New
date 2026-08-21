@@ -21,7 +21,6 @@ using ControllerHelpers::Lethal;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::SpellRank;
 using ControllerHelpers::Ready;
@@ -39,7 +38,6 @@ inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastAllyId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int QEmpoweredUntil = 0;
@@ -191,7 +189,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
     const RDecisionContext context{
         enemies >= Slider(RMenu, "MinimumEnemies", 2), lethal, healNeeded,
         Engine::UnderEnemyTurret(player.Position()),
-        enemies <= Slider(TacticsMenu, "MaxCommitEnemies", 2) || lethal, reactive};
+        enemies <= Slider(TacticsMenu, "MaxCommitEnemies", 2) || lethal};
     if (!ShouldCastR(context)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
@@ -271,10 +269,9 @@ inline void ReconcileState() {
     PassiveSharingObserved = PassiveShareValid(SharedState, now);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const auto target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kQRange);
-    if (ManualOwnershipUntil > Now()) return true;
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kQRange);
     if (mode == Mode::Automatic && Automatic(target)) return true;
     if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -292,21 +289,19 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
-        if (slot == 0 && !Engine::WasControllerCast(0)) {
+        if (slot == 0) {
             QEmpowered = true;
             QEmpoweredUntil = now + 4000;
         }
-        if (slot == 1 && !Engine::WasControllerCast(1)) {
+        if (slot == 1) {
             WActive = true;
             WActiveUntil = now + static_cast<int>(kWDurationSeconds * 1000.0f);
         }
-        if (slot == 2 && !Engine::WasControllerCast(2)) {
+        if (slot == 2) {
             ERecastReady = true;
             ERecastUntil = now + 700;
         }
-        if (slot == 3 && !Engine::WasControllerCast(3)) {
+        if (slot == 3) {
             RChanneling = true;
             RStartTick = now;
         }
@@ -397,7 +392,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("NilahOneTrick", "Nilah tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1200));
     TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum enemies at dash", 2, 1, 5));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Formless Blade"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 50, 10, 90));
@@ -415,7 +409,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void ResetState() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = LastAllyId = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = LastAllyId = 0;
     IncomingThreatUntil = IncomingHardCcUntil = QEmpoweredUntil = WActiveUntil = 0;
     WAllyUntil = ETargetId = ERecastUntil = RStartTick = 0;
     PassiveExperienceUntil = SharedHealUntil = SharedShieldUntil = 0;
@@ -435,15 +429,15 @@ inline constexpr const char* Scenarios[] = {
     "Track passive ally recipient and expire stale shared-resource observations safely",
     "Predict Formless Blade with 600 range, 75 width, 2200 speed and projectile-wall rejection",
     "Record Formless Blade empowered-attack state and consume it after the owned attack",
-    "Preserve ordinary AA windup while allowing reactive W, E or lethal Q ownership",
-    "Use selected enemy before orbwalker fallback for every combat decision",
+    "Preserve ordinary AA windup while allowing reactive W, E or lethal Q decisions",
+    "Use autonomous Engine target selection for every combat decision",
     "Cast Jubilant Veil only for incoming threat, threatened ally or an empowered trade",
     "Track Jubilant Veil duration and ally-sharing window from buff, spell and polling state",
     "Allow Slipstream through an enemy or ally only when the clamped endpoint is valid",
     "Recast Slipstream within its observed short window and clear stale recast ownership",
     "Reject E wall, enemy-turret and overcommitted endpoints unless the dash is verified lethal",
     "Use Apotheosis radius, multi-target count, lethal damage and missing-health healing gates",
-    "Reject unsafe Apotheosis turret commits while permitting explicit manual defensive healing",
+    "Reject unsafe Apotheosis turret commits unless lethal or defensively safe",
     "Record enemy process-spell, hard-CC and gapcloser threat windows for automatic W peel",
     "Automatic mode permits defensive W/E, lethal Q and safe R only",
     "Combo follows Q empower, E chase, W evasion and safe R multi-target route",

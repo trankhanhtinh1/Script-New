@@ -32,7 +32,6 @@ inline Menu* FarmMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int QTargetId = 0;
@@ -46,7 +45,6 @@ inline int RCastCount = 0;
 inline int EvolutionMask = 0;
 inline bool QWasIsolated = false;
 inline bool RStealthed = false;
-inline bool RControllerOwned = false;
 inline Mode LastMode = Mode::None;
 
 inline bool Buff(const AIBaseClient& unit, const char* token) {
@@ -179,7 +177,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
     if (!Engine::ControllerCastSelf(3)) return false;
     ++RCastCount;
     RTargetId = Engine::ValidEnemy(target) ? static_cast<int>(target.NetworkId()) : 0;
-    RControllerOwned = true;
     RStealthed = true;
     RStealthExpireTick = Now() + static_cast<int>(kRStealthSeconds * 1000.0f);
     LastCastTick[3] = Now();
@@ -245,7 +242,6 @@ inline void ReconcileState() {
     if (HasAnyBuff(player, "KhazixREvo", "KhaZixREvo")) EvolutionMask |= 8;
     RStealthed = HasAnyBuff(player, "KhazixRStealth", "KhaZixRStealth", "KhazixR");
     if (!RStealthed && RStealthExpireTick <= now) {
-        RControllerOwned = false;
         if (now - LastCastTick[3] > 1800) RCastCount = 0;
     }
     if (QTargetId != 0 && !GameObjects::GetUnitByNetworkId<AIHeroClient>(QTargetId).IsValid())
@@ -254,12 +250,11 @@ inline void ReconcileState() {
         WTargetId = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(
-        selected, mode == Mode::Flee ? 950.0f : kWRange);
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 950.0f : kWRange);
     if (mode == Mode::Automatic) { (void)Automatic(target); return true; }
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -279,12 +274,9 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            const bool manual = !Engine::WasControllerCast(slot);
-            if (manual) ManualOverrideUntil = now +
-                Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 3) {
-                if (manual) ++RCastCount;
+                ++RCastCount;
                 RStealthed = true;
                 RStealthExpireTick = now + 1250;
             }
@@ -339,7 +331,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KhaZixOneTrick", "Kha'Zix isolation tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 650, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Taste Their Fear"));
     QMenu->Add(new MenuBool("RequireIsolation", "Require isolation unless lethal", false));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Void Spike"));
@@ -359,29 +350,26 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    ManualOverrideUntil = LastAutoTargetId = LastAutoTick = QTargetId = WTargetId =
+    LastAutoTargetId = LastAutoTick = QTargetId = WTargetId =
         ETargetId = RTargetId = IncomingThreatUntil = IncomingHardCCUntil =
         RStealthExpireTick = RCastCount = EvolutionMask = 0;
-    QWasIsolated = RStealthed = RControllerOwned = false;
+    QWasIsolated = RStealthed = false;
     LastMode = Mode::None;
 }
-inline void OnUnload() {
-    TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
-    QWasIsolated = RStealthed = RControllerOwned = false;
-}
+inline void OnUnload() { OnLoad(); }
 
 inline constexpr const char* Scenarios[] = {
     "Pin all mechanics to Riot 26.15 and CommunityDragon 16.15",
     "Reconcile Q/W/E/R evolution buffs by event and polling before route decisions",
-    "Prefer selected target and use orbwalker fallback only when selection is invalid",
+    "Select the highest-value autonomous reachable target",
     "Compute target isolation from the 425-unit nearby-enemy boundary",
     "Apply the isolated Taste Their Fear multiplier to damage and lethal gates",
-    "Preserve attacks and manual Q/W/E/R ownership before nonreactive casts",
+    "Preserve attack timing before nonreactive casts",
     "Aim Void Spike with prediction, collision rejection, width and projectile-wall checks",
     "Use the real 325-unit Q melee envelope and reject protected targets",
     "Clamp Leap to its evolved endpoint range and reject wall, turret and crowded landings",
     "Use Void Assault only for isolated-target setup or urgent escape",
-    "Track stealth expiration, evolved R recasts, charges and manual recasts",
+    "Track stealth expiration, evolved R recasts, charges and spell events",
     "Reject offensive R around unsafe turret transitions and excessive local enemies",
     "Automatic mode is restricted to lethal isolated Q or hard-CC stealth escape",
     "Combo prioritizes spike contact, isolated Q, safe leap and bounded stealth",

@@ -108,10 +108,6 @@ inline bool DisguiseVisible(const DisguiseState& state, int now) {
 inline bool CloneVisible(const DisguiseState& state, int now) {
     return state.CloneActive && (state.ExpireTick <= 0 || now < state.ExpireTick);
 }
-inline bool ShouldBreakDisguise(bool disguised, bool tookChampionDamage,
-                                bool manualOverride) {
-    return disguised && (tookChampionDamage || manualOverride);
-}
 
 enum class UltimateStage : std::uint8_t { Idle, Channeling, Landing };
 struct UltimateContext {
@@ -120,7 +116,6 @@ struct UltimateContext {
     bool PredictionHits = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     bool AttackWindingUp = false;
     bool UnderEnemyTurret = false;
     int PredictedHits = 0;
@@ -129,14 +124,14 @@ struct UltimateContext {
 inline bool ShouldStartUltimate(const UltimateContext& context) {
     if (!context.Ready || !context.TargetValid || !context.PredictionHits ||
         context.UnderEnemyTurret) return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.Defensive &&
-        !context.Manual) return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive)
+        return false;
+    return context.Lethal || context.Defensive ||
            context.PredictedHits >= std::max(1, context.MinimumHits);
 }
 inline bool ShouldAbortUltimate(bool channeling, bool playerDead,
-                               bool hardCrowdControl, bool manualOverride) {
-    return channeling && (playerDead || hardCrowdControl || manualOverride);
+                               bool hardCrowdControl) {
+    return channeling && (playerDead || hardCrowdControl);
 }
 inline bool ShouldLandUltimate(UltimateStage stage, bool channelObserved,
                                bool landingPositionValid, int predictedHits,

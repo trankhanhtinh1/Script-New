@@ -53,7 +53,6 @@ inline bool RChanneling = false;
 inline int RChannelStartTick = 0;
 inline int RChannelEndTick = 0;
 inline int RTargetId = 0;
-inline bool RPlayerOwned = false;
 
 inline bool ReadyFor(int index, Mode mode, bool reactive = false) {
     return index >= 0 && index < 4 && Ready(index, mode) &&
@@ -245,7 +244,6 @@ inline bool CastAbsoluteZero(const AIHeroClient& target, Mode mode,
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
     RChanneling = true;
-    RPlayerOwned = true;
     RChannelStartTick = Now();
     RChannelEndTick = Now() + 3000;
     RTargetId = target.IsValid() ? static_cast<int>(target.NetworkId()) : 0;
@@ -262,7 +260,6 @@ inline bool ReleaseAbsoluteZero(bool reactive = true) {
     }
     Engine::MarkSuccessfulCast(3);
     RChanneling = false;
-    RPlayerOwned = false;
     RTargetId = 0;
     return true;
 }
@@ -301,8 +298,8 @@ inline void Farm(Mode mode) {
     (void)Engine::TryFarm(mode);
 }
 
-inline void Flee(const AIHeroClient& selected) {
-    const AIHeroClient threat = NearestEnemyToPlayer(selected, 1000.0f);
+inline void Flee(const AIHeroClient& target) {
+    const AIHeroClient threat = NearestEnemyToPlayer(target, 1000.0f);
     if (Engine::ValidEnemy(threat, kSnowballTargetRange) &&
         CastBarrage(threat, Mode::Flee, true)) return;
     if (WCharging) {
@@ -325,7 +322,7 @@ inline void Flee(const AIHeroClient& selected) {
     }
 }
 
-inline void Automatic(const AIHeroClient& selected) {
+inline void Automatic(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (RChanneling) {
@@ -346,14 +343,14 @@ inline void Automatic(const AIHeroClient& selected) {
             CastBarrage(threat, Mode::Automatic, true)) return;
     }
     if (player.HealthPercent() < 40.0f) {
-        const AIHeroClient threat = NearestEnemyToPlayer(selected, 900.0f);
+        const AIHeroClient threat = NearestEnemyToPlayer(target, 900.0f);
         if (Engine::ValidEnemy(threat, kAbsoluteZeroRadius)) {
             (void)CastAbsoluteZero(threat, Mode::Automatic, true);
         }
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     if (EStacks > 0 && !EStackWindowActive(EStacks, Now(), ELastStackTick)) {
         EStacks = 0;
         ETargetId = 0;
@@ -372,8 +369,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         }
         return true;
     }
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(
-        selected, kSnowballTargetRange);
+    const AIHeroClient target = Engine::SelectTarget(kSnowballTargetRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -391,7 +387,7 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("Nunu tactics"));
     ObjectiveMenu = TacticsMenu->AddSubMenu(new Menu("Consume objectives"));
-    ObjectiveMenu->Add(new MenuBool("SecureEpic", "Reserve Consume for epic objective secure", true));
+    ObjectiveMenu->Add(new MenuBool("SecureEpic", "Reserve Q for epic objective", true));
     ObjectiveMenu->Add(new MenuBool("AllowContest", "Allow Q plus Smite contest window", true));
     SnowballMenu = TacticsMenu->AddSubMenu(new Menu("Snowball path"));
     SnowballMenu->Add(new MenuSlider("MaxEnemies", "Maximum enemies at W endpoint", 1, 0, 3));
@@ -415,7 +411,6 @@ inline void OnLoad() {
     ELastStackTick = ERootUntil = ETargetId = 0;
     RChanneling = false;
     RChannelStartTick = RChannelEndTick = RTargetId = 0;
-    RPlayerOwned = false;
 }
 
 inline void OnUnload() {
@@ -425,7 +420,6 @@ inline void OnUnload() {
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
-        if (!Engine::WasControllerCast(static_cast<int>(args.Slot))) return;
         if (args.Slot == static_cast<int>(SDK::SpellSlot::W)) {
             WTargetId = static_cast<int>(args.TargetNetworkId);
         } else if (args.Slot == static_cast<int>(SDK::SpellSlot::E)) {
@@ -478,7 +472,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "nunuabsolutezero") ||
         Engine::TextContains(args.BuffName, "nunur")) {
         RChanneling = false;
-        RPlayerOwned = false;
     }
 }
 
@@ -533,9 +526,9 @@ inline constexpr const char* Scenarios[] = {
     "Snowball Barrage three-stack slow-to-root lifecycle",
     "Absolute Zero three-second slow/channel and early interrupt release",
     "jungle objective sequencing and non-epic sustain clear",
-    "lane last-hit, harass mana and selected/orbwalker target policy",
+    "lane last-hit, harass mana and autonomous Engine target policy",
     "flee Barrage peel and safe-cursor snowball escape",
-    "manual cast, auto windup protection and event/poll reconciliation",
+    "event-driven casts, auto windup protection and event/poll reconciliation",
 };
 
 inline constexpr ChampionController Controller = [] {

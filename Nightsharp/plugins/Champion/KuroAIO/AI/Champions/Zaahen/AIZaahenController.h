@@ -41,7 +41,6 @@ inline int QExpireTick = 0;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastTargetId = 0;
@@ -168,7 +167,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false, 
     LastTargetId = static_cast<int>(target.NetworkId());
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !ManaOkay(3, mode) ||
         !Ready(3, mode, reactive) || !Throttle(3, 140) || PreserveAttack(reactive)) return false;
@@ -183,7 +182,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, 
     }
     const UltimateContext context{true, true, true,
         SafeDashEndpoint(aim, defensive), player.HealthPercent() <= 30.0f,
-        Lethal(target, RDamage(target)), defensive, manual, hits,
+        Lethal(target, RDamage(target)), defensive, hits,
         Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldDeliver(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
@@ -249,20 +248,22 @@ inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target) && CastE(target, Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target)) (void)CastW(target, Mode::Flee, true);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : 900.0f);
-    if (PlayerOverrideUntil > Now() || InRevive()) return true;
-    if (Engine::ValidEnemy(target) && (IncomingThreatUntil > Now() || IncomingHardCCUntil > Now()) &&
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1000.0f : 900.0f);
+    if (InRevive()) return true;
+    if (Engine::ValidEnemy(target) &&
+        (IncomingThreatUntil > Now() || IncomingHardCCUntil > Now()) &&
         CastW(target, mode, true)) return true;
     if (Engine::ValidEnemy(target) && TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1000.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, 1000.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -273,8 +274,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
             player.HealthPercent() <= Slider(RMenu, "DefensiveHealth", 30);
         const bool kill = Engine::ValidEnemy(target) &&
             (Lethal(target, EDamage(target, true)) || Lethal(target, RDamage(target)));
-        if (AutomaticAllowed({defensive, IncomingHardCCUntil > Now(), kill, false,
-                              PlayerOverrideUntil > Now()})) {
+        if (AutomaticAllowed({defensive, IncomingHardCCUntil > Now(), kill, false})) {
             if (defensive && Engine::ValidEnemy(target) && CastE(target, mode, true, kill)) return true;
             if (Engine::ValidEnemy(target)) (void)CastR(target, mode, true);
         }
@@ -290,8 +290,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil =
-                now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
             if (slot == 0) {
                 if (QArmed && now >= QRecastUnlockTick) QRecastReady = true;
@@ -352,7 +350,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ZaahenTactics", "Zaahen determination tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Darkin Glaive"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 42, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Dreaded Return"));
@@ -373,7 +370,7 @@ inline void OnLoad() {
     QArmed = QRecastReady = false;
     QCastTick = QRecastUnlockTick = QExpireTick = 0;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = LastTargetId = 0;
     LastMode = Mode::None;
 }
@@ -385,22 +382,22 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile Determination stacks, five-second refresh and half-second falloff",
     "Respect twelve-stack bonus AD multiplier and revive-ready/revive/cooldown buffs",
     "Use Q first-cast empowerment and 1.5-second recast attack reset windows",
-    "Preserve the observed orbwalker target and never cancel an ordinary AA windup",
+    "Preserve the engine-selected target and never cancel an ordinary AA windup",
     "Use W 850-range line, collision, final stun and 225-unit pull geometry",
     "Use E 350-range dash with 200-375 outer sweet spot and safe endpoint limits",
     "Reject E endpoints through walls, enemy turrets and excessive enemy count",
     "Use R 600-range dash, 550 landing zone, damage reduction and champion healing",
     "Require lethal, defensive or configured multi-target value before R landing",
-    "Track cooldowns and manual ownership from events with polling reconciliation",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Track cooldowns and event-reconciled target state with polling",
+    "Use the engine-selected target with orbwalker attack timing",
     "Combo sequences W pull, Q attacks, E sweet spot and R commitment",
     "Harass uses W and Q while respecting mana and avoiding unsolicited R",
     "LaneClear Jungle and LastHit delegate to shared farm policy",
     "Flee uses defensive E and W peel without turret diving",
     "Automatic mode only reacts to defense, hard crowd control or kill secure",
     "Reject invulnerable, protected and spell-shielded targets",
-    "Use cursor only for observed safe endpoint intent, never for forced movement",
-    "Never automate items, summoners or unrelated movement ownership",
+    "Use endpoint safety gates without forced movement",
+    "Never automate items, summoners or unrelated movement decisions",
     "Draw range guidance without changing decisions",
 };
 inline constexpr ChampionController Controller = [] {

@@ -126,7 +126,6 @@ struct SpinContext {
     bool Interrupt = false;
     bool Defensive = false;
     bool Lethal = false;
-    bool Manual = false;
     bool AttackWindingUp = false;
     bool UnderEnemyTurret = false;
     int PredictedTargets = 0;
@@ -137,8 +136,8 @@ inline bool ShouldStartSpin(const SpinContext& context) {
     if (!context.Ready || !context.TargetValid || !context.TargetInRadius ||
         context.UnderEnemyTurret) return false;
     if (context.AttackWindingUp && !context.Interrupt && !context.Defensive &&
-        !context.Lethal && !context.Manual) return false;
-    return context.Interrupt || context.Defensive || context.Lethal || context.Manual ||
+        !context.Lethal) return false;
+    return context.Interrupt || context.Defensive || context.Lethal ||
            context.PredictedTargets >= std::max(1, context.MinimumTargets);
 }
 
@@ -146,7 +145,7 @@ inline bool ShouldContinueSpin(const SpinContext& context, SpinPosture posture,
                                int elapsedMs) {
     if (posture == SpinPosture::Idle || elapsedMs < 0 || elapsedMs >
         static_cast<int>(kRDurationMs)) return false;
-    if (context.Interrupt || context.Defensive || context.Lethal || context.Manual)
+    if (context.Interrupt || context.Defensive || context.Lethal)
         return true;
     return context.TargetValid && context.TargetInRadius;
 }
@@ -163,11 +162,10 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
            (context.Defensive || context.Interrupt || context.KillSecure);
 }
 

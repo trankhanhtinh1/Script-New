@@ -39,7 +39,6 @@ inline int RTargetId = 0;
 inline int RMissileId = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -268,12 +267,11 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
     const float targetRange = mode == Mode::Flee ? RReach(GameObjects::Player().MoveSpeed()) + 100.0f
                                                  : std::max(kQFollowRange, kERange) + 100.0f;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, targetRange);
+    const AIHeroClient target = Engine::SelectTarget(targetRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -292,7 +290,6 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu = root->AddSubMenu(new Menu("Warwick tactics"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Warwick farming"));
     TacticsMenu->Add(new MenuSlider("MaxREnemies", "Maximum enemies at R landing", 2, 0, 5));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("Mana", "Farm mana percent", 30, 0, 100));
 }
@@ -304,7 +301,6 @@ inline void OnLoad() {
     QTargetId = RTargetId = RMissileId = 0;
     QCastTick = ECastTick = RCastTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
     IncomingThreatEndpoint = {};
     LastCastTick.fill(0);
 }
@@ -320,9 +316,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot < 0 || args.Slot > 3) return;
-        if (!Engine::WasControllerCast(args.Slot)) {
-            ManualOwnershipUntil = now + static_cast<int>(Slider(TacticsMenu, "ManualOwnershipMs", 650));
-        }
         LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
         if (args.Slot == 0) {
             if (CurrentQState == QState::Holding) CurrentQState = QState::ReleasePending;
@@ -426,8 +419,7 @@ inline constexpr const char* Scenarios[] = {
     "Primal Howl reduction window and one-second fear recast",
     "Infinite Duress movement-speed reach and first-champion collision",
     "R suppression, low-health healing and endpoint turret safety",
-    "attack-windup preservation and manual cast ownership",
-    "event plus polling reconciliation for Q/E/R buffs and missiles",
+    "Preserve attack windup and event plus polling reconciliation for Q/E/R buffs and missiles",
     "combo, harass, lane clear, jungle, last hit, flee and automatic behavior",
 };
 

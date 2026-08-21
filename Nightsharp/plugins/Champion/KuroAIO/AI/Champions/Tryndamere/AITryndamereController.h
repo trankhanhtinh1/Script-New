@@ -24,7 +24,6 @@ using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Slider;
 using ControllerHelpers::SpellCost;
@@ -218,7 +217,7 @@ inline void Automatic(const AIHeroClient& target) {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const int now = Now();
     const auto player = GameObjects::Player();
     if (player.IsValid()) Fury = std::clamp(static_cast<int>(CurrentResource(100.0f)), 0, 100);
@@ -230,7 +229,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         IncomingThreatTargetId = 0;
         IncomingThreatEndpoint = {};
     }
-    const AIHeroClient target = PreferredEnemyTarget(selected, 920.0f);
+    const AIHeroClient target = Engine::SelectTarget(920.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -350,10 +349,10 @@ inline constexpr const char* Scenarios[] = {
     "Mocking Shout radius, facing-away slow and attack-damage debuff",
     "Spinning Slash prediction, line collision and projectile-wall rejection",
     "Spinning Slash real 650-unit reach with terrain and enemy-density safety",
-    "Undying Rage five-second lethal-threat timing and manual cast reconciliation",
-    "Post-Rage kill check versus cursor escape before expiry",
+    "Undying Rage five-second lethal-threat timing and cast-event reconciliation",
+    "Post-Rage kill check before a safe escape before expiry",
     "AA windup preservation and E reset after a confirmed attack",
-    "Turret dive only when the selected target is killable",
+    "Turret dive only when the Engine target is killable",
     "Lane clear, jungle clear and last-hit sustain without spending R",
     "Flee W peel, R survival and safe cursor spin",
     "Gapcloser, interruptable spell and polling threat reconciliation",
@@ -363,6 +362,8 @@ inline constexpr ChampionController Controller = [] {
     ChampionController controller{};
     controller.ChampionId = SDK::ChampionId::Tryndamere;
     controller.OwnsDecisionLoop = true;
+    controller.OnLoad = &OnLoad;
+    controller.OnUnload = &OnUnload;
     controller.ControllerId = "champion.kuroaio.ai.tryndamere.onetrick";
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AITryndamere.md";

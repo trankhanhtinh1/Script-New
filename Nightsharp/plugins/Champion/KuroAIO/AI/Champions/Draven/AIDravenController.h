@@ -272,10 +272,10 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return false;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode) {
     if (!Engine::RuntimeSpells[3] || !target.IsValid() ||
         !CastThrottlePassed(LastRCastTick, 120) ||
-        (!manual && !CanUse(3, mode))) return false;
+        !CanUse(3, mode)) return false;
     SDK::PredictionOutput prediction{};
     if (!RPrediction(target, &prediction)) return false;
     const auto player = GameObjects::Player();
@@ -287,7 +287,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
     context.ReturnHit = returnHit;
     context.LethalOnEitherPass = lethal;
     context.MultiTarget = Engine::CountEnemiesAt(prediction.GetCastPosition(), 250.0f) >= 2;
-    context.Manual = manual;
     context.CashInSafe = player.IsValid() &&
         player.Position().Distance2D(target.Position()) > 500.0f;
     context.TargetEscaping = target.IsMoving();
@@ -319,7 +318,7 @@ inline bool TryCashIn(const AIHeroClient& preferred) {
     cash.TargetLethal = SpellDamage(3, target) >= target.Health() + target.AllShield();
     const auto* catchAxe = BestCatchAxe();
     cash.SafeCatch = !catchAxe || AxeCatchSafe(*catchAxe);
-    cash.SelectedTarget = preferred.IsValid() &&
+    cash.PreferredTarget = preferred.IsValid() &&
         preferred.NetworkId() == target.NetworkId();
     cash.EnemyNearBase = target.Position().Distance2D(player.Position()) < 900.0f;
     return ShouldCashIn(cash) && CastR(target, Mode::Automatic);
@@ -373,12 +372,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     RefreshAxeFocus(mode, preferred);
 
     if (TryReactive()) return true;
-    if (ManualUltimatePressed()) {
-        const auto manualTarget = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, kRRange);
-        if (Engine::ValidEnemy(manualTarget, kRRange) &&
-            CastR(manualTarget, Mode::Automatic, true)) return true;
-    }
     if (TryCashIn(preferred)) return true;
     if (TryKillSecure(preferred)) return true;
     if (mode == Mode::Flee) return TryFlee(preferred);
@@ -449,10 +442,10 @@ inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     context.CatchSafe = catchSafe;
     context.TargetKillable = target.IsValid() &&
         AutoDamage(target) >= target.Health() + target.AllShield();
-    context.SelectedTarget = target.IsValid() && LastSmartTarget.IsValid() &&
+    context.PreferredTarget = target.IsValid() && LastSmartTarget.IsValid() &&
         target.NetworkId() == LastSmartTarget.NetworkId();
     context.AxeWouldExpire = axe && Now() + 300 >= axe->ExpireTick;
-    context.ManualCastPending = Engine::WasControllerCast(0) ||
+    context.ControllerCastPending = Engine::WasControllerCast(0) ||
         Engine::WasControllerCast(1) || Engine::WasControllerCast(2) ||
         Engine::WasControllerCast(3);
     if (!AllowAttackDuringWindup(context)) {
@@ -524,9 +517,9 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("DravenMechanics", "Draven Mechanics"));
     AxeMenu = TacticsMenu->AddSubMenu(new Menu("AxeLogic", "Spinning Axe / Catch"));
-    AxeMenu->Add(new MenuSeparator("CatchMovement", "Preserve safe catch movement before AA windup"));
+    AxeMenu->Add(new MenuSeparator("CatchMovement", "Protect catch movement before AA"));
     ReturnMenu = TacticsMenu->AddSubMenu(new Menu("ReturnLogic", "Whirling Death"));
-    ReturnMenu->Add(new MenuSeparator("CashIn", "Cash in passive only on a safe lethal route"));
+    ReturnMenu->Add(new MenuSeparator("CashIn", "Cash in passive on safe route"));
     SafetyMenu = TacticsMenu->AddSubMenu(new Menu("Safety", "Catch Safety"));
     SafetyMenu->Add(new MenuSlider("MaxCatchEnemies", "Maximum enemies around axe", 1, 0, 3));
 }
@@ -562,18 +555,18 @@ inline constexpr const char* Scenarios[] = {
     "Record allied Draven axe landing objects from create and missile lifecycle events",
     "Reconcile axe expiry and deletion every update rather than trusting one hook",
     "Keep spinning-axe state synchronized with Q cast events and passive buff telemetry",
-    "Preserve a selected/orbwalker target while an axe catch route is still safe",
+    "Preserve an autonomous/orbwalker target while an axe catch route is still safe",
     "Suppress a nonlethal AA during windup when it would abandon a safe active axe",
-    "Allow an AA windup when the attack kills, is selected-target intent, or the axe expires",
+    "Allow an AA windup when the attack kills, follows the current route, or the axe expires",
     "Use Blood Rush for catch movement, spacing or escape instead of unconditional buffs",
     "Reject catch routes through walls, turrets or excess enemies",
     "Throw Stand Aside on predicted reachable targets for peel and interrupt",
     "Use Stand Aside immediately against captured gapclosers and interruptible spells",
     "Track outgoing Whirling Death missile start and end positions",
     "Evaluate return-line intersections before spending a global cast",
-    "Cash in Draven passive only on a selected safe lethal route",
+    "Cash in Draven passive only on a preferred safe lethal route",
     "Reserve automatic Whirling Death for lethal, multi-target or escaping targets",
-    "Preserve manual R intent while still requiring a real prediction path",
+    "Use Whirling Death only when its lethal, multi-target or escape policy allows it",
     "Keep Flee, LaneClear, Jungle and LastHit loops explicit and conservative",
     "Clear focus, axe objects and return state on mode exit and unload",
 };

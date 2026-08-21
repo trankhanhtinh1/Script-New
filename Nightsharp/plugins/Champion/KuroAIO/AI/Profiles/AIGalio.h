@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Galio = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "GalioPassiveReady";
@@ -86,7 +85,7 @@ inline constexpr ChampionProfile Galio = [] {
     p.Flee = Plan("Durand peel",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 0, 900),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 90, 850),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireSafePosition, 150, 2500));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 150, 2500));
     return p;
 }();
 

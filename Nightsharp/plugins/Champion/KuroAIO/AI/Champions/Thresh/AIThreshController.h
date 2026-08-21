@@ -24,7 +24,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::Slider;
@@ -39,7 +38,6 @@ inline int QTargetId = 0;
 inline int QRecastUntil = 0;
 inline int LanternObjectId = 0;
 inline int LanternCastTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -106,8 +104,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false,
                     !Engine::UnderEnemyTurret(player.Position()),
                 Engine::CountEnemiesAt(hooked.Position(), 600.0f),
                 CountAlliedFollowup(hooked.Position(), 850.0f),
-                Slider(TacticsMenu, "MaxCommitEnemies", 2),
-                static_cast<int>(hooked.NetworkId()) == QTargetId, lethal) &&
+                Slider(TacticsMenu, "MaxCommitEnemies", 2), lethal) &&
             SafeCommit(hooked.Position(), fleeing || reactive, lethal) &&
             Engine::ControllerCastSelf(0)) {
             QRecastUntil = 0;
@@ -146,7 +143,7 @@ inline bool CastLantern(const AIHeroClient& ally, Mode mode, bool reactive = fal
         Engine::CountEnemiesAt(ally.Position(), 600.0f),
         Engine::CountAlliesAt(ally.Position(), 750.0f),
         Engine::UnderEnemyTurret(ally.Position()) &&
-            !Engine::UnderEnemyTurret(player.Position()), true,
+            !Engine::UnderEnemyTurret(player.Position()),
         Slider(TacticsMenu, "MaxCommitEnemies", 2));
     if (!safe && !reactive) return false;
     if (Engine::ControllerCastPosition(1, ally.Position())) {
@@ -191,7 +188,7 @@ inline bool CastBox(const AIHeroClient& target, Mode mode, bool reactive = false
     if (Engine::ValidEnemy(target) && target.IsInvulnerable()) return false;
     const bool safe = BoxSafe(player.Position(),
         Engine::ValidEnemy(target) ? target.Position() : Vec3{}, ally.Position(),
-        false, enemies, allies, Engine::UnderEnemyTurret(player.Position()),
+        enemies, allies, Engine::UnderEnemyTurret(player.Position()),
         defensive ? 0 : 1);
     if (!safe && !defensive) return false;
     if (Engine::ControllerCastSelf(3)) {
@@ -251,10 +248,9 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected, kQRange + 100.0f);
+    const AIHeroClient target = Engine::SelectTarget(kQRange + 100.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -267,16 +263,14 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     }
     return true;
 }
-
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("Thresh hook and lantern tactics"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Thresh farming posture"));
-    TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum enemies at hook or flay endpoint", 2, 0, 5));
-    TacticsMenu->Add(new MenuSlider("AllyRescueHealth", "Ally health threshold for lantern rescue", 58, 1, 100));
-    TacticsMenu->Add(new MenuSlider("BoxHealth", "Health threshold for defensive Box", 42, 1, 100));
+    TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Max hook/flay endpoint enemies", 2, 0, 5));
+    TacticsMenu->Add(new MenuSlider("AllyRescueHealth", "Lantern rescue ally HP threshold", 58, 1, 100));
+    TacticsMenu->Add(new MenuSlider("BoxHealth", "Defensive Box HP threshold", 42, 1, 100));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Minimum harass mana percent", 58, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("LaneMana", "Minimum lane-clear mana percent", 30, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleMana", "Minimum jungle mana percent", 25, 0, 100));
@@ -284,7 +278,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     Souls = QTargetId = QRecastUntil = LanternObjectId = LanternCastTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    IncomingThreatUntil = IncomingThreatTargetId = 0;
     IncomingThreatEndpoint = {};
     LastAutoTargetId = LastAutoTick = 0;
     LastCastTick.fill(0);
@@ -301,8 +295,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) {
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
             if (args.Slot == 0) {
                 if (QTargetId != 0 && QRecastUntil >= now) QRecastUntil = now + 450;
@@ -398,12 +390,12 @@ inline void OnDraw() {}
 inline constexpr const char* Scenarios[] = {
     "souls accumulate armor and scale Dark Passage shield strength",
     "Death Sentence prediction, collision, projectile wall and Q recast dash",
-    "Q recast commits only with selected target and allied followup safety",
-    "Dark Passage lantern placement rescues a threatened selected ally",
+    "Q recast commits only with the hooked target and allied followup safety",
+    "Dark Passage lantern placement rescues a threatened allied carry",
     "Flay uses explicit toward and away directions for engage and peel",
-    "The Box five-wall cage protects selected and allied carries from unsafe trapping",
+    "The Box five-wall cage protects the threatened target and allied carries from unsafe trapping",
     "turret, enemy-count, wall, spell-shield and lethal mobility gates",
-    "AA windup preservation and manual ownership protection",
+    "AA windup preservation and event-safe cast timing",
     "event and polling reconciliation for hook, lantern, souls and threats",
     "distinct combo, harass, lane clear, jungle, last-hit, flee and automatic policies",
 };

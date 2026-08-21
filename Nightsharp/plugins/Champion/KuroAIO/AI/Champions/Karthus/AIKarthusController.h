@@ -28,7 +28,6 @@ using ControllerHelpers::NameEquals;
 using ControllerHelpers::PlayerManaPercent;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellCost;
 using ControllerHelpers::SpellEnabled;
@@ -47,7 +46,6 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick = {};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int DeathTick = 0;
 inline int RCastTick = 0;
 inline int RChannelEndTick = 0;
@@ -308,7 +306,7 @@ inline bool TryFarm(Mode mode) {
     return false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const Mode decisionMode = mode == Mode::None ? Mode::Automatic : mode;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
@@ -331,9 +329,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
             Slider(EMenu, "FlatReserve", 90))) {
         (void)CastDefile(false, decisionMode, true);
     }
-    if (ManualOwnershipUntil > now) return true;
-    const AIHeroClient target = PreferredEnemyTarget(
-        selected, decisionMode == Mode::Flee ? 1100.0f : 10000.0f);
+    const AIHeroClient target = Engine::SelectTarget(
+        decisionMode == Mode::Flee ? 1100.0f : 10000.0f);
     if (RChanneling) return true;
     if (TryKillSecure(target, decisionMode)) return true;
     if (decisionMode == Mode::Flee) {
@@ -368,9 +365,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = Now();
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = Now() +
-                Slider(TacticsMenu, "ManualOwnershipMs", 560);
-            if (slot == 2 && !Engine::WasControllerCast(slot)) DefileActive = !DefileActive;
+            if (slot == 2) DefileActive = !DefileActive;
             if (slot == 3) {
                 RChanneling = true;
                 RCastTick = Now();
@@ -441,7 +436,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KarthusOneTrick", "Karthus state tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Minimum harass mana (%)", 55, 10, 95));
     QMenu = TacticsMenu->AddSubMenu(new Menu("LayWaste", "Isolated Q geometry"));
     QMenu->Add(new MenuBool("PreferIsolated", "Prefer isolated double damage", true));
@@ -465,7 +459,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick = {};
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     DeathTick = RCastTick = RChannelEndTick = RTargetId = 0;
     WCastTick = WTargetId = ECastTick = 0;
     IncomingThreatUntil = IncomingHardCcUntil = 0;
@@ -493,10 +487,10 @@ inline constexpr const char* Scenarios[] = {
     "Start Requiem as a protected three-second stationary channel",
     "Require exact mitigated lethal damage or a meaningful multi-target outcome for R",
     "Reject Requiem under turret or excessive nearby enemies unless lethal/reactive",
-    "Reconcile Requiem channel completion and manual cast ownership from events and polling",
-    "Prefer the selected target before global fallback target selection",
-    "Preserve auto-attack windup and yield briefly after manual spell input",
-    "Use incoming cast telemetry to record hard-CC pressure without taking movement ownership",
+    "Reconcile Requiem channel completion from events and polling",
+    "Select the highest-value autonomous target before global fallback selection",
+    "Preserve auto-attack windup while resuming after observed spell events",
+    "Use incoming cast telemetry to record hard-CC pressure without issuing movement",
     "Combo uses W corridor, isolated Q, contact Defile and exact Requiem gates",
     "Harass uses W/Q with an independent mana floor and no forced Defile drain",
     "LaneClear Jungle and LastHit use Q health and isolation checks without generic ordering",
@@ -504,7 +498,7 @@ inline constexpr const char* Scenarios[] = {
     "Automatic mode remains conservative and never invents a turret dive",
     "Reject protected, dead or invulnerable targets before offensive casts",
     "Draw live Q and Defile boundaries without changing gameplay decisions",
-    "Do not automate movement, Flash, items or orbwalker target ownership",
+    "Do not automate movement, Flash, items or orbwalker target control",
 };
 
 inline constexpr ChampionController Controller = [] {

@@ -47,7 +47,6 @@ inline int RBounceCount = 0;
 inline int RCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline std::array<int, 4> LastCastTick{};
@@ -257,10 +256,9 @@ inline void ReconcileState() {
     if (IncomingThreatUntil < now) IncomingThreatUntil = IncomingThreatTargetId = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kERangeMax + 200.0f);
+    const AIHeroClient target = Engine::SelectTarget(kERangeMax + 200.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -281,7 +279,6 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("MaxEEnemies", "Maximum enemies at E landing", 3, 0, 5));
     TacticsMenu->Add(new MenuSlider("MaxREnemies", "Maximum enemies during R", 3, 0, 5));
     TacticsMenu->Add(new MenuSlider("WMinimumHealth", "Minimum health percent for W", 20, 1, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("MinimumHealth", "Farm minimum health percent", 35, 1, 100));
 }
@@ -290,7 +287,7 @@ inline void OnLoad() {
     CurrentEState = EState::Ready; CurrentRState = RState::Ready;
     PassiveCooldownEndTick = BlobCount = QFirstTargetId = QFirstCastTick = WCastTick = 0;
     ECastTick = RCastTick = RBounceCount = RCarryTargetId = RMissileId = RCarryTick = 0;
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    LastAutoTargetId = LastAutoTick = IncomingThreatUntil = IncomingThreatTargetId = 0;
     QFirstPosition = EEndpoint = {}; BlobPositions = {}; LastCastTick.fill(0);
 }
 
@@ -302,7 +299,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         if (args.IsAutoAttack) { LastAutoTargetId = static_cast<int>(args.TargetNetworkId); LastAutoTick = now; return; }
         if (args.Slot < 0 || args.Slot > 3) return;
-        if (!Engine::WasControllerCast(args.Slot)) ManualOwnershipUntil = now + static_cast<int>(Slider(TacticsMenu, "ManualOwnershipMs", 650));
         LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
         if (args.Slot == 0) {
             if (CurrentQState == QState::Ready) { CurrentQState = QState::FirstHit; QFirstCastTick = now; QFirstTargetId = static_cast<int>(args.TargetNetworkId); QFirstPosition = args.CastPosition; }
@@ -381,8 +377,7 @@ inline constexpr const char* Scenarios[] = {
     "E release rejects walls, turrets and excessive enemies while allowing lethal/Flee escape",
     "Let's Bounce! R performs four 500ms bounces and carries a safe first target",
     "R endpoint and enemy-count safety gates prevent unsafe turret commits",
-    "selected target preference with orbwalker fallback, attack windup and manual ownership",
-    "event plus polling reconciliation tracks passive, Q, E, R state and blob objects",
+    "Engine-selected target, attack windup and event-reconciled state",
     "combo, harass, lane clear, jungle, last hit, flee and automatic behavior",
 };
 

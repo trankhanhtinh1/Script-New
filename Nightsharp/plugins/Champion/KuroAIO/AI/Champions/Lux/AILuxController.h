@@ -16,7 +16,6 @@ namespace Plugins::KuroAIO::AI::Controllers::Lux {
 
 using namespace Geometry;
 using MarksmanControllerHelpers::CanUse;
-using MarksmanControllerHelpers::ManualUltimatePressed;
 using MarksmanControllerHelpers::PredictionHits;
 using MarksmanControllerHelpers::PredictionProjectileWall;
 using MarksmanControllerHelpers::SpellDamage;
@@ -27,8 +26,6 @@ using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::IsCommonUntargetableOrImmune;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
-using ControllerHelpers::PlayerSelectedEnemy;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::SpellEventNameContainsAny;
 
@@ -54,7 +51,6 @@ inline bool WShieldObserved = false;
 inline int ETargetId = 0;
 inline EZoneState EZone{};
 inline bool RChannelActive = false;
-inline bool RManualStarted = false;
 inline int RChannelUntil = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserUntil = 0;
@@ -145,8 +141,8 @@ inline bool PredictionFor(int slot, const AIHeroClient& target,
         !output.GetCastPosition().IsZero();
 }
 
-inline AIHeroClient CombatTarget(const AIHeroClient& preferred, float range) {
-    return PreferredEnemyTarget(preferred, range);
+inline AIHeroClient CombatTarget(float range) {
+    return Engine::SelectTarget(range);
 }
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
@@ -187,13 +183,12 @@ inline Vector3 WEndpoint(const AIHeroClient& threat, bool fleeing) {
     const auto ally = ProtectedAlly();
     if (ally.IsValid()) return ally.Position();
     const Vector3 direction = fleeing
-        ? Game::CursorPos() : (threat.IsValid() ? threat.Position() : Game::CursorPos());
+        ? Game::CursorPos() : (threat.IsValid() ? threat.Position() : Vector3{});
     if (!direction.IsValid() || direction.IsZero()) return {};
     return Engine::Extend(player.Position(), direction, kWRange);
 }
 
-inline bool CastW(const AIHeroClient& threat, Mode mode, bool fleeing = false,
-                  bool manual = false) {
+inline bool CastW(const AIHeroClient& threat, Mode mode, bool fleeing = false) {
     if (!CanUse(1, mode, true) || Now() - LastWCastTick < 70) return false;
     const auto player = GameObjects::Player();
     const Vector3 endpoint = WEndpoint(threat, fleeing);
@@ -202,7 +197,7 @@ inline bool CastW(const AIHeroClient& threat, Mode mode, bool fleeing = false,
     const bool incoming = Engine::CountEnemiesAt(
         ally.IsValid() ? ally.Position() : player.Position(), 700.0f) > 0;
     const bool low = ally.IsValid() && ally.HealthPercent() < 55.0f;
-    if (!WReturnShieldWorthwhile(true, endpoint.IsValid(), low, incoming, manual || fleeing)) return false;
+    if (!WReturnShieldWorthwhile(true, endpoint.IsValid(), low, incoming, fleeing)) return false;
     if (!Engine::ControllerCastPosition(1, endpoint)) return false;
     LastWCastTick = Now();
     LastWTargetId = ally.IsValid() ? static_cast<int>(ally.NetworkId()) :
@@ -247,9 +242,9 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return true;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode) {
     if (!Engine::RuntimeSpells[3] || !Engine::RuntimeSpells[3]->IsReady() ||
-        (!manual && !CanUse(3, mode)) || Now() - LastRCastTick < 180 ||
+        !CanUse(3, mode) || Now() - LastRCastTick < 180 ||
         !Engine::ValidEnemy(target, kRRange) || RChannelActive) return false;
     SDK::PredictionOutput prediction{};
     if (!PredictionFor(3, target, SDK::HitChance::VeryHigh, prediction, false)) return false;
@@ -264,7 +259,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
         Engine::UnderEnemyTurret(target.Position()),
         Engine::CountEnemiesAt(player.Position(), 850.0f), 0, lethal);
     context.Lethal = lethal;
-    context.Manual = manual;
     context.ChannelActive = RChannelActive;
     context.UnderTurret = Engine::UnderEnemyTurret(player.Position());
     context.Distance = player.Position().Distance2D(prediction.GetCastPosition());
@@ -272,17 +266,10 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
     if (!Engine::ControllerCastPosition(3, prediction.GetCastPosition())) return false;
     LastRCastTick = Now();
     RChannelActive = true;
-    RManualStarted = manual;
     RChannelUntil = Now() + 1800;
     return true;
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed() || RChannelActive) return false;
-    const auto selected = PlayerSelectedEnemy(kRRange);
-    const auto target = CombatTarget(selected.IsValid() ? selected : preferred, kRRange);
-    return target.IsValid() && CastR(target, Mode::Automatic, true);
-}
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     if (!target.IsValid()) return false;
@@ -294,12 +281,11 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return CastW(target, mode);
 }
 
-inline bool TryAutomatic(const AIHeroClient& preferred) {
-    if (TryManualR(preferred)) return true;
-    const auto target = CombatTarget(preferred, kRRange);
+inline bool TryAutomatic() {
+    const auto target = CombatTarget(kRRange);
     if (!target.IsValid()) return false;
     const bool lethal = SpellDamage(3, target) >= target.Health() + target.AllShield();
-    if (lethal && CastR(target, Mode::Automatic, false)) return true;
+    if (lethal && CastR(target, Mode::Automatic)) return true;
     if (GapcloserUntil > Now()) {
         const auto threat = HeroByNetworkId(GapcloserTargetId);
         if (Engine::ValidEnemy(threat, kQRange) && CastQ(threat, Mode::Automatic, true)) return true;
@@ -307,7 +293,7 @@ inline bool TryAutomatic(const AIHeroClient& preferred) {
     return TryCombat(target, Mode::Automatic);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileMarks();
     const int now = Now();
     if (EZone.Active && EZone.ExpiresAt <= static_cast<float>(now) / 1000.0f) EZone = {};
@@ -319,22 +305,21 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
              player.HasBuff("LuxLightstrikeToggle"));
         if (!observed && RChannelUntil <= now) {
             RChannelActive = false;
-            RManualStarted = false;
         } else {
             return true;
         }
     }
-    if (TryManualR(preferred)) return true;
-    if (mode == Mode::Automatic) return TryAutomatic(preferred);
+    if (mode == Mode::Automatic) return TryAutomatic();
     if (mode == Mode::Flee) {
-        if (CastW(preferred, mode, true, true)) return true;
-        return Engine::ValidEnemy(preferred, kQRange) && CastQ(preferred, mode, true);
+        const auto threat = Engine::SelectTarget(kQRange);
+        if (CastW(threat, mode, true)) return true;
+        return Engine::ValidEnemy(threat, kQRange) && CastQ(threat, mode, true);
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
         return Engine::TryFarm(mode);
     }
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        const auto target = CombatTarget(preferred, kERange + 50.0f);
+        const auto target = CombatTarget(kERange + 50.0f);
         return TryCombat(target, mode);
     }
     return false;
@@ -425,9 +410,8 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("Lux mechanics", "Lux mechanics"));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("Illumination", "Passive marks"));
-    PassiveMenu->Add(new MenuSeparator("RequireMark", "Track and consume Illumination marks before autos"));
+    PassiveMenu->Add(new MenuSeparator("RequireMark", "Track Illumination marks"));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu("FinalSpark", "Final Spark safety"));
-    UltimateMenu->Add(new MenuSeparator("ManualOnly", "Manual R bypasses local damage preference but never line safety"));
 }
 
 inline void OnLoad() {
@@ -440,7 +424,7 @@ inline void OnLoad() {
     WReturnExpected = WShieldObserved = false;
     ETargetId = 0;
     EZone = {};
-    RChannelActive = RManualStarted = false;
+    RChannelActive = false;
     RChannelUntil = 0;
     GapcloserTargetId = GapcloserUntil = 0;
     GapcloserEndpoint = {};
@@ -462,9 +446,9 @@ inline constexpr const char* Scenarios[] = {
     "Detonate E on lethal, rooted, slowed or expiring targets inside 295 radius",
     "Reject E and R casts through projectile walls and unsafe turret commit points",
     "Predict the global R beam at very-high confidence across its 3340 range",
-    "Use automatic R only for isolated lethal lines and manual R for explicit intent",
-    "Protect a manual Final Spark channel from the decision loop until it ends",
-    "Prefer selected target, then orbwalker target, while keeping a reachable route",
+    "Use automatic R only for isolated lethal lines with channel-safe policy",
+    "Reconcile Final Spark channel state until it ends",
+    "Use autonomous Engine target selection while keeping a reachable route",
     "Run Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic policies",
     "Reconcile local spell, auto, buff, gapcloser and missile lifecycle events",
 };
@@ -477,7 +461,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ResearchArtifact = "AI/Research/AILux.md";
     controller.ImplementationSummary =
         "Illumination mark ledger, first-collision Q root, returning W shield state, "
-        "recast-aware E slow zone and safe global Final Spark prediction with manual channel protection.";
+        "recast-aware E slow zone and safe global Final Spark prediction with channel reconciliation.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

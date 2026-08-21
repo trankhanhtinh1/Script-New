@@ -153,7 +153,6 @@ struct ResurrectionCandidate {
     int NearbyEnemies = 0;
     bool IsSelf = false;
     bool AlreadyProtected = false;
-    bool ManualSave = false;
     bool Valid = false;
 };
 
@@ -164,7 +163,6 @@ inline float ChronoTargetScore(const ResurrectionCandidate& candidate) {
     score += std::clamp(candidate.IncomingDamagePercent, 0.0f, 100.0f) * 4.2f;
     score += static_cast<float>(std::max(0, candidate.NearbyEnemies)) * 115.0f;
     if (candidate.IsSelf) score += 90.0f;
-    if (candidate.ManualSave) score += 420.0f;
     return score;
 }
 
@@ -182,12 +180,6 @@ inline int ChooseChronoTarget(const ResurrectionCandidate* candidates,
     return bestId;
 }
 
-inline bool ManualSaveProtected(bool controllerCast, bool recentlyManual,
-                                bool alreadyProtected, int nowTick,
-                                int manualUntilTick) {
-    return alreadyProtected || (!controllerCast && recentlyManual &&
-                                nowTick <= manualUntilTick);
-}
 
 inline bool LethalAfterShield(float damage, float health, float shield) {
     return damage >= std::max(0.0f, health) + std::max(0.0f, shield);

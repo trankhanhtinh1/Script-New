@@ -133,10 +133,5 @@ inline void RecordHunt(HuntMark& mark, int targetId, int now) {
 }
 
 enum class Form { Human, Cougar, Unknown };
-inline bool ShouldTransform(Form current, Form desired, bool targetNear,
-                            bool escape, bool manualOwnership) {
-    if (manualOwnership || current == Form::Unknown || current == desired) return false;
-    return targetNear || escape;
-}
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Nidalee::Geometry

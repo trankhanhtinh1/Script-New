@@ -3,11 +3,11 @@
 // ============================================================================
 // KuroAIO shared champion intelligence runtime.
 //
-// This engine deliberately assists the player's orbwalker intent instead of
-// taking ownership of movement.  It runs one champion profile at a time and
-// provides the safety/timing machinery every AI-prefixed champion receives:
-// plan state, prediction, AA weaving, manual-input protection, safe mobility,
-// reactive peel, interrupt, kill secure, farming and channel protection.
+// This engine owns the autonomous champion decision loop.  It runs one
+// champion profile at a time and provides the safety/timing machinery every
+// AI-prefixed champion receives: plan state, prediction, AA weaving, safe
+// mobility, reactive peel, interrupt, kill secure, farming and channel
+// protection.
 // ============================================================================
 
 #include "AIChampionProfile.h"
@@ -54,7 +54,6 @@ inline int LastActionTick = 0;
 inline int LastDecisionTick = 0;
 inline int LastEngineRequestTick = 0;
 inline int LastEngineRequestSlot = -1;
-inline int LastManualSpellTick = 0;
 inline int LastAfterAttackTick = 0;
 inline int LastBeforeAttackTick = 0;
 inline int LastTargetChangeTick = 0;
@@ -81,7 +80,6 @@ struct TrackedObject {
 inline std::unordered_map<std::uint32_t, TrackedObject> TrackedObjects;
 
 inline constexpr float kInfiniteSpeed = FLT_MAX;
-inline constexpr int kManualInputLockMs = 80;
 inline constexpr int kReactiveWindowMs = 700;
 inline constexpr int kPlanTargetGraceMs = 420;
 
@@ -747,6 +745,8 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     const TargetPurpose purpose = KuroPurposeForMode(mode);
     auto request = Plugins::KuroAIO::MakeKuroTargetRequest(
         range, damageType, purpose, DecisionPhase::Planning);
+    request.PreferredTargetId = 0;
+    request.RespectManualSelection = false;
     if (mode == Mode::Combo || mode == Mode::Harass) {
         request.ProfileHint = KuroProfileForMode(mode);
         request.HasProfileHint = true;
@@ -799,16 +799,6 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroPlanningRequest(
     return request;
 }
 
-inline void SyncFocusLeaseManualOverride(
-    const SDK::KuroTargetSelector::SelectionState& state) {
-    // A selected target is an explicit user authority even when the temporary
-    // manual key is no longer held.  Suspend, rather than delete, a lease so
-    // the coordinator can restore it when the override ends.
-    const bool manual = state.ManualOverrideActive ||
-        (state.PreferSelectedTarget && state.SelectedNetworkId > 0);
-    AICombatTargetCoordinator::FocusLease::SetManualOverride(
-        manual, manual ? state.SelectedNetworkId : 0);
-}
 
 inline void EnsureAllInTargetProvider();
 
@@ -827,10 +817,9 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     auto* kuro = SDK::KuroTargetSelector::ActiveService();
     EnsureAllInTargetProvider();
 
-    // The advanced service owns a per-tick snapshot, but its request still
-    // depends on the live selection state and FocusLease.  Do not return the
-    // legacy one-tick cache while Kuro is active or a lease could change
-    // targets without changing the requested range.
+    // The advanced service owns a per-tick snapshot; do not return the legacy
+    // cache while Kuro is active or an AI lease could change the target
+    // without changing the requested range.
     if (currentTick == lastSelectTick &&
         std::abs(range - lastSelectRange) < 1.0f) {
         if (ValidEnemy(cachedTarget, range)) {
@@ -888,44 +877,34 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     bool hardLeaseRequested = false;
     int hardLeaseTargetId = 0;
     if (kuro) {
-        const auto state = kuro->GetSelectionState();
-        SyncFocusLeaseManualOverride(state);
-        if (!state.Suspended) {
-            auto request = MakeKuroPlanningRequest(
-                range, damage, planningMode, planningSpec);
-            const bool preferSelected = ActiveProfile->PreferSelectedTarget &&
-                Bool(HumanMenu, "PreferSelected", true) &&
-                state.PreferSelectedTarget;
-            request.PreferredTargetId = preferSelected
-                ? state.SelectedNetworkId
-                : 0;
-            request.LockedTargetId = LockedTargetNetworkId != 0
-                ? LockedTargetNetworkId
-                : (ValidEnemy(cachedTarget, range)
-                    ? cachedTarget.NetworkId()
-                    : 0);
-            request.RespectManualSelection = preferSelected;
+        auto request = MakeKuroPlanningRequest(
+            range, damage, planningMode, planningSpec);
+        request.PreferredTargetId = 0;
+        request.LockedTargetId = LockedTargetNetworkId != 0
+            ? LockedTargetNetworkId
+            : (ValidEnemy(cachedTarget, range)
+                ? cachedTarget.NetworkId()
+                : 0);
+        request.RespectManualSelection = false;
 
-            const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(
-                currentTick);
-            if (!lease.ManualOverride &&
-                lease.Status == AICombatTargetCoordinator::LeaseStatus::Active &&
-                lease.TargetNetworkId > 0) {
-                if (lease.Strength ==
-                        AICombatTargetCoordinator::LeaseStrength::Hard) {
-                    request.RequiredTargetId = lease.TargetNetworkId;
-                    request.AllowFallback = false;
-                    hardLeaseRequested = true;
-                    hardLeaseTargetId = lease.TargetNetworkId;
-                } else if (request.PreferredTargetId == 0) {
-                    request.PreferredTargetId = lease.TargetNetworkId;
-                }
+        const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(
+            currentTick);
+        if (lease.Status == AICombatTargetCoordinator::LeaseStatus::Active &&
+            lease.TargetNetworkId > 0) {
+            if (lease.Strength ==
+                    AICombatTargetCoordinator::LeaseStrength::Hard) {
+                request.RequiredTargetId = lease.TargetNetworkId;
+                request.AllowFallback = false;
+                hardLeaseRequested = true;
+                hardLeaseTargetId = lease.TargetNetworkId;
+            } else {
+                request.PreferredTargetId = lease.TargetNetworkId;
             }
+        }
 
-            const auto decision = kuro->Select(request);
-            if (decision.Legal && ValidEnemy(decision.Target, range)) {
-                result = decision.Target;
-            }
+        const auto decision = kuro->Select(request);
+        if (decision.Legal && ValidEnemy(decision.Target, range)) {
+            result = decision.Target;
         }
     }
 
@@ -938,26 +917,13 @@ inline AIHeroClient SelectTarget(float range = -1.0f) {
     }
 
     if (!result.IsValid()) {
-        // Preserve the existing selected-target, locked-target, SDK-selector,
-        // and health fallback behavior when the advanced service is absent or
-        // returns no legal candidate.
-        if (ActiveProfile->PreferSelectedTarget &&
-            Bool(HumanMenu, "PreferSelected", true)) {
-            auto* selector = SDK::TargetSelector::GetTargetSelector("SDK");
-            if (selector) {
-                const auto selected = selector->GetSelectedTarget();
-                if (ValidEnemy(selected, range)) {
-                    result = selected;
-                }
-            }
-        }
+        // Keep the AI lease, SDK selector and health fallback paths available
+        // when the advanced service is absent or returns no legal candidate.
 
-        if (!result.IsValid()) {
             const auto locked = EnemyByNetworkId(LockedTargetNetworkId);
             if (ValidEnemy(locked, range)) {
                 result = locked;
             }
-        }
 
         if (!result.IsValid()) {
             if (auto* selector = SDK::TargetSelector::GetTargetSelector("SDK")) {
@@ -1083,16 +1049,6 @@ inline bool CanAct(bool reactive = false) {
         Plugins::KuroCombatCoordination::Coordinator::EvadeOwnsActions(now)) {
         return false;
     }
-    if (!reactive && Bool(HumanMenu, "RespectManual", true) &&
-        LastManualSpellTick > 0) {
-        const int now2 = SDK::Variables::TickCount();
-        const int lockMs = (Orbwalker::ActiveMode() == OrbwalkingMode::Combo)
-            ? std::max(40, kManualInputLockMs / 2)
-            : kManualInputLockMs;
-        if (now2 - LastManualSpellTick < lockMs) {
-            return false;
-        }
-    }
     if (IsPlayerCrowdControlled(player)) {
         return false;
     }
@@ -1128,25 +1084,21 @@ inline bool BuffRequirementsMet(const SpellSpec& spec, const AIHeroClient& targe
 
 inline bool UltimateAllowed(const SpellSpec& spec,
                             const AIHeroClient& target,
-                            Mode mode,
-                            bool manualAssist) {
+                            Mode mode) {
     if (!ActiveProfile || spec.Slot != SDK::SpellSlot::R) {
-        return true;
-    }
-    if (manualAssist || Key(AutomaticMenu, "ManualR", false)) {
         return true;
     }
 
     const auto player = GameObjects::Player();
     const float targetHp = target.IsValid() ? target.HealthPercent() : 100.0f;
-    const int enemies = CountEnemiesAt(player.Position(), std::max(500.0f, spec.TriggerRange));
+    const int enemies = CountEnemiesAt(
+        player.Position(), std::max(500.0f, spec.TriggerRange));
     const float damage = target.IsValid() && RuntimeSpells[3]
         ? RuntimeSpells[3]->GetDamage(target)
         : 0.0f;
 
     switch (ActiveProfile->Ultimate) {
     case UltimatePolicy::DisabledByDefault:
-    case UltimatePolicy::ManualAssist:
         return false;
     case UltimatePolicy::Execute:
         return target.IsValid() && damage > 0.0f && damage >= target.Health();
@@ -1160,14 +1112,16 @@ inline bool UltimateAllowed(const SpellSpec& spec,
             (targetHp <= ActiveProfile->UltimateTargetHealthPercent ||
              damage >= target.Health());
     case UltimatePolicy::MultiTarget:
-        return mode == Mode::Combo && enemies >= ActiveProfile->UltimateMinimumTargets;
+        return mode == Mode::Combo &&
+            enemies >= ActiveProfile->UltimateMinimumTargets;
     case UltimatePolicy::Defensive:
         return player.HealthPercent() <= ActiveProfile->DefensiveHealthPercent;
     case UltimatePolicy::SaveAlly:
         return false;
     case UltimatePolicy::GlobalExecute:
-        return Bool(AutomaticMenu, "GlobalExecute", false) && target.IsValid() &&
-               damage > 0.0f && damage >= target.Health();
+        return Bool(AutomaticMenu, "GlobalExecute", false) &&
+               target.IsValid() && damage > 0.0f &&
+               damage >= target.Health();
     case UltimatePolicy::RecastControl:
         return IsRuntimeRecast(3) ||
                (mode == Mode::Combo && target.IsValid() &&
@@ -1242,11 +1196,7 @@ inline bool StepRulesMet(const ComboStep& step,
         EstimatedDamage(target, index) >= target.Health()) {
         return false;
     }
-    if (Has(step.Rules, StepRule::ManualAssistOnly) &&
-        !Key(AutomaticMenu, "ManualR", false)) {
-        return false;
-    }
-    if (!UltimateAllowed(spec, target, mode, false)) {
+    if (!UltimateAllowed(spec, target, mode)) {
         return false;
     }
     return true;
@@ -1379,13 +1329,8 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroExecutionRequest(
         KuroPurposeForSpell(spec, mode) == TargetPurpose::Execute;
     request.LockedTargetId = target.NetworkId();
 
-    if (auto* kuro = SDK::KuroTargetSelector::ActiveService()) {
-        const auto state = kuro->GetSelectionState();
-        request.PreferredTargetId = state.PreferSelectedTarget
-            ? state.SelectedNetworkId
-            : 0;
-        request.RespectManualSelection = state.PreferSelectedTarget;
-    }
+    request.PreferredTargetId = 0;
+    request.RespectManualSelection = false;
     request.AllowFallback = false;
     request.RequireVisible = true;
     return request;
@@ -1409,7 +1354,7 @@ inline bool KuroExecutionAllowed(
         return true;
     }
     auto* kuro = SDK::KuroTargetSelector::ActiveService();
-    if (!kuro || kuro->GetSelectionState().Suspended) {
+    if (!kuro) {
         return true;
     }
     return kuro->ValidateExecution(
@@ -1581,8 +1526,7 @@ inline bool TryCast(const SpellSpec& spec,
                     const AIHeroClient& target,
                     Mode mode,
                     StepRule rules = StepRule::None,
-                    bool reactive = false,
-                    bool manualAssist = false) {
+                    bool reactive = false) {
     const int index = SlotIndex(spec.Slot);
     if (index < 0 || !RuntimeSpells[index] || !CanAct(reactive) ||
         !RuntimeSpells[index]->IsReady() || !ModeEnabled(spec, mode) ||
@@ -1599,7 +1543,7 @@ inline bool TryCast(const SpellSpec& spec,
     }
 
     if (spec.Slot == SDK::SpellSlot::R &&
-        !UltimateAllowed(spec, target, mode, manualAssist)) {
+        !UltimateAllowed(spec, target, mode)) {
         return false;
     }
     if (target.IsValid() && target.HealthPercent() > spec.TargetHealthPercent &&
@@ -1989,8 +1933,7 @@ inline bool TryKillSecure() {
         for (const int index : order) {
             const auto& spec = ResolvedSpecs[index];
             if (!Has(spec.Intents, Intent::Damage) || !RuntimeSpells[index] ||
-                !RuntimeSpells[index]->IsReady() || spec.Slot == SDK::SpellSlot::R &&
-                    ActiveProfile->Ultimate == UltimatePolicy::ManualAssist) {
+                !RuntimeSpells[index]->IsReady()) {
                 continue;
             }
             const float damage = RuntimeSpells[index]->GetDamage(enemy);
@@ -1998,7 +1941,7 @@ inline bool TryKillSecure() {
                 damage * 0.94f < enemy.Health()) {
                 continue;
             }
-            if (TryCast(spec, enemy, Mode::Automatic, StepRule::None, false)) {
+            if (TryCast(spec, enemy, Mode::Automatic, StepRule::None)) {
                 return true;
             }
         }
@@ -2128,14 +2071,6 @@ inline bool TryFarm(Mode mode) {
     return false;
 }
 
-inline bool TryManualUltimate() {
-    if (!ActiveProfile || !Key(AutomaticMenu, "ManualR", false)) {
-        return false;
-    }
-    const auto target = SelectTarget(std::max(1500.0f, ResolvedSpecs[3].Range));
-    return TryCast(ResolvedSpecs[3], target, Mode::Automatic,
-                   StepRule::None, false, true);
-}
 
 inline bool IsValidTrackedNetworkId(std::uint32_t networkId) {
     return networkId != 0 && networkId != 0xFFFFFFFFu;
@@ -2291,7 +2226,7 @@ inline void Game_OnUpdate(const SDK::Events::GameUpdateEventArgs&) {
     }
 
     if (TryEmergencyDefense() || TryPendingInterrupt() || TryPendingGapcloser() ||
-        TrySaveAlly() || TryManualUltimate() || TryKillSecure()) {
+        TrySaveAlly() || TryKillSecure()) {
         return;
     }
 
@@ -2326,15 +2261,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (index < 0) {
         return;
     }
-    const int now = SDK::Variables::TickCount();
-    const bool ours = WasControllerCast(index);
-    if (!ours) {
-        LastManualSpellTick = now;
-        if (Bool(HumanMenu, "ManualResetsPlan", true)) {
-            ResetPlan(CurrentMode(), LockedTargetNetworkId);
-        }
-    }
-    LastSlotCastTick[index] = now;
+    LastSlotCastTick[index] = SDK::Variables::TickCount();
 }
 
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -2520,7 +2447,7 @@ inline void BuildModeSpellToggles(Menu* menu, Mode mode, bool ultimateDefault) {
         char key[16] = {};
         char label[96] = {};
         _snprintf_s(key, sizeof(key), _TRUNCATE, "Use%s", SlotName(index));
-        _snprintf_s(label, sizeof(label), _TRUNCATE, "Use %s - %s",
+        _snprintf_s(label, sizeof(label), _TRUNCATE, "Use %s - %.24s",
                     SlotName(index), ResolvedSpecs[index].Name);
         const bool defaultValue = ModeEnabled(ResolvedSpecs[index], mode) &&
                                   (index != 3 || ultimateDefault);
@@ -2561,13 +2488,8 @@ inline void BuildMenu() {
     AutomaticMenu->Add(new MenuBool("EmergencyDefense", "Emergency defense", true));
     AutomaticMenu->Add(new MenuBool("SaveAllies", "Save allies", true));
     AutomaticMenu->Add(new MenuBool("GlobalExecute", "Global execute", false));
-    AutomaticMenu->Add(new MenuKeyBind(
-        "ManualR", "Semi-manual ultimate", Keys::T, KeyBindType::Press));
 
-    HumanMenu = MenuRoot->AddSubMenu(new Menu("Cooperation", "Cooperation"));
-    HumanMenu->Add(new MenuBool("PreferSelected", "Prefer selected target", true));
-    HumanMenu->Add(new MenuBool("RespectManual", "Respect manual cast", true));
-    HumanMenu->Add(new MenuBool("ManualResetsPlan", "Re-plan on manual cast", true));
+    HumanMenu = MenuRoot->AddSubMenu(new Menu("Automation", "Automation"));
     HumanMenu->Add(new MenuBool("PreserveAttacks", "Preserve windup", true));
     HumanMenu->Add(new MenuSlider(
         "Humanizer", "Humanizer delay (ms)",
@@ -2596,9 +2518,6 @@ inline void BuildMenu() {
 inline void RemoveMenu() {
     if (!MenuRoot) {
         return;
-    }
-    if (auto* item = AutomaticMenu ? AutomaticMenu->Get<MenuKeyBind>("ManualR") : nullptr) {
-        item->RemovePermashow();
     }
     MenuManager::Instance().Remove(MenuRoot);
     delete MenuRoot;
@@ -2637,7 +2556,6 @@ inline void OnGameLoad(const ChampionProfile& profile,
     LastDecisionTick = 0;
     LastEngineRequestTick = 0;
     LastEngineRequestSlot = -1;
-    LastManualSpellTick = 0;
     LastAfterAttackTick = 0;
     LastBeforeAttackTick = 0;
     LastSlotCastTick.fill(0);

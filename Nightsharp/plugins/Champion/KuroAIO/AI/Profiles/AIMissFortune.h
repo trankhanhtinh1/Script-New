@@ -13,7 +13,7 @@ inline constexpr ChampionProfile MissFortune = [] {
     p.Resource = ResourceModel::Mana;
     p.Mechanics = Mechanic::AutoWeave | Mechanic::Mark |
                   Mechanic::Channel;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::MultiTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Double Up", CastKind::EnemyTarget,
@@ -86,7 +86,6 @@ inline constexpr ChampionProfile MissFortune = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "MissFortunePassive";

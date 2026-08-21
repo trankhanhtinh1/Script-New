@@ -36,13 +36,10 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline bool WActive = false;
-inline bool WOwned = false;
 inline bool RActive = false;
-inline bool ROwned = false;
 inline int RStartTick = 0;
 inline int WStartTick = 0;
 inline int SpiritTargetId = 0;
@@ -119,9 +116,9 @@ inline void ReconcileState() {
     const bool runtimeR = player.HasBuff("IllaoiR") ||
         ControllerHelpers::RuntimeNameContains(3, "IllaoiR");
     if (runtimeW) WActive = true;
-    else if (WActive && now - WStartTick > 900) { WActive = false; WOwned = false; }
+    else if (WActive && now - WStartTick > 900) WActive = false;
     if (runtimeR) RActive = true;
-    else if (RActive && now - RStartTick > 1100) { RActive = false; ROwned = false; }
+    else if (RActive && now - RStartTick > 1100) RActive = false;
     if (!SpiritActive(now, SpiritTargetId, SpiritExpireTick)) {
         SpiritTargetId = 0;
         SpiritExpireTick = 0;
@@ -172,7 +169,6 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
     const Vec3 aim = PredictPosition(target, 0.10f);
     if (!aim.IsValid() || !Engine::ControllerCastPosition(1, aim)) return false;
     WActive = true;
-    WOwned = true;
     WStartTick = Now();
     LastCastTick[1] = Now();
     return true;
@@ -216,7 +212,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
         Slider(RMenu, "MaximumEnemies", 3) && !defensive && !lethal) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     RActive = true;
-    ROwned = true;
     RStartTick = Now();
     LastCastTick[3] = Now();
     return true;
@@ -246,12 +241,11 @@ inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target) && CastQ(target, Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target)) (void)CastE(target, Mode::Flee, true);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
     const float range = mode == Mode::Flee ? 1200.0f : kERange;
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected, range);
+    const auto target = Engine::SelectTarget(range);
     const auto player = GameObjects::Player();
     if (player.IsValid() && IncomingHardCcUntil > Now() && Engine::ValidEnemy(target) &&
         CastQ(target, mode, true)) return true;
@@ -276,17 +270,15 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
-            const bool ours = Engine::WasControllerCast(slot);
-            if (!ours) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
-            if (slot == 1) { WActive = true; WOwned = ours; WStartTick = now; }
+            if (slot == 1) { WActive = true; WStartTick = now; }
             if (slot == 2) {
                 SpiritTargetId = args.TargetNetworkId != 0 ? static_cast<int>(args.TargetNetworkId) :
                     static_cast<int>(args.Target.NetworkId);
                 SpiritExpireTick = now + static_cast<int>(kESpiritSeconds * 1000.0f);
                 SpiritVessel = SpiritTargetId != 0;
             }
-            if (slot == 3) { RActive = true; ROwned = ours; RStartTick = now; }
+            if (slot == 3) { RActive = true; RStartTick = now; }
         }
         return;
     }
@@ -345,8 +337,7 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs&) {}
 inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs&) {}
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (!args.Target.IsValid()) return;
-    if (ManualOwnershipUntil > Now() || (WActive && !WOwned)) args.Process = false;
+    (void)args;
 }
 inline void OnDraw() {
     if (!Bool(CoachMenu, "DrawRanges", false)) return;
@@ -362,7 +353,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("IllaoiOneTrick", "Illaoi tentacle tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Tentacle Smash"));
     QMenu->Add(new MenuBool("RequireHighHitChance", "Require high prediction", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Harsh Lesson leap/reset"));
@@ -379,9 +369,9 @@ inline void BuildMenu(Menu* root) {
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw ranges and tentacles", false));
 }
 inline void OnLoad() {
-    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
-    IncomingThreatUntil = IncomingHardCcUntil = 0; WActive = WOwned = false;
-    RActive = ROwned = false; RStartTick = WStartTick = 0;
+    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = 0;
+    IncomingThreatUntil = IncomingHardCcUntil = 0; WActive = false;
+    RActive = false; RStartTick = WStartTick = 0;
     SpiritTargetId = SpiritExpireTick = 0; SpiritVessel = false;
     Tentacles.fill({}); LastMode = Mode::None;
 }
@@ -393,14 +383,14 @@ inline constexpr const char* Scenarios[] = {
     "Predict Q Tentacle Smash slam with 825 reach, 105 width and 0.75-second windup",
     "Reject Q through projectile or navmesh walls and turret-only endpoints",
     "Preserve ordinary attack windup while allowing reactive Q peel",
-    "Use W Harsh Lesson as a reachable leap and attack reset with manual ownership",
+    "Use W Harsh Lesson as a reachable leap and attack reset",
     "Gate W on mana, health, turret exposure and nearby-enemy density",
     "Track E Test of Spirit vessel target and seven-second spirit window from events and polling",
     "Reject E when prediction, reach, collision, projectile wall or spell protection fails",
     "Apply E spirit leash, vessel duration, slow and damage-transfer state",
     "Spawn and reconcile R tentacles from object events and eight-second field state",
     "Use R only for low-health, lethal or multi-target commitments with turret safety",
-    "Respect mana costs, cooldown throttles, selected-target preference and orbwalker fallback",
+    "Respect mana costs, cooldown throttles, autonomous target selection and orbwalker fallback",
     "Capture enemy threat and hard crowd-control windows through process-spell callbacks",
     "Support Combo Harass LaneClear Jungle LastHit Flee and Automatic modes distinctly",
     "Keep Q/W/E/R damage, reach, spawn count and lifecycle boundaries in standalone geometry",

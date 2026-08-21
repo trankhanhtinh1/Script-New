@@ -114,7 +114,6 @@ struct ParanoiaSafety {
     bool PointClickLockdown = false;
     bool DashHazard = false;
     bool Lethal = false;
-    bool Manual = false;
     int EnemiesAtLanding = 0;
     int AlliesAtLanding = 0;
     int MaximumEnemies = 2;
@@ -130,7 +129,7 @@ inline bool SafeParanoiaCommit(const ParanoiaSafety& context) {
     const int alliesAfterArrival = std::max(0, context.AlliesAtLanding) + 1;
     if (enemies > std::max(1, context.MaximumEnemies)) return false;
     if (enemies > alliesAfterArrival && !context.Lethal) return false;
-    return context.Manual || context.Lethal || enemies <= alliesAfterArrival;
+    return context.Lethal || enemies <= alliesAfterArrival;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Nocturne::Geometry

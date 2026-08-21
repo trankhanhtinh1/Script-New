@@ -178,13 +178,9 @@ inline int CountLineHits(const Vec3& origin, const Vec3& endpoint,
 }
 inline bool ShouldCastR(bool ready, bool targetValid, bool predictionAccepted,
                         bool projectileBlocked, bool lethal, bool defensive,
-                        bool manual, int predictedHits, int minimumHits) {
+                        int predictedHits, int minimumHits) {
     if (!ready || !targetValid || !predictionAccepted || projectileBlocked) return false;
-    return lethal || defensive || manual || predictedHits >= std::max(1, minimumHits);
-}
-inline bool AutomaticAllowed(bool defensive, bool interrupt, bool killSecure,
-                            bool freshEngage, bool manualOwnership) {
-    return !freshEngage && !manualOwnership && (defensive || interrupt || killSecure);
+    return lethal || defensive || predictedHits >= std::max(1, minimumHits);
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Sejuani::Geometry

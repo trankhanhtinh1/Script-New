@@ -40,7 +40,7 @@ inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline bool RActive = false;
@@ -347,8 +347,7 @@ inline void Flee(const AIHeroClient& threat) {
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
-    const AIHeroClient target = PreferredEnemyTarget(selected, kWRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = PreferredEnemyTarget(selected, kWRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastE(target, mode, true, true, false)) return true;
     if (Engine::ValidEnemy(target) &&
@@ -381,9 +380,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) {
-                PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-            }
             if (slot == 0) ObservedQAmmo = std::max(0, RuntimeQAmmo() - 1);
             if (slot == 3) {
                 RActive = !RActive;
@@ -473,20 +469,19 @@ inline void OnDraw() {
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("HeimerTactics", "Turret zone and manual ownership"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("HeimerTactics", "Turret zone and object safety"));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     TurretMenu = TacticsMenu->AddSubMenu(new Menu("Turrets", "H-28G ammo and zone safety"));
     TurretMenu->Add(new MenuSlider("MaxPlacementEnemies", "Maximum enemies at placement", 2, 0, 5));
     RocketMenu = TacticsMenu->AddSubMenu(new Menu("Rockets", "Five-rocket collision policy"));
     GrenadeMenu = TacticsMenu->AddSubMenu(new Menu("Grenade", "Center-stun policy"));
     UpgradeMenu = TacticsMenu->AddSubMenu(new Menu("Upgrade", "UPGRADE!!! choice"));
-    UpgradeMenu->Add(new MenuSlider("StartUpgradeBelowHP", "Start upgrade below target HP percent", 48, 10, 90));
+    UpgradeMenu->Add(new MenuSlider("StartUpgradeBelowHP", "Upgrade below target HP (%)", 48, 10, 90));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Farm", "Turret zone waveclear"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 42, 0, 90));
     FarmMenu->Add(new MenuSlider("MinimumRocketUnits", "Minimum rocket farm units", 3, 1, 8));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("Coach", "Range and turret drawing"));
-    CoachMenu->Add(new MenuBool("DrawRanges", "Draw rocket, grenade and turret ranges", false));
+    CoachMenu->Add(new MenuBool("DrawRanges", "Draw spell and turret ranges", false));
 }
 inline void OnLoad() {
     Turrets = {};
@@ -494,7 +489,7 @@ inline void OnLoad() {
     ObservedQMaxAmmo = 3;
     QAmmoObserved = false;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    LastAutoTargetId = LastAutoTick = IncomingThreatUntil = IncomingHardCCUntil = 0;
     RActive = false;
     RExpireTick = 0;
     ActiveUpgrade = UpgradeChoice::None;
@@ -518,7 +513,7 @@ inline constexpr const char* Scenarios[] = {
     "Choose upgraded turret for defensive zone, rockets for multi-target pressure, and grenade for stun or execute",
     "Preserve selected target before orbwalker fallback and refuse protected or untargetable targets",
     "Preserve AA windup for ordinary Q/E/W casts while permitting only reactive or lethal interruption",
-    "Reconcile R active/recast state from spell events, buffs and polling and yield manual ownership",
+    "Reconcile R active/recast state from spell events, buffs and polling and reconcile cast state/",
     "Combo establishes turret zone, lands grenade stun, fires rockets, then uses an upgrade with value",
     "Harass uses turret setup and center grenade without spending upgrade for routine poke",
     "LaneClear, Jungle and LastHit use turret placement plus rocket cluster policy and mana reserve",
@@ -532,7 +527,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ControllerId = "champion.kuroaio.ai.heimerdinger.onetrick";
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIHeimerdinger.md";
-    controller.ImplementationSummary = "Turret-ammo and object-aware zone controller with grenade center-stun, collision-safe rockets, upgrade selection, manual ownership and combat/farm/flee policies.";
+    controller.ImplementationSummary = "Turret-ammo and object-aware zone controller with grenade center-stun, collision-safe rockets, upgrade selection, autonomous combat/farm/flee policies/.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

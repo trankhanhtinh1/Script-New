@@ -93,7 +93,6 @@ inline constexpr ChampionProfile Taric = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "TaricPassive";

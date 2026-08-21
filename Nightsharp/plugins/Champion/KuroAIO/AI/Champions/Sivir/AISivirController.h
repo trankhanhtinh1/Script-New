@@ -113,12 +113,8 @@ inline void RefreshThreatState() {
     if (ShieldActiveUntil < Now()) ShieldActiveUntil = 0;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& preferred,
-                                 float range = kQMaximumRange) {
-    if (Engine::ValidEnemy(preferred, range)) return preferred;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(range);
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    return NearestEnemyToPlayer(preferred, range);
+inline AIHeroClient SelectTarget(float range = kQMaximumRange) {
+    return Engine::SelectTarget(range);
 }
 
 inline int NearbyUniqueTargets(const AIHeroClient& primary, float range) {
@@ -132,8 +128,8 @@ inline int NearbyUniqueTargets(const AIHeroClient& primary, float range) {
     return count;
 }
 
-inline bool CastQ(const AIHeroClient& target, Mode mode, bool manual = false) {
-    if (!CanCast(0, mode, manual) || QActive ||
+inline bool CastQ(const AIHeroClient& target, Mode mode) {
+    if (!CanCast(0, mode) || QActive ||
         !Engine::ValidEnemy(target, kQMaximumRange + 90.0f)) return false;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
@@ -160,7 +156,6 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool manual = false) {
     context.OutsideAttackRange = !InAutoAttackRange(target);
     context.Lethal = SpellDamage(0, target) >=
         target.Health() + target.AllShield();
-    context.Manual = manual;
     if (!ShouldThrowBoomerang(context)) return false;
 
     if (!Engine::ControllerCastPosition(0, cast)) return false;
@@ -212,8 +207,8 @@ inline RPosture ResolvePosture(Mode mode) {
     return mode == Mode::Combo ? RPosture::Engage : RPosture::Hold;
 }
 
-inline bool CastR(Mode mode, bool manual = false) {
-    if (!CanCast(3, mode, manual)) return false;
+inline bool CastR(Mode mode) {
+    if (!CanCast(3, mode)) return false;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     const int enemies = Engine::CountEnemiesAt(player.Position(), 900.0f);
@@ -229,7 +224,6 @@ inline bool CastR(Mode mode, bool manual = false) {
     context.AlliesMovingWithPlayer = allies > 0 || mode == Mode::Flee;
     context.AlliedFollowup = allies > 0;
     context.EnemyCommitment = GapcloserExpireTick >= Now();
-    context.Manual = manual;
     context.NearbyAllies = allies;
     context.NearbyEnemies = enemies;
     if (!ShouldCastOnTheHunt(context)) return false;
@@ -243,12 +237,7 @@ inline bool TryReactiveShield() {
     return CastE(Mode::Automatic, true);
 }
 
-inline bool TryManualUltimate() {
-    return ManualUltimatePressed() && CastR(Mode::Automatic, true);
-}
-
-inline bool TryCombat(const AIHeroClient& preferred, Mode mode) {
-    const auto target = SelectTarget(preferred);
+inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target, kQMaximumRange + 90.0f)) return false;
     if (CastW(target, mode, false)) return true;
     return CastQ(target, mode);
@@ -271,16 +260,15 @@ inline bool TryFarm(Mode mode) {
     return Engine::TryFarmSpell(1, jungle, lastHit);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     RefreshThreatState();
     ReconcileQState();
     if (TryReactiveShield()) return true;
-    if (TryManualUltimate()) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    const AIHeroClient target = Engine::SelectTarget(kQMaximumRange);
+    if (mode == Mode::Flee) return TryFlee(target);
     if (mode == Mode::Combo || mode == Mode::Harass || mode == Mode::Automatic) {
         if (mode == Mode::Combo && CastR(mode)) return true;
-        const auto target = SelectTarget(preferred);
         if (Engine::ValidEnemy(target) && TryCombat(target, mode)) return true;
         return mode == Mode::Automatic && CastR(mode);
     }
@@ -393,7 +381,7 @@ inline void BuildMenu(Menu* root) {
     RicochetMenu = TacticsMenu->AddSubMenu(new Menu("Ricochet", "Ricochet target policy"));
     RicochetMenu->Add(new MenuSlider("ManaPercent", "Minimum W mana (%)", 42, 10, 90));
     ShieldMenu = TacticsMenu->AddSubMenu(new Menu("SpellShield", "Spell Shield timing"));
-    ShieldMenu->Add(new MenuSeparator("ImpactWindow", "Cast E only inside a verified impact window"));
+    ShieldMenu->Add(new MenuSeparator("ImpactWindow", "Cast E during impact window"));
     HuntMenu = TacticsMenu->AddSubMenu(new Menu("OnTheHunt", "Ally movement and engage posture"));
     HuntMenu->Add(new MenuSlider("ThreatHealth", "R self-peel health (%)", 48, 10, 80));
 }
@@ -422,7 +410,7 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Anchor Q to the selected or orbwalker target and reject collision objects",
+    "Anchor Q to the autonomous engine target and reject collision objects",
     "Evaluate Q outgoing and reverse return lines as independent collision passes",
     "Allow Q outside attack range, on escape, lethal damage or a verified return hit",
     "Reconcile a missing Q missile callback and expire stale boomerang state",
@@ -435,7 +423,7 @@ inline constexpr const char* Scenarios[] = {
     "Use R for coordinated engage when allies move with the player",
     "Use R for committed peel or flee movement when the player is threatened",
     "Reject blind automatic R with no allied follow-up or enemy pressure",
-    "Preserve selected target, orbwalker attacks, manual casts and AA windup",
+    "Preserve engine routing, orbwalker attacks and AA windup",
     "Run Q, W, E, R, farm and reactive policies through the owned update loop",
 };
 

@@ -442,7 +442,7 @@ inline constexpr const char* Scenarios[] = {
     "detonation damage, shield and lethal gates",
     "turret, enemy-count and low-health commit safety",
     "combo, harass, lane clear, jungle, last-hit, flee and automatic modes",
-    "manual cast ownership, missile lifecycle and polling reconciliation",
+    "autonomous cast state, missile lifecycle and polling reconciliation",
 };
 
 inline constexpr ChampionController Controller = [] {

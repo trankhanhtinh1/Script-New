@@ -15,10 +15,7 @@ using namespace Geometry;
 using namespace MarksmanControllerHelpers;
 using ControllerHelpers::CaptureLocalAutoAttackEvent;
 using ControllerHelpers::InAutoAttackRange;
-using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
-using ControllerHelpers::OrbwalkerHeroTarget;
-using ControllerHelpers::PlayerSelectedEnemy;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
 
@@ -91,13 +88,8 @@ inline bool CanUse(int index, Mode mode, bool reactive = false) {
     return true;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& preferred) {
-    const auto selected = PlayerSelectedEnemy(1300.0f);
-    if (Engine::ValidEnemy(selected, 1300.0f)) return selected;
-    const auto orb = OrbwalkerHeroTarget(1300.0f);
-    if (Engine::ValidEnemy(orb, 1300.0f)) return orb;
-    if (Engine::ValidEnemy(preferred, 1300.0f)) return preferred;
-    return NearestEnemyToPlayer({}, 1300.0f);
+inline AIHeroClient SelectTarget(float range = 1300.0f) {
+    return Engine::SelectTarget(range);
 }
 
 inline bool IsMarked(const AIHeroClient& target) {
@@ -252,9 +244,9 @@ inline bool TryAutomatic(const AIHeroClient& target) {
     return CastR(target, Mode::Automatic, false);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
-    const auto target = SelectTarget(preferred);
+    const auto target = SelectTarget();
     ReconcileHarrier(target);
     if (LastWCastTick > 0 && Now() - LastWCastTick > kRevealDurationMs) RevealObserved = false;
 
@@ -325,13 +317,13 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("QuinnMechanics", "Quinn Mechanics"));
     HarrierMenu = TacticsMenu->AddSubMenu(new Menu("Harrier", "Harrier marks"));
-    HarrierMenu->Add(new MenuSeparator("Consume", "Consume Harrier on the selected attack target"));
+    HarrierMenu->Add(new MenuSeparator("Consume", "Consume Harrier on attack"));
     ScoutingMenu = TacticsMenu->AddSubMenu(new Menu("Scouting", "Heightened Senses scouting"));
-    ScoutingMenu->Add(new MenuSeparator("Reveal", "Reveal hidden enemies before facechecking"));
+    ScoutingMenu->Add(new MenuSeparator("Reveal", "Reveal hidden enemies"));
     VaultMenu = TacticsMenu->AddSubMenu(new Menu("Vault", "Vault displacement safety"));
-    VaultMenu->Add(new MenuSeparator("Landing", "Reject walls, unsafe enemy counts and turret landings"));
+    VaultMenu->Add(new MenuSeparator("Landing", "Reject unsafe Vault landings"));
     BehindLinesMenu = TacticsMenu->AddSubMenu(new Menu("BehindEnemyLines", "Behind Enemy Lines"));
-    BehindLinesMenu->Add(new MenuSeparator("Movement", "Keep R movement and recast safety player-owned"));
+    BehindLinesMenu->Add(new MenuSeparator("Movement", "Keep R movement player-owned"));
 }
 
 inline void OnLoad() {
@@ -356,8 +348,8 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Reconcile Harrier from QuinnPassiveMarked and polling before choosing a target",
-    "Prefer the selected enemy, then the orbwalker's hero target, then a nearest fallback",
+    "Reconcile Harrier from QuinnPassiveMarked and polling before choosing an engine target",
+    "Use the engine-selected enemy target for combat and farm fallback",
     "Consume one Harrier mark only after the recorded attack lands on that target",
     "Preserve a meaningful auto-attack windup before offensive Q or E",
     "Cast Blinding Assault through prediction with the first collision as the blind target",

@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Swain = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 58;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SwainSoulCounter";

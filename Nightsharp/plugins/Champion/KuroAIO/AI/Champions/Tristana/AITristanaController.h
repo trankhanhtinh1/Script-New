@@ -242,8 +242,7 @@ inline AIHeroClient CurrentTristanaFocus(float range) {
     if (lease.OwnerId != kFocusLeaseOwnerId ||
         lease.TargetNetworkId <= 0 ||
         lease.Status == AICombatTargetCoordinator::LeaseStatus::Inactive ||
-        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal ||
-        lease.ManualOverride) {
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal) {
         return {};
     }
 
@@ -426,18 +425,15 @@ inline BusterContext BuildBusterContext(const AIHeroClient& target,
 
 inline bool CastR(const AIHeroClient& target,
                   Mode mode,
-                  bool gapcloser,
-                  bool manual) {
+                  bool gapcloser) {
     if (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !TargetedSpellReach(target) ||
         ControllerHelpers::HasSpellShieldOrImmunity(target) ||
         !CastThrottlePassed(LastRCastTick, 90)) return false;
-    if (!manual && !CanUse(3, mode, gapcloser)) return false;
+    if (!CanUse(3, mode, gapcloser)) return false;
     const auto context = BuildBusterContext(target, mode, gapcloser);
     if (context.ProjectileWall) return false;
-    if (!manual && !ShouldCastBusterShot(context)) return false;
-    if (manual && !context.InRange) return false;
     PrepareTargetedCastRange(3, target);
     if (!Engine::ControllerCastUnit(3, target)) return false;
     LastRCastTick = Now();
@@ -520,8 +516,6 @@ inline bool ImmediateAttackKill(const AIHeroClient& target) {
 }
 
 inline AIHeroClient ProtectedImmediateAttackKill() {
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(850.0f);
-    if (ImmediateAttackKill(selected)) return selected;
     const auto orbTarget = ControllerHelpers::OrbwalkerHeroTarget(850.0f);
     return ImmediateAttackKill(orbTarget) ? orbTarget : AIHeroClient{};
 }
@@ -608,7 +602,7 @@ inline bool TryAntiGapcloser() {
     if (GapcloserExpireTick < Now()) return false;
     const auto target = ControllerHelpers::HeroByNetworkId(GapcloserTargetId);
     return Engine::ValidEnemy(target) &&
-           CastR(target, Mode::Automatic, true, false);
+           CastR(target, Mode::Automatic, true);
 }
 
 inline bool TryKillSecure(const AIHeroClient& preferred) {
@@ -624,13 +618,13 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
     if (!Engine::ValidEnemy(target)) return false;
     // Never spend Rocket Jump from the generic automatic kill-secure loop.
     // R is targeted and does not sacrifice Tristana's position.
-    return CastR(target, Mode::Automatic, false, false);
+    return CastR(target, Mode::Automatic, false);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
     if (TryPendingRapidFire()) return true;
-    if (CastR(target, mode, false, false)) return true;
+    if (CastR(target, mode, false)) return true;
     return CastWOnTarget(target, mode);
 }
 
@@ -643,12 +637,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
         ReleaseTristanaFocus();
         PendingRapidFireTargetId = PendingRapidFireUntil = 0;
     }
-    if (ManualUltimatePressed()) {
-        const auto target = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, TargetedRange() + 125.0f);
-        if (Engine::ValidEnemy(target) &&
-            CastR(target, Mode::Automatic, false, true)) return true;
-    }
     if (TryAntiGapcloser()) return true;
     if (TryKillSecure(preferred)) return true;
     if (combat) {
@@ -660,7 +648,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
         const auto threat = ControllerHelpers::NearestEnemyToPlayer(
             preferred, 950.0f);
         if (Engine::ValidEnemy(threat) &&
-            CastR(threat, Mode::Flee, true, false)) return true;
+            CastR(threat, Mode::Flee, true)) return true;
         return CastWFlee(threat);
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
@@ -741,7 +729,7 @@ inline void BuildMenu(Menu* root) {
     ChargeMenu = TacticsMenu->AddSubMenu(new Menu(
         "ExplosiveChargeLogic", "Explosive Charge / Orbwalker"));
     ChargeMenu->Add(new MenuSeparator(
-        "Focus", "Focus reachable E targets until detonation"));
+        "Focus", "Focus E targets until detonation"));
     JumpMenu = TacticsMenu->AddSubMenu(new Menu(
         "RocketJumpLogic", "Rocket Jump Safety"));
     JumpMenu->Add(new MenuSlider(
@@ -749,7 +737,7 @@ inline void BuildMenu(Menu* root) {
     BusterMenu = TacticsMenu->AddSubMenu(new Menu(
         "BusterShotLogic", "Buster Shot"));
     BusterMenu->Add(new MenuSeparator(
-        "Reserve", "R is reserved for lethal detonation or peel"));
+        "Reserve", "Reserve R for lethal or peel"));
 }
 
 inline void OnLoad() {

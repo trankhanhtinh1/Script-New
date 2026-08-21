@@ -40,9 +40,7 @@ struct PassiveStatus {
 
 enum class TargetMode {
     Normal = 0,
-    Optional = 1,
-    Selected = 2,
-    Priority = 3
+    Priority = 1
 };
 
 struct DashTarget {
@@ -72,11 +70,8 @@ inline Menu* ComboMenu = nullptr;
 inline Menu* HarassMenu = nullptr;
 inline Menu* TargetMenu = nullptr;
 inline Menu* PriorityModeMenu = nullptr;
-inline Menu* OptionalModeMenu = nullptr;
-inline Menu* SelectedModeMenu = nullptr;
 inline Menu* LaneClearMenu = nullptr;
 inline Menu* JungleClearMenu = nullptr;
-inline Menu* MiscMenu = nullptr;
 inline Menu* DrawMenu = nullptr;
 inline Menu* EvadeTargetMenu = nullptr;
 inline Menu* EvadeOthersMenu = nullptr;
@@ -89,9 +84,6 @@ inline std::vector<EffectEmitter> FioraUltiPassiveObjects;
 inline std::vector<DetectedTarget> DetectedTargets;
 inline std::vector<DashTarget> DetectedDashes;
 
-inline AIHeroClient OptionalTarget;
-inline AIHeroClient OldOptionalTarget;
-inline AIHeroClient PreOptionalTarget;
 
 inline int RivenDashTick = 0;
 inline int RivenQ3Tick = 0;
@@ -102,7 +94,6 @@ inline Vector2 FizzFishEndPos;
 inline GameObject FizzFishChum;
 inline int FizzFishChumStartTick = 0;
 
-inline int movetick = 0;
 
 // Vitals Lists
 inline const std::vector<std::string> FioraPassiveNames = {
@@ -117,13 +108,6 @@ inline const std::vector<std::string> FioraPrePassiveNames = {
 // ============================================================================
 // Helper Functions & Math Extensions
 // ============================================================================
-
-#ifndef WM_KEYDOWN
-#define WM_KEYDOWN 0x0100
-#endif
-#ifndef WM_LBUTTONDOWN
-#define WM_LBUTTONDOWN 0x0201
-#endif
 
 inline bool EqualsIgnoreCase(const char* left, const char* right) {
     return left && right && left[0] && right[0] && _stricmp(left, right) == 0;
@@ -298,26 +282,14 @@ static std::vector<Vector2> GetRadiusPoints(const Vector2& targetpredictedpos, c
 // Target Selector Toggles & Ranges
 // ============================================================================
 
-static float OptionalRange() {
-    return OptionalModeMenu ? static_cast<float>(Slider(OptionalModeMenu, "OptionalRange", 1000)) : 1000.0f;
-}
-
-static float SelectedRange() {
-    return SelectedModeMenu ? static_cast<float>(Slider(SelectedModeMenu, "SelectedRange", 1000)) : 1000.0f;
-}
-
 static float PriorityRange() {
     return PriorityModeMenu ? static_cast<float>(Slider(PriorityModeMenu, "PriorityRange", 1000)) : 1000.0f;
 }
 
 static TargetMode GetTargetingMode() {
-    int idx = List(TargetMenu, "TargetingMode", 3);
-    switch (idx) {
-        case 0: return TargetMode::Optional;
-        case 1: return TargetMode::Selected;
-        case 2: return TargetMode::Priority;
-        default: return TargetMode::Normal;
-    }
+    return List(TargetMenu, "TargetingMode", 1) == 0
+        ? TargetMode::Priority
+        : TargetMode::Normal;
 }
 
 static AIHeroClient GetUltedTarget() {
@@ -336,35 +308,9 @@ static AIHeroClient GetUltedTarget() {
     return AIHeroClient();
 }
 
-static AIHeroClient GetOptionalTarget() {
-    auto ulted = GetUltedTarget();
-    float oRange = OptionalRange();
-    if (ValidHeroTarget(ulted, oRange)) {
-        OptionalTarget = ulted;
-        return OptionalTarget;
-    }
-    if (ValidHeroTarget(OptionalTarget, oRange)) {
-        return OptionalTarget;
-    }
-
-    AIHeroClient best;
-    float bestDist = FLT_MAX;
-    const auto player = Player();
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, oRange)) continue;
-        float dist = player.Position().Distance(enemy.Position());
-        if (dist < bestDist) {
-            best = enemy;
-            bestDist = dist;
-        }
-    }
-    OptionalTarget = best;
-    return OptionalTarget;
-}
-
 static AIHeroClient GetPriorityTarget() {
     auto ulted = GetUltedTarget();
-    float pRange = PriorityRange();
+    const float pRange = PriorityRange();
     if (ValidHeroTarget(ulted, pRange)) {
         return ulted;
     }
@@ -378,13 +324,13 @@ static AIHeroClient GetPriorityTarget() {
             SDK::ChampionIdFromName(GetObjectCharacterName(enemy).c_str());
         const char* championName = SDK::ChampionName(championId);
         if (championId == SDK::ChampionId::Unknown || !championName[0]) continue;
-        std::string key = "Priority" + std::string(championName);
-        int p = Slider(PriorityModeMenu, key.c_str(), 2);
-        if (p > bestPriority) {
+        const std::string key = "Priority" + std::string(championName);
+        const int priority = Slider(PriorityModeMenu, key.c_str(), 2);
+        if (priority > bestPriority) {
             best = enemy;
-            bestPriority = p;
+            bestPriority = priority;
             bestHealth = enemy.Health();
-        } else if (p == bestPriority && enemy.Health() < bestHealth) {
+        } else if (priority == bestPriority && enemy.Health() < bestHealth) {
             best = enemy;
             bestHealth = enemy.Health();
         }
@@ -392,24 +338,8 @@ static AIHeroClient GetPriorityTarget() {
     return best;
 }
 
-static AIHeroClient GetSelectedTarget() {
-    auto ulted = GetUltedTarget();
-    float sRange = SelectedRange();
-    if (ValidHeroTarget(ulted, sRange)) {
-        return ulted;
-    }
-    auto tar = SDK::TargetSelector::Instance()->GetSelectedTarget();
-    if (ValidHeroTarget(tar, sRange)) {
-        return tar;
-    }
-    if (Bool(SelectedModeMenu, "SelectedSwitchIfNoSelected", true)) {
-        return GetOptionalTarget();
-    }
-    return AIHeroClient();
-}
-
 static AIHeroClient GetStandarTarget(float range) {
-    auto ulted = GetUltedTarget();
+    const auto ulted = GetUltedTarget();
     if (ValidHeroTarget(ulted, 500.0f)) {
         return ulted;
     }
@@ -417,16 +347,9 @@ static AIHeroClient GetStandarTarget(float range) {
 }
 
 static AIHeroClient GetFioraTarget(float range = 500.0f) {
-    const TargetMode mode = GetTargetingMode();
-    if (mode == TargetMode::Normal)
-        return GetStandarTarget(range);
-    if (mode == TargetMode::Optional)
-        return GetOptionalTarget();
-    if (mode == TargetMode::Priority)
-        return GetPriorityTarget();
-    if (mode == TargetMode::Selected)
-        return GetSelectedTarget();
-    return AIHeroClient();
+    return GetTargetingMode() == TargetMode::Priority
+        ? GetPriorityTarget()
+        : GetStandarTarget(range);
 }
 
 // ============================================================================
@@ -469,11 +392,8 @@ static void SolveInstantBlock() {
                 fallbackHero, W.Delay).GetUnitPosition();
             CastWPosition(castPosition.IsZero()
                 ? fallbackHero.Position() : castPosition);
-        } else {
-            Vector3 castPos = player.Position().Extend(SDK::Game::CursorPosition(), 100.0f);
-            CastWPosition(castPos);
-        }
     }
+}
 }
 
 static void SolveDelayBlock(int timeDelayMs) {
@@ -778,112 +698,6 @@ static bool CastActiveItem() {
     return false;
 }
 
-// ============================================================================
-// Wall Jump Methods
-// ============================================================================
-
-static Vector2 GetFirstWallPoint(const Vector2& from, const Vector2& to, float step = 25.0f) {
-    Vector2 direction = (to - from).Normalized();
-    float distance = from.Distance(to);
-    for (float d = 0.0f; d < distance; d += step) {
-        Vector2 testPoint = from + direction * d;
-        CollisionFlags flags = NavMesh::GetCollisionFlags(testPoint.x, testPoint.y);
-        if (HasFlag(flags, CollisionFlags::Wall) || HasFlag(flags, CollisionFlags::Building)) {
-            return from + direction * (d - step);
-        }
-    }
-    return {};
-}
-
-static Vector2 GetLastWallPoint(const Vector2& from, const Vector2& to, float step = 25.0f) {
-    Vector2 direction = (to - from).Normalized();
-    auto fstWall = GetFirstWallPoint(from, to, step);
-    if (fstWall.IsValid() && !fstWall.IsZero()) {
-        float distance = fstWall.Distance(to) + 1000.0f;
-        for (float d = step; d < distance; d += step) {
-            Vector2 testPoint = fstWall + direction * d;
-            CollisionFlags flags = NavMesh::GetCollisionFlags(testPoint.x, testPoint.y);
-            if (!HasFlag(flags, CollisionFlags::Wall) && !HasFlag(flags, CollisionFlags::Building)) {
-                return fstWall + direction * d;
-            }
-        }
-    }
-    return {};
-}
-
-static bool InMiddleWall(const Vector2& firstwall, const Vector2& lastwall) {
-    Vector2 midwall = (firstwall + lastwall) / 2.0f;
-    Vector2 point = midwall.Extend(SDK::Game::CursorPosition().To2D(), 50.0f);
-    // This probe is only a yes/no gate.  Fifteen-degree samples retain the
-    // wall-jump corridor check while avoiding 36 collision-grid reads every
-    // update when the key is held.
-    for (int i = 0; i <= 350; i += 15) {
-        Vector2 testpoint = RotateAround(point, midwall, static_cast<float>(i) * (3.14159265f / 180.0f));
-        CollisionFlags flags = NavMesh::GetCollisionFlags(testpoint.x, testpoint.y);
-        if (!HasFlag(flags, CollisionFlags::Wall) && !HasFlag(flags, CollisionFlags::Building)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static void RunWallJump() {
-    const auto player = Player();
-    if (!player.IsValid() || !Bool(MiscMenu, "WallJump", true) || !Key(MiscMenu, "WallJumpKey", false)) {
-        return;
-    }
-
-    const Vector2 playerPos2D = player.Position().To2D();
-    const Vector2 cursorPos2D = SDK::Game::CursorPosition().To2D();
-
-    auto fstWall = GetFirstWallPoint(playerPos2D, cursorPos2D);
-    if (fstWall.IsValid() && !fstWall.IsZero()) {
-        auto lstWall = GetLastWallPoint(fstWall, cursorPos2D);
-        if (lstWall.IsValid() && !lstWall.IsZero()) {
-            if (InMiddleWall(fstWall, lstWall)) {
-                Vector3 dest = player.Position().Extend(SDK::Game::CursorPosition(), 30.0f);
-                int now = SDK::Variables::TickCount();
-                int pingSafe = 70 + (std::min)(60, SDK::Game::Ping());
-                if (now - movetick >= pingSafe) {
-                    if (player.Position().Distance(SDK::Game::CursorPosition()) <= 1200.0f &&
-                        NavMesh::IsWall(player.Position().Extend(SDK::Game::CursorPosition(), 200.0f))) {
-                        SDK::IssueOrder(player, SDK::GameObjectOrder::MoveTo, player.Position().Extend(SDK::Game::CursorPosition(), -20.0f));
-                        movetick = now;
-                    } else {
-                        SDK::IssueOrder(player, SDK::GameObjectOrder::MoveTo, player.Position().Distance(SDK::Game::CursorPosition()) <= 1200.0f ?
-                                          player.Position().Extend(SDK::Game::CursorPosition(), 200.0f) : SDK::Game::CursorPosition());
-                        movetick = now;
-                    }
-                }
-                if (NavMesh::IsWall(dest) && SDK::Prediction::GetPrediction(player, 0.5f).GetUnitPosition().To2D().Distance(playerPos2D) <= 10.0f && Q.IsReady()) {
-                    Vector2 pos = playerPos2D.Extend(cursorPos2D, 100.0f);
-                    // A one-degree sweep performed up to 360 times and
-                    // continued casting after a valid point was found.  A
-                    // four-degree broad sweep is sufficient for the 400-unit
-                    // Q dash; stop after the first valid escape point.
-                    for (int i = 0; i < 360; i += 4) {
-                        float angleRad = static_cast<float>(i) * (3.14159265f / 180.0f);
-                        Vector2 pos1 = RotateAround(pos, playerPos2D, angleRad);
-                        Vector2 pos2 = playerPos2D.Extend(pos1, 400.0f);
-                        if (InTheCone(pos1, playerPos2D, cursorPos2D, 60.0) && NavMesh::IsWall(Vector3::From2D(pos1)) && !NavMesh::IsWall(Vector3::From2D(pos2))) {
-                            Q.Cast(Vector3::From2D(pos2));
-                            break;
-                        }
-                    }
-                }
-            } else if (SDK::Variables::TickCount() - movetick >= 70 + (std::min)(60, SDK::Game::Ping())) {
-                SDK::IssueOrder(player, SDK::GameObjectOrder::MoveTo, SDK::Game::CursorPosition());
-                movetick = SDK::Variables::TickCount();
-            }
-        } else if (SDK::Variables::TickCount() - movetick >= 70 + (std::min)(60, SDK::Game::Ping())) {
-            SDK::IssueOrder(player, SDK::GameObjectOrder::MoveTo, SDK::Game::CursorPosition());
-            movetick = SDK::Variables::TickCount();
-        }
-    } else if (SDK::Variables::TickCount() - movetick >= 70 + (std::min)(60, SDK::Game::Ping())) {
-        SDK::IssueOrder(player, SDK::GameObjectOrder::MoveTo, SDK::Game::CursorPosition());
-        movetick = SDK::Variables::TickCount();
-    }
-}
 
 // ============================================================================
 // Combo & Harass execution
@@ -972,10 +786,6 @@ static void Combo() {
                     return;
                 }
             }
-            if (Bool(ComboMenu, "UseRComboOnTap", true) && Key(ComboMenu, "UseRComboOnTapKey", false)) {
-                R.Cast(target);
-                return;
-            }
         }
     }
 }
@@ -1056,7 +866,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
     }
 
     FioraPassiveUpdate();
-    RunWallJump();
 
     if (IsComboMode()) {
         Combo();
@@ -1342,91 +1151,6 @@ static void OnObjectDelete(const GameObject& object) {
     }
 }
 
-static void OnWndProc(Game::WndEventArgs& args) {
-    if (Game::IsChatOpen()) return;
-    const TargetMode mode = GetTargetingMode();
-    if (mode == TargetMode::Optional) {
-        if (args.Msg == WM_KEYDOWN) {
-            const auto* item = OptionalModeMenu ? OptionalModeMenu->Get<MenuKeyBind>("OptionalSwitchTargetKey") : nullptr;
-            uint32_t switchKey = item ? static_cast<uint32_t>(item->Key) : 0x54; // default 'T'
-            if (args.WParam == switchKey) {
-                OptionalTarget = GetOptionalTarget();
-                const auto player = Player();
-                if (!OptionalTarget.IsValid()) {
-                    AIHeroClient best;
-                    float bestDist = FLT_MAX;
-                    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                        if (!ValidHeroTarget(enemy, OptionalRange())) continue;
-                        bool matchOld = OldOptionalTarget.IsValid() && enemy.NetworkId() == OldOptionalTarget.NetworkId();
-                        float dist = player.Position().Distance(enemy.Position());
-                        if (matchOld) dist -= 100000.0f;
-                        if (dist < bestDist) {
-                            best = enemy;
-                            bestDist = dist;
-                        }
-                    }
-                    if (best.IsValid()) {
-                        OptionalTarget = best;
-                    }
-                    return;
-                }
-                AIHeroClient best;
-                float bestDist = FLT_MAX;
-                for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                    if (!ValidHeroTarget(enemy, OptionalRange()) || enemy.NetworkId() == OptionalTarget.NetworkId()) continue;
-                    bool matchOld = OldOptionalTarget.IsValid() && enemy.NetworkId() == OldOptionalTarget.NetworkId();
-                    float dist = player.Position().Distance(enemy.Position());
-                    if (matchOld) dist -= 100000.0f;
-                    if (dist < bestDist) {
-                        best = enemy;
-                        bestDist = dist;
-                    }
-                }
-                if (best.IsValid()) {
-                    OldOptionalTarget = OptionalTarget;
-                    OptionalTarget = best;
-                }
-                return;
-            }
-        }
-        if (args.Msg == WM_LBUTTONDOWN) {
-            OptionalTarget = GetOptionalTarget();
-            float oRange = OptionalRange();
-            const auto cursor = SDK::Game::CursorPosition();
-            if (!OptionalTarget.IsValid()) {
-                AIHeroClient best;
-                float bestCursorDist = FLT_MAX;
-                for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                    if (!ValidHeroTarget(enemy, oRange) || enemy.Position().Distance(cursor) > 400.0f) continue;
-                    float dist = cursor.Distance(enemy.Position());
-                    if (dist < bestCursorDist) {
-                        best = enemy;
-                        bestCursorDist = dist;
-                    }
-                }
-                if (best.IsValid()) {
-                    OptionalTarget = best;
-                }
-                return;
-            }
-            AIHeroClient best;
-            float bestCursorDist = FLT_MAX;
-            for (const auto& enemy : GameObjects::EnemyHeroes()) {
-                if (!ValidHeroTarget(enemy, oRange) || enemy.Position().Distance(cursor) > 400.0f) continue;
-                float dist = cursor.Distance(enemy.Position());
-                if (dist < bestCursorDist) {
-                    best = enemy;
-                    bestCursorDist = dist;
-                }
-            }
-            if (best.IsValid()) {
-                OldOptionalTarget = OptionalTarget;
-                OptionalTarget = best;
-            }
-            return;
-        }
-    }
-}
 
 static void OnAfterAttack(OrbwalkingActionArgs& args) {
     const auto player = Player();
@@ -1486,22 +1210,16 @@ static void OnDraw() {
     if (Bool(DrawMenu, "DrawW", false) && W.IsReady()) {
         Drawing::DrawCircle(player.Position(), W.Range, 0xFF00FF00u, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawOptionalRange", true) && GetTargetingMode() == TargetMode::Optional) {
-        Drawing::DrawCircle(player.Position(), OptionalRange(), 0xFFFF1493u, 1.5f, 64);
-    }
-    if (Bool(DrawMenu, "DrawSelectedRange", true) && GetTargetingMode() == TargetMode::Selected) {
-        Drawing::DrawCircle(player.Position(), SelectedRange(), 0xFFFF1493u, 1.5f, 64);
-    }
-    if (Bool(DrawMenu, "DrawPriorityRange", true) && GetTargetingMode() == TargetMode::Priority) {
+    if (Bool(DrawMenu, "DrawPriorityRange", false) && GetTargetingMode() == TargetMode::Priority) {
         Drawing::DrawCircle(player.Position(), PriorityRange(), 0xFFFF1493u, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawTarget", true) && GetTargetingMode() != TargetMode::Normal) {
+    if (Bool(DrawMenu, "DrawTarget", false)) {
         auto target = GetFioraTarget();
         if (target.IsValid() && !target.IsDead()) {
             Drawing::DrawCircle(target.Position(), 75.0f, 0xFFFFFF00u, 5.0f, 64);
         }
     }
-    if (Bool(DrawMenu, "DrawVitals", false) && GetTargetingMode() != TargetMode::Normal) {
+    if (Bool(DrawMenu, "DrawVitals", false)) {
         auto target = GetFioraTarget();
         if (target.IsValid() && !target.IsDead()) {
             auto status = GetPassiveStatus(target, 0.0f);
@@ -1531,8 +1249,6 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuBool("UseRComboLowHP", "Use R Low HP", true));
     ComboMenu->Add(new MenuSlider("UseRComboLowHPValue", "R Low HP if player hp<", 40, 0, 100));
     ComboMenu->Add(new MenuBool("UseRComboKillable", "Use R Killable", true));
-    ComboMenu->Add(new MenuBool("UseRComboOnTap", "Use R on Tap", true));
-    ComboMenu->Add(new MenuKeyBind("UseRComboOnTapKey", "R on Tap key", SDK::Keys::G, KeyBindType::Press))->Permashow();
     ComboMenu->Add(new MenuBool("UseRComboAlways", "Use R Always", false));
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass", "Harass Settings"));
@@ -1544,14 +1260,11 @@ static void BuildMenu() {
     HarassMenu->Add(new MenuSlider("ManaHarass", "Mana Harass", 40, 0, 100));
 
     TargetMenu = MenuRoot->AddSubMenu(new Menu("TargetingModes", "Targeting Modes"));
-    TargetMenu->Add(new MenuList("TargetingMode", "Targeting Mode", { "Optional", "Selected", "Priority", "Normal" }, 3));
-    TargetMenu->Add(new MenuSlider("OrbwalkToPassiveRange", "Orbwalk To Passive Range", 300, 250, 500));
+    TargetMenu->Add(new MenuList("TargetingMode", "Targeting Mode", { "Priority", "Normal" }, 1));
     TargetMenu->Add(new MenuBool("FocusUltedTarget", "Focus Ulted Target", false));
 
     PriorityModeMenu = TargetMenu->AddSubMenu(new Menu("Priority", "Priority Mode"));
     PriorityModeMenu->Add(new MenuSlider("PriorityRange", "Priority Range", 1000, 300, 1000));
-    PriorityModeMenu->Add(new MenuBool("PriorityOrbwalktoPassive", "Orbwalk to Passive", true));
-    PriorityModeMenu->Add(new MenuBool("PriorityUnderTower", "Under Tower", true));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         const std::string runtimeName = GetObjectCharacterName(enemy);
         const SDK::ChampionId championId =
@@ -1563,17 +1276,6 @@ static void BuildMenu() {
         PriorityModeMenu->Add(new MenuSlider(key.c_str(), label.c_str(), 2, 1, 5));
     }
 
-    OptionalModeMenu = TargetMenu->AddSubMenu(new Menu("Optional", "Optional Mode"));
-    OptionalModeMenu->Add(new MenuSlider("OptionalRange", "Optional Range", 1000, 300, 1000));
-    OptionalModeMenu->Add(new MenuBool("OptionalOrbwalktoPassive", "Orbwalk to Passive", true));
-    OptionalModeMenu->Add(new MenuBool("OptionalUnderTower", "Under Tower", false));
-    OptionalModeMenu->Add(new MenuKeyBind("OptionalSwitchTargetKey", "Switch Target Key", SDK::Keys::T, KeyBindType::Press))->Permashow();
-
-    SelectedModeMenu = TargetMenu->AddSubMenu(new Menu("Selected", "Selected Mode"));
-    SelectedModeMenu->Add(new MenuSlider("SelectedRange", "Selected Range", 1000, 300, 1000));
-    SelectedModeMenu->Add(new MenuBool("SelectedOrbwalktoPassive", "Orbwalk to Passive", true));
-    SelectedModeMenu->Add(new MenuBool("SelectedUnderTower", "Under Tower", false));
-    SelectedModeMenu->Add(new MenuBool("SelectedSwitchIfNoSelected", "Switch to Optional if no target", true));
 
     LaneClearMenu = MenuRoot->AddSubMenu(new Menu("LaneClear", "Lane Clear"));
     LaneClearMenu->Add(new MenuBool("UseELClear", "E Enable", true));
@@ -1585,17 +1287,12 @@ static void BuildMenu() {
     JungleClearMenu->Add(new MenuBool("UseTimatJClear", "Use Item", true));
     JungleClearMenu->Add(new MenuSlider("minimumManaJC", "minimum Mana", 40, 0, 100));
 
-    MiscMenu = MenuRoot->AddSubMenu(new Menu("Misc", "Misc Settings"));
-    MiscMenu->Add(new MenuBool("WallJump", "Wall Jump Enable", true));
-    MiscMenu->Add(new MenuKeyBind("WallJumpKey", "Wall Jump Key", SDK::Keys::H, KeyBindType::Press))->Permashow();
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Drawings"));
     DrawMenu->Add(new MenuBool("DrawQ", "Draw Q", false));
     DrawMenu->Add(new MenuBool("DrawW", "Draw W", false));
-    DrawMenu->Add(new MenuBool("DrawOptionalRange", "Draw Optional Range", true));
-    DrawMenu->Add(new MenuBool("DrawSelectedRange", "Draw Selected Range", true));
-    DrawMenu->Add(new MenuBool("DrawPriorityRange", "Draw Priority Range", true));
-    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Target", true));
+    DrawMenu->Add(new MenuBool("DrawPriorityRange", "Draw Priority Range", false));
+    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Target", false));
     DrawMenu->Add(new MenuBool("DrawVitals", "Draw Vitals", false));
 
     EvadeTargetMenu = MenuRoot->AddSubMenu(new Menu("EvadeTarget", "Evade Targeted Missile"));
@@ -1693,15 +1390,6 @@ static void BuildMenu() {
 static void RemoveMenu() {
     if (!MenuRoot) return;
 
-    if (auto* item = ComboMenu ? ComboMenu->Get<MenuKeyBind>("UseRComboOnTapKey") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = OptionalModeMenu ? OptionalModeMenu->Get<MenuKeyBind>("OptionalSwitchTargetKey") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = MiscMenu ? MiscMenu->Get<MenuKeyBind>("WallJumpKey") : nullptr) {
-        item->RemovePermashow();
-    }
 
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;
@@ -1726,7 +1414,6 @@ static void OnGameLoad() {
     Events::hook.OnDash += &Unit_OnDash;
     GameObjects::AddOnCreate(&OnObjectCreate);
     GameObjects::AddOnDelete(&OnObjectDelete);
-    Game::OnWndProc += &OnWndProc;
     Orbwalker::OnAfterAttack += &OnAfterAttack;
     Drawing::OnDraw += &OnDraw;
 
@@ -1744,7 +1431,6 @@ static void OnUnload() {
     Events::hook.OnDash -= &Unit_OnDash;
     GameObjects::RemoveOnCreate(&OnObjectCreate);
     GameObjects::RemoveOnDelete(&OnObjectDelete);
-    Game::OnWndProc -= &OnWndProc;
     Orbwalker::OnAfterAttack -= &OnAfterAttack;
     Drawing::OnDraw -= &OnDraw;
 

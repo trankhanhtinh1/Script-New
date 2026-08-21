@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Smolder = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 28;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SmolderDragonPractice";

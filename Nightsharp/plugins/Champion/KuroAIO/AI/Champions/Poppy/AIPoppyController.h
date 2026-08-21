@@ -33,7 +33,6 @@ inline Vector3 LastQAim{};
 inline Vector3 LastEAim{};
 inline Vector3 LastRAim{};
 inline int LastCastTick[4]{};
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserUntil = 0;
@@ -83,6 +82,12 @@ inline Vector3 AimFor(const AIHeroClient& target, float delay) {
     }
     return aim;
 }
+inline AIHeroClient AutonomousTarget(float range) {
+    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
+    return Engine::SelectTarget(range);
+}
+
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0, mode) || !Throttle(0) || Protected(target) || PreserveAttack(reactive)) return false;
@@ -129,7 +134,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false, 
     LastCastTick[2] = Now();
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, kRRange) || Protected(target) ||
         !Ready(3, mode) || !Throttle(3, 140) || PreserveAttack(reactive)) return false;
@@ -145,7 +150,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, 
     const bool defensive = reactive || low || mode == Mode::Flee;
     const Vector3 away = Direction2D(player.Position(), aim);
     const UltimateContext context{true, true, true, false, RStage == UltimateStage::Charging,
-        !away.IsZero(), defensive, Lethal(target, RDamage(target)), manual, low,
+        !away.IsZero(), defensive, Lethal(target, RDamage(target)), low,
         hitCount, Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldReleaseUltimate(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
@@ -187,18 +192,18 @@ inline void ReconcileState() {
         !player.HasBuff("PoppyRCharging") && now - LastCastTick[3] > 2500) RStage = UltimateStage::Idle;
     if (GapcloserUntil < now) GapcloserTargetId = 0;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = AutonomousTarget(
+        mode == Mode::Flee ? 1000.0f : kRRange);
     if (Engine::ValidEnemy(target) &&
         ShouldInterceptDash({Ready(1, mode), target.IsDashing(),
             target.Position().Distance2D(player.Position()) <= kWRadius,
             target.IsDashing() || IncomingThreatUntil > Now(),
-            player.HealthPercent() <= Slider(WMenu, "DefensiveHealth", 42), false}) &&
+            player.HealthPercent() <= Slider(WMenu, "DefensiveHealth", 42)}) &&
         CastW(target, mode, true)) return true;
     if (TryKillSecure(target, mode)) return true;
     switch (mode) {
@@ -215,8 +220,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
             player.HealthPercent() <= Slider(WMenu, "DefensiveHealth", 42);
         const bool antiGap = GapcloserUntil > Now();
         const bool kill = Engine::ValidEnemy(target) && Lethal(target, QDamage(target, true));
-        if (AutomaticAllowed({defense, antiGap, IncomingHardCCUntil > Now(), kill, false,
-            PlayerOverrideUntil > Now()})) {
+        if (AutomaticAllowed({defense, antiGap, IncomingHardCCUntil > Now(), kill,
+            false})) {
             if ((antiGap || defense) && CastW(target, mode, true)) return true;
             if (Engine::ValidEnemy(target) && CastE(target, mode, true, kill)) return true;
             if (Engine::ValidEnemy(target)) (void)CastR(target, mode, true);
@@ -233,8 +238,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil =
-                now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
             if (slot == 3) RStage =
                 RStage == UltimateStage::Charging ? UltimateStage::RecastReady : UltimateStage::Charging;
@@ -287,7 +290,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("PoppyOneTrick", "Poppy vanguard tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Hammer Shock"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 50, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Steadfast Presence"));
@@ -307,7 +309,7 @@ inline void OnLoad() {
     RStage = UltimateStage::Idle;
     LastQAim = LastEAim = LastRAim = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = GapcloserUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = GapcloserUntil = 0;
     GapcloserTargetId = LastAutoTargetId = LastAutoTick = 0;
     LastMode = Mode::None;
 }
@@ -328,18 +330,18 @@ inline constexpr const char* Scenarios[] = {
     "Intercept enemy dashes with W before selecting an offensive sequence",
     "Track Keeper's Verdict charging and release posture from spell and buff events",
     "Use tap or charged R only with a valid predicted line and no projectile wall",
-    "Require a knockback-away direction for non-manual charged R release",
+    "Require a knockback-away direction for charged R release",
     "Reserve nonlethal R for configured multi-target value, defense, interruption or flee",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous orbwalker and engine target policy",
     "Combo prioritizes wall stun, Q damage and defensive W before verdict",
     "Harass spends mana on Q and uses W only for an observed dash",
     "LaneClear Jungle and LastHit delegate to shared farm policy",
-    "Flee uses W peel and manual-assist-safe verdict knockback",
+    "Flee uses W peel and safe verdict knockback",
     "Automatic mode permits defense, anti-gapclose, interrupt or kill secure only",
-    "Yield after observed manual Q W E or R ownership",
+    "Reconcile observed Q W E or R events",
     "Reject protected, invulnerable and spell-shielded targets",
-    "Never automate items, summoner spells or movement ownership",
-    "Keep profile metadata separate from the owned decision loop",
+    "Never issue items, summoner spells or movement",
+    "Keep profile metadata separate from the decision loop",
     "Draw ranges without changing gameplay decisions",
 };
 inline constexpr ChampionController Controller = [] {

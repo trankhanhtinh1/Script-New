@@ -36,7 +36,7 @@ inline Menu* FarmMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatOrigin{};
@@ -281,7 +281,7 @@ inline void ReconcileState() {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now() || ShieldActiveUntil > Now() || FissureActiveUntil > Now()) return true;
+    if (ShieldActiveUntil > Now() || FissureActiveUntil > Now()) return true;
     const AIHeroClient target = PreferredEnemyTarget(selected, kRRange + 100.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -301,8 +301,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) {
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
             if (args.Slot == 2) ShieldActiveUntil = now + 3200;
             if (args.Slot == 3) FissureActiveUntil = now + 4200;
@@ -381,8 +379,7 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at W/R destination", 3, 0, 6));
     TacticsMenu->Add(new MenuSlider("MinimumRTargets", "Minimum R knock-up targets", 2, 1, 5));
     TacticsMenu->Add(new MenuSlider("QHealth", "Minimum Q poke health threshold", 82, 10, 100));
-    TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana floor", 56, 0, 95));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
+    TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana floor", 56, 0, 95));
     FarmMenu->Add(new MenuSlider("LaneMana", "Lane-clear mana floor", 30, 0, 95));
     FarmMenu->Add(new MenuSlider("JungleMana", "Jungle mana floor", 24, 0, 95));
 }
@@ -390,7 +387,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     LastCastTick.fill(0);
     PassiveTargets.fill({});
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingThreatTargetId = ShieldActiveUntil = 0;
     LastQTargetId = LastRTargetId = FissureActiveUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
@@ -418,7 +415,7 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear, Jungle and LastHit preserve resources and delegate farming to the shared engine",
     "Flee dashes to a safe ally, raises Unbreakable against threats, peels with Q and fissures pursuers",
     "Automatic mode reconciles ally health, incoming projectiles, gapclosers and interruptible threats",
-    "Manual spell events yield ownership briefly while polling reconciles shield, fissure and passive state",
+    "Automatic spell events reconcile shield, fissure and passive state/",
     "Expose complete load, menu, update, draw, spell, buff, attack, gapcloser and interrupt callbacks",
 };
 

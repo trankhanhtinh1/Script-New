@@ -33,7 +33,6 @@ inline int PassiveExpireTick = 0;
 inline int QDashExpireTick = 0;
 inline int QTargetId = 0;
 inline int RTargetId = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline bool WActive = false;
@@ -56,12 +55,6 @@ inline bool TargetBlocked(const AIHeroClient& target) {
            HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
-}
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
@@ -149,14 +142,12 @@ inline void ReconcileState() {
             RChannelActive = UpdateDepthCharge(DepthCharge, RTargetId, target.Position(), now);
         }
     }
-    if (now >= ManualOverrideUntil) ManualOverrideUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
-    const AIHeroClient target = SelectTarget(selected, mode == Mode::Flee ? 900.0f : kQRange);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 900.0f : kQRange);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 900.0f);
     if (mode == Mode::Flee) {
         if (Engine::ValidEnemy(threat)) (void)CastQ(threat, mode, true);
@@ -203,7 +194,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             if (slot == 3) RChannelActive = true;
         }
         return;
@@ -258,7 +248,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("NautilusOneTrick", "Nautilus vanguard"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("NautilusQ", "Dredge Line"));
     QMenu->Add(new MenuSlider("MaxDashEnemies", "Maximum dash endpoint enemies", 2, 1, 5));
     WMenu = TacticsMenu->AddSubMenu(new Menu("NautilusW", "Titan's Wrath"));
@@ -275,7 +264,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = PassiveTargetId = PassiveExpireTick = 0;
-    QDashExpireTick = QTargetId = RTargetId = ManualOverrideUntil = 0;
+    QDashExpireTick = QTargetId = RTargetId = 0;
     IncomingThreatUntil = IncomingHardCCUntil = 0;
     WActive = RChannelActive = false;
     DepthCharge = {};
@@ -290,7 +279,7 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Use Riot 26.15 and CommunityDragon 16.15 Summoner's Rift values",
-    "Preserve selected target precedence before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Predict Dredge Line and reject collision, projectile-wall and uncertain endpoints",
     "Track anchor dash endpoint, terrain, turret and enemy-density safety",
     "Track first-hit passive root by buff events and polling expiry",
@@ -298,8 +287,7 @@ inline constexpr const char* Scenarios[] = {
     "Use Riptide only when a live target is inside the wave radius or for reactive peel",
     "Track Depth Charge target, travel position, channel and expiry by event plus polling",
     "Reject R against spell shields, invalid targets and unsafe turret channels",
-    "Preserve AA windup and passive root ownership around manual or controller casts",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Preserve AA windup and passive root state through event-driven safety",
     "Respect mana, cooldown, reach, collision, prediction and enemy-count gates",
     "Cover Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Automatic mode is restricted to defensive R or observed incoming threat",

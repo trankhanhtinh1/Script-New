@@ -37,13 +37,11 @@ inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int AttachedAllyId = 0;
-inline int SelectedAllyId = 0;
 inline int QCastTick = 0;
 inline int RCastTick = 0;
 inline int RWaveHits = 0;
 inline int QMissileId = 0;
 inline int RMissileId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int EnemyThreatUntil = 0;
 inline int HardCcThreatUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -87,10 +85,7 @@ inline AIHeroClient AllyById(int id) {
     return {};
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range) {
     return Engine::SelectTarget(range);
 }
 
@@ -102,16 +97,14 @@ inline AIHeroClient SelectAlly(bool defensive = false) {
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally, kWRange) ||
             ally.NetworkId() == player.NetworkId()) continue;
-        const bool selected = static_cast<int>(ally.NetworkId()) == SelectedAllyId;
         const bool bestFriend = ally.HasBuff("YuumiWBestFriend");
         const int enemies = Engine::CountEnemiesAt(ally.Position(), 700.0f);
         const float score = AllyPriority(ally.HealthPercent(), ally.TotalAttackDamage(),
-                                         ally.AP(), enemies, selected, bestFriend);
+                                         ally.AP(), enemies, bestFriend);
         if (score > scoreBest) { best = ally; scoreBest = score; }
     }
     if (!best.IsValid() && defensive &&
         Engine::ValidAlly(player, kERange)) return player;
-    if (best.IsValid()) SelectedAllyId = static_cast<int>(best.NetworkId());
     return best;
 }
 
@@ -163,7 +156,7 @@ inline bool CastW(const AIHeroClient& threat, Mode mode, bool reactive = false) 
         Slider(WMenu, "AllyHealth", 72) || mode == Mode::Combo || mode == Mode::Flee;
     if (!safe || !need) return false;
     if (!Engine::ControllerCastUnit(1, ally)) return false;
-    AttachedAllyId = SelectedAllyId = static_cast<int>(ally.NetworkId());
+    AttachedAllyId = static_cast<int>(ally.NetworkId());
     CurrentState = AttachmentState::Attached;
     LastCastTick[1] = Now();
     return true;
@@ -291,21 +284,20 @@ inline void ReconcileState() {
         CurrentState = AttachmentState::Channeling;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = SelectEnemy(kQRange);
     if (CurrentState == AttachmentState::Channeling) {
-        if (mode == Mode::Automatic) (void)CastE(selected, mode, true);
+        if (mode == Mode::Automatic) (void)CastE(target, mode, true);
         return true;
     }
-    const AIHeroClient target = SelectEnemy(selected, kQRange);
     if (mode == Mode::Automatic) { Automatic(target); return true; }
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, kWRange)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, kWRange)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -323,14 +315,12 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot >= 4) return;
-        if (!Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
         LastCastTick[static_cast<std::size_t>(slot)] = now;
         if (slot == 0) QCastTick = now;
         if (slot == 1) {
             const int id = args.TargetNetworkId != 0 ? static_cast<int>(args.TargetNetworkId) :
                 static_cast<int>(args.Target.NetworkId);
-            if (id != 0) { AttachedAllyId = SelectedAllyId = id; CurrentState = AttachmentState::Attached; }
+            if (id != 0) { AttachedAllyId = id; CurrentState = AttachmentState::Attached; }
             else { CurrentState = AttachmentState::Detached; AttachedAllyId = 0; }
         }
         if (slot == 3) { RCastTick = now; CurrentState = AttachmentState::Channeling; }
@@ -432,7 +422,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("YuumiTactics", "Yuumi attachment tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 600, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Prowling Projectile steering"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "You and Me attachment"));
@@ -453,9 +442,9 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = AttachedAllyId = SelectedAllyId = 0;
+    LastAutoTargetId = LastAutoTick = AttachedAllyId = 0;
     QCastTick = RCastTick = RWaveHits = QMissileId = RMissileId = 0;
-    ManualOwnershipUntil = EnemyThreatUntil = HardCcThreatUntil = 0;
+    EnemyThreatUntil = HardCcThreatUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = {};
     LastQEndpoint = LastREndpoint = {};
@@ -470,10 +459,10 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Pin Yuumi mechanics to Riot 26.15 and CommunityDragon 16.15 metadata",
     "Reconcile detached, attached ally and Final Chapter channel states from events and polling",
-    "Prefer selected enemy, then orbwalker enemy, then engine fallback",
+    "Use the engine-selected enemy target for every combat mode",
     "Steer attached Prowling Projectile during its cursor window with prediction and collision",
     "Use Q projectile speed, target radius, reach and projectile-wall rejection gates",
-    "Attach only to a valid selected carry or threatened ally with bounded enemy density",
+    "Attach only to the highest-value valid carry or threatened ally with bounded enemy density",
     "Never spend You and Me mobility into an unsafe turret or enemy cluster",
     "Keep AttachedAllyId and Best Friend policy coherent after ally transfer or detach",
     "Cast Zoomies as a meaningful heal/shield for the attached ally or endangered player",
@@ -483,7 +472,7 @@ inline constexpr const char* Scenarios[] = {
     "Preserve ally safety while allowing movement, attach and Zoomies during the R channel",
     "Track Yuumi Q and R missile lifecycle without duplicating channel casts",
     "Preserve ordinary attack windup while allowing urgent peel and protection reactions",
-    "Yield manual spell ownership for a bounded window and reconcile missing events",
+    "Track player Q/W/E/R casts from events while reconciling missing state",
     "Combo attaches, shields, steers Q and channels a safe multi-wave chapter",
     "Harass preserves a mana floor and spends only high-value Q or Zoomies",
     "LaneClear Jungle and LastHit delegate only after resource floor is met",

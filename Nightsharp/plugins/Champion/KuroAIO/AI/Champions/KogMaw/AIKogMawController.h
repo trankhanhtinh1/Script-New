@@ -132,8 +132,7 @@ inline OozeContext BuildOozeContext(
 inline ArtilleryContext BuildArtilleryContext(
     const AIHeroClient& target,
     const SDK::PredictionOutput& prediction,
-    bool predictionHits,
-    bool manual) {
+    bool predictionHits) {
     ArtilleryContext context{};
     const auto player = GameObjects::Player();
     const float range = Engine::RuntimeSpells[3]
@@ -151,8 +150,7 @@ inline ArtilleryContext BuildArtilleryContext(
         SDK::HasBuffOfType(target, SDK::BuffType::Slow);
     context.Escaping = IsEscaping(target, 0.60f);
     context.CostStacks = ArtilleryCostStacks();
-    context.MaximumStacks = manual
-        ? 10 : Slider(ArtilleryMenu, "MaxStacks", 2);
+    context.MaximumStacks = Slider(ArtilleryMenu, "MaxStacks", 2);
     return context;
 }
 
@@ -209,14 +207,13 @@ inline bool CastE(const AIHeroClient& target,
 }
 
 inline bool CastR(const AIHeroClient& target,
-                  Mode mode,
-                  bool manual = false) {
+                  Mode mode) {
     if (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target) ||
         ControllerHelpers::HasSpellShieldOrImmunity(target) ||
         !CastThrottlePassed(LastRCastTick, 55)) return false;
-    if (!manual && !CanUse(3, mode)) return false;
+    if (!CanUse(3, mode)) return false;
     const float range = Engine::RuntimeSpells[3]->CurrentRange();
     const auto player = GameObjects::Player();
     if (!player.IsValid() ||
@@ -227,11 +224,8 @@ inline bool CastR(const AIHeroClient& target,
     const bool predictionHits = PredictionFor(
         3, target, SDK::HitChance::VeryHigh, false, prediction);
     const auto context = BuildArtilleryContext(
-        target, prediction, predictionHits, manual);
-    if (!manual && !ShouldCastArtillery(context)) return false;
-    if (manual && (!context.PredictionVeryHigh || !context.InRange)) {
-        return false;
-    }
+        target, prediction, predictionHits);
+    if (!ShouldCastArtillery(context)) return false;
     if (!Engine::ControllerCastPosition(3, prediction.GetCastPosition())) {
         return false;
     }
@@ -272,7 +266,7 @@ inline MarksmanTargeting::TargetContext TargetFacts(
         PredictionFor(
             3, target, SDK::HitChance::VeryHigh, false, rPrediction);
     const bool r = rPredictionHits && ShouldCastArtillery(
-        BuildArtilleryContext(target, rPrediction, rPredictionHits, false));
+        BuildArtilleryContext(target, rPrediction, rPredictionHits));
 
     const std::array<bool, 4> reachable = {q, false, e, r};
     const int expectedAutos = (attack || futureAttack)
@@ -320,7 +314,7 @@ inline MarksmanTargeting::TargetContext KillSecureFacts(
         PredictionFor(
             3, target, SDK::HitChance::VeryHigh, false, rPrediction);
     const bool r = rHit && ShouldCastArtillery(
-        BuildArtilleryContext(target, rPrediction, rHit, false));
+        BuildArtilleryContext(target, rPrediction, rHit));
 
     auto context = BaseTargetContext(
         target, std::max({q ? SpellDamage(0, target) : 0.0f,
@@ -332,15 +326,14 @@ inline MarksmanTargeting::TargetContext KillSecureFacts(
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred,
-                                      Mode mode) {
+inline AIHeroClient SelectSmartTarget(Mode mode) {
     const float range = std::max(
         1240.0f,
         Engine::RuntimeSpells[3]
             ? Engine::RuntimeSpells[3]->CurrentRange() + 50.0f
             : 1240.0f);
     LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
-        preferred, range,
+        AIHeroClient{}, range,
         [mode](const AIHeroClient& enemy) {
             return TargetFacts(enemy, mode);
         });
@@ -384,7 +377,7 @@ inline bool TryAntiGapcloser() {
            CastE(target, Mode::Automatic, true);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
     const float range = std::max(
         1240.0f,
@@ -392,7 +385,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
             ? Engine::RuntimeSpells[3]->CurrentRange() + 50.0f
             : 1240.0f);
     const auto target = ControllerHelpers::SelectReachableEnemy(
-        preferred, range,
+        AIHeroClient{}, range,
         [](const AIHeroClient& enemy) {
             return KillSecureFacts(enemy);
         });
@@ -401,7 +394,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
         CastQ(target, Mode::Automatic)) return true;
     if (SpellDamage(2, target) >= target.Health() + target.AllShield() &&
         CastE(target, Mode::Automatic, false)) return true;
-    return CastR(target, Mode::Automatic, false);
+    return CastR(target, Mode::Automatic);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
@@ -411,34 +404,25 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
         CastE(target, mode, false)) return true;
     if (CastQ(target, mode)) return true;
     if (CastE(target, mode, false)) return true;
-    return CastR(target, mode, false);
+    return CastR(target, mode);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     RefreshDynamicRanges();
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     if (!combat) {
         ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
     }
-    if (ManualUltimatePressed()) {
-        const float range = Engine::RuntimeSpells[3]
-            ? Engine::RuntimeSpells[3]->CurrentRange() + 75.0f : 0.0f;
-        const auto manual = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, range);
-        if (Engine::ValidEnemy(manual) &&
-            CastR(manual, Mode::Automatic, true)) return true;
-    }
     if (TryAntiGapcloser()) return true;
-    if (TryKillSecure(preferred)) return true;
+    if (TryKillSecure()) return true;
     if (combat) {
-        const auto target = SelectSmartTarget(preferred, mode);
+        const auto target = SelectSmartTarget(mode);
         RefreshOrbwalkerFocus(mode, target);
         return TryCombat(target, mode);
     }
     if (mode == Mode::Flee) {
-        const auto target = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, 1240.0f);
+        const auto target = ControllerHelpers::NearestEnemyToPlayer({}, 1240.0f);
         return Engine::ValidEnemy(target) &&
                CastE(target, Mode::Flee, true);
     }
@@ -500,7 +484,7 @@ inline void BuildMenu(Menu* root) {
     BarrageMenu = TacticsMenu->AddSubMenu(new Menu(
         "BarrageLogic", "Bio-Arcane Barrage"));
     BarrageMenu->Add(new MenuSeparator(
-        "RealRoute", "W requires a real empowered attack route"));
+        "RealRoute", "Require an empowered attack"));
     ArtilleryMenu = TacticsMenu->AddSubMenu(new Menu(
         "ArtilleryLogic", "Living Artillery"));
     ArtilleryMenu->Add(new MenuSlider(

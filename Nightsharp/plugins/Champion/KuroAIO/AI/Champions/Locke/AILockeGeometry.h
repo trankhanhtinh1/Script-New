@@ -115,7 +115,6 @@ inline bool DashLineHits(const Vec3& from, const Vec3& to, const Vec3& target,
 struct WContext {
     bool Ready = false;
     bool Active = false;
-    bool Manual = false;
     bool IncomingThreat = false;
     bool EnoughHealth = false;
     bool EnoughMana = false;
@@ -123,10 +122,10 @@ struct WContext {
 };
 inline bool ShouldIgnite(const WContext& c) {
     return c.Ready && !c.Active && c.EnoughHealth && c.EnoughMana &&
-           (c.Manual || c.IncomingThreat || c.NearEnemy);
+           (c.IncomingThreat || c.NearEnemy);
 }
 inline bool ShouldRecastW(const WContext& c) {
-    return c.Active && (c.Manual || !c.EnoughHealth || !c.NearEnemy);
+    return c.Active && (!c.EnoughHealth || !c.NearEnemy);
 }
 
 struct RContext {
@@ -135,13 +134,14 @@ struct RContext {
     bool Blocked = false;
     bool Lethal = false;
     bool ExecuteWindow = false;
-    bool Manual = false;
+    bool Reactive = false;
     bool UnderEnemyTurret = false;
     int EnemiesAtImpact = 0;
 };
 inline bool ShouldCastPurgatory(const RContext& c, int minimumAoe = 1) {
     if (!c.Ready || !c.PredictedHit || c.Blocked || c.UnderEnemyTurret) return false;
-    return c.Manual || c.Lethal || c.ExecuteWindow || c.EnemiesAtImpact >= std::max(1, minimumAoe);
+    return c.Reactive || c.Lethal || c.ExecuteWindow ||
+        c.EnemiesAtImpact >= std::max(1, minimumAoe);
 }
 inline bool ExecuteEligible(float healthPercent, int sealedChampions) {
     return healthPercent <= RExecuteThreshold(sealedChampions);

@@ -305,7 +305,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool CastR(const AIHeroClient& target, bool manual) {
+inline bool CastR(const AIHeroClient& target) {
     if (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !CastThrottlePassed(LastRCastTick, 180) ||
@@ -315,7 +315,6 @@ inline bool CastR(const AIHeroClient& target, bool manual) {
     }
     const float rDamage = SpellDamage(3, target);
     UltimateContext context{};
-    context.Manual = manual;
     context.Lethal = rDamage >= target.Health() + target.AllShield();
     context.InRange = true;
     context.ChannelSafe = ChannelSafe();
@@ -350,14 +349,9 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
     if (SpellDamage(2, target) + AutoDamage(target) >=
             target.Health() + target.AllShield() &&
         CastNet(target, Mode::Automatic, false)) return true;
-    return CastR(target, false);
+    return CastR(target);
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic);
-    return Engine::ValidEnemy(target) && CastR(target, true);
-}
 
 inline bool TryCombo(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
@@ -382,7 +376,6 @@ inline bool TryFlee(const AIHeroClient& preferred) {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     RefreshOrbwalkerFocus(mode, preferred);
-    if (TryManualR(preferred)) return true;
     if (TryAntiGapcloser()) return true;
     if (TryKillSecure(preferred)) return true;
     if (mode == Mode::Flee) return TryFlee(preferred);
@@ -438,11 +431,11 @@ inline void BuildMenu(Menu* root) {
         2400, 1000, 4000));
     NetMenu = TacticsMenu->AddSubMenu(new Menu("NetLogic", "Net/Recoil Logic"));
     NetMenu->Add(new MenuSeparator(
-        "SafeLanding", "E always requires a safe recoil landing"));
+        "SafeLanding", "Require safe recoil landing"));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
         "AceLogic", "Ace in the Hole"));
     UltimateMenu->Add(new MenuSeparator(
-        "CleanChannel", "R always requires an isolated safe channel"));
+        "CleanChannel", "Require isolated safe channel"));
 }
 
 inline void OnLoad() {
@@ -462,8 +455,8 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Reject selected targets outside every current AA/Q/W/E/R route",
-    "Keep selected-target priority only when that target is reachable",
+    "Reject targets outside every current AA/Q/W/E/R route",
+    "Keep route scoring only when that target is reachable",
     "Prefer trapped headshot reach up to the observed range-check state",
     "Temporarily force trapped headshot targets through the orbwalker",
     "Release owned orbwalker focus immediately after the headshot attack",
@@ -478,7 +471,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject R while any local attack/Q action is better",
     "Reject R when another champion can intercept the shot",
     "Reject R while a nearby enemy can punish the channel",
-    "Allow manual R only after the same reach and safety validation",
+    "Require lethal R only after the same reach and safety validation",
     "Run Q/W/E decisions at cooldown pace with 20-45 ms local throttles",
 };
 

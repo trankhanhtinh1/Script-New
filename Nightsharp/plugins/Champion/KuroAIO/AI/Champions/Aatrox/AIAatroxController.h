@@ -29,12 +29,9 @@ using ControllerHelpers::SpellEnabled;
 // widening trapezoid, and Q3 is a circle centered in front of Aatrox.
 enum class Sequence : int {
     None,
-    ExtendedEWaitW,
-    ExtendedEWaitQ,
     Q1WaitW,
     ChainWaitQ2,
     ChainWaitPullQ3,
-    Disengage,
 };
 
 inline Menu* TacticsMenu = nullptr;
@@ -81,6 +78,8 @@ inline constexpr int kQStaticLockoutMs = 1000;
 inline constexpr int kQRecastWindowMs = 4000;
 inline constexpr float kEDistance = 300.0f;
 
+inline constexpr int kQCorrectionMinDelayMs = 225;
+inline constexpr int kQCorrectionMaxDelayMs = 400;
 inline QStage StageFromName(const char* name, QStage fallback) {
     if (!name || !name[0]) return fallback;
     if (Engine::TextContains(name, "aatroxq3") ||
@@ -208,14 +207,6 @@ inline bool SafeDash(const Vector3& position,
         Slider(Engine::ComboMenu, "MaxCommitEnemies", 2)) {
         return false;
     }
-    if (Bool(QMenu, "RespectCursor", true) && aggressive) {
-        const float currentCursorDistance = player.Position().Distance2D(Game::CursorPos());
-        const float candidateCursorDistance = position.Distance2D(Game::CursorPos());
-        if (candidateCursorDistance > currentCursorDistance + 325.0f &&
-            player.HealthPercent() < 65.0f) {
-            return false;
-        }
-    }
     return true;
 }
 
@@ -272,7 +263,6 @@ inline bool FindDashCorrection(QStage stage,
             // Prefer a lateral body displacement while the fixed Q blade still
             // travels into Fiora. This mirrors the one-trick Q2-E parry dodge.
             candidateScore += index == 0 ? -0.30f : 0.20f;
-            candidateScore -= candidate.Distance2D(Game::CursorPos()) * 0.00015f;
         }
         if (candidateScore > bestScore) {
             bestScore = candidateScore;
@@ -300,14 +290,12 @@ inline bool TryCorrectQWithE() {
         return false;
     }
     const int now = SDK::Variables::TickCount();
-    const int remainingMs = std::max(0, QWindupEndTick - now);
-    // Delay the correction until the opponent commits to a dodge direction.
-    // The configurable lead still leaves enough time for E travel and ping.
-    const int commitLead = std::max(
-        250 + Game::Ping() / 2,
-        Slider(QMenu, "ECommitLead", 345));
-    if (remainingMs > commitLead && !target.IsDashing() &&
-        !Engine::IsHardCrowdControlled(target)) {
+    const int elapsedMs = now - QCastStartTick;
+    const int correctionDelay = std::clamp(
+        Slider(QMenu, "ECommitDelay", 300),
+        kQCorrectionMinDelayMs,
+        kQCorrectionMaxDelayMs);
+    if (elapsedMs < correctionDelay || elapsedMs > kQCorrectionMaxDelayMs) {
         return false;
     }
     const float remaining = static_cast<float>(std::max(0, QWindupEndTick - now)) /
@@ -395,7 +383,7 @@ inline bool CastQ(const AIHeroClient& target,
         Engine::RuntimeSpells[2]->IsReady() && Bool(QMenu, "UseEForQ", true) &&
         FindDashCorrection(stage, target, direction, predicted, correction,
                            improvement, mode == Mode::Combo || mode == Mode::Harass);
-    const float minScore = targetIsImmobile ? 0.0f : MinimumSweetspotScore(comboMode);
+    const float minScore = MinimumSweetspotScore(comboMode);
     if (score < minScore && !canCorrect && !(allowBody && bodyHit)) {
         return false;
     }
@@ -476,13 +464,10 @@ inline float QDamage(const AIHeroClient& target, QStage stage, bool sweetspot) {
     return std::max(0.0f, damage);
 }
 
-inline bool ShouldUseR(const AIHeroClient& target, bool manual) {
+inline bool ShouldUseR(const AIHeroClient& target) {
     if (!Engine::RuntimeSpells[3] || !Engine::RuntimeSpells[3]->IsReady() ||
         RActive || !Engine::ValidEnemy(target, 900.0f) || IsQWindup()) {
         return false;
-    }
-    if (manual) {
-        return true;
     }
     if (!SpellEnabled(3, Mode::Combo)) {
         return false;
@@ -513,37 +498,12 @@ inline bool ShouldUseR(const AIHeroClient& target, bool manual) {
 }
 
 inline bool TryR(const AIHeroClient& target) {
-    const bool manual = Key(Engine::AutomaticMenu, "ManualR", false);
-    if (!ShouldUseR(target, manual) || !CastThrottleReady(3)) {
+    if (!ShouldUseR(target) || !CastThrottleReady(3)) {
         return false;
     }
     return Engine::ControllerCastSelf(3);
 }
 
-inline bool TryExtendedEWQ(const AIHeroClient& target) {
-    if (!Bool(ChainMenu, "EWQ", true) || AvailableQStage != QStage::First ||
-        !Engine::RuntimeSpells[0] || !Engine::RuntimeSpells[0]->IsReady() ||
-        !Engine::RuntimeSpells[1] || !Engine::RuntimeSpells[1]->IsReady() ||
-        !Engine::RuntimeSpells[2] || !Engine::RuntimeSpells[2]->IsReady()) {
-        return false;
-    }
-    const auto player = GameObjects::Player();
-    const Vector3 predicted = PredictPosition(target, 0.20f);
-    const float distance = player.Position().Distance2D(predicted);
-    if (distance < static_cast<float>(Slider(ChainMenu, "EWQMinRange", 735)) ||
-        distance > 1100.0f) {
-        return false;
-    }
-    const float dashDistance = std::min(kEDistance, std::max(90.0f, distance - 760.0f));
-    const Vector3 destination = player.Position().Extend(predicted, dashDistance);
-    if (!CastE(destination, target, true)) {
-        return false;
-    }
-    ActiveSequence = Sequence::ExtendedEWaitW;
-    SequenceTargetId = static_cast<int>(target.NetworkId());
-    SequenceExpireTick = SDK::Variables::TickCount() + 1050;
-    return true;
-}
 
 inline bool ShouldWaitForAuto(const AIHeroClient& target, QStage stage) {
     if (!Bool(ChainMenu, "WeaveAutos", true) || !InAutoRange(target) ||
@@ -586,41 +546,6 @@ inline bool TrySequence(const AIHeroClient& fallbackTarget, Mode mode) {
         return false;
     }
 
-    if (ActiveSequence == Sequence::Disengage) {
-        AvailableQStage = RuntimeQStage();
-        if (AvailableQStage == QStage::Second) {
-            if (ShouldWaitForAuto(target, QStage::Second)) return false;
-            if (CastQ(target, mode, true, false)) {
-                ActiveSequence = Sequence::Disengage;
-                SequenceExpireTick = now + 1750;
-                return true;
-            }
-        } else if (AvailableQStage == QStage::Third) {
-            if (ShouldWaitForAuto(target, QStage::Third)) return false;
-            if (CastQ(target, mode, true, true)) {
-                ActiveSequence = Sequence::None;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    if (ActiveSequence == Sequence::ExtendedEWaitW) {
-        if (CastW(target, mode)) {
-            ActiveSequence = Sequence::ExtendedEWaitQ;
-            SequenceExpireTick = now + 1150;
-            return true;
-        }
-        return false;
-    }
-    if (ActiveSequence == Sequence::ExtendedEWaitQ) {
-        if (CastQ(target, mode, false, true)) {
-            ActiveSequence = Sequence::Q1WaitW;
-            SequenceExpireTick = now + 1600;
-            return true;
-        }
-        return false;
-    }
     if (ActiveSequence == Sequence::Q1WaitW) {
         if (WActiveFor(target)) {
             ActiveSequence = Sequence::ChainWaitQ2;
@@ -639,7 +564,8 @@ inline bool TrySequence(const AIHeroClient& fallbackTarget, Mode mode) {
         if (!WActiveFor(target) && ShouldWaitForAuto(target, QStage::Second)) {
             return false;
         }
-        if (CastQ(target, mode, false, true)) {
+        if (CastQ(target, mode, false, true) ||
+            CastQ(target, mode, true, true)) {
             ActiveSequence = Sequence::ChainWaitPullQ3;
             SequenceExpireTick = now + 1900;
             return true;
@@ -657,7 +583,8 @@ inline bool TrySequence(const AIHeroClient& fallbackTarget, Mode mode) {
             now < WExpectedPullTick - 660) {
             return false;
         }
-        if (CastQ(target, mode, false, true)) {
+        if (CastQ(target, mode, false, true) ||
+            CastQ(target, mode, true, true)) {
             ActiveSequence = Sequence::None;
             return true;
         }
@@ -676,21 +603,6 @@ inline bool ShouldHoldQ3(const AIHeroClient& target, Mode mode) {
     if (mode == Mode::Harass && Bool(ChainMenu, "HoldQ3Harass", true) &&
         !WActiveFor(target) && target.HealthPercent() > 32.0f) {
         return true;
-    }
-    if (mode == Mode::Combo && Bool(ChainMenu, "HoldQ3Unsafe", true) &&
-        !WActiveFor(target) && !RActive) {
-        const auto player = GameObjects::Player();
-        const bool eUnavailable = !Engine::RuntimeSpells[2] ||
-                                  !Engine::RuntimeSpells[2]->IsReady();
-        const float lethal = QDamage(target, QStage::Third, true) +
-            SDK::Damage::GetAutoAttackDamage(player, target, true);
-        const bool isLethal = lethal >= target.Health() + target.AllShield();
-        if (isLethal) return false;
-        if (eUnavailable &&
-            player.HealthPercent() + 12.0f < target.HealthPercent() &&
-            Engine::CountEnemiesAt(player.Position(), 650.0f) > 1) {
-            return true;
-        }
     }
     return false;
 }
@@ -776,7 +688,7 @@ inline bool TryAutoReset(const AIHeroClient& target) {
         return false;
     }
     const auto player = GameObjects::Player();
-    Vector3 destination = player.Position().Extend(Game::CursorPos(), 85.0f);
+    Vector3 destination = player.Position().Extend(target.Position(), 85.0f);
     if (!SafeDash(destination, target, false)) {
         destination = player.Position().Extend(target.Position(), 70.0f);
     }
@@ -795,45 +707,42 @@ inline bool TryCombo(const AIHeroClient& target, Mode mode) {
     if (Orbwalker::IsWindingUp()) {
         return false;
     }
-    if (TrySequence(target, mode) || TryR(target) || TryAutoReset(target)) {
-        return true;
-    }
-    if (mode == Mode::Combo && TryExtendedEWQ(target)) {
+    if (TrySequence(target, mode)) {
         return true;
     }
 
     if (AvailableQStage == QStage::First) {
         const float distance = GameObjects::Player().Distance(target);
-        if (Bool(ChainMenu, "MeleeBranch", true) && distance <= 335.0f &&
-            CastQ(target, mode, true, false)) {
-            ActiveSequence = Sequence::Disengage;
-            SequenceTargetId = static_cast<int>(target.NetworkId());
-            SequenceExpireTick = SDK::Variables::TickCount() + 1900;
-            return true;
-        }
+        const bool allowBodyFallback =
+            distance > 335.0f || Bool(ChainMenu, "MeleeBranch", true);
         if (CastQ(target, mode, false, true)) {
             return true;
         }
-        if (Bool(ChainMenu, "WOpen", true) && CastW(target, mode)) {
-            ActiveSequence = Sequence::ExtendedEWaitQ;
-            SequenceTargetId = static_cast<int>(target.NetworkId());
-            SequenceExpireTick = SDK::Variables::TickCount() + 1300;
+        if (allowBodyFallback && CastQ(target, mode, true, true)) {
+            return true;
+        }
+        if (TryR(target) || TryAutoReset(target)) {
             return true;
         }
         return false;
     }
 
-    if (ShouldWaitForAuto(target, AvailableQStage)) {
+    if (ShouldWaitForAuto(target, AvailableQStage) ||
+        ShouldHoldQ3(target, mode)) {
         return false;
     }
-    if (ShouldHoldQ3(target, mode)) {
-        return false;
+    if (CastQ(target, mode, false, true) ||
+        CastQ(target, mode, true, true)) {
+        return true;
     }
-    return CastQ(target, mode, false, true);
+    if (TryR(target) || TryAutoReset(target)) {
+        return true;
+    }
+    return false;
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
-    AIHeroClient pursuer = selected;
+inline bool TryFlee() {
+    AIHeroClient pursuer{};
     float bestDistance = FLT_MAX;
     const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -849,10 +758,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     }
     AvailableQStage = RuntimeQStage();
     if (Engine::ValidEnemy(pursuer, 700.0f) &&
-        CastQ(pursuer, Mode::Flee, true, false, true)) {
-        ActiveSequence = Sequence::Disengage;
-        SequenceTargetId = static_cast<int>(pursuer.NetworkId());
-        SequenceExpireTick = SDK::Variables::TickCount() + 900;
+        CastQ(pursuer, Mode::Flee, true, true, true)) {
         return true;
     }
     if (Engine::RuntimeSpells[2] && Engine::RuntimeSpells[2]->IsReady() &&
@@ -870,6 +776,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
     }
     return false;
 }
+
 
 struct FarmDirection {
     Vector3 Direction = {};
@@ -964,10 +871,7 @@ inline void RefreshState() {
     if (QRecastExpireTick > 0 && now > QRecastExpireTick) {
         AvailableQStage = QStage::First;
         QRecastExpireTick = 0;
-        if (ActiveSequence != Sequence::ExtendedEWaitW &&
-            ActiveSequence != Sequence::ExtendedEWaitQ) {
-            ActiveSequence = Sequence::None;
-        }
+        ActiveSequence = Sequence::None;
     }
     if (WStateExpireTick > 0 && now > WStateExpireTick) {
         WTargetId = 0;
@@ -978,7 +882,7 @@ inline void RefreshState() {
     RActive = player.IsValid() && player.HasBuff("aatroxr");
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     RefreshState();
     if (IsQWindup()) {
         (void)TryCorrectQWithE();
@@ -988,10 +892,14 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
         return true;
     }
     if (mode == Mode::Flee) {
-        (void)TryFlee(target);
+        (void)TryFlee();
         return true;
     }
     if (mode == Mode::Combo || mode == Mode::Harass) {
+        AIHeroClient target = Engine::SelectTarget(1150.0f);
+        if (!Engine::ValidEnemy(target, 1150.0f)) {
+            target = ControllerHelpers::NearestEnemyToPlayer({}, 1150.0f);
+        }
         (void)TryCombo(target, mode);
         return true;
     }
@@ -1002,10 +910,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
     if (mode == Mode::LastHit) {
         (void)TryFarm(true);
         return true;
-    }
-    // Manual R remains cooperative even when the orbwalker has no active mode.
-    if (Key(Engine::AutomaticMenu, "ManualR", false)) {
-        (void)TryR(target);
     }
     return true;
 }
@@ -1127,21 +1031,21 @@ inline void DrawQGeometry() {
 
 inline void OnDraw() {
     if (!CoachMenu || !GameObjects::Player().IsValid()) return;
-    if (Bool(CoachMenu, "DrawSweetspot", true)) {
+    if (Bool(CoachMenu, "DrawSweetspot", false)) {
         DrawQGeometry();
     }
-    if (Bool(CoachMenu, "DrawCorrection", true) &&
+    if (Bool(CoachMenu, "DrawCorrection", false) &&
         LastDashCorrection.IsValid() && !LastDashCorrection.IsZero() && IsQWindup()) {
         Drawing::DrawCircle(LastDashCorrection, 45.0f, 0xFF55FF88u, 2.0f, 40);
         Drawing::DrawLine(GameObjects::Player().Position(), LastDashCorrection,
                           0xFF55FF88u, 2.0f);
     }
-    if (Bool(CoachMenu, "DrawW", true) && WTargetId != 0 &&
+    if (Bool(CoachMenu, "DrawW", false) && WTargetId != 0 &&
         SDK::Variables::TickCount() <= WStateExpireTick && !WCenter.IsZero()) {
         Drawing::DrawCircle(WCenter, 250.0f,
                             WConfirmed ? 0xFFCC66FFu : 0x88CC66FFu, 1.5f, 56);
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen = {};
         if (Drawing::WorldToScreen(GameObjects::Player().Position(), screen)) {
             char state[160] = {};
@@ -1167,21 +1071,16 @@ inline void BuildMenu(Menu* root) {
     QMenu->Add(new MenuSlider("Sweetspot", "Min sweetspot confidence (%)", 56, 25, 90));
     QMenu->Add(new MenuSlider("MinEDistance", "Min E correction distance", 45, 20, 160));
     QMenu->Add(new MenuSlider(
-        "ECommitLead", "Commit E lead time (ms)", 345, 250, 500));
+        "ECommitDelay", "Q-E correction delay (ms)", 300, 225, 400));
     QMenu->Add(new MenuList(
         "Prediction", "Q prediction confidence", { "Medium", "High" }, 1));
-    QMenu->Add(new MenuBool("RespectCursor", "Respect cursor dir", true));
     QMenu->Add(new MenuBool(
         "AngleFiora", "Angle Q-E vs Fiora W", true));
 
     ChainMenu = TacticsMenu->AddSubMenu(new Menu("Chains", "Combo Chains"));
     ChainMenu->Add(new MenuBool("Q1W", "Q1 -> W -> Q2", true));
-    ChainMenu->Add(new MenuBool("EWQ", "Extended E -> W -> Q", true));
-    ChainMenu->Add(new MenuSlider("EWQMinRange", "Min range for E-W-Q", 735, 650, 900));
-    ChainMenu->Add(new MenuBool("WOpen", "W opener", true));
     ChainMenu->Add(new MenuBool("TimeQ3Pull", "Time Q3 to W pull", true));
     ChainMenu->Add(new MenuBool("HoldQ3Harass", "Hold Q3 in trade", true));
-    ChainMenu->Add(new MenuBool("HoldQ3Unsafe", "Hold unsafe Q3", true));
     ChainMenu->Add(new MenuBool(
         "MeleeBranch", "Melee dive defense spacing", true));
     ChainMenu->Add(new MenuBool("WeaveAutos", "Weave passive/auto attacks", true));
@@ -1260,8 +1159,6 @@ inline constexpr const char* Scenarios[] = {
     "Deliberately drop Q3 during a short harass trade",
     "Reset state when the four-second Q recast window expires",
     "Q1-W-Q2 standard chain setup",
-    "Extended E-W-Q engage",
-    "W opener only with prediction and collision approval",
     "Time Q3 impact to the Infernal Chains pull",
     "Adapt Q2 toward the target's W escape path",
     "Weave Deathbringer Stance between Q casts",
@@ -1281,7 +1178,6 @@ inline constexpr const char* Scenarios[] = {
     "Health-predicted Q last hits",
     "Yield spell timing for a valuable passive auto",
     "Cancel an AA only when it would miss guaranteed Q3-on-pull timing",
-    "Re-plan from manual spells while retaining the observed Q stage",
 };
 
 inline constexpr ChampionController Controller = [] {
@@ -1291,8 +1187,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIAatrox.md";
     controller.ImplementationSummary =
-        "Per-stage Q geometry, in-windup E sweetspot solver, W pull timing, "
-        "E-W-Q and Q1-W-Q2-Q3 branches, passive weaving, smart R commitment, "
+        "Q1-W-Q2-Q3 chaining, passive weaving, smart R commitment, "
         "reactive peel, and geometric farming.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);

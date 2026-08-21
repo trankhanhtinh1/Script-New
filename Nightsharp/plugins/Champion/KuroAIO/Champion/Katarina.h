@@ -417,7 +417,7 @@ static bool AllowDashTo(const Vector3& position) {
     if (position.IsZero() || NavMesh::IsWall(position)) {
         return false;
     }
-    return Key(MenuRoot, "Turret") || !UnderTower(position);
+    return Bool(MenuRoot, "Turret", false) || !UnderTower(position);
 }
 
 static bool CastE(const Vector3& position) {
@@ -785,7 +785,7 @@ static bool ShouldCancelRForKillsteal(const AIBaseClient& target) {
     if (!HaveRBuff()) {
         return true;
     }
-    if (Key(RMenu, "NeverCancelR")) {
+    if (Bool(RMenu, "NeverCancelR", false)) {
         return false;
     }
     if (target.DistanceToPlayer() > R.Range) {
@@ -804,7 +804,7 @@ static bool ShouldKeepR() {
     if (!HaveRBuff()) {
         return false;
     }
-    if (Key(RMenu, "NeverCancelR") && Player().CountEnemyHeroesInRange(R.Range) > 0) {
+    if (Bool(RMenu, "NeverCancelR", false) && Player().CountEnemyHeroesInRange(R.Range) > 0) {
         return true;
     }
     if (Player().CountEnemyHeroesInRange(R.Range) == 0) {
@@ -828,7 +828,7 @@ static bool DoComboE(
     if (waitingForQuickEReset) {
         *waitingForQuickEReset = false;
     }
-    if (HaveRBuff() && Key(RMenu, "NeverCancelR")) {
+    if (HaveRBuff() && Bool(RMenu, "NeverCancelR", false)) {
         return false;
     }
 
@@ -1330,7 +1330,7 @@ static bool TryCastR() {
         return R.Cast();
     }
 
-    if (Key(RMenu, "RCombo")) {
+    if (Bool(RMenu, "RCombo", true)) {
         return R.Cast();
     }
 
@@ -1341,7 +1341,7 @@ static bool TryCastR() {
 }
 
 static void EQ() {
-    if (HaveRBuff() && Key(RMenu, "NeverCancelR")) {
+    if (HaveRBuff() && Bool(RMenu, "NeverCancelR", false)) {
         return;
     }
 
@@ -1407,7 +1407,7 @@ static void EQ() {
     bool waitingForQuickEReset = false;
     if (E.IsReady() && DoComboE(
             eTarget,
-            Key(EMenu, "SaveEIfNoDaggers", true),
+            Bool(EMenu, "SaveEIfNoDaggers", true),
             Q.IsReady(),
             &waitingForDagger,
             &waitingForQuickEReset)) {
@@ -1448,7 +1448,7 @@ static void EQ() {
 }
 
 static void QE() {
-    if (HaveRBuff() && Key(RMenu, "NeverCancelR")) {
+    if (HaveRBuff() && Bool(RMenu, "NeverCancelR", false)) {
         return;
     }
 
@@ -1457,7 +1457,7 @@ static void QE() {
 
     AIBaseClient eTarget;
     bool eCasted = false;
-    if (E.IsReady() && DoComboE(eTarget, Key(EMenu, "SaveEIfNoDaggers", true))) {
+    if (E.IsReady() && DoComboE(eTarget, Bool(EMenu, "SaveEIfNoDaggers", true))) {
         eCasted = true;
     }
 
@@ -1714,7 +1714,7 @@ static void UpdateOrbwalkerState() {
         Orbwalker::AttackEnabled(false);
         Orbwalker::MoveEnabled(false);
 
-        if (!Key(RMenu, "NeverCancelR") &&
+        if (!Bool(RMenu, "NeverCancelR", false) &&
             player.HealthPercent() <= 50.0f &&
             SDK::Variables::TickCount() - LastR > 500 &&
             SDK::Variables::TickCount() - LastR < 5000) {
@@ -1991,7 +1991,7 @@ static void OnDraw() {
         return;
     }
 
-    if (Bool(DrawMenu, "DrawDaggers")) {
+    if (Bool(DrawMenu, "DrawDaggers", false)) {
         for (const auto& dagger : Daggers) {
             if (!IsOwnDagger(dagger)) {
                 continue;
@@ -2001,7 +2001,7 @@ static void OnDraw() {
         }
     }
 
-    if (Bool(DrawMenu, "DrawQRange")) {
+    if (Bool(DrawMenu, "DrawQRange", false)) {
         Drawing::DrawCircle(player.Position(), Q.Range, 0xFFADFF2Fu, 1.5f, 64);
     }
 
@@ -2022,7 +2022,7 @@ static void BuildMenu() {
         "Combo Mode",
         { "E first then Q", "Q first then E", "Logic Swap Combo" },
         0))->Permashow();
-    MenuRoot->Add(new MenuKeyBind("Turret", "Combo under Turret", SDK::Keys::T, KeyBindType::Toggle))->Permashow();
+    MenuRoot->Add(new MenuBool("Turret", "Combo under Turret", false));
 
     QMenu = MenuRoot->AddSubMenu(new Menu("Qstg", "Q Settings"));
     QMenu->Add(new MenuBool("FindBestTarget", "Find Best Target"));
@@ -2036,17 +2036,17 @@ static void BuildMenu() {
 
     EMenu = MenuRoot->AddSubMenu(new Menu("Estg", "E Settings"));
     EMenu->Add(new MenuBool("EKs", "Use E KS"));
-    EMenu->Add(new MenuKeyBind("SaveEIfNoDaggers", "Save E", SDK::Keys::H, KeyBindType::Toggle, true))->Permashow();
+    EMenu->Add(new MenuBool("SaveEIfNoDaggers", "Save E", true));
 
     RMenu = MenuRoot->AddSubMenu(new Menu("Rstg", "R Settings"));
-    RMenu->Add(new MenuKeyBind("RCombo", "R Combo toggle Key", SDK::Keys::A, KeyBindType::Toggle))->Permashow();
-    RMenu->Add(new MenuKeyBind("NeverCancelR", "Never Canceling R", SDK::Keys::Z, KeyBindType::Toggle))->Permashow();
-    RMenu->Add(new MenuBool("UseRIfKs", "Accept R combo if target Can kill"));
+    RMenu->Add(new MenuBool("RCombo", "Use R in combo", true));
+    RMenu->Add(new MenuBool("NeverCancelR", "Never cancel R", false));
+    RMenu->Add(new MenuBool("UseRIfKs", "Use R if target is killable"));
     RMenu->Add(new MenuSlider("RCount", "R Target in range", 3, 1, 5));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Drawstg", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawDaggers", "Draw Daggers"));
-    DrawMenu->Add(new MenuBool("DrawQRange", "Draw Q Range"));
+    DrawMenu->Add(new MenuBool("DrawDaggers", "Draw Daggers", false));
+    DrawMenu->Add(new MenuBool("DrawQRange", "Draw Q Range", false));
 
     MenuRoot->Attach();
 }
@@ -2057,18 +2057,6 @@ static void RemoveMenu() {
     }
 
     if (auto* item = MenuRoot->Get<MenuList>("KataComboMode")) {
-        item->RemovePermashow();
-    }
-    if (auto* item = MenuRoot->Get<MenuKeyBind>("Turret")) {
-        item->RemovePermashow();
-    }
-    if (auto* item = EMenu ? EMenu->Get<MenuKeyBind>("SaveEIfNoDaggers") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = RMenu ? RMenu->Get<MenuKeyBind>("RCombo") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = RMenu ? RMenu->Get<MenuKeyBind>("NeverCancelR") : nullptr) {
         item->RemovePermashow();
     }
 

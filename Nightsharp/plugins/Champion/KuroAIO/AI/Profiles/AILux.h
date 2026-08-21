@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Lux = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 38;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "LuxIllumination";
@@ -30,7 +29,7 @@ inline constexpr ChampionProfile Lux = [] {
         "Mark targets with Illumination, root only on Q's first legal collision, "
         "send Prismatic Wave through the threatened ally for its returning shield, "
         "hold a visible Lucent Singularity zone for slow/detonation value and use "
-        "Final Spark only on a safe predicted beam or explicit manual request.";
+        "Final Spark only on a safe predicted beam or isolated lethal shot.";
     p.ResearchSummary =
         "Riot 26.15 notes (no Lux balance change) and CommunityDragon 16.15 Lux "
         "spell-bin values: Q 1175/80/1200, W 1200/150/25-100+40% AP doubled on return, "

@@ -63,7 +63,6 @@ enum class Sequence : std::uint8_t {
     ArenaAllIn,
     PortalBuffer,
     FarmPullback,
-    PlayerLed,
 };
 
 enum class Posture : std::uint8_t {
@@ -80,7 +79,6 @@ enum class Posture : std::uint8_t {
 
 enum class QPurpose : std::uint8_t {
     None,
-    Manual,
     Trade,
     AllIn,
     PullbackLethal,
@@ -92,7 +90,6 @@ enum class QPurpose : std::uint8_t {
 
 enum class WPurpose : std::uint8_t {
     None,
-    Manual,
     FlankAngle,
     Dodge,
     TakedownReset,
@@ -104,7 +101,6 @@ enum class WPurpose : std::uint8_t {
 
 enum class EPurpose : std::uint8_t {
     None,
-    Manual,
     TradeProc,
     AllInFinish,
     StandalonePoke,
@@ -118,7 +114,6 @@ enum class EPurpose : std::uint8_t {
 
 enum class RPurpose : std::uint8_t {
     None,
-    Manual,
     FollowupEngage,
     ArenaAllIn,
     CrowdControlBuffer,
@@ -226,7 +221,6 @@ inline std::array<int, kMaximumSpirits> SpiritExpireTicks = {};
 inline int PredictedSpiritCount = 0;
 
 inline bool QActive = false;
-inline bool QControllerOwned = false;
 inline int QCastTick = 0;
 inline int QExpireTick = 0;
 inline int QPrimaryTargetId = 0;
@@ -235,7 +229,6 @@ inline int Q2LastTick = 0;
 
 inline bool WInvisible = false;
 inline bool WRealmHopper = false;
-inline bool WControllerOwned = false;
 inline int WCastTick = 0;
 inline int WInvisibleUntil = 0;
 inline int WRealmHopperUntil = 0;
@@ -250,7 +243,6 @@ inline int ERecoilUntil = 0;
 inline Vector3 LastERecoilEndpoint = {};
 
 inline bool RArenaActive = false;
-inline bool RControllerOwned = false;
 inline int RCastTick = 0;
 inline int RArenaExpireTick = 0;
 inline int RPortalReadyTick = 0;
@@ -547,7 +539,6 @@ inline std::vector<QMark> CurrentMarks() {
 
 inline void ClearQState(bool clearMarks = true) {
     QActive = false;
-    QControllerOwned = false;
     QCastTick = QExpireTick = QPrimaryTargetId = 0;
     if (clearMarks) ClearMarks();
 }
@@ -791,15 +782,11 @@ inline bool CastQPlan(const QPlan& plan,
     }
     if (!Engine::ControllerCastPosition(0, plan.Aim)) return false;
     QActive = true;
-    QControllerOwned = true;
     QCastTick = QLastObservedTick = Now();
     QExpireTick = QCastTick + static_cast<int>(
         (kQCastSeconds + kQMarkSeconds) * 1000.0f);
     QPrimaryTargetId = plan.TargetId;
     CommitExpectedMarks(plan);
-    for (const auto& mark : plan.ExpectedMarks) {
-        ObservePassiveApplication(mark.Id);
-    }
     if (plan.ChampionHits > 0) LastChampionDamageTick = Now();
     LastQPlan = plan;
     LastQPurpose = plan.Purpose;
@@ -855,15 +842,10 @@ inline AIBaseClient BestQReturnTarget() {
 }
 
 inline bool CastQ2(QPurpose purpose, bool reactive = false) {
-    if (!QActive || !QControllerOwned || !RuntimeQRecast() || !Ready(0) ||
+    if (!QActive || !RuntimeQRecast() || !Ready(0) ||
         !CastThrottleReady(0, 34, reactive ? 0 : -1)) return false;
     if (!Engine::ControllerCastSelf(0)) return false;
-    for (const auto& mark : QMarks) {
-        if (mark.NetworkId != 0 && mark.ExpireTick >= Now()) {
-            ObservePassiveApplication(mark.NetworkId);
-            if (mark.Champion) LastChampionDamageTick = Now();
-        }
-    }
+    if (ActiveMarkCount(true) > 0) LastChampionDamageTick = Now();
     Q2LastTick = Now();
     LastQPurpose = purpose;
     if (purpose == QPurpose::PullbackPassive) {
@@ -910,7 +892,6 @@ inline bool ManageQRecast(Mode mode) {
         LastQPurpose == QPurpose::MarkedWave;
     QRecastContext context{};
     context.MarkActive = true;
-    context.ControllerOwned = QControllerOwned;
     context.AutoAttackWindup = Orbwalker::IsWindingUp();
     context.TargetValid = target.IsValid() && !target.IsDead();
     context.TargetEscaping = targetChampion &&
@@ -1118,7 +1099,6 @@ inline bool CastWPlan(const WPlan& plan,
         return false;
     }
     if (!Engine::ControllerCastPosition(1, plan.CastPosition)) return false;
-    WControllerOwned = true;
     WCastTick = Now();
     const int rank = SpellRank(1);
     WInvisibleUntil = WCastTick + static_cast<int>(
@@ -1299,7 +1279,6 @@ inline bool CastEPlan(const EPlan& plan,
     ECastTick = Now();
     ERecoilUntil = ECastTick + 750;
     LastERecoilEndpoint = plan.RecoilEndpoint;
-    for (const int id : plan.HitIds) ObservePassiveApplication(id);
     if (plan.ChampionHits > 0) LastChampionDamageTick = Now();
     LastEPlan = plan;
     LastEPurpose = plan.Purpose;
@@ -1360,8 +1339,7 @@ inline std::vector<RUnit> BuildRUnits(float delaySeconds,
 
 inline RPlan BuildRPlan(const AIHeroClient& primary,
                         RPurpose purpose,
-                        bool defensive = false,
-                        bool manual = false) {
+                        bool defensive = false) {
     RPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(primary) ||
@@ -1381,11 +1359,6 @@ inline RPlan BuildRPlan(const AIHeroClient& primary,
     for (const float degrees : angles) {
         directions.push_back(SharedGeometry::Rotate2D(
             baseDirection, degrees * kPi / 180.0f));
-    }
-    if (manual) {
-        const Vector3 cursorDirection = SharedGeometry::Direction2D(
-            player.Position(), Game::CursorPos());
-        if (!cursorDirection.IsZero()) directions.push_back(cursorDirection);
     }
 
     const int followup = CountAlliedFollowup(
@@ -1425,7 +1398,7 @@ inline RPlan BuildRPlan(const AIHeroClient& primary,
                 EnemyWindows, primaryId)) score += 110.0f;
         if (ControllerHelpers::EnemyCastWindowHardCrowdControlSpent(
                 EnemyWindows, primaryId)) score += 95.0f;
-        if (!manual && !defensive &&
+        if (!defensive &&
             !CursorDirectionAgrees(castPosition, -0.22f) &&
             Orbwalker::ActiveMode() != OrbwalkingMode::Combo) score -= 330.0f;
         if (!leapSafe) score -= 1000.0f;
@@ -1488,14 +1461,12 @@ inline bool CastRPlan(const RPlan& plan,
     context.MinimumHits = Slider(WorldsMenu, "MinimumHits", 2);
     context.Evaluation = plan.Evaluation;
     if (plan.Purpose == RPurpose::KillSecure ||
-        plan.Purpose == RPurpose::SelfPeel ||
-        plan.Purpose == RPurpose::Manual) {
+        plan.Purpose == RPurpose::SelfPeel) {
         context.MinimumHits = 1;
         context.FollowupReady = true;
     }
     if (!ShouldCastR(context)) return false;
     if (!Engine::ControllerCastPosition(3, plan.CastPosition)) return false;
-    RControllerOwned = true;
     RArenaActive = true;
     RCastTick = Now();
     RArenaExpireTick = RCastTick + static_cast<int>(
@@ -1512,11 +1483,10 @@ inline bool CastRPlan(const RPlan& plan,
 }
 
 inline bool CastRRecast() {
-    if (!RArenaActive || !RControllerOwned || !RuntimeRRecast() ||
+    if (!RArenaActive || !RuntimeRRecast() ||
         !Ready(3) || !CastThrottleReady(3, 34, 0)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     RArenaActive = false;
-    RControllerOwned = false;
     RArenaExpireTick = RPortalReadyTick = 0;
     RArenaCenter = {};
     LastPortalDestination = {};
@@ -1618,7 +1588,6 @@ inline bool ManageArena() {
     if (!player.IsValid()) return false;
     if (RArenaExpireTick <= Now()) {
         RArenaActive = false;
-        RControllerOwned = false;
         RArenaCenter = {};
         return false;
     }
@@ -1694,10 +1663,8 @@ inline void RefreshRuntimeState() {
     if (RuntimeQRecast()) {
         if (!QActive) {
             QActive = true;
-            QControllerOwned = false;
             QCastTick = now;
             QExpireTick = now + static_cast<int>(kQMarkSeconds * 1000.0f);
-            ActiveSequence = Sequence::PlayerLed;
         }
         QLastObservedTick = now;
     } else if (QActive && now - QLastObservedTick > 260 &&
@@ -1718,7 +1685,6 @@ inline void RefreshRuntimeState() {
         })) {
         if (!RArenaActive) {
             RArenaActive = true;
-            RControllerOwned = false;
             RCastTick = now;
             RArenaExpireTick = now + static_cast<int>(
                 RArenaDuration(std::max(1, SpellRank(3))) * 1000.0f);
@@ -1733,7 +1699,6 @@ inline void RefreshRuntimeState() {
         }
     } else if (RArenaActive && now > RArenaExpireTick + 150) {
         RArenaActive = false;
-        RControllerOwned = false;
         RArenaCenter = {};
     }
 
@@ -1767,33 +1732,6 @@ inline Posture DeterminePosture(Mode mode,
         return Posture::FrontToBack;
     }
     return Posture::Neutral;
-}
-
-inline AIHeroClient CursorEnemy(float range = 1450.0f) {
-    const auto player = GameObjects::Player();
-    if (!player.IsValid()) return {};
-    AIHeroClient best{};
-    float bestCursorDistance = FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy, range)) continue;
-        const float cursorDistance = enemy.Position().Distance2D(
-            Game::CursorPos());
-        if (cursorDistance < bestCursorDistance) {
-            bestCursorDistance = cursorDistance;
-            best = enemy;
-        }
-    }
-    return bestCursorDistance <= 620.0f ? best : AIHeroClient{};
-}
-
-inline bool TryManualR() {
-    if (!Key(WorldsMenu, "ManualR", false) || !Ready(3) ||
-        RArenaActive) return false;
-    const AIHeroClient target = CursorEnemy();
-    if (!Engine::ValidEnemy(target)) return false;
-    const RPlan plan = BuildRPlan(
-        target, RPurpose::Manual, false, true);
-    return CastRPlan(plan, Mode::Automatic, true);
 }
 
 inline bool TryReactiveDefense(Mode mode) {
@@ -2105,7 +2043,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
     LastKnownMode = mode;
     RefreshRuntimeState();
     CurrentPosture = DeterminePosture(mode, target);
-    if (TryManualR()) return true;
     if (RArenaActive && ManageArena()) return true;
     if (QActive && ManageQRecast(mode)) return true;
     if (TryReactiveDefense(mode)) return true;
@@ -2118,7 +2055,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& target) {
     return false;
 }
 
-inline void ObserveManualQLine(const Vector3& endpoint) {
+inline void ObserveQLine(const Vector3& endpoint) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || endpoint.IsZero()) return;
     const Vector3 aim = ClampDirectionCast(endpoint, kQRange);
@@ -2150,55 +2087,37 @@ inline void ObserveLocalSpell(
         return;
     }
     if (IsQ2Event(args)) {
-        const bool ours = Engine::WasControllerCast(0);
-        if (!ours) {
-            for (const auto& mark : QMarks) {
-                if (mark.NetworkId != 0 && mark.ExpireTick >= now) {
-                    ObservePassiveApplication(mark.NetworkId);
-                }
+        for (const auto& mark : QMarks) {
+            if (mark.NetworkId != 0 && mark.ExpireTick >= now) {
+                ObservePassiveApplication(mark.NetworkId);
             }
-            LastQPurpose = QPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
         }
         Q2LastTick = now;
         ClearQState();
         return;
     }
     if (IsQEvent(args)) {
-        const bool ours = Engine::WasControllerCast(0);
         QActive = true;
-        QControllerOwned = ours;
         QCastTick = QLastObservedTick = now;
         QExpireTick = now + static_cast<int>(
             (kQCastSeconds + kQMarkSeconds) * 1000.0f);
-        if (!ours) {
-            LastQPurpose = QPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
-            const Vector3 endpoint = args.EndPosition.IsValid() &&
-                    !args.EndPosition.IsZero()
-                ? args.EndPosition : (args.CastPosition.IsValid() &&
-                    !args.CastPosition.IsZero()
-                    ? args.CastPosition : Game::CursorPos());
-            ObserveManualQLine(endpoint);
-        }
+        const Vector3 endpoint = args.EndPosition.IsValid() &&
+                !args.EndPosition.IsZero()
+            ? args.EndPosition : (args.CastPosition.IsValid() &&
+                !args.CastPosition.IsZero()
+                ? args.CastPosition : Game::CursorPos());
+        ObserveQLine(endpoint);
         return;
     }
     if (IsWEvent(args)) {
-        const bool ours = Engine::WasControllerCast(1);
-        WControllerOwned = ours;
         WCastTick = now;
         WInvisibleUntil = now + static_cast<int>(
             (0.25f + WInvisibilitySeconds(SpellRank(1))) * 1000.0f);
         WRealmHopperUntil = now + static_cast<int>(
             kWRealmHopperSeconds * 1000.0f);
-        if (!ours) {
-            LastWPurpose = WPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
-        }
         return;
     }
     if (IsEEvent(args)) {
-        const bool ours = Engine::WasControllerCast(2);
         const auto player = GameObjects::Player();
         const Vector3 endpoint = args.EndPosition.IsValid() &&
                 !args.EndPosition.IsZero()
@@ -2209,33 +2128,26 @@ inline void ObserveLocalSpell(
             ? ERecoilEndpoint(player.Position(), endpoint,
                               GroundedOrRooted())
             : Vector3{};
-        if (!ours && player.IsValid()) {
+        if (player.IsValid()) {
+            bool championHit = false;
             const auto units = BuildEUnits(kECastSeconds, true);
             for (const auto& unit : units) {
-                if (ELineHits(player.Position(), endpoint, unit)) {
-                    ObservePassiveApplication(unit.Id);
-                }
+                if (!ELineHits(player.Position(), endpoint, unit)) continue;
+                ObservePassiveApplication(unit.Id);
+                championHit = championHit || unit.Champion;
             }
-            LastEPurpose = EPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
+            if (championHit) LastChampionDamageTick = now;
         }
         return;
     }
     if (IsR2Event(args)) {
-        const bool ours = Engine::WasControllerCast(3);
         RArenaActive = false;
-        RControllerOwned = false;
         RArenaExpireTick = RPortalReadyTick = 0;
         RArenaCenter = {};
         LastPortalDestination = {};
-        if (!ours) {
-            LastRPurpose = RPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
-        }
         return;
     }
     if (IsREvent(args)) {
-        const bool ours = Engine::WasControllerCast(3);
         const auto player = GameObjects::Player();
         const Vector3 endpoint = args.EndPosition.IsValid() &&
                 !args.EndPosition.IsZero()
@@ -2248,15 +2160,10 @@ inline void ObserveLocalSpell(
             RArenaCenter = placement.ArenaCenter;
         }
         RArenaActive = true;
-        RControllerOwned = ours;
         RCastTick = now;
         RArenaExpireTick = now + static_cast<int>(
             RArenaDuration(std::max(1, SpellRank(3))) * 1000.0f);
         RPortalReadyTick = now + 350;
-        if (!ours) {
-            LastRPurpose = RPurpose::Manual;
-            ActiveSequence = Sequence::PlayerLed;
-        }
     }
 }
 
@@ -2326,7 +2233,6 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
                         RArenaDuration(std::max(1, SpellRank(3))) *
                         1000.0f));
             } else {
-                RControllerOwned = false;
                 RArenaCenter = {};
                 LastPortalDestination = {};
             }
@@ -2406,7 +2312,6 @@ inline const char* SequenceName(Sequence sequence) {
     case Sequence::ArenaAllIn: return "R arena all-in";
     case Sequence::PortalBuffer: return "R portal buffer";
     case Sequence::FarmPullback: return "pullback farm";
-    case Sequence::PlayerLed: return "player-led";
     default: return "idle";
     }
 }
@@ -2429,17 +2334,17 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kQRange,
                             0x3359E7FFu, 1.0f, 72);
         Drawing::DrawCircle(player.Position(), kERange,
                             0x33B56CFFu, 1.0f, 72);
     }
-    if (Bool(CoachMenu, "DrawQ", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawQ", false) && LastQPlan.Valid) {
         Drawing::DrawLine(player.Position(), LastQPlan.Aim,
                           0xDD59E7FFu, 2.0f);
     }
-    if (Bool(CoachMenu, "DrawPullbacks", true)) {
+    if (Bool(CoachMenu, "DrawPullbacks", false)) {
         for (const auto& mark : QMarks) {
             if (mark.NetworkId == 0 || mark.ExpireTick < Now()) continue;
             Drawing::DrawCircle(mark.LastPosition,
@@ -2451,14 +2356,14 @@ inline void OnDraw() {
                               mark.Champion ? 1.8f : 1.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawW", true) && LastWPlan.Valid) {
+    if (Bool(CoachMenu, "DrawW", false) && LastWPlan.Valid) {
         Drawing::DrawLine(player.Position(), LastWPlan.Endpoint,
                           LastWPlan.CrossesWall ? 0xDDAA77FFu : 0xCC6CF0D8u,
                           2.0f);
         Drawing::DrawCircle(LastWPlan.Endpoint, 85.0f,
                             0xAA6CF0D8u, 1.5f, 36);
     }
-    if (Bool(CoachMenu, "DrawE", true) && LastEPlan.Valid) {
+    if (Bool(CoachMenu, "DrawE", false) && LastEPlan.Valid) {
         Drawing::DrawLine(player.Position(), LastEPlan.Aim,
                           0xDDB56CFFu, 2.0f);
         if (!LastEPlan.GroundedOrRooted &&
@@ -2469,7 +2374,7 @@ inline void OnDraw() {
                                 0xAAFF7C8Eu, 1.4f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawR", true) &&
+    if (Bool(CoachMenu, "DrawR", false) &&
         (RArenaActive || LastRPlan.Valid)) {
         const Vector3 center = RArenaActive
             ? RArenaCenter : LastRPlan.Placement.ArenaCenter;
@@ -2488,7 +2393,7 @@ inline void OnDraw() {
                                 1.6f, 40);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             const PassiveRecord* targetPassive =
@@ -2524,11 +2429,11 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider(
         "DefensiveHealth", "Defensive W/R HP (%)", 42, 10, 90));
     TacticsMenu->Add(new MenuSeparator(
-        "Ownership",
+        "Control",
         "Movement, attacks, cursor"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "SpiritAbjuration", "Passive three-hit and auto-weave discipline"));
+        "SpiritAbjuration", "Passive procs and auto-weave"));
     PassiveMenu->Add(new MenuBool(
         "WeaveAutos", "Yield Q mark time for safe", true));
     PassiveMenu->Add(new MenuBool(
@@ -2538,7 +2443,7 @@ inline void BuildMenu(Menu* root) {
         "Q, autos, E, Q2 and R are"));
 
     HexMenu = TacticsMenu->AddSubMenu(new Menu(
-        "TwofoldHex", "Q pierce, pullback alignment and recast timing"));
+        "TwofoldHex", "Q pierce and pullback timing"));
     HexMenu->Add(new MenuBool(
         "Combo", "Q as the ordinary first", true));
     HexMenu->Add(new MenuBool(
@@ -2554,7 +2459,7 @@ inline void BuildMenu(Menu* root) {
         "Q2 is delayed for missing"));
 
     VeilMenu = TacticsMenu->AddSubMenu(new Menu(
-        "AcrossTheVeil", "W stealth route, wall hop and reset value"));
+        "AcrossTheVeil", "W stealth routes and resets"));
     VeilMenu->Add(new MenuBool(
         "Combo", "W only create a verified", true));
     VeilMenu->Add(new MenuBool(
@@ -2570,7 +2475,7 @@ inline void BuildMenu(Menu* root) {
         "A takedown is valued only"));
 
     WeirdingMenu = TacticsMenu->AddSubMenu(new Menu(
-        "TheWeirding", "E damage line and opposite recoil endpoint"));
+        "TheWeirding", "E line and recoil endpoint"));
     WeirdingMenu->Add(new MenuBool(
         "Combo", "Use E late enough that", true));
     WeirdingMenu->Add(new MenuBool(
@@ -2588,7 +2493,7 @@ inline void BuildMenu(Menu* root) {
         "E is not rejected by"));
 
     WorldsMenu = TacticsMenu->AddSubMenu(new Menu(
-        "BetweenWorlds", "R leap, arena, opposite portal and early end"));
+        "BetweenWorlds", "R arena and portal timing"));
     WorldsMenu->Add(new MenuBool(
         "Combo", "R for verified", true));
     WorldsMenu->Add(new MenuBool(
@@ -2609,15 +2514,12 @@ inline void BuildMenu(Menu* root) {
         "Flee", "R portal last escape", true));
     WorldsMenu->Add(new MenuSlider(
         "FleeHealth", "Max HP flee R (%)", 35, 10, 80));
-    WorldsMenu->Add(new MenuKeyBind(
-        "ManualR", "Manual R toward enemy nearest cursor [T]",
-        SDK::Keys::T, KeyBindType::Press));
     WorldsMenu->Add(new MenuSeparator(
         "CurrentR",
         "Enemies are not trapped: R"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Q-marked wave pullback and recoil-safe E"));
+        "Farm", "Q-marked wave and safe E"));
     FarmMenu->Add(new MenuBool(
         "HoldForChampion", "Do not spend farm spells", true));
     FarmMenu->Add(new MenuSlider(
@@ -2636,21 +2538,21 @@ inline void BuildMenu(Menu* root) {
         "JungleMana", "Minimum jungle-clear mana (%)", 35, 0, 100));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "One-trick state and geometry visualization"));
+        "Coach", "State and geometry overlay"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw live Q and E ranges", true));
+        "DrawRanges", "Draw live Q and E ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw selected Q1 line", true));
+        "DrawQ", "Draw selected Q1 line", false));
     CoachMenu->Add(new MenuBool(
-        "DrawPullbacks", "Draw Q2 paths", true));
+        "DrawPullbacks", "Draw Q2 paths", false));
     CoachMenu->Add(new MenuBool(
-        "DrawW", "Draw W route", true));
+        "DrawW", "Draw W route", false));
     CoachMenu->Add(new MenuBool(
-        "DrawE", "Draw E aim/recoil", true));
+        "DrawE", "Draw E aim/recoil", false));
     CoachMenu->Add(new MenuBool(
-        "DrawR", "Draw arena/opposite portal", true));
+        "DrawR", "Draw arena/opposite portal", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw passive/W/arena", true));
+        "DrawState", "Draw passive/W/arena", false));
 }
 
 inline void OnLoad() {
@@ -2668,7 +2570,7 @@ inline void OnLoad() {
     PredictedSpiritCount = 0;
     ClearQState();
     QLastObservedTick = Q2LastTick = 0;
-    WInvisible = WRealmHopper = WControllerOwned = false;
+    WInvisible = WRealmHopper = false;
     WCastTick = WInvisibleUntil = WRealmHopperUntil = 0;
     LastChampionDamageTick = 0;
     LastWCooldownSeconds = 0.0f;
@@ -2676,7 +2578,7 @@ inline void OnLoad() {
     WCooldownObserved = false;
     ECastTick = ERecoilUntil = 0;
     LastERecoilEndpoint = {};
-    RArenaActive = RControllerOwned = false;
+    RArenaActive = false;
     RCastTick = RArenaExpireTick = RPortalReadyTick = 0;
     RLastPortalTick = 0;
     RArenaCenter = LastPortalDestination = {};
@@ -2748,8 +2650,7 @@ inline constexpr const char* Scenarios[] = {
     "Recast Q2 immediately when its current damage is lethal",
     "Recast Q2 immediately when it completes a passive proc",
     "Recast Q2 before the marked target escapes the useful fight window",
-    "Recast Q2 just before expiry instead of losing controller-owned marks",
-    "Never recast a manually cast Q merely because the controller dislikes it",
+    "Recast Q2 before expiry instead of losing tracked marks",
     "Never cancel a valuable auto windup with Q2 unless lethal or expiring",
     "Compare current Q2 alignment with the player's natural path endpoint",
     "Never issue movement to manufacture a better Q2 return angle",
@@ -2757,7 +2658,7 @@ inline constexpr const char* Scenarios[] = {
     "Use Q1-Q2-E on a marked minion wave",
     "Pull Q2 before E can kill marked backline minions and erase their bolts",
     "Use Q1-E-Q2 against a lone champion when the mark has time",
-    "Let Q2 auto-fire remain a fallback when manual Q ownership is detected",
+    "Let Q2 auto-fire remain a fallback when marks persist near expiry",
     "Track Q2 auto-attack cancellation risk in the protected-windup policy",
     "Use Q2 return lines to reveal and continue tracking marked fog targets",
     "Use current W 22/21/20/19/18 cooldown telemetry",
@@ -2772,7 +2673,7 @@ inline constexpr const char* Scenarios[] = {
     "Do not cast another spell blindly during the W dash lockout",
     "Prefer side-angle W over a direct dash into melee",
     "Prefer a cursor-agreeing wall hop when the player is already leaving",
-    "Use deceptive W direction changes only through player-owned movement",
+    "Use deceptive W direction changes only through safe route geometry",
     "Score W endpoint turret exposure before casting",
     "Score ready point-click lockdown at the W endpoint",
     "Score Poppy, Taliyah and Cassiopeia dash hazards at the W endpoint",
@@ -2827,8 +2728,7 @@ inline constexpr const char* Scenarios[] = {
     "Use R leap unstoppable against one-instance crowd control",
     "Do not pretend R leap cleanses suppression or persistent crowd control",
     "Do not spend R into Malzahar, Warwick or Skarner suppression as a fake cleanse",
-    "Track arena center and expiry even for a player-cast manual R",
-    "Never early-end a player-owned manual arena automatically",
+    "Track arena center and expiry from every R cast event",
     "Map every boundary contact to the diametrically opposite portal destination",
     "Require real boundary proximity before planning a portal interaction",
     "Track a short portal transit cooldown conservatively after a long position jump",
@@ -2841,8 +2741,8 @@ inline constexpr const char* Scenarios[] = {
     "Preserve W, E and portal as separate mobility resources by default",
     "Allow E inward so recoil carries Aurora across the portal during incoming CC",
     "Allow W-hidden portal only behind an explicit opt-in and safe destination",
-    "End controller-owned R before a player-requested unsafe forced portal",
-    "End controller-owned R after targets escape and no defensive portal value remains",
+    "End R before an unsafe forced portal",
+    "End R after targets escape and no defensive portal value remains",
     "Never issue movement commands to touch an R boundary",
     "Never issue attack-move commands inside R",
     "Never cast summoner spells for Q-Flash, E-Flash or Q-E-Flash combos",
@@ -2859,7 +2759,7 @@ inline constexpr const char* Scenarios[] = {
     "Cooperate with the jungler by rewarding allied follow-up in R scoring",
     "Cooperate with the player's cursor on Q, W and offensive R direction",
     "Cooperate with the player's autos by yielding spell windows",
-    "Respect manual Q, W, E and R ownership in every state transition",
+    "Respect Q/W/E/R event state transitions and auto-attack safety",
     "Draw every tracked Q2 return path for one-trick alignment coaching",
     "Draw W wall endpoints before they are committed",
     "Draw E aim and recoil as two opposite paths",

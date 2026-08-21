@@ -13,7 +13,6 @@
 namespace Plugins::KuroAIO::AI::Controllers::Yorick {
 
 using namespace Geometry;
-using ControllerHelpers::AnalyzeEnemyCast;
 using ControllerHelpers::Bool;
 using ControllerHelpers::CaptureAfterAttack;
 using ControllerHelpers::CurrentResource;
@@ -23,7 +22,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellCost;
@@ -54,7 +52,6 @@ inline int ETargetId = 0;
 inline int EMarkExpireTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline std::array<int, 4> LastCastTick = {};
 
 inline bool Throttle(int slot, int delay = 55) {
@@ -265,7 +262,7 @@ inline void Farm(Mode mode) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Engine::CountEnemiesAt(player.Position(), 850.0f) > 0) return;
     if (mode == Mode::LastHit && LiveGraveCount() > 0) {
-        const AIHeroClient target = PreferredEnemyTarget({}, kQRange);
+        const AIHeroClient target = Engine::SelectTarget(kQRange);
         if (target.IsValid() && CastQ(target, mode)) return;
     }
     (void)Engine::TryFarm(mode);
@@ -289,18 +286,17 @@ inline void Automatic(const AIHeroClient& target) {
         ControllerHelpers::Lethal(target, QDamage(target))) (void)CastQ(target, Mode::Automatic, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
     const float range = mode == Mode::Flee ? kWRange : kRRange;
-    const AIHeroClient target = PreferredEnemyTarget(selected, range);
+    const AIHeroClient target = Engine::SelectTarget(range);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit: Farm(mode); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, kWRange)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, kWRange)); break;
     case Mode::Automatic: Automatic(target); break;
     default: break;
     }
@@ -311,15 +307,12 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     const int slot = static_cast<int>(args.Slot);
     if (IsLocalPlayer(args.Sender)) {
-        const bool ours = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-        if (slot >= 0 && slot < 4 && !ours) ManualOwnershipUntil = Now() + Slider(TacticsMenu, "ManualOwnershipMs", 650);
+        if (slot < 0 || slot > 3) return;
         if (slot == 0) QCastTick = Now();
         else if (slot == 2) { ECastTick = Now(); ETargetId = static_cast<int>(args.TargetNetworkId); EMarkExpireTick = Now() + 6000; }
         else if (slot == 3) { RCastTick = Now(); Maiden = MaidenState::Alive; MaidenSpawnTick = Now(); MaidenExpireTick = Now() + 60000; }
         return;
     }
-    const auto analysis = AnalyzeEnemyCast(args);
-    if (analysis.Valid && (analysis.TargetsPlayer || analysis.CrossesPlayer)) ManualOwnershipUntil = std::max(ManualOwnershipUntil, analysis.CommitmentUntilTick);
 }
 
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
@@ -344,8 +337,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Maiden = MaidenState::Dead;
     }
 }
-inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) { ManualOwnershipUntil = std::max(ManualOwnershipUntil, Now() + 700); (void)args; }
-inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) { ManualOwnershipUntil = std::max(ManualOwnershipUntil, Now() + 700); (void)args; }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) { if (args.Target.IsValid()) { LastAutoTargetId = static_cast<int>(args.Target.NetworkId()); LastAutoTick = Now(); } }
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) { (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick); }
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) { if (IsLocalPlayer(args.Sender) && args.IsAutoAttack && QCastTick > 0 && QCastTick + 600 > Now()) QCastTick = 0; }
@@ -387,7 +378,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("YorickTactics", "Yorick grave and Maiden tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1400));
     TacticsMenu->Add(new MenuBool("SplitPush", "Allow safe split-push Maiden", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Last Rites"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Dark Procession"));
@@ -409,7 +399,7 @@ inline void ResetState() {
     MaidenSpawnTick = MaidenExpireTick = 0;
     QCastTick = WCastTick = ECastTick = RCastTick = 0;
     ETargetId = EMarkExpireTick = 0;
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     LastCastTick.fill(0);
 }
 inline void OnLoad() { ResetState(); }
@@ -418,7 +408,7 @@ inline void OnUnload() { ResetState(); TacticsMenu = QMenu = WMenu = EMenu = RMe
 inline constexpr const char* Scenarios[] = {
     "Track confirmed graves and four Mist Walkers from object and minion observations",
     "Consume one nearby grave only after Q Last Rites cast and preserve the auto reset",
-    "Use selected target first, then orbwalker fallback for every combat mode",
+    "Use the engine-selected target for every combat mode",
     "Place Dark Procession only on a valid walkable endpoint with turret and enemy-count gates",
     "Reject cage projectile-wall paths and allow defensive or lethal exceptions",
     "Predict Mourning Mist, reject collision and projectile walls, then reconcile E mark lifetime",
@@ -428,8 +418,7 @@ inline constexpr const char* Scenarios[] = {
     "Require wave, health, visibility and retreat/teleport safety before split-push automation",
     "Reconcile every state from both events and polling rather than trusting local casts",
     "Preserve ordinary attack windup and let Q own its explicit auto reset",
-    "Yield for a bounded manual-ownership window after unowned spell input",
-    "Gate automatic reactions on lethal E/Q or an active wall peel rather than cursor movement",
+    "Gate automatic reactions on lethal E/Q or an active wall peel",
     "Use distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic routes",
     "Never automate item, summoner, wall-blink or unsafe turret-diving decisions",
 };
@@ -456,8 +445,6 @@ inline constexpr ChampionController Controller = [] {
 
     controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &OnAfterAttack;
-    controller.OnGapcloser = &OnGapcloser;
-    controller.OnInterruptable = &OnInterruptable;
     controller.OnObjectCreate = &OnObjectCreate;
     controller.OnObjectDelete = &OnObjectDelete;
     controller.OnMissileCreate = &OnMissileCreate;

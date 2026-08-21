@@ -24,7 +24,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PlayerManaPercent;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Slider;
 using ControllerHelpers::SpellEnabled;
@@ -38,7 +37,6 @@ inline int StanceCastTick = 0;
 inline int StanceTargetId = 0;
 inline int StormTargetId = 0;
 inline int StormObjectId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -286,11 +284,10 @@ inline void ReconcileState() {
     if (StormObjectId != 0 && now > StanceCastTick + kStormDurationMs) StormObjectId = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
     const float range = mode == Mode::Flee ? 850.0f : kLightningReach + 100.0f;
-    const AIHeroClient target = PreferredEnemyTarget(selected, range);
+    const AIHeroClient target = Engine::SelectTarget(range);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -310,7 +307,6 @@ inline void BuildMenu(Menu* root) {
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Udyr jungle posture"));
     TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum enemies at stance commit", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Minimum harass mana percent", 45, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("LaneMana", "Minimum lane-clear mana percent", 30, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleMana", "Minimum jungle mana percent", 25, 0, 100));
@@ -320,7 +316,6 @@ inline void OnLoad() {
     CurrentStance = Stance::None;
     CurrentRecastState = RecastState::Ready;
     StanceCastTick = StanceTargetId = StormTargetId = StormObjectId = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
     IncomingThreatEndpoint = {};
     LastAutoTargetId = LastAutoTick = 0;
     LastCastTick.fill(0);
@@ -337,8 +332,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) {
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
             const Stance stance = args.Slot == 0 ? Stance::WildingClaw :
                 (args.Slot == 1 ? Stance::IronMantle :
@@ -443,8 +436,7 @@ inline constexpr const char* Scenarios[] = {
     "Wingborne Storm slow, pulses, zone safety and moving target tracking",
     "stance recast state reconciled by spell, buff, object and polling callbacks",
     "prediction, collision and projectile-wall checks before stance commitment",
-    "attack windup preservation and manual ownership protection",
-    "combo and harass stance-aware priorities with selected/orbwalker target policy",
+    "attack windup preservation and autonomous Engine target policy",
     "lane clear, jungle objective, last-hit, flee and automatic threat policies",
     "mana, cooldown, turret and enemy-count gates around safe mobility and zones",
 };

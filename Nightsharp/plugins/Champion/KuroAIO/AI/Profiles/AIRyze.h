@@ -6,7 +6,7 @@ namespace Plugins::KuroAIO::AI::Profiles {
 
 // Ryze is a short-range reset battlemage. The full controller owns first-body
 // Q collision, four-second Rune/Flux state, direct versus wave-bridge spell
-// branches, mana reserves, auto weaving and player-authorized Realm Warp.
+// branches, mana reserves, auto weaving and safe Realm Warp endpoint.
 inline constexpr ChampionProfile Ryze = [] {
     ChampionProfile p{};
     p.ChampionId = SDK::ChampionId::Ryze;
@@ -17,7 +17,7 @@ inline constexpr ChampionProfile Ryze = [] {
     p.Mechanics = Mechanic::Mark | Mechanic::Stack |
                   Mechanic::AutoWeave | Mechanic::Channel |
                   Mechanic::Blink | Mechanic::ObjectTracking;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::Defensive;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Overload", CastKind::Line,
@@ -129,7 +129,6 @@ inline constexpr ChampionProfile Ryze = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 30;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "RyzePassive";
@@ -144,7 +143,7 @@ inline constexpr ChampionProfile Ryze = [] {
         "Resolve every moving Q first body; track each four-second Flux and "
         "Rune; choose QEQWQEQ, QEWQ, EWQ, WEQ or QEQ by commitment, mobility, "
         "mana and escape need; bridge E-Q through the wave; weave only in real "
-        "downtime; keep Realm Warp under an explicit player key and safe-arrival gate.";
+        "downtime; cast Realm Warp only for an autonomous safe-arrival route.";
     p.ResearchSummary =
         "Pinned to Riot/CommunityDragon 16.14 and Riot 25.11/25.13/26.3/26.12; "
         "cross-checked with current OP.GG order, Mobalytics combo catalog, "

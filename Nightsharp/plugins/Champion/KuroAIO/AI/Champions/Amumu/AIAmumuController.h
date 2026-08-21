@@ -90,7 +90,6 @@ enum class UltimateReason : int {
     Interrupt,
     Lethal,
     Survival,
-    ManualFlash,
 };
 
 struct BandagePlan {
@@ -118,7 +117,7 @@ struct UltimatePlan {
     float Score = 0.0f;
     float PrimaryScore = 0.0f;
     bool IncludesProtectedThreat = false;
-    bool IncludesSelected = false;
+    bool IncludesFocus = false;
     bool Valid = false;
 };
 
@@ -210,8 +209,6 @@ inline int InterruptExpireTick = 0;
 
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualFlashUntil = 0;
-inline int ManualRFlashWindowUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline float RecentIncomingPressure = 0.0f;
@@ -379,13 +376,6 @@ inline bool TargetUntargetableState(const AIHeroClient& target) {
            target.HasBuff("BardRStasis");
 }
 
-inline bool CursorAgrees(const Vector3& destination,
-                         float minimumDot = -0.05f) {
-    if (Orbwalker::ActiveMode() == OrbwalkingMode::Combo) return true;
-    if (!Bool(RoleMenu, "RespectCursor", true)) return true;
-    return ControllerHelpers::CursorDirectionAgrees(
-        destination, minimumDot);
-}
 
 inline void AppendLineUnit(std::vector<LineUnit>& result,
                            const AIBaseClient& unit,
@@ -635,7 +625,7 @@ inline float EnemyUltimatePriority(const AIHeroClient& enemy) {
 
 inline UltimatePlan BuildUltimatePlan(const Vector3& center,
                                       float delaySeconds,
-                                      int selectedId = 0) {
+                                      int focusId = 0) {
     UltimatePlan plan{};
     plan.Center = center;
     if (!center.IsValid() || center.IsZero()) return plan;
@@ -682,7 +672,7 @@ inline UltimatePlan BuildUltimatePlan(const Vector3& center,
             plan.PrimaryId = id;
         }
         if (id == PeelThreatId) plan.IncludesProtectedThreat = true;
-        if (id == selectedId) plan.IncludesSelected = true;
+        if (id == focusId) plan.IncludesFocus = true;
     }
     plan.Valid = plan.RawHitCount > 0;
     return plan;
@@ -734,17 +724,13 @@ inline bool CastBandage(const AIBaseClient& intended,
         Orbwalker::AttackCastDelayRemaining() > 25) {
         return false;
     }
-    if ((purpose == BandagePurpose::Engage ||
-         purpose == BandagePurpose::Bridge) &&
-        !CursorAgrees(intended.Position())) {
-        return false;
-    }
     AIHeroClient hero = intended.IsHero()
         ? AIHeroClient(intended.Address())
         : AIHeroClient{};
     const bool allowShield = allowSpellShieldMobility &&
         Bool(BandageMenu, "ShieldMobility", false);
-    const BandagePlan plan = BuildBandagePlan(intended, purpose, allowShield);
+    const BandagePlan plan = BuildBandagePlan(
+        intended, purpose, allowShield);
     if (!plan.Valid || !plan.IntendedFirst || !plan.ArrivalSafe) return false;
 
     if (hero.IsValid() && purpose == BandagePurpose::Engage &&
@@ -1046,7 +1032,7 @@ inline bool UltimateReady() {
 
 inline bool UltimatePlanMeetsReason(const UltimatePlan& plan,
                                    UltimateReason reason,
-                                   const AIHeroClient& selected) {
+                                   const AIHeroClient& focus) {
     if (!plan.Valid) return false;
     const int minimum = Slider(UltimateMenu, "MinimumTargets", 2);
     const float scoreMinimum = static_cast<float>(
@@ -1054,28 +1040,25 @@ inline bool UltimatePlanMeetsReason(const UltimatePlan& plan,
     switch (reason) {
     case UltimateReason::QArrival:
         return plan.EffectiveHitCount >= minimum ||
-               (plan.IncludesSelected && plan.PrimaryScore >= 1.55f);
+               (plan.IncludesFocus && plan.PrimaryScore >= 1.55f);
     case UltimateReason::MultiTarget:
         return plan.EffectiveHitCount >= minimum &&
                plan.Score >= scoreMinimum;
     case UltimateReason::HighValuePick:
-        return plan.IncludesSelected && plan.PrimaryId ==
-                   static_cast<int>(selected.NetworkId()) &&
+        return plan.IncludesFocus && plan.PrimaryId ==
+                   static_cast<int>(focus.NetworkId()) &&
                plan.PrimaryScore >= 1.65f &&
                CountAlliedFollowup(plan.Center, 900.0f) >= 1;
     case UltimateReason::Peel:
         return plan.IncludesProtectedThreat;
     case UltimateReason::AntiDash:
     case UltimateReason::Interrupt:
-        return plan.IncludesSelected;
+        return plan.IncludesFocus;
     case UltimateReason::Lethal:
-        return plan.IncludesSelected && Engine::ValidEnemy(selected) &&
-               RDamage(selected, HasCurse(selected)) >= selected.Health();
+        return plan.IncludesFocus && Engine::ValidEnemy(focus) &&
+               RDamage(focus, HasCurse(focus)) >= focus.Health();
     case UltimateReason::Survival:
         return plan.EffectiveHitCount >= 1;
-    case UltimateReason::ManualFlash:
-        return plan.EffectiveHitCount >= minimum ||
-               (plan.IncludesSelected && plan.PrimaryScore >= 1.45f);
     default:
         return false;
     }
@@ -1083,7 +1066,7 @@ inline bool UltimatePlanMeetsReason(const UltimatePlan& plan,
 
 inline bool CastUltimate(UltimateReason reason,
                          Mode mode,
-                         const AIHeroClient& selected,
+                         const AIHeroClient& focus,
                          const Vector3& expectedCenter = {},
                          bool fastFollowup = false) {
     if (!UltimateReady() || !SpellEnabled(3, mode) ||
@@ -1102,8 +1085,8 @@ inline bool CastUltimate(UltimateReason reason,
         : 0.25f;
     const UltimatePlan plan = BuildUltimatePlan(
         center, delay,
-        selected.IsValid() ? static_cast<int>(selected.NetworkId()) : 0);
-    if (!UltimatePlanMeetsReason(plan, reason, selected)) return false;
+        focus.IsValid() ? static_cast<int>(focus.NetworkId()) : 0);
+    if (!UltimatePlanMeetsReason(plan, reason, focus)) return false;
     if (!fastFollowup && Orbwalker::IsWindingUp() &&
         Orbwalker::AttackCastDelayRemaining() > 25 &&
         reason != UltimateReason::Peel &&
@@ -1118,15 +1101,14 @@ inline bool CastUltimate(UltimateReason reason,
     RPendingMarkTick = RResolveTick;
     RPendingResolve = true;
     RWasManual = false;
-    RCastTargetId = selected.IsValid()
-        ? static_cast<int>(selected.NetworkId())
+    RCastTargetId = focus.IsValid()
+        ? static_cast<int>(focus.NetworkId())
         : plan.PrimaryId;
     LastUltimatePlan = plan;
     LastUltimateReason = reason;
     QForcedAutoSuppressUntil = 0;
     return true;
 }
-
 inline AIHeroClient ProtectedAlly() {
     AIHeroClient current{};
     for (const auto& ally : GameObjects::AllyHeroes()) {
@@ -1379,13 +1361,6 @@ inline bool TryReactiveUltimate(const AIHeroClient& selected,
         ? Mode::Combo
         : Mode::Automatic;
 
-    if (ManualFlashUntil >= Now() &&
-        Bool(UltimateMenu, "AfterManualFlash", true) &&
-        CastUltimate(UltimateReason::ManualFlash, castMode,
-                     selected, player.Position(), true)) {
-        ManualFlashUntil = 0;
-        return true;
-    }
 
     if (GapcloserTargetId != 0 && Now() <= GapcloserExpireTick &&
         Bool(UltimateMenu, "AntiDashR", true)) {
@@ -1439,7 +1414,8 @@ inline bool TryReactiveUltimate(const AIHeroClient& selected,
 
 inline AIBaseClient BestBridgeAnchor(const AIHeroClient& champion) {
     const auto player = GameObjects::Player();
-    if (!Engine::ValidEnemy(champion) || RuntimeQCharges() < 2 ||
+    if (!player.IsValid() || !Engine::ValidEnemy(champion) ||
+        RuntimeQCharges() < 2 ||
         player.Position().Distance2D(champion.Position()) <=
             kBandageRange - 40.0f ||
         player.Position().Distance2D(champion.Position()) > 2250.0f) {
@@ -1459,8 +1435,7 @@ inline AIBaseClient BestBridgeAnchor(const AIHeroClient& champion) {
                 kBandageRange,
                 static_cast<float>(Slider(
                     BandageMenu, "BridgeMinimumGain", 300))) ||
-            !ArrivalSafe(landing, BandagePurpose::Bridge, champion) ||
-            !CursorAgrees(landing, 0.10f)) {
+            !ArrivalSafe(landing, BandagePurpose::Bridge, champion)) {
             return;
         }
         const BandagePlan plan = BuildBandagePlan(
@@ -1483,7 +1458,6 @@ inline AIBaseClient BestBridgeAnchor(const AIHeroClient& champion) {
     }
     return best;
 }
-
 inline AIBaseClient BestEscapeAnchor(const AIHeroClient& pursuer) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
@@ -1847,15 +1821,17 @@ inline void RefreshState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     RefreshState();
     const AIHeroClient ally = ProtectedAlly();
     const AIHeroClient threat = Engine::ValidAlly(ally)
         ? SelectPeelThreat(ally)
         : AIHeroClient{};
-    CurrentPosture = ChoosePosture(mode, selected, ally, threat);
+    const AIHeroClient target = Engine::SelectTarget();
+    CurrentPosture = ChoosePosture(mode, target, ally, threat);
 
-    if (HandleBandageSequence(mode, selected)) return true;
+    if (HandleBandageSequence(mode, target)) return true;
     if (QPendingArrival) return false;
     if (TryInterrupt()) return true;
     if (Bool(RoleMenu, "PeelBeforeEngage", true) &&
@@ -1863,15 +1839,15 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         TryPeel(ally, threat, mode)) {
         return true;
     }
-    if (TryReactiveUltimate(selected, mode)) return true;
+    if (TryReactiveUltimate(target, mode)) return true;
     if (TryManageDespair(
-            mode == Mode::None ? Mode::Automatic : mode, selected)) {
+            mode == Mode::None ? Mode::Automatic : mode, target)) {
         return true;
     }
 
-    if (mode == Mode::Flee) return TryFlee(selected);
-    if (mode == Mode::Combo) return TryCombo(selected);
-    if (mode == Mode::Harass) return TryHarass(selected);
+    if (mode == Mode::Flee) return TryFlee(target);
+    if (mode == Mode::Combo) return TryCombo(target);
+    if (mode == Mode::Harass) return TryHarass(target);
     if (mode == Mode::LaneClear) {
         if (JungleRole() && TryJungle()) return true;
         return TryLaneFarm(mode);
@@ -1984,18 +1960,10 @@ inline void ObserveLocalSpell(
             RPendingResolve = true;
             RWasManual = true;
             LastUltimateReason = UltimateReason::None;
-            ManualRFlashWindowUntil = RResolveTick + 80;
             LastUltimatePlan = BuildUltimatePlan(
                 GameObjects::Player().Position(), 0.25f, 0);
         }
         return;
-    }
-    if (args.Slot == static_cast<int>(SDK::SpellSlot::Summoner1) ||
-        args.Slot == static_cast<int>(SDK::SpellSlot::Summoner2) ||
-        SpellEventNameContains(args, "SummonerFlash")) {
-        if (SpellEventNameContains(args, "Flash")) {
-            ManualFlashUntil = Now() + 480;
-        }
     }
 }
 
@@ -2144,7 +2112,6 @@ inline const char* UltimateReasonName(UltimateReason reason) {
     case UltimateReason::Interrupt: return "interrupt";
     case UltimateReason::Lethal: return "lethal";
     case UltimateReason::Survival: return "survival";
-    case UltimateReason::ManualFlash: return "manual-Flash";
     default: return "hold";
     }
 }
@@ -2154,7 +2121,7 @@ inline void OnDraw() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
-    if (Bool(CoachMenu, "DrawQ", true)) {
+    if (Bool(CoachMenu, "DrawQ", false)) {
         Drawing::DrawCircle(player.Position(), kBandageRange,
                             0x665BD6FFu, 1.2f, 80);
         if (LastBandagePlan.Valid &&
@@ -2186,7 +2153,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(player.Position(), kTantrumRadius,
                             0x557E67FFu, 1.0f, 56);
     }
-    if (Bool(CoachMenu, "DrawR", true)) {
+    if (Bool(CoachMenu, "DrawR", false)) {
         Drawing::DrawCircle(player.Position(), kCurseRadius,
                             UltimateReady()
                                 ? 0xAA9B7CFFu
@@ -2208,7 +2175,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawPeel", true)) {
+    if (Bool(CoachMenu, "DrawPeel", false)) {
         const AIHeroClient ally = ProtectedAlly();
         const AIHeroClient threat = HeroByNetworkId(PeelThreatId);
         if (ally.IsValid()) {
@@ -2220,7 +2187,7 @@ inline void OnDraw() {
                               0xFFFF6375u, 2.4f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[320]{};
@@ -2239,13 +2206,6 @@ inline void OnDraw() {
                               0xFFD9F4FFu, state);
         }
     }
-    if (ManualRFlashWindowUntil >= Now() &&
-        Bool(CoachMenu, "DrawRFlashWindow", true)) {
-        Drawing::DrawCircle(Game::CursorPos(), 85.0f,
-                            0xFFFFD166u, 3.0f, 48);
-        Drawing::DrawLine(player.Position(), Game::CursorPos(),
-                          0xFFFFD166u, 2.0f);
-    }
 }
 
 inline void BuildMenu(Menu* root) {
@@ -2258,24 +2218,14 @@ inline void BuildMenu(Menu* root) {
     RoleMenu->Add(new MenuList(
         "Role", "Role model", { "Auto", "Jungle", "Support" }, 0));
     RoleMenu->Add(new MenuBool(
-        "RespectCursor", "Require cursor agreement", true));
-    RoleMenu->Add(new MenuBool(
         "PeelBeforeEngage", "Protect carry first", true));
     RoleMenu->Add(new MenuSlider(
         "HarassFollowup", "Min allies follow Q", 1, 0, 3));
-    RoleMenu->Add(new MenuSeparator(
-        "Ownership",
-        "Movement, attack-move, Hold,"));
 
     BandageMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Bandage", "Two-charge first-collision and arrival planner"));
-    BandageMenu->Add(new MenuBool(
         "DirectEngage", "Use a safe direct champion Q", true));
     BandageMenu->Add(new MenuBool(
         "ReserveSecond", "Reserve Q for peel", true));
-    BandageMenu->Add(new MenuList(
-        "Hitchance", "Naked champion Q hitchance",
-        { "Medium", "High", "Very high", "Immobile only" }, 2));
     BandageMenu->Add(new MenuSlider(
         "MaximumNakedRange", "Max naked-Q center range",
         1000, 700, 1160));
@@ -2309,7 +2259,7 @@ inline void BuildMenu(Menu* root) {
         "HarassMana", "Minimum mana for Q harass (%)", 55, 0, 100));
 
     DespairMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Despair", "Contact-aware W toggle and mana economy"));
+        "Contact-aware W and mana"));
     DespairMenu->Add(new MenuBool(
         "AutoToggle", "Auto W on contact", true));
     DespairMenu->Add(new MenuBool(
@@ -2324,7 +2274,7 @@ inline void BuildMenu(Menu* root) {
         "KeepEpic", "Keep W on while an epic", true));
 
     TantrumMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Tantrum", "Curse weave and incoming-attack cooldown refunds"));
+        "Curse weave and attack refunds"));
     TantrumMenu->Add(new MenuBool(
         "WeaveCurse", "Wait for an in-range AA", true));
     TantrumMenu->Add(new MenuBool(
@@ -2335,7 +2285,7 @@ inline void BuildMenu(Menu* root) {
         "RefundRule", "Each basic attack that hits"));
 
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Ultimate", "Predicted R quality, layering and player Flash"));
+        "Predicted R, layering and Flash"));
     UltimateMenu->Add(new MenuBool(
         "MultiTarget", "R multi-target cluster", true));
     UltimateMenu->Add(new MenuSlider(
@@ -2373,25 +2323,14 @@ inline void BuildMenu(Menu* root) {
     UltimateMenu->Add(new MenuSlider(
         "SurvivalHp", "Player HP for survival R (%)", 27, 5, 65));
     UltimateMenu->Add(new MenuBool(
-        "AfterManualFlash", "Cast smart R after the", true));
-    UltimateMenu->Add(new MenuBool(
         "FleeR", "Use R fleeing from multiple", true));
     UltimateMenu->Add(new MenuSlider(
         "FleeTargets", "Minimum flee-R targets", 2, 1, 5));
-    UltimateMenu->Add(new MenuSeparator(
-        "RFlash",
-        "Manual R->Flash is coached"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Jungle E-refund and conservative lane clear"));
-    FarmMenu->Add(new MenuBool(
         "JungleAbilities", "Abilities in jungle", true));
     FarmMenu->Add(new MenuBool(
         "JungleQ", "Q a distant jungle target", true));
-    FarmMenu->Add(new MenuBool(
-        "JungleE", "Use E on jungle contact", true));
-    FarmMenu->Add(new MenuSlider(
-        "JungleEMinimum", "Minimum jungle units for E", 1, 1, 6));
     FarmMenu->Add(new MenuBool(
         "LaneE", "E for lane clear", true));
     FarmMenu->Add(new MenuBool(
@@ -2415,8 +2354,6 @@ inline void BuildMenu(Menu* root) {
         "DrawPeel", "Draw ally/diver", false));
     CoachMenu->Add(new MenuBool(
         "DrawState", "Draw posture/ammo state", false));
-    CoachMenu->Add(new MenuBool(
-        "DrawRFlashWindow", "Draw R->Flash window", false));
 }
 
 inline void OnLoad() {
@@ -2448,7 +2385,6 @@ inline void OnLoad() {
     GapcloserEnd = {};
     InterruptTargetId = InterruptExpireTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
-    ManualFlashUntil = ManualRFlashWindowUntil = 0;
     IncomingThreatUntil = IncomingHardCcUntil = 0;
     RecentIncomingPressure = 0.0f;
     RefreshState();

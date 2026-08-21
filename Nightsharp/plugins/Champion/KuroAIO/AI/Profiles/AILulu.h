@@ -89,7 +89,6 @@ inline constexpr ChampionProfile Lulu = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "LuluPix";
@@ -101,7 +100,7 @@ inline constexpr ChampionProfile Lulu = [] {
     p.ThemeTo = 0xFFB86BFFu;
     p.ThemeSpeed = 0.94f;
     p.TacticalSummary =
-        "Preserve selected target ownership while managing Pix bolt origin, dual-bolt Glitterlance, defensive polymorph or speed Whimsy posture, and health-safe Wild Growth timing.";
+        "Preserve the best reachable target while managing Pix bolt origin, dual-bolt Glitterlance, defensive polymorph or speed Whimsy posture, and health-safe Wild Growth timing.";
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15 Lulu values, spell names and Pix transfer behavior are recorded in AILulu.md.";
     return p;

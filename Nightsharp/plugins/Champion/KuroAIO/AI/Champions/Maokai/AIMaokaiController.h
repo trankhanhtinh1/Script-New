@@ -561,9 +561,9 @@ inline void BuildMenu(Menu* root) {
     RoleMenu->Add(new MenuSlider(
         "PeelAllyHp", "Peel ally health percent", 48, 10, 90));
     SaplingMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Saplings", "Sapling object and brush zone tracking"));
+        "Saplings", "Sapling brush tracking"));
     SaplingMenu->Add(new MenuBool(
-        "AssumeBrush", "Treat E landing as brush when map data is unavailable", true));
+        "AssumeBrush", "Assume E landing is brush", true));
     SaplingMenu->Add(new MenuBool(
         "PreferEmpowered", "Prefer empowered sapling zones", true));
     EngageMenu = TacticsMenu->AddSubMenu(new Menu(
@@ -613,7 +613,7 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Prefer the selected target while retaining a nearest-enemy fallback",
+    "Use autonomous Engine target selection with nearest-enemy threat fallback",
     "Poll and reconcile sapling objects when object events are delayed",
     "Expire ordinary saplings after thirty seconds and track empowered brush zones",
     "Use E's 550-unit sapling detection radius rather than a generic trap radius",
@@ -632,7 +632,7 @@ inline constexpr const char* Scenarios[] = {
     "Discount R targets protected by spell shields and avoid unsafe mobility commits",
     "Protect a low-health ally from a nearby diver before proactive engage",
     "Use Q and R to peel a gapcloser or interruptable channel",
-    "Preserve AA windup and manual casts through local ownership arbitration",
+    "Preserve AA windup and event-driven casts through safe policy gates",
     "Use Q on jungle monsters with the current 26.15 monster/AP tuning",
     "Use E for conservative jungle and lane zone control with mana reserve",
     "Use Q only for predicted last-hit opportunities rather than generic clear spam",

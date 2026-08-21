@@ -36,7 +36,6 @@ inline HuntMark ActiveHunt{};
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline Vec3 LastPounceEndpoint{};
@@ -204,10 +203,9 @@ inline void ReconcileState() {
         ActiveHunt.ExpireTick = std::max(ActiveHunt.ExpireTick, now + kHuntDurationMs);
     }
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, CurrentForm == Form::Cougar ?
+    const AIHeroClient target = Engine::SelectTarget(CurrentForm == Form::Cougar ?
         kHuntedPounceRange : kJavelinRange);
     const bool threatened = IncomingThreatUntil > Now() || IncomingHardCCUntil > Now();
     if (CurrentForm == Form::Human && (threatened ||
@@ -241,8 +239,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-                Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
         }
         if (SpellEventNameContainsAny(args, {"Takedown", "Pounce", "Swipe", "Cougar"}))
@@ -294,7 +290,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("NidaleeOneTrick", "Nidalee form tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     SpearMenu = TacticsMenu->AddSubMenu(new Menu("Javelin", "Spear and trap setup"));
     SpearMenu->Add(new MenuBool("UseTrap", "Use Bushwhack setup", true));
     HuntMenu = TacticsMenu->AddSubMenu(new Menu("Hunt", "Hunt mark tracking"));
@@ -313,7 +308,7 @@ inline void OnLoad() {
     CurrentForm = Form::Unknown;
     ActiveHunt = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastPounceEndpoint = {};
     ReconcileState();
@@ -326,7 +321,7 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Pin Riot 26.15 and CommunityDragon 16.15 Summoner's Rift values",
     "Reconcile human/cougar form from spell names, form buffs, events and polling",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Track Hunt marks by enemy network id, buff callbacks and four-second expiry polling",
     "Use high-confidence predicted Javelin with 1500 range, collision and wall rejection",
     "Use Bushwhack as a conservative setup/trap placement rather than blind combat damage",
@@ -338,7 +333,7 @@ inline constexpr const char* Scenarios[] = {
     "Require Hunt evidence before spending the long Pounce path when configured",
     "Transform only when a target or escape route justifies a form transition",
     "Preserve auto-attack windup unless reactive or lethal action requires interruption",
-    "Yield manual spell ownership and reconcile manual form transitions",
+    "Reconcile event-driven form transitions with the live state machine",
     "Handle Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Automatic mode permits only emergency sustain, defensive leap or kill secure",
     "Never automate items, summoner spells or movement ownership",

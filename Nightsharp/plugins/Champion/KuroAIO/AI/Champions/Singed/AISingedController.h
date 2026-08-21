@@ -25,7 +25,6 @@ using ControllerHelpers::SpellEnabled;
 inline Menu* TacticsMenu = nullptr;
 inline Menu* SafetyMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline int WTargetId = 0;
@@ -42,8 +41,7 @@ inline Vector3 LastFlingEndpoint{};
 
 inline bool Ready(int slot, Mode mode, bool reactive = false) {
     return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
-        Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode) &&
-        (reactive || ManualOverrideUntil <= Now());
+        Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode);
 }
 
 inline bool PreserveAttack(bool reactive, bool allowDuringWindup = false) {
@@ -239,7 +237,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         IncomingThreatUntil = 0;
         IncomingThreatTargetId = 0;
     }
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, 1100.0f);
+    const AIHeroClient target = Engine::SelectTarget(1100.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -260,13 +258,11 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("PoisonReserve", "Turn poison off below mana percent", 24, 0, 100));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 42, 0, 100));
     TacticsMenu->Add(new MenuSlider("FarmMana", "Farm mana percent", 24, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast ownership window", 560, 100, 1200));
     SafetyMenu->Add(new MenuSlider("MaxEndpointEnemies", "Maximum enemies at fling endpoint", 2, 1, 5));
 }
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    ManualOverrideUntil = 0;
     IncomingThreatUntil = 0;
     IncomingThreatTargetId = 0;
     WTargetId = 0;
@@ -304,8 +300,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) {
             LastCastTick[static_cast<std::size_t>(args.Slot)] = Now();
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOverrideUntil = Now() + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -353,7 +347,7 @@ inline constexpr const char* Scenarios[] = {
     "combo and harass poison route with adhesive-to-fling priority",
     "lane clear, jungle and last-hit poison persistence",
     "flee adhesive escape, threat event and polling reconciliation",
-    "manual cast windup protection, selected target and orbwalker policy",
+    "event-reconciled cast windup, autonomous engine target and orbwalker policy",
 };
 
 inline constexpr ChampionController Controller = [] {

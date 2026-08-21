@@ -24,7 +24,6 @@ using ControllerHelpers::PlayerManaPercent;
 
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Ready;
@@ -43,7 +42,6 @@ inline std::array<PlantState, 16> Plants{};
 inline std::array<int, 8> SeedIds{};
 inline int ActivePlantCount = 0;
 inline int ActiveSeedCount = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int InterruptTargetId = 0;
@@ -86,8 +84,8 @@ inline bool ManaEnough(Mode mode) {
     return PlayerManaPercent() >= minimum;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    return PreferredEnemyTarget(selected, range);
+inline AIHeroClient SelectTarget(float range) {
+    return Engine::SelectTarget(range);
 }
 
 inline bool HasNearbyPlant(const Vector3& position, float range = 180.0f) {
@@ -270,11 +268,10 @@ inline void ReconcileState() {
     if (IncomingHardCcUntil <= now) IncomingHardCcUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const Mode decisionMode = mode == Mode::None ? Mode::Automatic : mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = SelectTarget(selected, kERange + 35.0f);
+    const auto target = SelectTarget(kERange + 35.0f);
     if (!Engine::ValidEnemy(target)) {
         return (decisionMode == Mode::LaneClear || decisionMode == Mode::Jungle ||
                 decisionMode == Mode::LastHit) ? Farm(decisionMode) : false;
@@ -314,7 +311,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = now;
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
         }
         return;
     }
@@ -411,14 +407,13 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("ZyraOneTrick", "Zyra seed, plant and root control"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 600, 180, 1400));
+    TacticsMenu = root->AddSubMenu(new Menu("ZyraOneTrick", "Zyra seed/plant/root control"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("DeadlySpines", "Q plant awakening"));
-    QMenu->Add(new MenuBool("RequirePlantCombo", "Prefer Q when a seed or plant is present", true));
+    QMenu->Add(new MenuBool("RequirePlantCombo", "Prefer Q with nearby plant", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("RampantGrowth", "W seed placement"));
     WMenu->Add(new MenuBool("ReserveSeed", "Reserve one seed for combo", true));
     EMenu = TacticsMenu->AddSubMenu(new Menu("GraspingRoots", "Predicted root collision"));
-    EMenu->Add(new MenuBool("RespectProjectileWalls", "Reject E through projectile walls", true));
+    EMenu->Add(new MenuBool("RespectProjectileWalls", "Reject E through walls", true));
     RMenu = TacticsMenu->AddSubMenu(new Menu("Stranglethorns", "Knock-up zone safety"));
     RMenu->Add(new MenuSlider("MinimumRTargets", "Minimum champions in R zone", 2, 1, 5));
     RMenu->Add(new MenuSlider("MaxREnemies", "Maximum enemies at R destination", 3, 0, 5));
@@ -426,7 +421,7 @@ inline void BuildMenu(Menu* root) {
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("ZyraFarm", "Distinct lane and jungle policy"));
     FarmMenu->Add(new MenuBool("UseSeeds", "Use W seeds for lane and jungle", true));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("ZyraCoach", "Plant lifecycle telemetry"));
-    CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/E/R ranges and live plants", false));
+    CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/E/R ranges + plants", false));
 }
 
 inline void OnLoad() {
@@ -434,7 +429,6 @@ inline void OnLoad() {
     Plants = {};
     SeedIds = {};
     ActivePlantCount = ActiveSeedCount = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCcUntil = 0;
     InterruptTargetId = InterruptExpireTick = RTargetId = RPendingUntil = 0;
     ROwned = false;
     LastAutoTargetId = LastAutoTick = 0;
@@ -450,12 +444,12 @@ inline constexpr const char* Scenarios[] = {
     "Pin Riot live 26.15 and CommunityDragon PC 16.15 Zyra values and runtime aliases",
     "Track passive seeds, W seed placement and Q/E-awakened plant objects through events and polling",
     "Expire Thorn Spitters and Vine Lashers after their eight-second plant lifetime",
-    "Place W seeds only in reachable non-wall, non-turret terrain with a selected target then orbwalker fallback",
+    "Place W seeds only in reachable non-wall, non-turret terrain for the autonomous target",
     "Use Q to awaken nearby plants while retaining direct ground damage when enemies commit",
     "Predict E roots at impact time, reject minion collision and projectile-wall blocked paths",
     "Count enemy champions inside the predicted R plant knock-up zone before committing",
     "Reject R centers in terrain, under enemy turret, or beyond the configured enemy-count gate",
-    "Preserve auto-attack windup and yield after manual player spell ownership",
+    "Preserve auto-attack windup and reconcile local spell timing gates",
     "Reconcile R knock-up state and interrupt ownership on hard crowd-control pressure",
     "Handle Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes distinctly",
     "Use live spell readiness, mana, cooldown, mitigated damage, and champion target validity",

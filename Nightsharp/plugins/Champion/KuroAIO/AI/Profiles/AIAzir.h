@@ -115,7 +115,6 @@ inline constexpr ChampionProfile Azir = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 30;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "AzirPassive";
@@ -125,7 +124,7 @@ inline constexpr ChampionProfile Azir = [] {
     p.ThemeTo = 0xFF9B6A21u;
     p.ThemeSpeed = 0.58f;
     p.TacticalSummary =
-        "Keep movement, attacks, target choice and summoners player-owned. "
+        "Automate movement, attacks and target choice while preserving summoner safety. "
         "Maintain a defensive soldier, delay Q until the target leaves stab "
         "range, collide with E only deliberately, front-to-back by default, "
         "and use R as peel unless a safe allied displacement is proven.";

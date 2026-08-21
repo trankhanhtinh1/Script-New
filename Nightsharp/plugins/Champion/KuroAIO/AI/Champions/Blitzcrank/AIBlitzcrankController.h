@@ -162,7 +162,6 @@ inline int LastAfterAttackTargetId = 0;
 inline int LastAfterAttackTick = 0;
 inline int LastLocalAutoTargetId = 0;
 inline int LastLocalAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int SequenceExpireTick = 0;
 
 inline bool WActive = false;
@@ -178,8 +177,6 @@ inline Vector3 QFlightEnd = {};
 inline int QMissileId = 0;
 inline int LastManaBarrierProcTick = -1000000;
 
-inline constexpr int kManualOwnershipMs = 420;
-inline constexpr int kManualHookAssistDelayMs = 115;
 inline constexpr int kHookArrivalGraceMs = 520;
 
 inline bool IsQEvent(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -886,7 +883,6 @@ inline QPlan BuildQPlan(const AIHeroClient& target,
         if (!evaluation.Cast) continue;
         float score = evaluation.Score;
         if (contact.Kind == HookContactKind::EndpointLollipop) score -= 35.0f;
-        if (purpose == HookPurpose::ManualCursor) score += 130.0f;
         if (!best.Valid || score > best.Evaluation.Score) {
             evaluation.Score = score;
             best.CastPosition = aim;
@@ -1148,26 +1144,50 @@ inline bool CleanDirectHookLine(const AIHeroClient& target) {
         static_cast<int>(target.NetworkId()));
 }
 
+inline Vector3 PredictedRImpactPosition(const AIHeroClient& target) {
+    return PredictPosition(target, kRCastSeconds);
+}
+
+inline bool RWillHitAtImpact(const AIBaseClient& player,
+                             const AIHeroClient& target) {
+    if (!player.IsValid() || !Engine::ValidEnemy(target)) return false;
+    const Vector3 predicted = PredictedRImpactPosition(target);
+    return predicted.IsValid() && !predicted.IsZero() &&
+        RContainsPredictedTarget(
+            player.Position().Distance2D(predicted),
+            target.BoundingRadius());
+}
+
+inline int PredictedRHitCount() {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid()) return 0;
+    int result = 0;
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (RWillHitAtImpact(player, enemy)) ++result;
+    }
+    return result;
+}
+
 inline RPlan BuildRPlan(const AIHeroClient& preferred,
                         RPurpose purpose) {
     RPlan plan{};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3)) return plan;
-    AIHeroClient primary = Engine::ValidEnemy(preferred,
-        kRRadius + preferred.BoundingRadius()) ? preferred : AIHeroClient{};
+    const bool preferredWillBeHit = RWillHitAtImpact(player, preferred);
+    AIHeroClient primary = preferredWillBeHit ? preferred : AIHeroClient{};
     int hitCount = 0;
     int priorityCount = 0;
     float shields = 0.0f;
-    float bestPriority = -FLT_MAX;
+    float bestPriority = preferredWillBeHit
+        ? EnemyPriority(preferred) : -FLT_MAX;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy) ||
-            player.Position().Distance2D(enemy.Position()) >
-                kRRadius + enemy.BoundingRadius()) continue;
+        if (!RWillHitAtImpact(player, enemy)) continue;
         ++hitCount;
         const float priority = EnemyPriority(enemy);
         if (priority >= 2.0f) ++priorityCount;
         shields += TotalDamageShields(enemy);
-        if (!primary.IsValid() || priority > bestPriority) {
+        if (!primary.IsValid() ||
+            (!preferredWillBeHit && priority > bestPriority)) {
             primary = enemy;
             bestPriority = priority;
         }
@@ -1184,7 +1204,7 @@ inline RPlan BuildRPlan(const AIHeroClient& preferred,
     RContext context{};
     context.Ready = true;
     context.HasMana = player.Mana() + 0.5f >= SpellCost(3);
-    context.TargetInRange = true;
+    context.TargetInRange = RWillHitAtImpact(player, primary);
     context.TargetSpellShield = HasSpellShieldOrImmunity(primary);
     context.TargetHasDamageShield = TotalDamageShields(primary) > 1.0f;
     context.CriticalShieldBreak = context.TargetHasDamageShield &&
@@ -1245,6 +1265,9 @@ inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
     if (!plan.Valid || !Ready(3) ||
         !ControllerHelpers::CastThrottleReady(
             3, 38, reactive ? 0 : -1)) return false;
+    const auto player = GameObjects::Player();
+    const AIHeroClient primary = RawEnemyById(plan.PrimaryTargetId);
+    if (!RWillHitAtImpact(player, primary)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastRPlan = plan;
     LastRCastTick = Now();
@@ -1290,8 +1313,7 @@ inline bool TryInterrupt() {
     if (!Engine::ValidEnemy(target, 1250.0f)) return false;
     const auto player = GameObjects::Player();
     if (Bool(RMenu, "Interrupt", true) && Ready(3) &&
-        player.Position().Distance2D(target.Position()) <=
-            kRRadius + target.BoundingRadius()) {
+        RWillHitAtImpact(player, target)) {
         const RPlan r = BuildRPlan(target, RPurpose::Interrupt);
         if (CastRPlan(r, true)) return true;
     }
@@ -1327,8 +1349,7 @@ inline bool TryGapcloser() {
         if (CastQPlan(q, true)) return true;
     }
     if (Bool(RMenu, "Peel", true) && Ready(3) &&
-        Engine::CountEnemiesAt(GameObjects::Player().Position(),
-                               kRRadius) >= 2) {
+        PredictedRHitCount() >= 2) {
         const RPlan r = BuildRPlan(target, RPurpose::Peel);
         if (CastRPlan(r, true)) return true;
     }
@@ -1353,8 +1374,7 @@ inline bool TryPeel(const AIHeroClient& ally,
         if (CastQPlan(q, true)) return true;
     }
     if (Ready(3) && Bool(RMenu, "Peel", true) &&
-        threat.Position().Distance2D(GameObjects::Player().Position()) <=
-            kRRadius + threat.BoundingRadius()) {
+        RWillHitAtImpact(GameObjects::Player(), threat)) {
         const RPlan r = BuildRPlan(threat, RPurpose::Peel);
         if (CastRPlan(r, true)) return true;
     }
@@ -1372,9 +1392,7 @@ inline bool TryAutomaticShieldBreak() {
         Slider(RMenu, "ShieldBreakValue", 260));
     const auto player = GameObjects::Player();
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy) ||
-            player.Position().Distance2D(enemy.Position()) >
-                kRRadius + enemy.BoundingRadius()) continue;
+        if (!RWillHitAtImpact(player, enemy)) continue;
         const float shield = TotalDamageShields(enemy);
         if (shield > bestShield) {
             best = enemy;
@@ -1385,17 +1403,15 @@ inline bool TryAutomaticShieldBreak() {
     return CastRPlan(BuildRPlan(best, RPurpose::ShieldBreak), true);
 }
 
-inline bool TryHookFlightFollowups(bool playerLed = false) {
+inline bool TryHookFlightFollowups() {
     if (!QInFlight || QFlightTargetId == 0 ||
         QExpectedArrivalTick + kHookArrivalGraceMs < Now()) return false;
     const AIHeroClient target = RawEnemyById(QFlightTargetId);
     if (!target.IsValid()) return false;
-    if (playerLed && !Bool(EMenu, "AssistManualHook", true)) return false;
     const bool escapeReady = EnemyMobilityReady(target) &&
         !EnemyWindowEscapeSpent(QFlightTargetId);
     if (Ready(3) && Bool(RMenu, "MidPullSilence", true) && escapeReady &&
-        GameObjects::Player().Position().Distance2D(target.Position()) <=
-            kRRadius + target.BoundingRadius()) {
+        RWillHitAtImpact(GameObjects::Player(), target)) {
         const RPlan r = BuildRPlan(target, RPurpose::MidPullSilence);
         if (CastRPlan(r, true)) return true;
     }
@@ -1421,8 +1437,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred,
         if (!best.IsValid() || enemy.Health() < best.Health()) best = enemy;
     }
     if (!best.IsValid()) return false;
-    if (Ready(3) && player.Position().Distance2D(best.Position()) <=
-            kRRadius + best.BoundingRadius()) {
+    if (Ready(3) && RWillHitAtImpact(player, best)) {
         const RPlan r = BuildRPlan(best, RPurpose::Lethal);
         if (r.Valid && CastRPlan(r, true)) return true;
     }
@@ -1469,8 +1484,7 @@ inline HookPurpose OrdinaryHookPurpose(const AIHeroClient& target,
         return HookPurpose::ImmobilePunish;
     }
     if (target.IsDashing()) return HookPurpose::DashEndpoint;
-    if (id == selectedTargetId) return HookPurpose::SelectedPick;
-    return HookPurpose::ManualCursor;
+    return HookPurpose::None;
 }
 
 inline bool TryBestHook(const AIHeroClient& preferred,
@@ -1508,8 +1522,7 @@ inline bool TryPreHookRQ(const AIHeroClient& target) {
     if (!Bool(RMenu, "PreHookSilence", true) || !Ready(3) || !Ready(0) ||
         !Engine::ValidEnemy(target) || !EnemyMobilityReady(target) ||
         EnemyPriority(target) < 1.8f ||
-        GameObjects::Player().Position().Distance2D(target.Position()) >
-            kRRadius + target.BoundingRadius() ||
+        !RWillHitAtImpact(GameObjects::Player(), target) ||
         !CleanDirectHookLine(target)) return false;
     return CastRPlan(BuildRPlan(target, RPurpose::PreHookSilence));
 }
@@ -1540,8 +1553,7 @@ inline bool TryCombo(const AIHeroClient& target,
     if (SpellEnabled(0, Mode::Combo) && TryBestHook(
             target, selectedTargetId, false)) return true;
     if (Ready(3) && SpellEnabled(3, Mode::Combo)) {
-        RPurpose purpose = Engine::CountEnemiesAt(
-            GameObjects::Player().Position(), kRRadius) >=
+        RPurpose purpose = PredictedRHitCount() >=
                 Slider(RMenu, "MinimumTargets", 2)
             ? RPurpose::MultiTarget : RPurpose::None;
         const RPlan r = BuildRPlan(target, purpose);
@@ -1589,9 +1601,7 @@ inline bool TryFlee(const AIHeroClient& fallback) {
         if (CastWPlan(w, true)) return true;
     }
     if (Ready(3) && Bool(RMenu, "Flee", true) &&
-        Engine::CountEnemiesAt(GameObjects::Player().Position(),
-                               kRRadius) >=
-            Slider(RMenu, "FleeMinimum", 2)) {
+        PredictedRHitCount() >= Slider(RMenu, "FleeMinimum", 2)) {
         const RPlan r = BuildRPlan(threat, RPurpose::Peel);
         if (CastRPlan(r, true)) return true;
     }
@@ -1688,33 +1698,26 @@ inline Posture DeterminePosture(Mode mode,
     return Posture::Neutral;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     RefreshRuntimeState();
-    const int selectedId = Engine::ValidEnemy(selected)
-        ? static_cast<int>(selected.NetworkId()) : 0;
-    const AIHeroClient target = PreferredEnemy(selected, 1300.0f);
+    const int targetId = 0;
+    const AIHeroClient target = Engine::SelectTarget(1300.0f);
     const AIHeroClient ally = ProtectedAlly();
     const AIHeroClient threat = SelectPeelThreat(ally);
     if (threat.IsValid()) PeelThreatId = static_cast<int>(threat.NetworkId());
     CurrentPosture = DeterminePosture(mode, target, ally, threat);
 
-    if (PlayerOverrideUntil >= Now()) {
-        if (ActiveSequence == Sequence::PlayerLedHook &&
-            Now() - LastQCastTick >= kManualHookAssistDelayMs) {
-            return TryHookFlightFollowups(true);
-        }
-        return false;
-    }
-    if (TryStasisExitHook(selectedId)) return true;
+    if (TryStasisExitHook(targetId)) return true;
     if (TryInterrupt()) return true;
     if (TryGapcloser()) return true;
     if (TryPeel(ally, threat)) return true;
     if (TryAutomaticShieldBreak()) return true;
-    if (TryObjectiveHook(selectedId)) return true;
-    if (TryKillSecure(target, selectedId)) return true;
+    if (TryObjectiveHook(targetId)) return true;
+    if (TryKillSecure(target, targetId)) return true;
     if (mode == Mode::Flee) return TryFlee(target);
-    if (mode == Mode::Combo) return TryCombo(target, selectedId);
-    if (mode == Mode::Harass) return TryHarass(target, selectedId);
+    if (mode == Mode::Combo) return TryCombo(target, targetId);
+    if (mode == Mode::Harass) return TryHarass(target, targetId);
     if (mode == Mode::None || mode == Mode::Automatic) {
         return TryRoamW();
     }
@@ -1797,10 +1800,7 @@ inline void BeginObservedHook(
         1000.0f);
     SequenceExpireTick = QExpectedArrivalTick + kHookArrivalGraceMs;
     if (!controllerOwned) {
-        PlayerOverrideUntil = Now() +
-            Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
-        ActiveSequence = Bool(EMenu, "AssistManualHook", true) &&
-                targetId != 0
+        ActiveSequence = targetId != 0
             ? Sequence::PlayerLedHook : Sequence::None;
     } else {
         ActiveSequence = LastQPlan.Purpose == HookPurpose::StasisExit
@@ -1845,11 +1845,6 @@ inline void ObserveLocalSpell(
         }
     } else if (slot == 3) {
         LastRCastTick = now;
-    }
-    if (!controllerOwned) {
-        PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
-        ActiveSequence = Sequence::None;
     }
 }
 
@@ -2054,7 +2049,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(
             player.Position(), kQMaximumTargetCenterRange,
             0x6677C9FFu, 1.3f, 72);
@@ -2069,7 +2064,7 @@ inline void OnDraw() {
             player.Position(), eReach,
             0x5559E59Cu, 1.2f, 56);
     }
-    if (Bool(CoachMenu, "DrawHook", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawHook", false) && LastQPlan.Valid) {
         const std::uint32_t color = LastQPlan.DangerousDelivery
             ? 0xDDEF5656u : 0xDDF4C857u;
         Drawing::DrawLine(
@@ -2081,7 +2076,7 @@ inline void OnDraw() {
                 55.0f, color, 2.0f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawProtectedAlly", true)) {
+    if (Bool(CoachMenu, "DrawProtectedAlly", false)) {
         const AIHeroClient ally = ProtectedAlly();
         if (ally.IsValid()) {
             Drawing::DrawCircle(
@@ -2089,7 +2084,7 @@ inline void OnDraw() {
                 0xAA63E6A2u, 1.6f, 36);
         }
     }
-    if (Bool(CoachMenu, "DrawETarget", true) && EArmed) {
+    if (Bool(CoachMenu, "DrawETarget", false) && EArmed) {
         const AIHeroClient target = RawEnemyById(DesiredETargetId);
         if (target.IsValid()) {
             Drawing::DrawCircle(
@@ -2097,7 +2092,7 @@ inline void OnDraw() {
                 0xDDF0A44Bu, 2.2f, 36);
         }
     }
-    if (Bool(CoachMenu, "DrawMarks", true)) {
+    if (Bool(CoachMenu, "DrawMarks", false)) {
         for (const auto& enemy : GameObjects::EnemyHeroes()) {
             const int pending = MarkTracker.Pending(
                 static_cast<int>(enemy.NetworkId()));
@@ -2116,7 +2111,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             const bool barrierReady =
@@ -2129,7 +2124,7 @@ inline void OnDraw() {
                 PostureName(CurrentPosture), SequenceName(ActiveSequence),
                 EArmed ? "armed" : "idle",
                 barrierReady ? "ready" : "cooldown",
-                PlayerOverrideUntil >= Now() ? "player" : "controller");
+                "controller");
             Drawing::DrawText(
                 screen.x - 245.0f, screen.y - 112.0f,
                 0xFFFFD15Cu, state);
@@ -2146,15 +2141,9 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider(
         "EmergencyHp", "Emergency HP (%)",
         24, 5, 70));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)",
-        kManualOwnershipMs, 150, 1000));
-    TacticsMenu->Add(new MenuSeparator(
-        "PlayerOwnership",
-        "Movement, attacks,"));
 
     RoleMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Posture", "Catch, front-to-back and carry protection"));
+        "Posture", "Catch and carry protection"));
     RoleMenu->Add(new MenuBool(
         "ProtectCarry", "Peel carry before looking", true));
     RoleMenu->Add(new MenuSlider(
@@ -2164,7 +2153,7 @@ inline void BuildMenu(Menu* root) {
         "ReservePeelMana", "Keep mana Power Fist", true));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
-        "RocketGrab", "Moving first-body and pull-value policy"));
+        "RocketGrab", "Hook body and pull policy"));
     QMenu->Add(new MenuList(
         "Hitchance", "Ordinary Q prediction",
         { "Medium", "High", "Very high", "Immobile only" }, 2));
@@ -2193,7 +2182,7 @@ inline void BuildMenu(Menu* root) {
         "Healthy assassins, divers,"));
 
     WMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Overdrive", "Walk-up pressure and delayed self-slow"));
+        "Overdrive", "Walk-up pressure and self-slow"));
     WMenu->Add(new MenuBool(
         "WalkUpE", "W when it reaches a safe", true));
     WMenu->Add(new MenuBool(
@@ -2213,13 +2202,11 @@ inline void BuildMenu(Menu* root) {
         "The five-second speed decay"));
 
     EMenu = TacticsMenu->AddSubMenu(new Menu(
-        "PowerFist", "Exact target, pre-arm and AA reset timing"));
+        "PowerFist", "Target, pre-arm and AA reset"));
     EMenu->Add(new MenuBool(
         "AAReset", "AA-E-AA vs trappable", true));
     EMenu->Add(new MenuBool(
         "PreArmHook", "Arm E during Q flight vs", true));
-    EMenu->Add(new MenuBool(
-        "AssistManualHook", "E timing for player Q", true));
     EMenu->Add(new MenuBool(
         "Peel", "Power Fist the diver", true));
     EMenu->Add(new MenuBool(
@@ -2231,7 +2218,7 @@ inline void BuildMenu(Menu* root) {
         "A wrong minion attack is"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
-        "StaticField", "Shield, silence and passive-mark economy"));
+        "StaticField", "Shield, silence, passive marks"));
     RMenu->Add(new MenuSlider(
         "MinimumTargets", "Min enemies active R", 2, 1, 5));
     RMenu->Add(new MenuBool(
@@ -2258,19 +2245,19 @@ inline void BuildMenu(Menu* root) {
         "Pending one-per-second"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "Blitzcrank one-trick geometry and state"));
+        "Coach", "Blitzcrank geometry and state"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw Q/W-E/R ranges", true));
+        "DrawRanges", "Draw Q/W-E/R ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawHook", "Draw Q corridor", true));
+        "DrawHook", "Draw Q corridor", false));
     CoachMenu->Add(new MenuBool(
-        "DrawProtectedAlly", "Mark protected ally", true));
+        "DrawProtectedAlly", "Mark protected ally", false));
     CoachMenu->Add(new MenuBool(
-        "DrawETarget", "Mark Power Fist target", true));
+        "DrawETarget", "Mark Power Fist target", false));
     CoachMenu->Add(new MenuBool(
-        "DrawMarks", "Draw R lightning", true));
+        "DrawMarks", "Draw R lightning", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture, E, passive", true));
+        "DrawState", "Draw posture, E, passive", false));
 }
 
 inline void OnLoad() {
@@ -2291,7 +2278,6 @@ inline void OnLoad() {
     LastBeforeAttackTargetId = LastBeforeAttackTick = 0;
     LastAfterAttackTargetId = LastAfterAttackTick = 0;
     LastLocalAutoTargetId = LastLocalAutoTick = 0;
-    PlayerOverrideUntil = SequenceExpireTick = 0;
     WActive = EArmed = QInFlight = false;
     WExpireTick = WSelfSlowExpireTick = EExpireTick = 0;
     DesiredETargetId = QFlightTargetId = QExpectedArrivalTick = 0;

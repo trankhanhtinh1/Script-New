@@ -159,19 +159,19 @@ struct FlightContext {
     bool EndpointWall = false;
     bool EndpointUnderTurret = false;
     bool EndpointThreatened = false;
-    bool CursorAgrees = false;
+    bool TargetDriven = false;
     bool Defensive = false;
     bool Lethal = false;
-    bool Manual = false;
     float Distance = 0.0f;
     float MaximumRange = kERange;
 };
+
 inline bool ShouldTakeFlight(const FlightContext& context) {
     if (!context.Ready || !context.EndpointValid || context.EndpointWall ||
         context.EndpointUnderTurret || context.EndpointThreatened ||
-        !context.CursorAgrees || context.Distance < kEMinEndpointDistance ||
+        context.Distance < kEMinEndpointDistance ||
         context.Distance > context.MaximumRange + 0.01f) return false;
-    return context.Defensive || context.Lethal || context.Manual;
+    return context.TargetDriven || context.Defensive || context.Lethal;
 }
 
 struct RContext {
@@ -180,13 +180,13 @@ struct RContext {
     bool ProjectileBlocked = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int PredictedTargets = 0;
     int MinimumTargets = 2;
 };
+
 inline bool ShouldCastR(const RContext& context) {
     if (!context.Ready || !context.PredictionHits || context.ProjectileBlocked) return false;
-    return context.Manual || context.Defensive || context.Lethal ||
+    return context.Defensive || context.Lethal ||
            context.PredictedTargets >= std::max(1, context.MinimumTargets);
 }
 

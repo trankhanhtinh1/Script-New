@@ -43,10 +43,10 @@ inline float ERangeForCharge(int elapsedMs) {
     const float t = std::clamp(static_cast<float>(elapsedMs) / static_cast<float>(kEChargeMaxMs), 0.0f, 1.0f);
     return 400.0f + 200.0f * t;
 }
-inline bool QCastAllowed(QState state, FrenzyState frenzy, bool targetValid, bool targetProtected,
-                         bool manualOwnership, bool attacking) {
+inline bool QCastAllowed(QState state, FrenzyState frenzy, bool targetValid,
+                         bool targetProtected, bool attacking) {
     return state == QState::Ready && frenzy != FrenzyState::Taunt && targetValid && !targetProtected &&
-        !manualOwnership && (!attacking || frenzy != FrenzyState::Calm);
+        (!attacking || frenzy != FrenzyState::Calm);
 }
 inline bool QStunConfirmed(QState state, int elapsedMs, bool targetStillValid) {
     return state == QState::LeapPending && targetStillValid && elapsedMs >= 0 && elapsedMs <= kQFollowWindowMs;
@@ -71,8 +71,8 @@ inline float EHealPercent(float missingHealthPercent, int elapsedMs) {
     const float charge = std::clamp(static_cast<float>(elapsedMs) / static_cast<float>(kEChargeMaxMs), 0.0f, 1.0f);
     return std::min(missingHealthPercent, 8.5f + 9.0f * charge);
 }
-inline bool EChargeAllowed(EState state, int elapsedMs, bool manualOwnership, bool threatened, bool targetNearby) {
-    return state == EState::Charging && !manualOwnership && elapsedMs >= kEChargeMinMs && elapsedMs <= kEChargeMaxMs &&
+inline bool EChargeAllowed(EState state, int elapsedMs, bool threatened, bool targetNearby) {
+    return state == EState::Charging && elapsedMs >= kEChargeMinMs && elapsedMs <= kEChargeMaxMs &&
         (threatened || targetNearby || elapsedMs >= kEChargeMaxMs - kEReleaseTailMs);
 }
 inline bool EReleaseSafe(EState state, int elapsedMs, bool endpointWall, bool endpointTurret,
@@ -136,14 +136,5 @@ inline float EReleaseDamage(int rank, float bonusAttackDamage, float abilityPowe
 inline float RRawDamage(int rank, float abilityPower) {
     static constexpr std::array<float, 3> base{50.0f, 150.0f, 250.0f};
     return base[static_cast<std::size_t>(std::clamp(rank, 1, 3) - 1)] + 1.3f * std::max(0.0f, abilityPower);
-}
-inline bool UnsafeBerserk(bool targetValid, bool targetProtected, bool targetLethal,
-                          bool endpointTurret, int enemiesAtEndpoint,
-                          int maximumEnemies, bool fleeing, bool playerLow,
-                          bool manual = false) {
-    if (!targetValid || targetProtected) return true;
-    if (targetLethal || fleeing || playerLow || manual) return false;
-    if (endpointTurret) return true;
-    return enemiesAtEndpoint > std::max(0, maximumEnemies);
 }
 } // namespace Plugins::KuroAIO::AI::Controllers::Briar::Geometry

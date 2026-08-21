@@ -21,7 +21,6 @@ using ControllerHelpers::IsCommonUntargetableOrImmune;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
-using ControllerHelpers::OrbwalkerHeroTarget;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
@@ -35,7 +34,6 @@ inline Menu* PassiveMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 
 inline int LastCastTick[4]{};
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -63,12 +61,6 @@ inline bool Protected(const AIHeroClient& target) {
     return !Engine::ValidEnemy(target) || IsCommonUntargetableOrImmune(target) ||
         target.HasBuff("SivirE") || target.HasBuff("NocturneShroudofDarkness") ||
         target.HasBuff("BansheesVeil") || target.HasBuff("MorganaE");
-}
-inline AIHeroClient CooperativeTarget(const AIHeroClient& selected) {
-    if (Engine::ValidEnemy(selected, 1200.0f)) return selected;
-    const auto orb = OrbwalkerHeroTarget(1200.0f);
-    if (Engine::ValidEnemy(orb)) return orb;
-    return Engine::SelectTarget(1200.0f);
 }
 using ControllerHelpers::AP;
 inline bool Lethal(const AIHeroClient& target, float rawDamage) {
@@ -129,7 +121,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool defensive = false)
     LastCastTick[2] = ECastTick;
     return true;
 }
-inline bool CastRTarget(const AIHeroClient& target, Mode mode, bool manual = false) {
+inline bool CastRTarget(const AIHeroClient& target, Mode mode) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(3, mode) || !Throttle(3, 100)) return false;
     const RPolicyContext context{
@@ -139,12 +131,12 @@ inline bool CastRTarget(const AIHeroClient& target, Mode mode, bool manual = fal
         player.HealthPercent() <= Slider(RMenu, "SelfHp", 30),
         IncomingThreatUntil > Now(),
         Engine::CountEnemiesAt(target.Position(), kRRadius) >= Slider(RMenu, "MinimumTargets", 2),
-        Orbwalker::IsWindingUp(), manual};
+        Orbwalker::IsWindingUp(), false};
     if (!ShouldCastTargetR(context) || !Engine::ControllerCastUnit(3, target)) return false;
     LastCastTick[3] = Now();
     return true;
 }
-inline bool CastRSelf(Mode mode, bool emergency = false) {
+inline bool CastRSelf(Mode mode, bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 100)) return false;
     const RPolicyContext context{
@@ -152,7 +144,7 @@ inline bool CastRSelf(Mode mode, bool emergency = false) {
         player.HealthPercent() <= Slider(RMenu, "SelfHp", 30),
         IncomingThreatUntil > Now(),
         Engine::CountEnemiesAt(player.Position(), kRRadius) >= 1,
-        Orbwalker::IsWindingUp(), emergency};
+        Orbwalker::IsWindingUp(), defensive};
     if (!ShouldCastSelfR(context) || !Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
     return true;
@@ -197,16 +189,15 @@ inline void PruneThralls() {
     const int now = Now();
     for (auto& thrall : Thralls) if (!ThrallActive(thrall, now)) thrall = {};
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     PruneThralls();
     if (EActive && EExpireTick <= Now()) EActive = false;
-    const AIHeroClient target = CooperativeTarget(selected);
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(1200.0f);
     if (TryReactive(target, mode) || TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: (void)Combo(target); break;
     case Mode::Harass: (void)Harass(target); break;
-    case Mode::Flee: (void)Flee(NearestEnemyToPlayer(target, 1000.0f)); break;
+    case Mode::Flee: (void)Flee(NearestEnemyToPlayer({}, 1000.0f)); break;
     case Mode::LaneClear: (void)Engine::TryFarm(Mode::LaneClear); break;
     case Mode::Jungle: (void)Engine::TryFarm(Mode::Jungle); break;
     case Mode::LastHit: (void)Engine::TryFarm(Mode::LastHit); break;
@@ -229,7 +220,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot <= 3) LastCastTick[slot] = now;
-        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         if (args.Slot == 2 && !EActive) {
             const auto player = GameObjects::Player();
             EOrigin = player.Position();
@@ -279,7 +269,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LissandraOneTrick", "Lissandra stasis and claw tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("IceShard", "Q spread and harass"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 38, 10, 90));
     RMenu = TacticsMenu->AddSubMenu(new Menu("FrozenTomb", "R stasis policy"));
@@ -292,7 +281,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCcUntil = 0;
+    IncomingThreatUntil = IncomingHardCcUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     EActive = PassiveReady = false; ECastTick = EExpireTick = EReturnReadyTick = ETargetId = 0; EOrigin = EClawEnd = {};
     Thralls = {};
@@ -303,7 +292,7 @@ inline void OnUnload() {
 }
 inline constexpr const char* Scenarios[] = {
     "Pin spell and buff semantics to Riot 26.15 and CommunityDragon 16.15",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection before combat policy gates",
     "Model Ice Shard central line and both spread shards with collision safety",
     "Reject Q through invalid terrain and preserve AA windup unless lethal",
     "Root only targets inside the live Ring of Frost radius",
@@ -314,8 +303,8 @@ inline constexpr const char* Scenarios[] = {
     "Track Icy Thralls as passive objects without inventing a passive cast",
     "Reconcile passive buffs and thrall object deletion through polling",
     "React to gapclosers and interruptible casts with root or stasis",
-    "Preserve manual spell ownership for a bounded handoff window",
-    "Combo uses Q spread, W root, E claw and policy-gated R",
+    "Use autonomous Engine target selection before combat policy gates",
+    "Reconcile local spell casts while preserving event and cooldown state",
     "Harass uses Q and W while respecting mana and AA windup",
     "LaneClear Jungle and LastHit use shared farm routing only",
     "Flee sends E toward cursor, returns only safely, then peels with W/R",

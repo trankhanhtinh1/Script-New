@@ -30,13 +30,6 @@ inline int List(Menu* menu, const char* key, int fallback = 0) {
     return item ? item->Index : fallback;
 }
 
-inline bool Key(Menu* menu, const char* key, bool fallback = false) {
-    if (!menu) {
-        return fallback;
-    }
-    const auto* item = menu->Get<MenuKeyBind>(key);
-    return item ? item->Active : fallback;
-}
 
 inline void SetBool(Menu* menu, const char* key, bool value) {
     if (auto* item = menu ? menu->Get<MenuBool>(key) : nullptr) {
@@ -50,10 +43,5 @@ inline void SetSlider(Menu* menu, const char* key, int value) {
     }
 }
 
-inline void SetKey(Menu* menu, const char* key, bool value) {
-    if (auto* item = menu ? menu->Get<MenuKeyBind>(key) : nullptr) {
-        item->Active = value;
-    }
-}
 
 } // namespace Plugins::KuroAIO

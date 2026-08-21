@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Zoe = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 58;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "zoeqpassive";

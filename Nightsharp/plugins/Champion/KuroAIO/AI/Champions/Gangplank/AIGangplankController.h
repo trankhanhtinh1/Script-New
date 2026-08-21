@@ -38,7 +38,7 @@ inline int LastCastTick[4]{};
 inline int LastAfterAttackTargetId = 0;
 inline int LastAfterAttackTick = 0;
 inline int ForcedBarrelId = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int CleanseThreatUntil = 0;
@@ -298,7 +298,7 @@ inline bool CastCannonBarrage(const AIHeroClient& selected, Mode mode,
     const float expected = player.CalculateMagicDamage(target,
         CannonBarrageConservativeRawDamage(SpellRank(3), AP(), 2, Upgrades));
     const RPolicyContext context{
-        true, true, ManualOwnershipUntil > Now(),
+        true, true, false,
         player.Position().Distance2D(target.Position()) <= 1000.0f,
         Engine::IsHardCrowdControlled(target),
         !target.IsDashing(), expected >= target.Health() + target.AllShield(),
@@ -374,7 +374,6 @@ inline void Farm(Mode mode) {
 inline void ReconcileState() {
     RefreshBarrels();
     PassiveState = NormalizeTrialByFire(PassiveState, Now());
-    if (ManualOwnershipUntil <= Now()) ManualOwnershipUntil = 0;
     if (IncomingThreatUntil <= Now()) IncomingThreatUntil = 0;
     if (IncomingHardCCUntil <= Now()) IncomingHardCCUntil = 0;
     if (CleanseThreatUntil <= Now()) CleanseThreatUntil = 0;
@@ -386,7 +385,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, 5000.0f);
     if (CastRemoveScurvy(mode, true)) return true;
-    if (ManualOwnershipUntil > Now()) return true;
+    if (false) return true;
     if (mode == Mode::Automatic && IncomingThreatUntil > Now() &&
         Engine::ValidEnemy(target)) {
         (void)CastRemoveScurvy(mode, true);
@@ -417,9 +416,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot)) {
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-            }
         }
         if (args.IsAutoAttack) PassiveState = ConsumeTrialByFire(now);
         return;
@@ -517,8 +513,7 @@ inline void OnDraw() {
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("GangplankOneTrick", "Gangplank barrel tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("GangplankOneTrick", "Gangplank barrel tactics"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Parrrley"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Remove Scurvy"));
@@ -538,7 +533,7 @@ inline void OnLoad() {
     PassiveState = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAfterAttackTargetId = LastAfterAttackTick = ForcedBarrelId = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = CleanseThreatUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = CleanseThreatUntil = 0;
     LastBarrelRefreshTick = LastModeTick = 0;
     LastMode = Mode::None;
     Upgrades = {};
@@ -562,7 +557,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject Q and AA barrel races that an enemy can win before impact",
     "Preserve selected target first, then orbwalker target, then selector fallback",
     "Preserve an AA windup unless a lethal or explicit barrel trigger is committed",
-    "Yield for bounded manual spell ownership after a player-triggered Q W E or R",
+    "Reconcile player-triggered Q W E or R state/",
     "Reconcile Trial by Fire cooldown and refresh it on observed barrel detonations",
     "Use W for removable crowd control and missing-health sustain, never airborne cleanse",
     "Use Q as an attack weave and conservative last-hit route without stealing a ready AA",

@@ -71,11 +71,11 @@ inline bool HookHits(const Vec3& origin, const Vec3& aim, const Vec3& target,
 
 inline bool HookRecastSafe(const Vec3& player, const Vec3& hooked,
                            bool wall, bool enemyTurret, int enemies,
-                           int allies, int maximumEnemies, bool selectedTarget,
+                           int allies, int maximumEnemies,
                            bool lethal = false) {
     if (!player.IsValid() || !hooked.IsValid() || wall || enemyTurret) return false;
     if (!lethal && enemies > std::max(0, maximumEnemies)) return false;
-    if (selectedTarget && allies <= 0 && !lethal) return false;
+    if (!lethal && allies <= 0) return false;
     return player.Distance2D(hooked) <= kQRange + 75.0f;
 }
 
@@ -99,9 +99,9 @@ inline LanternPlan BuildLanternPlan(const Vec3& origin, const Vec3& ally,
 }
 
 inline bool LanternRescueSafe(const Vec3& landing, int enemies, int allies,
-                              bool enemyTurret, bool selectedAlly,
+                              bool enemyTurret,
                               int maximumEnemies = 2) {
-    if (!landing.IsValid() || enemyTurret || !selectedAlly) return false;
+    if (!landing.IsValid() || enemyTurret) return false;
     return enemies <= std::max(0, maximumEnemies) && allies + 1 >= enemies;
 }
 
@@ -161,12 +161,12 @@ inline bool BoxWallBlocks(const Vec3& center, const Vec3& from,
     return (fromDistance < innerWall && toDistance >= innerWall) ||
            (toDistance < innerWall && fromDistance >= innerWall);
 }
-inline bool BoxSafe(const Vec3& center, const Vec3& selected,
-                   const Vec3& ally, bool selectedIsAlly, int enemiesInside,
-                   int alliesInside, bool enemyTurret, int minimumAllies = 1) {
+inline bool BoxSafe(const Vec3& center, const Vec3& target,
+                   const Vec3& ally, int enemiesInside,
+                   int alliesInside, bool enemyTurret,
+                   int minimumAllies = 1) {
     if (!center.IsValid() || enemyTurret || enemiesInside <= 0) return false;
-    if (!selected.IsZero() && !InsideBox(center, selected, 55.0f)) return false;
-    if (selectedIsAlly && !InsideBox(center, selected, 55.0f)) return false;
+    if (!target.IsZero() && !InsideBox(center, target, 55.0f)) return false;
     if (ally.IsValid() && !ally.IsZero() && !InsideBox(center, ally, 55.0f)) return false;
     return alliesInside >= std::max(0, minimumAllies);
 }

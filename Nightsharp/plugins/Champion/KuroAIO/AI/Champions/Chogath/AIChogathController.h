@@ -37,7 +37,7 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int InterruptTargetId = 0;
@@ -236,8 +236,7 @@ inline void Flee(const AIHeroClient& target) {
         (void)CastQ(target, Mode::Flee, true);
     }
 }
-inline bool Automatic(const AIHeroClient& target) {
-    if (PlayerOverrideUntil > Now()) return true;
+inline bool Automatic(const AIHeroClient& target) {
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(target))
         if (CastW(target, Mode::Automatic, true)) return true;
     if (Engine::ValidEnemy(target) && CastRChampion(target, Mode::Automatic, true)) return true;
@@ -247,8 +246,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
     ReconcileState();
     const auto target = ControllerHelpers::PreferredEnemyTarget(selected,
-        mode == Mode::Flee ? 1000.0f : std::max(kQRange, FeastCastRange(FeastStacks)));
-    if (PlayerOverrideUntil > Now()) return true;
+        mode == Mode::Flee ? 1000.0f : std::max(kQRange, FeastCastRange(FeastStacks)));
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -268,8 +266,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 2) {
             VorpalEnabled = true;
@@ -307,8 +303,7 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         Engine::TextContains(args.BuffName, "ChogathE")) VorpalEnabled = false;
 }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (!args.Target.IsValid()) return;
-    // Feast's cast is winding-up protected by Riot data; never cancel a manual
+    if (!args.Target.IsValid()) return;    // Feast is winding-up protected by Riot data; never cancel a controller cast.
     // or controller Feast windup to invent an extra Vorpal attack.
     if (LastCastTick[3] > 0 && Now() - LastCastTick[3] < 300) args.Process = false;
 }
@@ -332,8 +327,7 @@ inline void OnDraw() {
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("ChogathOneTrick", "Cho'Gath Feast tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("ChogathOneTrick", "Cho'Gath Feast tactics"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Rupture", "Delayed rupture prediction"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("FeralScream", "Silence cone"));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 54, 10, 90));
@@ -348,7 +342,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = IncomingThreatUntil = 0;
+    LastAutoTargetId = LastAutoTick = IncomingThreatUntil = 0;
     IncomingHardCCUntil = InterruptTargetId = InterruptExpireTick = 0;
     FeastStacks = LastRTargetId = 0;
     LastRWasEpic = VorpalEnabled = VorpalOwned = false;
@@ -366,14 +360,14 @@ inline constexpr const char* Scenarios[] = {
     "Aim W Feral Scream as a 675-range 28-degree cone and preserve silence for reactive peel",
     "Reject W through terrain and unsafe turret-only endpoints",
     "Toggle E Vorpal Spikes only for a reachable empowered attack and retain attack-reset ownership",
-    "Reconcile E active state from spell events, buff events and polling without toggling a manual E",
+    "Reconcile E active state from spell events, buff events and polling without toggling E",
     "Track Feast stacks from Feast buff counters, process-spell events and polling reconciliation",
     "Use true-damage Feast only at verified champion execute threshold",
     "Prioritize lethal epic jungle monsters/objectives over ordinary monster stacks",
     "Allow minion Feast stacks only below six while preserving champion and epic-monster stacks",
     "Respect Feast cast-range growth of 2.5 per stack capped at 25 and real target reach",
     "Reject turret-only or overcommitted Feast targets unless the execute is verified lethal",
-    "Protect Feast and ordinary AA windups from controller casts and manual ownership windows",
+    "Protect Feast and ordinary AA windups from controller casts and stale cast windows/",
     "Keep selected target precedence through PreferredEnemyTarget before selector fallback",
     "Run distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic policies",
     "Use Automatic only for reactive silence, lethal champion Feast or lethal objective Feast",

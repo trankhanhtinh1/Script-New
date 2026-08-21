@@ -13,7 +13,7 @@ inline constexpr ChampionProfile Kaisa = [] {
     p.Resource = ResourceModel::Mana;
     p.Mechanics = Mechanic::Evolve | Mechanic::Stack | Mechanic::Mark |
                   Mechanic::Dash | Mechanic::AutoWeave | Mechanic::MissingHealth;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::AllIn;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Icathian Rain", CastKind::Self,
@@ -84,7 +84,6 @@ inline constexpr ChampionProfile Kaisa = [] {
     p.UltimateTargetHealthPercent = 30.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 24;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "KaisaPassive";
@@ -94,7 +93,7 @@ inline constexpr ChampionProfile Kaisa = [] {
     p.ThemeTo = 0xFF1AD6C7u;
     p.ThemeSpeed = 0.93f;
     p.TacticalSummary =
-        "Keep the selected marked target as the anchor when reachable; poll "
+        "Use the best reachable marked target as the anchor; poll "
         "evolutions and Plasma rather than guessing from stats, reserve Q while "
         "a lethal auto is available, require collision-aware W prediction, use E "
         "to weave attack speed, and never R into an unsafe dash endpoint.";

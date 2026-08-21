@@ -22,7 +22,6 @@ using ControllerHelpers::CaptureGapcloser;
 using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::CountAlliedFollowup;
-using ControllerHelpers::CursorDirectionAgrees;
 using ControllerHelpers::EnemySpellReady;
 using ControllerHelpers::HasEnemyChampionNear;
 using ControllerHelpers::HasReadyPointClickThreatAt;
@@ -66,9 +65,6 @@ enum class Sequence : std::uint8_t {
     ReactiveDash,
     ReactivePeel,
     ReactiveFlee,
-    ManualWAssist,
-    ManualEAssist,
-    ManualBoulderAssist,
     JungleEW,
 };
 
@@ -188,7 +184,6 @@ inline int LastAfterAttackTick = 0;
 inline int LastLocalAutoTargetId = 0;
 inline int LastLocalAutoTick = 0;
 inline std::array<int, 4> LastRegisteredCastTick = {};
-inline int PlayerOverrideUntil = 0;
 inline int BoulderSlowTargetId = 0;
 inline int BoulderSlowStartTick = 0;
 inline int BoulderSlowUntil = 0;
@@ -196,7 +191,6 @@ inline int RChannelUntil = 0;
 
 inline constexpr int kSequenceLifetimeMs = 4400;
 inline constexpr int kReactiveLifetimeMs = 1800;
-inline constexpr int kManualOwnershipMs = 480;
 
 inline constexpr std::array<MobilityRule, 50> MobilityRules = {
     MobilityRule{ SDK::ChampionId::Ahri, SDK::SpellSlot::R },
@@ -489,32 +483,6 @@ inline float EComboDamage(const AIBaseClient& target, int contacts) {
             SpellRank(2), player.AP(), contacts, monster));
 }
 
-inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
-                                   float range = 1120.0f) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const AIHeroClient locked = HeroByNetworkId(Engine::LockedTargetNetworkId);
-    if (Engine::ValidEnemy(locked, range)) return locked;
-    const auto player = GameObjects::Player();
-    AIHeroClient best{};
-    float bestScore = -FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy, range)) continue;
-        float score = (100.0f - enemy.HealthPercent()) * 2.2f -
-            player.Position().Distance2D(enemy.Position()) * 0.10f;
-        score += std::max(enemy.TotalAttackDamage(), enemy.AP() * 0.78f) *
-            0.20f;
-        if (Engine::IsHardCrowdControlled(enemy)) score += 320.0f;
-        if (enemy.IsDashing()) score += 260.0f;
-        if (TargetBoulderSlowed(static_cast<int>(enemy.NetworkId()))) {
-            score += 180.0f;
-        }
-        if (score > bestScore) {
-            best = enemy;
-            bestScore = score;
-        }
-    }
-    return best;
-}
 
 inline AIHeroClient ProtectedAlly() {
     return ControllerHelpers::RawAllyHeroByNetworkId(ProtectedAllyId);
@@ -703,10 +671,6 @@ inline QPlan BuildQPlan(const AIBaseClient& intended,
             purpose != QPurpose::BoulderSetup;
         context.PreserveGroundForSetup = !bigRock &&
             Bool(QMenu, "ManageGround", true);
-        context.CursorAgrees = purpose == QPurpose::Wave ||
-            purpose == QPurpose::Jungle || purpose == QPurpose::Objective ||
-            CursorDirectionAgrees(aim, -0.18f) ||
-            (Orbwalker::ActiveMode() == OrbwalkingMode::Combo);
         context.Form = form;
         context.Purpose = forceBoulderSetup
             ? QPurpose::BoulderSetup : purpose;
@@ -757,7 +721,7 @@ inline void RegisterQCast(QForm form, int targetId) {
     if (transition.CreatedZoneId != 0) ++NextGroundZoneId;
     LastQForm = form;
     // The pre-cast ledger is authoritative. The explicit form argument is
-    // retained for missile reconciliation and manual-cast telemetry.
+    // retained for missile reconciliation and spell telemetry.
     if (transition.Form != form) LastQForm = transition.Form;
     LastQCastTick = now;
     LastQTargetId = targetId;
@@ -1152,9 +1116,6 @@ inline WPlan BuildWPlan(const AIBaseClient& target,
         context.PushesTowardEnemySafety = towardEnemySafety;
         context.PushesThreatTowardCarry = towardCarry;
         context.ImprovesPeelDistance = improvesPeel;
-        context.CursorAgrees = peel ||
-            CursorDirectionAgrees(destination, -0.15f) ||
-            (Orbwalker::ActiveMode() == OrbwalkingMode::Combo);
         context.Reactive = reactive;
         context.LethalCombo = lethal;
         context.MineContacts = contacts.Contacts;
@@ -1382,8 +1343,7 @@ inline ComboContext RuntimeComboContext(const AIHeroClient& target) {
     return context;
 }
 
-inline bool TryCombo(const AIHeroClient& selected) {
-    const AIHeroClient target = PreferredEnemy(selected);
+inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target, 1100.0f)) return false;
     const ComboContext context = RuntimeComboContext(target);
     const ComboBranch branch = ChooseComboBranch(context);
@@ -1397,10 +1357,9 @@ inline bool TryCombo(const AIHeroClient& selected) {
     return TryActiveSequence();
 }
 
-inline bool TryHarass(const AIHeroClient& selected) {
+inline bool TryHarass(const AIHeroClient& target) {
     if (PlayerManaPercent() <
         static_cast<float>(Slider(ComboMenu, "HarassMana", 48))) return false;
-    const AIHeroClient target = PreferredEnemy(selected);
     if (!Engine::ValidEnemy(target, kQRange + 80.0f)) return false;
     CurrentPosture = Posture::Poke;
     if (Ready(0)) {
@@ -1430,9 +1389,7 @@ inline bool TryHarass(const AIHeroClient& selected) {
     }
     return false;
 }
-
-inline bool TryFlee(const AIHeroClient& selected) {
-    const AIHeroClient target = PreferredEnemy(selected, 1050.0f);
+inline bool TryFlee(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target, 1050.0f)) return false;
     CurrentPosture = Posture::Peel;
     if (Ready(2)) {
@@ -1529,13 +1486,16 @@ inline bool TryPeel() {
     return false;
 }
 
-inline bool TryKillSecure(const AIHeroClient& selected) {
+inline bool TryKillSecure() {
     if (!Bool(TacticsMenu, "KillSecure", true)) return false;
     std::vector<AIHeroClient> targets;
-    if (Engine::ValidEnemy(selected, 1100.0f)) targets.push_back(selected);
+    const auto engineTarget = Engine::SelectTarget(1100.0f);
+    if (Engine::ValidEnemy(engineTarget, 1100.0f))
+        targets.push_back(engineTarget);
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy, 1100.0f)) continue;
-        if (selected.IsValid() && enemy.NetworkId() == selected.NetworkId()) continue;
+        if (engineTarget.IsValid() &&
+            enemy.NetworkId() == engineTarget.NetworkId()) continue;
         targets.push_back(enemy);
     }
     std::sort(targets.begin(), targets.end(),
@@ -1594,7 +1554,7 @@ inline std::vector<WallUnit> BuildWallUnits() {
             static_cast<int>(ally.NetworkId()) == ProtectedAllyId,
             false, AllyChanneling(ally) });
     }
-    AIHeroClient priority = PreferredEnemy({}, RRange(SpellRank(3)));
+    AIHeroClient priority = Engine::SelectTarget(RRange(SpellRank(3)));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (!Engine::ValidEnemy(enemy)) continue;
         units.push_back({ enemy.Position(), false, true, false,
@@ -1688,7 +1648,6 @@ inline WallPlan BuildWallPlan(Mode mode) {
     WallContext context{};
     context.Ready = true;
     context.HasMana = player.Mana() + 0.5f >= SpellCost(3);
-    context.ManualAuthorized = Key(WallMenu, "ManualWall", false);
     context.OriginValid = player.Position().IsValid();
     context.EndpointValid = endpoint.IsValid() && !endpoint.IsZero();
     context.PlayerRecentlyDamaged = PredictedDamageLockoutUntil >= Now();
@@ -1696,7 +1655,6 @@ inline WallPlan BuildWallPlan(Mode mode) {
     context.InterruptThreat = IncomingCrowdControlUntil >= Now() ||
         HasReadyPointClickThreatAt(player.Position()) ||
         Engine::CountEnemiesAt(player.Position(), 650.0f) > 0;
-    context.CursorAgrees = true;
     context.RouteNavigable = !SDK::NavMesh::IsWall(endpoint);
     context.ObjectiveSecuredSide = objectivePartition;
     context.EscapeSeparatesPursuers = escapePartition;
@@ -1704,13 +1662,6 @@ inline WallPlan BuildWallPlan(Mode mode) {
     context.Split = split;
     context.Purpose = purpose;
     CastEvaluation evaluation = EvaluateWall(context);
-    if (!evaluation.Cast && Bool(WallMenu, "UnsafeManual", false) &&
-        context.ManualAuthorized && context.Ready && context.HasMana &&
-        context.OriginValid && context.EndpointValid &&
-        !context.PlayerImmobilized &&
-        context.Split.ChannelingAlliesNearWall == 0) {
-        evaluation = { true, 1.0f, "explicit unsafe override" };
-    }
     if (!evaluation.Cast) return plan;
     plan.Endpoint = endpoint;
     plan.Context = context;
@@ -1721,8 +1672,7 @@ inline WallPlan BuildWallPlan(Mode mode) {
     return plan;
 }
 
-inline bool TryManualWall(Mode mode) {
-    if (!WallMenu || !Key(WallMenu, "ManualWall", false)) return false;
+inline bool TryWall(Mode mode) {
     const WallPlan plan = BuildWallPlan(mode);
     if (!plan.Valid || !ControllerHelpers::CastThrottleReady(3, 80, 0)) {
         return false;
@@ -1864,21 +1814,21 @@ inline void RefreshRuntimeState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     RefreshRuntimeState();
     CurrentPosture = Posture::Neutral;
-    if (TryManualWall(mode)) return true;
+    if (mode == Mode::Flee && TryWall(mode)) return true;
     if (TryInterrupt() || TryGapcloser() || TryPeel()) return true;
     if (TryActiveSequence()) return true;
-    if (PlayerOverrideUntil >= Now()) return false;
-    if (TryKillSecure(selected)) return true;
-    if (mode == Mode::Combo) return TryCombo(selected);
-    if (mode == Mode::Harass) return TryHarass(selected);
-    if (mode == Mode::Flee) return TryFlee(selected);
+    if (TryKillSecure()) return true;
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1050.0f : 1120.0f);
+    if (mode == Mode::Combo) return TryCombo(target);
+    if (mode == Mode::Harass) return TryHarass(target);
+    if (mode == Mode::Flee) return TryFlee(target);
     if (mode == Mode::LaneClear || mode == Mode::LastHit) {
-        if (ControllerHelpers::HasNearbyJungleTarget(1050.0f)) {
+        if (ControllerHelpers::HasNearbyJungleTarget(1050.0f))
             return TryJungleFarm();
-        }
         return TryLaneFarm(mode);
     }
     if (mode == Mode::Jungle) return TryJungleFarm();
@@ -1888,13 +1838,17 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 inline AIHeroClient NearestEnemyToPosition(const Vector3& position,
                                            float range) {
     AIHeroClient best{};
-    float bestDistance = range;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+    if (!position.IsValid() || position.IsZero() || range <= 0.0f) {
+        return best;
+    }
+    const float rangeSqr = range * range;
+    float bestDistanceSqr = rangeSqr;
+    for (const auto& enemy : GameObjects::EnemyHeroesFrame()) {
         if (!Engine::ValidEnemy(enemy)) continue;
-        const float distance = enemy.Position().Distance2D(position);
-        if (distance <= bestDistance) {
+        const float distanceSqr = enemy.Position().DistanceSqr2D(position);
+        if (distanceSqr <= bestDistanceSqr) {
             best = enemy;
-            bestDistance = distance;
+            bestDistanceSqr = distanceSqr;
         }
     }
     return best;
@@ -1938,30 +1892,17 @@ inline void ObserveLocalSpell(
     const SDK::Events::ProcessSpellEventArgs& args) {
     const int slot = EventSlot(args);
     if (slot < 0 || slot >= 4) return;
-    const bool ours = Engine::WasControllerCast(slot, 720);
     const int targetId = EventTargetId(args);
-    if (!ours) {
-        ClearSequence();
-        PlayerOverrideUntil = Now() +
-            Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
-    }
     if (slot == 0) {
         const QForm form = CurrentQForm();
         int resolvedTarget = targetId;
         if (resolvedTarget == 0 && args.EndPosition.IsValid()) {
             const AIHeroClient nearest = NearestEnemyToPosition(
                 args.EndPosition, 260.0f);
-            if (nearest.IsValid()) {
+            if (nearest.IsValid())
                 resolvedTarget = static_cast<int>(nearest.NetworkId());
-            }
         }
         RegisterQCast(form, resolvedTarget);
-        if (!ours && form == QForm::Boulder && resolvedTarget != 0 &&
-            Bool(ComboMenu, "AssistManualBoulder", true)) {
-            StartSequence(Sequence::ManualBoulderAssist,
-                          ComboBranch::BoulderWEQ,
-                          resolvedTarget, false, 1);
-        }
     } else if (slot == 1) {
         WPlan observed{};
         observed.Center = args.StartPosition.IsValid() &&
@@ -1974,7 +1915,7 @@ inline void ObserveLocalSpell(
             ? static_cast<int>(nearest.NetworkId()) : targetId;
         observed.Valid = observed.Center.IsValid() &&
             observed.DirectionEnd.IsValid();
-        if (!ours && observed.Valid) {
+        if (observed.Valid) {
             const auto player = GameObjects::Player();
             if (player.IsValid()) {
                 observed.PlannedMinefield = BuildMinefield(
@@ -1985,12 +1926,6 @@ inline void ObserveLocalSpell(
             LastWPlan = observed;
         }
         RegisterWCast(observed);
-        if (!ours && observed.TargetId != 0 && Ready(2) &&
-            Bool(ComboMenu, "AssistManualW", true)) {
-            StartSequence(Sequence::ManualWAssist,
-                          ComboBranch::FastWEQ,
-                          observed.TargetId, false, 1);
-        }
     } else if (slot == 2) {
         Vector3 aim = args.EndPosition;
         if (!aim.IsValid() || aim.IsZero()) aim = args.StartPosition;
@@ -1998,12 +1933,6 @@ inline void ObserveLocalSpell(
         const int resolved = nearest.IsValid()
             ? static_cast<int>(nearest.NetworkId()) : targetId;
         RegisterECast(aim, resolved);
-        if (!ours && resolved != 0 && Ready(1) &&
-            Bool(ComboMenu, "AssistManualE", true)) {
-            StartSequence(Sequence::ManualEAssist,
-                          ComboBranch::ControlledEWQ,
-                          resolved, false, 1);
-        }
     } else {
         LastRCastTick = Now();
         RChannelUntil = Now() + static_cast<int>(kRChannelSeconds * 1000.0f);
@@ -2089,7 +2018,7 @@ inline const char* PostureName(Posture posture) {
     case Posture::Peel: return "peel";
     case Posture::Farm: return "farm";
     case Posture::Objective: return "objective";
-    case Posture::Wall: return "manual wall";
+    case Posture::Wall: return "wall";
     default: return "neutral";
     }
 }
@@ -2111,9 +2040,6 @@ inline const char* SequenceName(Sequence sequence) {
     case Sequence::CombatBranch: return "combat";
     case Sequence::ReactiveDash: return "dash reaction";
     case Sequence::ReactivePeel: return "carry peel";
-    case Sequence::ManualWAssist: return "manual W assist";
-    case Sequence::ManualEAssist: return "manual E assist";
-    case Sequence::ManualBoulderAssist: return "manual BigQ assist";
     case Sequence::JungleEW: return "jungle E-W";
     default: return "none";
     }
@@ -2123,7 +2049,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kQRange,
                             0x6659C7E8u, 1.25f, 72);
         Drawing::DrawCircle(player.Position(), kWRange,
@@ -2131,7 +2057,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(player.Position(), kERange,
                             0x6659D89Bu, 1.10f, 64);
     }
-    if (Bool(CoachMenu, "DrawGround", true)) {
+    if (Bool(CoachMenu, "DrawGround", false)) {
         const float nowSeconds = static_cast<float>(Now()) / 1000.0f;
         for (const WorkedGroundZone& zone : GroundZones) {
             if (!ActiveWorkedGround(zone, nowSeconds)) continue;
@@ -2152,7 +2078,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawMines", true) && FieldActive()) {
+    if (Bool(CoachMenu, "DrawMines", false) && FieldActive()) {
         const float nowSeconds = static_cast<float>(Now()) / 1000.0f;
         for (int index = 0; index < ActiveMinefield.Count; ++index) {
             const EMine& mine = ActiveMinefield.Mines[
@@ -2165,7 +2091,7 @@ inline void OnDraw() {
                 spawned ? 1.5f : 0.8f, 16);
         }
     }
-    if (Bool(CoachMenu, "DrawQ", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawQ", false) && LastQPlan.Valid) {
         const std::uint32_t color = LastQPlan.Lethal
             ? 0xFFF4D35Eu
             : (LastQPlan.Form == QForm::Boulder
@@ -2180,7 +2106,7 @@ inline void OnDraw() {
                 color, 1.6f, 40);
         }
     }
-    if (Bool(CoachMenu, "DrawW", true) && LastWPlan.Valid) {
+    if (Bool(CoachMenu, "DrawW", false) && LastWPlan.Valid) {
         Drawing::DrawCircle(
             LastWPlan.Center, kWRadius, 0xCCB77CFFu, 1.8f, 40);
         Drawing::DrawLine(
@@ -2189,7 +2115,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(
             LastWPlan.Destination, 46.0f, 0xFFCF9BFFu, 1.8f, 24);
     }
-    if (Bool(CoachMenu, "DrawProtected", true)) {
+    if (Bool(CoachMenu, "DrawProtected", false)) {
         const AIHeroClient ally = ProtectedAlly();
         if (ally.IsValid()) {
             Drawing::DrawCircle(
@@ -2197,7 +2123,7 @@ inline void OnDraw() {
                 0xAA71E7A5u, 1.5f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawWall", true) && LastWallPlan.Valid) {
+    if (Bool(CoachMenu, "DrawWall", false) && LastWallPlan.Valid) {
         Drawing::DrawLine(
             player.Position(), LastWallPlan.Endpoint,
             0xBBE0B47Au, 2.0f);
@@ -2205,7 +2131,7 @@ inline void OnDraw() {
             LastWallPlan.Endpoint, 85.0f,
             0xCCE0B47Au, 1.8f, 32);
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[512]{};
@@ -2216,7 +2142,7 @@ inline void OnDraw() {
                 BranchName(ActiveBranch), SequenceStep,
                 CurrentQForm() == QForm::Boulder ? "BIG" : "volley",
                 GroundZones.size(),
-                PlayerOverrideUntil >= Now() ? "player" : "controller");
+                "controller");
             Drawing::DrawText(
                 screen.x - 285.0f, screen.y - 112.0f,
                 0xFFD9F4F7u, state);
@@ -2230,15 +2156,8 @@ inline void BuildMenu(Menu* root) {
         "TaliyahOneTrick", "Taliyah one-trick stoneweaver"));
     TacticsMenu->Add(new MenuBool(
         "KillSecure", "Secure with conservative", true));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)",
-        kManualOwnershipMs, 150, 1100));
-    TacticsMenu->Add(new MenuSeparator(
-        "Ownership",
-        "Movement, attacks, Flash, R"));
-
     QMenu = TacticsMenu->AddSubMenu(new Menu(
-        "ThreadedVolley", "Accelerating volley, boulder and Worked Ground"));
+        "Volley, boulder, Worked Ground"));
     QMenu->Add(new MenuList(
         "QHitchance", "Moving Q prediction",
         { "Medium", "High", "Very high", "Immobile only" }, 2));
@@ -2251,15 +2170,9 @@ inline void BuildMenu(Menu* root) {
         "Volley Q"));
 
     ComboMenu = TacticsMenu->AddSubMenu(new Menu(
-        "ComboRhythm", "Big Q, W-E surprise and E-W control branches"));
+        "Big Q, W-E and E-W branches"));
     ComboMenu->Add(new MenuBool(
         "BigQCatch", "Convert Big Q slow into W-E-Q", true));
-    ComboMenu->Add(new MenuBool(
-        "AssistManualBoulder", "W-E after player Q", true));
-    ComboMenu->Add(new MenuBool(
-        "AssistManualW", "Place E after a clean player W", true));
-    ComboMenu->Add(new MenuBool(
-        "AssistManualE", "W vector after player E", true));
     ComboMenu->Add(new MenuSlider(
         "HarassMana", "Min mana harass (%)", 48, 0, 100));
     ComboMenu->Add(new MenuSeparator(
@@ -2267,7 +2180,7 @@ inline void BuildMenu(Menu* root) {
         "W-E is faster but may miss"));
 
     MineMenu = TacticsMenu->AddSubMenu(new Menu(
-        "UnraveledEarth", "Six timed rows, dash denial and shove contacts"));
+        "Timed rows, dash denial, shove"));
     MineMenu->Add(new MenuSeparator(
         "LiveRows",
         "Track 22 mines: 2 in row"));
@@ -2276,7 +2189,7 @@ inline void BuildMenu(Menu* root) {
         "Detonation scoring uses"));
 
     PeelMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Peel", "Anti-dash, interrupt and protected-carry vectors"));
+        "Anti-dash, interrupt, carry peel"));
     PeelMenu->Add(new MenuBool(
         "AntiGapcloser", "E path then W away", true));
     PeelMenu->Add(new MenuBool(
@@ -2290,7 +2203,7 @@ inline void BuildMenu(Menu* root) {
         "Never shove a diver closer"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Worked Ground economy, wave AoE and jungle modifiers"));
+        "Ground economy, wave AoE, jungle"));
     FarmMenu->Add(new MenuBool(
         "Lane", "Champion Q/E wave logic", true));
     FarmMenu->Add(new MenuBool(
@@ -2315,36 +2228,31 @@ inline void BuildMenu(Menu* root) {
         "ChampionHoldRange", "Champion contest range", 1050, 500, 1600));
 
     WallMenu = TacticsMenu->AddSubMenu(new Menu(
-        "WeaversWall", "Explicit player wall with team-partition safety"));
-    WallMenu->Add(new MenuKeyBind(
-        "ManualWall", "Verified wall toward cursor [G]",
-        SDK::Keys::G, KeyBindType::Press));
+        "Autonomous wall with team safety"));
     WallMenu->Add(new MenuSlider(
-        "EscapeHp", "Classify manual wall as", 24, 5, 70));
-    WallMenu->Add(new MenuBool(
-        "UnsafeManual", "Allow explicit endpoint", false));
+        "EscapeHp", "Classify escape wall as", 24, 5, 70));
     WallMenu->Add(new MenuSeparator(
         "NoRide",
         "The controller casts only"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "Taliyah geometry, row timing and ownership telemetry"));
+        "Geometry, row timing, telemetry"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw Q/W/E ranges", true));
+        "DrawRanges", "Draw Q/W/E ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawGround", "Draw Worked Ground", true));
+        "DrawGround", "Draw Worked Ground", false));
     CoachMenu->Add(new MenuBool(
-        "DrawMines", "Draw E rows", true));
+        "DrawMines", "Draw E rows", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q first AoE", true));
+        "DrawQ", "Draw Q first AoE", false));
     CoachMenu->Add(new MenuBool(
-        "DrawW", "Draw W center, vector and", true));
+        "DrawW", "Draw W center, vector and", false));
     CoachMenu->Add(new MenuBool(
-        "DrawProtected", "Mark protected ally", true));
+        "DrawProtected", "Mark protected ally", false));
     CoachMenu->Add(new MenuBool(
-        "DrawWall", "Draw last verified manual wall", true));
+        "DrawWall", "Draw last verified wall", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/Q form", true));
+        "DrawState", "Draw posture/Q form", false));
 }
 
 inline void OnLoad() {
@@ -2376,7 +2284,6 @@ inline void OnLoad() {
     LastAfterAttackTargetId = LastAfterAttackTick = 0;
     LastLocalAutoTargetId = LastLocalAutoTick = 0;
     LastRegisteredCastTick.fill(0);
-    PlayerOverrideUntil = BoulderSlowTargetId = BoulderSlowStartTick = 0;
     BoulderSlowUntil = 0;
     RChannelUntil = 0;
     RefreshRuntimeState();
@@ -2553,11 +2460,6 @@ inline constexpr const char* Scenarios[] = {
     "Continue a clean player Big Q with W-E when opted in",
     "Continue a clean player W with E when opted in",
     "Continue a clean player E with the best W vector when opted in",
-    "Yield for a configurable window after unowned player spell input",
-    "Cancel the previous automatic cadence before starting an opted-in manual continuation",
-    "Prioritize interrupt, anti-gapclose and carry peel over an offensive active cadence",
-    "Keep reactive peel and interrupt available during player ownership",
-    "Preserve controller cast ownership through synchronous ProcessSpell",
     "Deduplicate controller prediction and spell-event state registration",
     "Use Q-W-E-Q branch mana with 10 mana for the opening Big Q",
     "Use exact live spellbook mana for all other branch slots",
@@ -2592,12 +2494,6 @@ inline constexpr const char* Scenarios[] = {
     "Never automate R ride",
     "Never automate R jump-off",
     "Never automate R early wall destruction",
-    "Clamp the manual wall endpoint to the learned R rank",
-    "Reject low-value manual walls shorter than 900 units",
-    "Reject manual wall while immobilized",
-    "Reject manual wall with a ready close interrupt threat",
-    "Reject manual wall that crosses a protected ally",
-    "Reject manual wall that crosses an allied channel",
     "Classify objective walls only when they partition enemy approach",
     "Classify escape walls only when they separate or knock aside a pursuer",
     "Recognize priority-target separation independently of unit iteration order",
@@ -2618,7 +2514,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AITaliyah.md";
     controller.ImplementationSummary =
-        "Accelerating/fixed Q first-body and AoE, Worked Ground ledger, timed 22-mine E, vector W branch planner, player-cooperative assists, carry peel and manual partition-safe R.";
+        "Accelerating/fixed Q first-body and AoE, Worked Ground ledger, timed 22-mine E, vector W branch planner, carry peel and partition-safe R.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

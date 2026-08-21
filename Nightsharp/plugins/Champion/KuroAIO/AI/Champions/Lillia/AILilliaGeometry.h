@@ -187,16 +187,15 @@ struct SafetyContext {
     bool Defensive = false;
     bool UnderTurret = false;
     bool AttackWindingUp = false;
-    bool Manual = false;
     int NearbyEnemies = 0;
     int MaxEnemies = 3;
 };
 inline constexpr bool SafeCommit(const SafetyContext& context) {
-    if (!context.TargetValid || context.UnderTurret && !context.Lethal && !context.Defensive && !context.Manual)
+    if (!context.TargetValid || context.UnderTurret && !context.Lethal && !context.Defensive)
         return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.Defensive && !context.Manual)
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive)
         return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    return context.Lethal || context.Defensive ||
         context.NearbyEnemies <= std::max(0, context.MaxEnemies);
 }
 inline constexpr bool SafeKite(float distance, float preferredDistance,

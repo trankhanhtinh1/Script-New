@@ -40,6 +40,12 @@ inline bool Ready(int slot, Mode mode, bool reactive = false) {
         Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode) &&
         (reactive || LastCastTick[static_cast<std::size_t>(slot)] + 45 <= Now());
 }
+inline AIHeroClient AutonomousTarget(float range) {
+    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
+    return Engine::SelectTarget(range);
+}
+
 
 inline bool CanUseAxe(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
@@ -179,7 +185,7 @@ inline void Automatic(const AIHeroClient& target) {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     if (AxeTracked && AxeExpireTick < Now()) AxeTracked = false;
     if (RagnarokActive && (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady())) RagnarokActive = false;
@@ -187,8 +193,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         IncomingThreatTargetId = 0;
         IncomingThreatEndpoint = {};
     }
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(
-        selected, kUndertowRange + 80.0f);
+    const AIHeroClient target = AutonomousTarget(kUndertowRange + 80.0f);
+
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -228,7 +234,6 @@ inline void OnUnload() {
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
-        if (!Engine::WasControllerCast(static_cast<int>(args.Slot))) return;
         LastAttackTargetId = static_cast<int>(args.TargetNetworkId);
         return;
     }
@@ -294,8 +299,7 @@ inline constexpr const char* Scenarios[] = {
     "Tough It Out attack-windup shield timing",
     "Ragnarok crowd-control immunity commit gate",
     "jungle low-health W and E last hit",
-    "turret chase and enemy-count safety",
-    "manual cast and buff expiry reconciliation",
+    "cast and buff expiry reconciliation",
     "gapcloser and interrupt threat tracking",
 };
 

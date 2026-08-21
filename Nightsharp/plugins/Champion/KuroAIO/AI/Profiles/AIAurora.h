@@ -102,7 +102,7 @@ inline constexpr ChampionProfile Aurora = [] {
              StepRule::RequireTarget | StepRule::RequireSafePosition));
 
     p.Flee = Plan(
-        "slow the pursuer with E, use W on a cursor-agreeing wall route, and reserve R portal for a committed threat",
+        "slow the pursuer with E, use W on a cursor-guided wall route, and reserve R portal for a committed threat",
         Step(SDK::SpellSlot::E,
              StepRule::RequireTarget | StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::W,
@@ -129,7 +129,7 @@ inline constexpr ChampionProfile Aurora = [] {
     p.ThemeTo = 0xFF59E7FFu;
     p.ThemeSpeed = 0.72f;
     p.TacticalSummary =
-        "Keep attacks, movement and cursor player-owned; open Q before the "
+        "Automate attacks and movement with cursor-guided routes; open Q before the "
         "auto, delay Q2 for missing health unless marked-wave bolts would be "
         "lost, spend W only on safe angle/reset routes, validate E's opposite "
         "recoil endpoint, and treat R leap, arena center, opposite portal and "

@@ -136,8 +136,7 @@ inline void RefreshProjectileCollisionMasks() {
     }
 }
 
-inline void RefreshOrbwalkerFocus(Mode mode,
-                                  const AIHeroClient& preferred) {
+inline void RefreshOrbwalkerFocus(Mode mode) {
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     auto owned = OwnedOrbwalkerFocus(
         OwnedFocusTargetId, OwnedFocusUntil, 800.0f);
@@ -154,8 +153,6 @@ inline void RefreshOrbwalkerFocus(Mode mode,
         if (!Engine::ValidEnemy(enemy, 800.0f) ||
             !InAutoAttackRange(enemy)) continue;
         float score = 100.0f - enemy.HealthPercent();
-        if (preferred.IsValid() &&
-            preferred.NetworkId() == enemy.NetworkId()) score += 155.0f;
         if (score > bestScore) {
             best = enemy;
             bestScore = score;
@@ -270,12 +267,11 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred,
-                                      Mode mode,
+inline AIHeroClient SelectSmartTarget(Mode mode,
                                       bool allowR = false) {
     const float range = allowR ? 3400.0f : 2560.0f;
     const auto target = ControllerHelpers::SelectReachableEnemy(
-        preferred, range,
+        AIHeroClient{}, range,
         [mode, allowR](const AIHeroClient& enemy) {
             return TargetFacts(enemy, mode, allowR);
         });
@@ -333,7 +329,7 @@ inline bool CastE(const AIHeroClient& target,
     return false;
 }
 
-inline bool StartCurtain(const AIHeroClient& target, bool manual) {
+inline bool StartCurtain(const AIHeroClient& target) {
     if (CurtainActive() || !Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target, 3400.0f) ||
@@ -345,8 +341,7 @@ inline bool StartCurtain(const AIHeroClient& target, bool manual) {
     const bool hit = ClearRPrediction(target, &prediction);
     const bool lethal = SpellDamage(3, target) * 4.0f >=
         target.Health() + target.AllShield();
-    if (!hit || (!manual && !lethal) ||
-        InAutoAttackRange(target, 150.0f)) return false;
+    if (!hit || !lethal || InAutoAttackRange(target, 150.0f)) return false;
     const auto player = GameObjects::Player();
     const Vector3 cast = prediction.GetCastPosition();
     if (!Engine::ControllerCastPosition(3, cast)) return false;
@@ -358,7 +353,7 @@ inline bool StartCurtain(const AIHeroClient& target, bool manual) {
     return true;
 }
 
-inline bool ShootCurtain(const AIHeroClient& preferred) {
+inline bool ShootCurtain() {
     if (!CurtainActive() || !Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !CastThrottlePassed(LastRCastTick,
@@ -368,8 +363,10 @@ inline bool ShootCurtain(const AIHeroClient& preferred) {
     const auto player = GameObjects::Player();
     if (CurtainOrigin.IsZero()) CurtainOrigin = player.Position();
     if (CurtainDirection.IsZero()) {
-        CurtainDirection = SharedGeometry::Direction2D(
-            CurtainOrigin, Game::CursorPos());
+        const auto target = Engine::SelectTarget(3400.0f);
+        CurtainDirection = target.IsValid()
+            ? SharedGeometry::Direction2D(CurtainOrigin, target.Position())
+            : Vector3{};
     }
 
     AIHeroClient best{};
@@ -395,8 +392,6 @@ inline bool ShootCurtain(const AIHeroClient& preferred) {
         context.Marked = Marked(enemy);
         context.HealthPercent = enemy.HealthPercent();
         float score = CurtainShotScore(context);
-        if (preferred.IsValid() &&
-            preferred.NetworkId() == enemy.NetworkId()) score += 120.0f;
         if (score > bestScore) {
             best = enemy;
             bestPrediction = prediction;
@@ -412,12 +407,6 @@ inline bool ShootCurtain(const AIHeroClient& preferred) {
     return false;
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    if (CurtainActive()) return ShootCurtain(preferred);
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic, true);
-    return Engine::ValidEnemy(target) && StartCurtain(target, true);
-}
 
 inline bool TryAntiGapcloser() {
     if (GapcloserExpireTick < Now()) return false;
@@ -426,17 +415,17 @@ inline bool TryAntiGapcloser() {
            CastE(target, Mode::Automatic, true);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    auto target = SelectSmartTarget(preferred, Mode::Automatic, false);
+    auto target = SelectSmartTarget(Mode::Automatic, false);
     if (Engine::ValidEnemy(target)) {
         if (SpellDamage(0, target) >= target.Health() + target.AllShield() &&
             CastQ(target, Mode::Automatic)) return true;
         if (SpellDamage(1, target) >= target.Health() + target.AllShield() &&
             CastW(target, Mode::Automatic)) return true;
     }
-    target = SelectSmartTarget(preferred, Mode::Automatic, true);
-    return Engine::ValidEnemy(target) && StartCurtain(target, false);
+    target = SelectSmartTarget(Mode::Automatic, true);
+    return Engine::ValidEnemy(target) && StartCurtain(target);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
@@ -446,21 +435,21 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return CastE(target, mode, false);
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto target = ControllerHelpers::NearestEnemyToPlayer(preferred, 800.0f);
+inline bool TryFlee() {
+    const auto target = ControllerHelpers::NearestEnemyToPlayer({}, 800.0f);
     if (!Engine::ValidEnemy(target)) return false;
     if (CastE(target, Mode::Flee, true)) return true;
     return CastW(target, Mode::Flee);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     RefreshProjectileCollisionMasks();
     const bool curtain = CurtainActive();
     if (curtain) {
         ClearTemporaryOrbwalkerFocus(
             OwnedFocusTargetId, OwnedFocusUntil);
     } else {
-        RefreshOrbwalkerFocus(mode, preferred);
+        RefreshOrbwalkerFocus(mode);
     }
     if (curtain && !CurtainOwnsOrbwalkerPause) {
         PreviousAttackEnabled = Orbwalker::AttackEnabled();
@@ -473,13 +462,12 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
         Orbwalker::MoveEnabled(PreviousMoveEnabled);
         CurtainOwnsOrbwalkerPause = false;
     }
-    if (curtain) return ShootCurtain(preferred);
-    if (TryManualR(preferred)) return true;
+    if (curtain) return ShootCurtain();
     if (TryAntiGapcloser()) return true;
-    if (TryKillSecure(preferred)) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    if (TryKillSecure()) return true;
+    if (mode == Mode::Flee) return TryFlee();
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        const auto target = SelectSmartTarget(preferred, mode, false);
+        const auto target = SelectSmartTarget(mode, false);
         return TryCombat(target, mode);
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
@@ -544,7 +532,7 @@ inline void BuildMenu(Menu* root) {
     FlourishMenu = TacticsMenu->AddSubMenu(new Menu(
         "FlourishLogic", "Deadly Flourish"));
     FlourishMenu->Add(new MenuSeparator(
-        "MarkFirst", "W always requires mark, CC or lethal damage"));
+        "MarkFirst", "W requires mark, CC or lethal"));
     TrapMenu = TacticsMenu->AddSubMenu(new Menu(
         "AudienceLogic", "Captive Audience"));
     TrapMenu->Add(new MenuSlider(
@@ -592,7 +580,7 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Reject selected targets outside AA/Q and without a legal marked W route",
+    "Reject targets outside AA/Q and without a legal marked W route",
     "Use Q immediately after AA or while reloading, never over a ready attack",
     "Force the best reachable fourth-shot target through the orbwalker",
     "Redirect BeforeAttack only while the fourth-shot state remains active",
@@ -610,8 +598,8 @@ inline constexpr const char* Scenarios[] = {
     "Keep every R shot inside the originally captured cone",
     "Recompute prediction and first champion for every R shot",
     "Prioritize lethal R shots, then lower-health marked targets",
-    "Restore orbwalker ownership immediately when the channel ends",
-    "Keep manual R subject to real reach, cone and blocker validation",
+    "Restore orbwalker control immediately when the channel ends",
+    "Keep policy-gated R subject to real reach, cone and blocker validation",
 };
 
 inline constexpr ChampionController Controller = [] {

@@ -770,7 +770,6 @@ struct QContext {
     bool ComboFollowupReady = false;
     bool FullVolleyPreferred = false;
     bool PreserveGroundForSetup = false;
-    bool CursorAgrees = true;
     QForm Form = QForm::Volley;
     QPurpose Purpose = QPurpose::Poke;
     int AoeVictims = 1;
@@ -807,12 +806,6 @@ inline CastEvaluation EvaluateQ(const QContext& context) {
         !context.Lethal && context.Purpose != QPurpose::BoulderSetup &&
         context.Purpose != QPurpose::Peel) {
         result.Reason = "preserve full volley DPS";
-        return result;
-    }
-    if (!context.CursorAgrees && !context.Lethal && !context.Reactive &&
-        (context.Purpose == QPurpose::Poke ||
-         context.Purpose == QPurpose::Combo)) {
-        result.Reason = "player direction disagrees";
         return result;
     }
     result.Cast = true;
@@ -860,7 +853,6 @@ struct WContext {
     bool PushesTowardEnemySafety = false;
     bool PushesThreatTowardCarry = false;
     bool ImprovesPeelDistance = false;
-    bool CursorAgrees = true;
     bool Reactive = false;
     bool LethalCombo = false;
     int MineContacts = 0;
@@ -916,11 +908,6 @@ inline CastEvaluation EvaluateW(const WContext& context) {
          context.Purpose == WPurpose::BigQCatch) &&
         context.MineContacts <= 0 && !context.LethalCombo) {
         result.Reason = "W misses mine conversion";
-        return result;
-    }
-    if (!context.CursorAgrees && !peel && !context.Reactive &&
-        context.AlliedFollowup <= 0) {
-        result.Reason = "player direction disagrees";
         return result;
     }
     result.Cast = true;
@@ -1240,13 +1227,11 @@ enum class WallPurpose : std::uint8_t {
 struct WallContext {
     bool Ready = false;
     bool HasMana = false;
-    bool ManualAuthorized = false;
     bool OriginValid = false;
     bool EndpointValid = false;
     bool PlayerRecentlyDamaged = false;
     bool PlayerImmobilized = false;
     bool InterruptThreat = false;
-    bool CursorAgrees = false;
     bool RouteNavigable = false;
     bool ObjectiveSecuredSide = false;
     bool EscapeSeparatesPursuers = false;
@@ -1257,11 +1242,11 @@ struct WallContext {
 
 inline CastEvaluation EvaluateWall(const WallContext& context) {
     CastEvaluation result{};
-    if (!context.Ready || !context.HasMana || !context.ManualAuthorized ||
+    if (!context.Ready || !context.HasMana ||
         !context.OriginValid || !context.EndpointValid ||
-        !context.CursorAgrees || !context.RouteNavigable ||
+        !context.RouteNavigable ||
         context.Distance < kRMinimumUsefulRange) {
-        result.Reason = "R not player-authorized";
+        result.Reason = "R safety gate";
         return result;
     }
     if (context.PlayerRecentlyDamaged || context.PlayerImmobilized ||
@@ -1296,7 +1281,7 @@ inline CastEvaluation EvaluateWall(const WallContext& context) {
     case WallPurpose::Cutoff: result.Score += 130.0f; break;
     default: break;
     }
-    result.Reason = "manual safe wall";
+    result.Reason = "safe wall";
     return result;
 }
 

@@ -30,7 +30,6 @@ using ControllerHelpers::MissileEventIsLocal;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::Ready;
 using ControllerHelpers::Slider;
@@ -53,7 +52,6 @@ inline int QTargetId = 0;
 inline int QMissileId = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserUntil = 0;
 inline Vector3 GapcloserEndpoint{};
@@ -347,7 +345,7 @@ inline void Automatic(const AIHeroClient& target) {
     if (Death.Active) (void)RecastR(true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const int now = Now();
     if (Shadows.W.ExpireTick <= now) Shadows.W = {};
     if (Shadows.R.ExpireTick <= now) Shadows.R = {};
@@ -371,9 +369,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         LastMark.TargetId, now, kMarkMs);
     if (InterruptUntil < now) InterruptTargetId = 0;
     if (GapcloserUntil < now) GapcloserTargetId = 0;
-    if (ManualOwnershipUntil > now) return true;
     const Mode decisionMode = mode == Mode::None ? Mode::Automatic : mode;
-    const AIHeroClient target = PreferredEnemyTarget(selected,
+    const AIHeroClient target = Engine::SelectTarget(
         decisionMode == Mode::Flee ? kWRange : kQRange + 100.0f);
     switch (decisionMode) {
     case Mode::Combo: Combo(target); break;
@@ -394,8 +391,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = Now();
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = Now() +
-                Slider(TacticsMenu, "ManualOwnershipMs", 600);
             if (slot == 1 && !ControllerHelpers::RuntimeNameContains(1, "ZedW2")) {
                 const Vector3 end = args.EndPosition.IsValid() && !args.EndPosition.IsZero()
                     ? args.EndPosition : Game::CursorPos();
@@ -510,7 +505,6 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("EnergyReserve", "Energy reserve", 20, 0, 100));
     TacticsMenu->Add(new MenuSlider("HarassEnergy", "Harass energy percent", 55, 0, 100));
     TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum commit enemies", 2, 0, 5));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 600, 150, 1500));
     ShadowMenu = TacticsMenu->AddSubMenu(new Menu("Shadow pairs", "W shadow and swaps"));
     ShadowMenu->Add(new MenuBool("AllowEmergencySwap", "Allow emergency W swap", true));
     RMenu = TacticsMenu->AddSubMenu(new Menu("Death Mark", "R return safety"));
@@ -529,7 +523,7 @@ inline void OnLoad() {
     Death = {};
     LastCastTick.fill(0);
     QCastTick = QTargetId = QMissileId = LastAutoTargetId = LastAutoTick = 0;
-    ManualOwnershipUntil = GapcloserTargetId = GapcloserUntil = InterruptTargetId = InterruptUntil = 0;
+    GapcloserTargetId = GapcloserUntil = InterruptTargetId = InterruptUntil = 0;
     GapcloserEndpoint = {};
 }
 inline void OnUnload() {
@@ -539,7 +533,7 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Zed to Riot 26.15 and CommunityDragon PC 16.15 runtime spell/object data",
-    "Select the manually selected enemy before orbwalker fallback",
+    "Use the engine-selected target for autonomous combat",
     "Predict Razor Shuriken and evaluate the first collision body",
     "Apply full Q damage only to the first collision and reduced damage afterward",
     "Preserve a real attack windup while allowing explicit reactive exceptions",
@@ -552,7 +546,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject ordinary R commits under turrets and excessive enemy counts",
     "Gate Q/W/E/R by live energy costs plus reserve",
     "Use runtime mitigated damage and shield-inclusive lethal checks",
-    "Yield briefly after manual casts while retaining state reconciliation",
+    "Reconcile player casts while retaining shadow and mark state",
     "Combo uses death mark, shadow slash, shuriken and controlled return",
     "Harass uses W/E/Q poke with an independent energy threshold",
     "LaneClear, Jungle and LastHit use Q/E only with real range and resource gates",

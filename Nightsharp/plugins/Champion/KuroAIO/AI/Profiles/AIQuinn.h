@@ -74,7 +74,7 @@ inline constexpr ChampionProfile Quinn = [] {
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget),
         Step(SDK::SpellSlot::R, StepRule::RequireTarget));
     p.Flee = Plan(
-        "Vault a pursuer for peel and keep Behind Enemy Lines movement player-owned",
+        "Vault a pursuer for peel and keep Behind Enemy Lines movement autonomous",
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup));
 
     p.PreferredCombatDistance = 575.0f;
@@ -84,7 +84,6 @@ inline constexpr ChampionProfile Quinn = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 30;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "QuinnPassiveMarked";

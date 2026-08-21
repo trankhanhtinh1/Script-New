@@ -158,13 +158,12 @@ struct UltimateContext {
     bool PlayerLow = false;
     bool TargetLethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int EnemyHits = 0;
     int MinimumHits = 2;
 };
 inline bool ShouldDeliver(const UltimateContext& context) {
     if (!context.Ready || !context.TargetValid || !context.LandingValid || !context.LandingSafe) return false;
-    return context.Manual || context.TargetLethal || context.Defensive || context.PlayerLow ||
+    return context.TargetLethal || context.Defensive || context.PlayerLow ||
            context.EnemyHits >= std::max(1, context.MinimumHits);
 }
 
@@ -173,10 +172,9 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
            (context.Defensive || context.Interrupt || context.KillSecure);
 }
 

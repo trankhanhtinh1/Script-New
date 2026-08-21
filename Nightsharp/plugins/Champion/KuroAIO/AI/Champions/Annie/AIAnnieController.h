@@ -2382,7 +2382,7 @@ inline void OnDraw() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
-    if (Bool(CoachMenu, "DrawQ", true)) {
+    if (Bool(CoachMenu, "DrawQ", false)) {
         Drawing::DrawCircle(player.Position(), kDisintegrateRange,
                             0x55FFAA55u, 1.2f, 72);
         if (QPending) {
@@ -2399,7 +2399,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawW", true)) {
+    if (Bool(CoachMenu, "DrawW", false)) {
         const int flashTick = WPending && ManualFlashTick >= WCastTick &&
                 ManualFlashTick <= WResolveTick
             ? ManualFlashTick : 0;
@@ -2422,7 +2422,7 @@ inline void OnDraw() {
                 WExpectedStun ? 0xFFFFBA4Au : 0x77FF774Fu, 1.4f);
         }
     }
-    if (Bool(CoachMenu, "DrawR", true)) {
+    if (Bool(CoachMenu, "DrawR", false)) {
         Drawing::DrawCircle(player.Position(), kTibbersCastRange,
                             0x44E75338u, 1.0f, 72);
         if (LastSummonPlan.Valid &&
@@ -2432,7 +2432,7 @@ inline void OnDraw() {
                 RExpectedStun ? 2.8f : 1.8f, 64);
         }
     }
-    if (Bool(CoachMenu, "DrawPet", true) && TibbersActive) {
+    if (Bool(CoachMenu, "DrawPet", false) && TibbersActive) {
         const AIMinionClient pet = Tibbers();
         if (pet.IsValid()) {
             Drawing::DrawCircle(pet.Position(), 110.0f,
@@ -2445,7 +2445,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawPeel", true)) {
+    if (Bool(CoachMenu, "DrawPeel", false)) {
         const AIHeroClient ally = AllyByNetworkId(ProtectedAllyId);
         const AIHeroClient threat = ControllerHelpers::HeroByNetworkId(
             PeelThreatId);
@@ -2458,7 +2458,7 @@ inline void OnDraw() {
                               0xFFFF5B62u, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[460]{};
@@ -2493,7 +2493,7 @@ inline void BuildMenu(Menu* root) {
         "Flash, move, attack-move and"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Pyromania", "Pyromania cast/impact state and hidden stun"));
+        "Pyromania cast and hidden stun"));
     PassiveMenu->Add(new MenuBool(
         "HiddenQPrime", "At three stacks, Q then E", true));
     PassiveMenu->Add(new MenuBool(
@@ -2507,7 +2507,7 @@ inline void BuildMenu(Menu* root) {
         "Q gains on impact; W/E/R"));
 
     DisintegrateMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Disintegrate", "Q point catch, refund and projectile rules"));
+        "Q catch, refund and projectile"));
     DisintegrateMenu->Add(new MenuBool(
         "Harass", "Q short trades", true));
     DisintegrateMenu->Add(new MenuSlider(
@@ -2530,7 +2530,7 @@ inline void BuildMenu(Menu* root) {
         "Walls", "Q is rejected through Yasuo,"));
 
     IncinerateMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Incinerate", "W cone, AoE stun and player Flash buffer"));
+        "W cone, AoE stun and Flash"));
     IncinerateMenu->Add(new MenuBool(
         "Combo", "W best stun cone", true));
     IncinerateMenu->Add(new MenuSlider(
@@ -2551,7 +2551,7 @@ inline void BuildMenu(Menu* root) {
         "WFlash", "The player presses Flash; W"));
 
     ShieldMenu = TacticsMenu->AddSubMenu(new Menu(
-        "MoltenShield", "E ally protection, speed and stack discipline"));
+        "E ally shield, speed and stacks"));
     ShieldMenu->Add(new MenuBool(
         "Reactive", "Shield targeted or crossing", true));
     ShieldMenu->Add(new MenuSlider(
@@ -2568,7 +2568,7 @@ inline void BuildMenu(Menu* root) {
         "Flee", "E for self shield and", true));
 
     TibbersMenu = TacticsMenu->AddSubMenu(new Menu(
-        "SummonTibbers", "R placement, stun value and summon commitment"));
+        "R placement, stun and summon"));
     TibbersMenu->Add(new MenuBool(
         "Combo", "Use scored R engage when", true));
     TibbersMenu->Add(new MenuSlider(
@@ -2591,7 +2591,7 @@ inline void BuildMenu(Menu* root) {
         "Flee", "R stun last-resort", true));
 
     PetMenu = TacticsMenu->AddSubMenu(new Menu(
-        "TibbersMicro", "Soft pet autopilot with manual ownership"));
+        "Pet autopilot and manual control"));
     PetMenu->Add(new MenuBool(
         "SoftAutopilot", "Focus clear targets but", true));
     PetMenu->Add(new MenuBool(
@@ -2609,7 +2609,7 @@ inline void BuildMenu(Menu* root) {
         "SDK has no inbound Alt-click"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Q-refund lane and conservative cone farming"));
+        "Q-refund lane and cone farm"));
     FarmMenu->Add(new MenuBool(
         "UseQ", "Last-hit with Q when", true));
     FarmMenu->Add(new MenuBool(

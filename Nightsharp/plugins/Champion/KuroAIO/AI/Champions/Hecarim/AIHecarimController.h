@@ -43,7 +43,7 @@ inline int RTargetId = 0;
 inline int RMissileId = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -254,8 +254,7 @@ inline void ReconcileState() {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
-    ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
+    ReconcileState();
     const float range = mode == Mode::Flee ? kRMaxRange + 100.0f : kERange + 100.0f;
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, range);
     switch (mode) {
@@ -277,8 +276,7 @@ inline void BuildMenu(Menu* root) {
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("HecarimFarming", "Hecarim farming"));
     TacticsMenu->Add(new MenuSlider("MaxREnemies", "Maximum enemies at R endpoint", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("MaxEEnemies", "Maximum enemies at E ram endpoint", 2, 0, 5));
-    TacticsMenu->Add(new MenuSlider("WHealth", "Cast W below health percent", 72, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
+    TacticsMenu->Add(new MenuSlider("WHealth", "Cast W below health percent", 72, 0, 100));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("Mana", "Farm mana percent", 25, 0, 100));
 }
@@ -290,7 +288,7 @@ inline void OnLoad() {
     CurrentRState = RState::Ready;
     QStacks = QLastHitTick = WCastTick = ECastTick = ETargetId = 0;
     RCastTick = RTargetId = RMissileId = RFearUntil = LastAutoTargetId = LastAutoTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    IncomingThreatUntil = IncomingThreatTargetId = 0;
     WCenter = EEndpoint = REndpoint = IncomingThreatEndpoint = {};
     LastCastTick.fill(0);
 }
@@ -311,9 +309,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
             return;
         }
         if (args.Slot < 0 || args.Slot > 3) return;
-        if (!Engine::WasControllerCast(args.Slot)) {
-            ManualOwnershipUntil = now + static_cast<int>(Slider(TacticsMenu, "ManualOwnershipMs", 650));
-        }
         LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
         if (args.Slot == 0) {
             QStacks = QStacksAfterHit(QStacks, now, QLastHitTick);
@@ -431,7 +426,7 @@ inline constexpr const char* Scenarios[] = {
     "Onslaught of Shadows 1000-range spectral wave fear endpoint",
     "R wave speed, first collision and distance-scaled fear duration",
     "R endpoint terrain, turret and enemy-count safety with lethal/Flee override",
-    "attack-windup preservation and manual cast ownership",
+    "attack-windup preservation and cast-state reconciliation/",
     "event plus polling reconciliation for Q/W/E/R buffs and missiles",
     "combo, harass, lane clear, jungle, last hit, flee and automatic behavior",
 };

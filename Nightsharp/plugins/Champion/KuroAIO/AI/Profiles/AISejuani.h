@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Sejuani = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SejuaniPassive";
@@ -90,7 +89,7 @@ inline constexpr ChampionProfile Sejuani = [] {
     p.Flee = Plan("Frost peel",
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireMark, 0, 700),
         Step(SDK::SpellSlot::Q, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 90, 700),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireTarget, 180, 1500));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 180, 1500));
     return p;
 }();
 

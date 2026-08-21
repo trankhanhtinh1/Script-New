@@ -96,7 +96,6 @@ struct ShadowLandingContext {
     bool DashHazard = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int EnemiesAtEndpoint = 0;
     int MaximumEnemies = 2;
 };
@@ -105,8 +104,8 @@ inline bool SafeShadowLanding(const ShadowLandingContext& context) {
     if (!context.TargetMarked || !context.EndpointValid || context.EndpointWall ||
         context.PointClickThreat || context.DashHazard) return false;
     if (context.EndpointUnderTurret && !context.OriginUnderTurret &&
-        !context.Lethal && !context.Defensive && !context.Manual) return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+        !context.Lethal && !context.Defensive) return false;
+    return context.Lethal || context.Defensive ||
            context.EnemiesAtEndpoint <= std::max(0, context.MaximumEnemies);
 }
 

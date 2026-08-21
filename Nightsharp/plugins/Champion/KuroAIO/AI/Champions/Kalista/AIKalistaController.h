@@ -201,10 +201,9 @@ inline MarksmanTargeting::TargetContext TargetFacts(const AIHeroClient& target,
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred,
-                                      Mode mode) {
+inline AIHeroClient SelectSmartTarget(Mode mode) {
     LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
-        preferred, kQRange + 90.0f,
+        AIHeroClient{}, kQRange + 90.0f,
         [mode](const AIHeroClient& enemy) { return TargetFacts(enemy, mode); });
     return LastSmartTarget;
 }
@@ -291,7 +290,7 @@ inline AIHeroClient SelectOathsworn() {
     return RawAllyHeroByNetworkId(0);
 }
 
-inline bool CastR(const AIHeroClient& preferred, Mode mode, bool manual = false) {
+inline bool CastR(Mode mode) {
     if (!CanUse(3, mode, true) || !Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() || !CastThrottlePassed(LastRCastTick, 180)) {
         return false;
@@ -302,7 +301,6 @@ inline bool CastR(const AIHeroClient& preferred, Mode mode, bool manual = false)
     }
     const auto player = GameObjects::Player();
     FateContext context{};
-    context.ManualRequest = manual;
     context.OathswornBound = true;
     context.AllyInRange = true;
     context.AllyLowHealth = ally.HealthPercent() <=
@@ -315,7 +313,6 @@ inline bool CastR(const AIHeroClient& preferred, Mode mode, bool manual = false)
     context.SavePolicyEnabled = Bool(FateMenu, "SaveAlly", true);
     context.EngagePolicyEnabled = Bool(FateMenu, "Engage", false) && mode == Mode::Combo;
     if (!ShouldCallFate(context)) return false;
-    (void)preferred;
     if (!Engine::ControllerCastUnit(3, ally)) return false;
     LastRCastTick = Now();
     return true;
@@ -327,13 +324,16 @@ inline bool ApplyHopIntent(const AIHeroClient& target, bool emergency = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Orbwalker::MoveEnabled()) return false;
     const Vector3 cursor = Game::CursorPos();
-    const Vector3 desired = player.Position().Extend(cursor, 115.0f);
-    const auto desiredDir = ControllerHelpers::CursorDirectionAgrees(desired, -0.12f);
+    const Vector3 desired = emergency
+        ? player.Position().Extend(cursor, 115.0f)
+        : player.Position().Extend(target.Position(), 115.0f);
+    const bool cursorTowardTarget = emergency &&
+        ControllerHelpers::CursorDirectionAgrees(desired, -0.12f);
     HopContext context{};
     context.AttackConfirmed = LastAfterAttackTargetId == static_cast<int>(target.NetworkId());
     context.PlayerAttackWindup = Orbwalker::IsWindingUp();
-    context.CursorValid = cursor.IsValid() && !cursor.IsZero();
-    context.CursorTowardTarget = desiredDir;
+    context.CursorValid = !emergency || (cursor.IsValid() && !cursor.IsZero());
+    context.CursorTowardTarget = !emergency || cursorTowardTarget;
     context.EmergencyPeel = emergency;
     context.DestinationSafe = !Engine::UnderEnemyTurret(desired) &&
         Engine::CountEnemiesAt(desired, 260.0f) <=
@@ -347,7 +347,7 @@ inline bool ApplyHopIntent(const AIHeroClient& target, bool emergency = false) {
 
 inline bool TryAutomaticR() {
     if (!Bool(FateMenu, "Automatic", true)) return false;
-    return CastR({}, Mode::Automatic, false);
+    return CastR(Mode::Automatic);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
@@ -358,10 +358,10 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto threat = ControllerHelpers::NearestEnemyToPlayer(preferred, kERange + 80.0f);
+inline bool TryFlee() {
+    const auto threat = ControllerHelpers::NearestEnemyToPlayer({}, kERange + 80.0f);
     if (Engine::ValidEnemy(threat, kERange) && CastE(Mode::Flee)) return true;
-    return CastR(preferred, Mode::Flee, false);
+    return CastR(Mode::Flee);
 }
 
 inline bool TryFarm(Mode mode) {
@@ -379,24 +379,19 @@ inline bool TryFarm(Mode mode) {
     return false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
-    if (ApplyHopIntent(ControllerHelpers::HeroByNetworkId(PendingHopTargetId))) return true;
-    if (Key(FateMenu, "ManualR", false)) {
-        const Mode rMode = (mode == Mode::Combo || mode == Mode::Flee)
-            ? mode : Mode::Automatic;
-        if (CastR(preferred, rMode, true)) return true;
-    }
+    if (ApplyHopIntent(
+            ControllerHelpers::HeroByNetworkId(PendingHopTargetId),
+            mode == Mode::Flee)) return true;
     if (TryAutomaticR()) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    if (mode == Mode::Flee) return TryFlee();
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        const auto target = SelectSmartTarget(preferred, mode);
-        if (Engine::ValidEnemy(target)) {
+        const auto target = SelectSmartTarget(mode);
             if (TryCombat(target, mode)) return true;
             (void)SetTemporaryOrbwalkerFocus(
                 target, ControllerHelpers::AutoAttackRange(target), 750,
                 OwnedFocusTargetId, OwnedFocusUntil);
-        }
         return false;
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
@@ -465,9 +460,9 @@ inline void BuildMenu(Menu* root) {
     RendMenu = TacticsMenu->AddSubMenu(new Menu("RendLogic", "Rend / Spear stacks"));
     RendMenu->Add(new MenuSeparator(
         "Threshold",
-        "Heroes: lethal, expiring, or leaving at the spear threshold; minions: lethal only"));
+        "Hero kill/escape; minion kill"));
     RendMenu->Add(new MenuSlider(
-        "EscapeStacks", "Minimum spears before E on escaping hero",
+        "EscapeStacks", "Escape hero: minimum spears",
         kDefaultEscapeSpearThreshold, 1, 15));
     HopMenu = TacticsMenu->AddSubMenu(new Menu("MartialPoise", "Hop movement"));
     HopMenu->Add(new MenuBool("Enable", "Hop after confirmed attacks", true));
@@ -477,8 +472,6 @@ inline void BuildMenu(Menu* root) {
     FateMenu->Add(new MenuSlider("SaveHealth", "Save below health (%)", 32, 10, 60));
     FateMenu->Add(new MenuBool("Engage", "Use R engage with allied follow-up", false));
     FateMenu->Add(new MenuBool("Automatic", "Allow automatic R save", true));
-    FateMenu->Add(new MenuKeyBind("ManualR", "Manual R request",
-                                  SDK::Keys::T, KeyBindType::Press));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("FarmSafety", "Farm / objective safety"));
     FarmMenu->Add(new MenuBool("Enable", "Use Q/E for farm", true));
 }
@@ -510,13 +503,13 @@ inline constexpr const char* Scenarios[] = {
     "Require the extra conservative half-damage margin before Rend on epic objectives",
     "Require a collision-free high-confidence Pierce prediction and projectile-wall check",
     "Preserve an orbwalker attack windup rather than stealing a confirmed spear application",
-    "Keep selected/reachable target ownership while redirecting BeforeAttack to the spear target",
-    "Queue Martial Poise hop intent only after a confirmed attack and a safe cursor-aligned destination",
+    "Keep reachable target routing while redirecting BeforeAttack to the spear target",
+    "Queue Martial Poise hop after confirmed attacks with target safety and Flee cursor movement",
     "Reconcile hop, spear and bound state by polling when buff telemetry is incomplete",
     "Use W Sentinel only when enabled and a predicted mark path is available",
     "Use Fate's Call automatically only for a threatened Oathsworn ally below policy threshold",
     "Keep Fate's Call engage disabled by default and require allied follow-up when enabled",
-    "Support manual Fate's Call through the same Oathsworn range and safety checks",
+    "Apply Fate's Call only through Oathsworn save and allied-follow-up policy",
     "Prefer hero Rend execution before farming, but allow Q last-hit and lane/jungle fallback",
     "Flee with Rend against a committed pursuer and reserve R for an actual ally save",
 };
@@ -529,7 +522,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ResearchArtifact = "AI/Research/AIKalista.md";
     controller.ImplementationSummary =
         "Stack-aware Rend threshold and reset, collision-safe Pierce, Oathsworn "
-        "save-first Fate's Call policy, target ownership and post-attack hop intent.";
+        "save-first Fate's Call policy, target routing and post-attack hop intent.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

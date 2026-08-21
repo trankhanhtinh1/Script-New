@@ -33,7 +33,7 @@ inline Menu* FarmMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOverrideUntil = 0;
+
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int WTargetId = 0;
@@ -288,8 +288,7 @@ inline void ReconcileState() {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
-    ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
+    ReconcileState();
     const float range = mode == Mode::Flee ? 950.0f : kWRange;
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, range);
     if (mode == Mode::Automatic) { (void)Automatic(target); return true; }
@@ -314,8 +313,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now +
-                Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 0) QPrimed = Engine::TextContains(args.SpellName, "EvelynnQ") &&
                 !Engine::TextContains(args.SpellName, "Q2");
@@ -379,8 +376,7 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("EvelynnOneTrick", "Evelynn ambush tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 650, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("EvelynnOneTrick", "Evelynn ambush tactics"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Hate Spike"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Allure charm"));
     WMenu->Add(new MenuSlider("CharmSeconds", "Charm arm time (tenths sec)", 25, 10, 25));
@@ -400,8 +396,7 @@ inline void BuildMenu(Menu* root) {
 }
 
 inline void OnLoad() {
-    LastCastTick.fill(0);
-    ManualOverrideUntil = LastAutoTargetId = LastAutoTick = WTargetId = WCastTick =
+    LastCastTick.fill(0);    LastAutoTargetId = LastAutoTick = WTargetId = WCastTick =
         QTargetId = ETargetId = RTargetId = IncomingThreatUntil = IncomingHardCCUntil = 0;
     PassiveUnlocked = DemonShade = WMarked = WArmed = QPrimed = EmpoweredE = RExecuteVisible = false;
     LastMode = Mode::None;
@@ -418,7 +413,7 @@ inline constexpr const char* Scenarios[] = {
     "Prime Allure only on a reachable target and wait the full charm arm interval before entry",
     "Aim the Hate Spike opener with prediction, line width, collision and projectile-wall checks",
     "Track Hate Spike's initial cast and 550-range recast independently",
-    "Preserve ordinary attack windup and manual casts before nonreactive spell ownership",
+    "Preserve ordinary attack windup and cast state before nonreactive spells/",
     "Use empowered Whiplash only as a safe 210-range entry through an armed charm",
     "Reject Whiplash entry through walls, turrets, mobility lock or excessive endpoint enemies",
     "Spend Last Caress only on a protected-safe execute inside the 30 percent threshold",
@@ -429,7 +424,7 @@ inline constexpr const char* Scenarios[] = {
     "Harass preserves mana and avoids unarmed Whiplash commits",
     "LaneClear delegates to neutral farm policy while Jungle and LastHit preserve mode-specific resources",
     "Flee prioritizes safe Last Caress escape before reactive Whiplash",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Reconcile observed Q, W, E and R state/",
     "Expose Q and R ranges without changing gameplay decisions",
 };
 

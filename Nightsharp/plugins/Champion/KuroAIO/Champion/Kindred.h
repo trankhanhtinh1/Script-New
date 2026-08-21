@@ -207,7 +207,7 @@ static bool IsGoodDashPosition(const Vector3& destination) {
         DashPathHasWall(destination)) {
         return false;
     }
-    if (Key(DashMenu, "TurretCheck", true) && PointUnderTurret(destination, true)) {
+    if (Bool(DashMenu, "TurretCheck", true) && PointUnderTurret(destination, true)) {
         return false;
     }
     if (InMeleeAttackRange(destination)) {
@@ -225,55 +225,6 @@ static bool IsGoodDashPosition(const Vector3& destination) {
     return enemiesAtEnd <= CountEnemyHeroesNear(player.Position(), 400.0f);
 }
 
-static Vector3 CursorDashPosition() {
-    const auto player = Player();
-    return player.IsValid()
-        ? player.Position().Extend(Game::CursorPos(), Q.Range)
-        : Vector3();
-}
-
-static Vector3 SideDashPosition(const AIHeroClient& preferredTarget) {
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return {};
-    }
-
-    AIHeroClient target = preferredTarget;
-    if (!ValidHeroTarget(target)) {
-        const auto orbTarget = Orbwalker::GetTarget();
-        if (!orbTarget.IsValid() || !orbTarget.IsHero()) {
-            return {};
-        }
-        target = AIHeroClient(orbTarget.Handle());
-    }
-    if (!ValidHeroTarget(target)) {
-        return {};
-    }
-
-    const Vector3 origin = player.Position();
-    const Vector3 targetPosition = target.Position();
-    const float dx = targetPosition.x - origin.x;
-    const float dz = targetPosition.z - origin.z;
-    const float length = std::sqrt(dx * dx + dz * dz);
-    if (length <= 0.001f) {
-        return {};
-    }
-    const float perpendicularX = -dz / length;
-    const float perpendicularZ = dx / length;
-    const Vector3 right{
-        origin.x + perpendicularX * Q.Range,
-        origin.y,
-        origin.z + perpendicularZ * Q.Range
-    };
-    const Vector3 left{
-        origin.x - perpendicularX * Q.Range,
-        origin.y,
-        origin.z - perpendicularZ * Q.Range
-    };
-    return right.DistanceSqr2D(Game::CursorPos()) < left.DistanceSqr2D(Game::CursorPos())
-        ? right
-        : left;
-}
 
 static bool HasMeleePressure(const Vector3& position) {
     const auto player = Player();
@@ -359,8 +310,7 @@ static Vector3 SmartDashPosition(const AIHeroClient& target, bool emergency) {
             continue;
         }
 
-        float score = DashSafetyScore(point) -
-                      point.Distance2D(Game::CursorPos()) * 0.10f;
+        float score = DashSafetyScore(point);
         if (hasTarget) {
             const float targetDistance = point.Distance2D(targetPosition);
             const float radialChange = targetDistance - currentTargetDistance;
@@ -406,12 +356,7 @@ static Vector3 SmartDashPosition(const AIHeroClient& target, bool emergency) {
 }
 
 static Vector3 FindDashPosition(const AIHeroClient& target, bool asap = false) {
-    Vector3 result = {};
-    switch (List(DashMenu, "DashMode", 2)) {
-    case 0: result = CursorDashPosition(); break;
-    case 1: result = SideDashPosition(target); break;
-    default: result = SmartDashPosition(target, asap); break;
-    }
+    Vector3 result = SmartDashPosition(target, asap);
 
     if (!IsGoodDashPosition(result)) {
         return {};
@@ -491,10 +436,8 @@ static SDK::KuroTargetSelector::RejectReason ValidateKindredTarget(
     if (!context.Request || !context.Facts) {
         return SDK::KuroTargetSelector::RejectReason::None;
     }
-    const bool manualAssist = context.Request->Purpose ==
-        SDK::KuroTargetSelector::TargetPurpose::ManualAssist;
     return TargetPolicy::RZoneBlocksAction(
-            KindredMechanicFactsFromProvider(*context.Facts), manualAssist)
+            KindredMechanicFactsFromProvider(*context.Facts))
         ? SDK::KuroTargetSelector::RejectReason::Immunity
         : SDK::KuroTargetSelector::RejectReason::None;
 }
@@ -550,20 +493,6 @@ static void EnsureKindredTargetProvider() {
     KindredProviderToken = service->RegisterProvider(provider);
 }
 
-static void SyncKindredManualOverride() {
-    auto* service = SDK::KuroTargetSelector::ActiveService();
-    if (!service) return;
-    const auto state = service->GetSelectionState();
-    const bool manual = state.ManualOverrideActive ||
-        (state.PreferSelectedTarget && state.SelectedNetworkId > 0);
-    const int manualTarget = manual ? state.SelectedNetworkId : 0;
-    if (AICombatTargetCoordinator::FocusLease::ManualOverrideActive() != manual ||
-        AICombatTargetCoordinator::FocusLease::ManualTargetNetworkId() !=
-            manualTarget) {
-        AICombatTargetCoordinator::FocusLease::SetManualOverride(
-            manual, manualTarget);
-    }
-}
 
 static SDK::KuroTargetSelector::TargetRequest KindredTargetRequest(
     float range,
@@ -639,8 +568,7 @@ static AIHeroClient CurrentKindredFocus(float range) {
     const auto lease = AICombatTargetCoordinator::FocusLease::Snapshot(now);
     if (lease.OwnerId != kFocusLeaseOwnerId || lease.TargetNetworkId <= 0 ||
         lease.Status == AICombatTargetCoordinator::LeaseStatus::Inactive ||
-        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal ||
-        lease.ManualOverride) {
+        lease.Status == AICombatTargetCoordinator::LeaseStatus::Terminal) {
         return {};
     }
 
@@ -774,30 +702,6 @@ static AIHeroClient SelectKindredETarget(float range) {
     return best;
 }
 
-static bool FastBlackE() {
-    if (!E.IsReady()) {
-        return false;
-    }
-    const auto player = Player();
-    AIHeroClient best = {};
-    float bestScore = FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, E.Range) || !EBlacklisted(enemy) ||
-            AtKindredRDeathFloor(enemy)) {
-            continue;
-        }
-        const float score = EffectivePhysicalHealth(enemy) -
-            Damage::GetAutoAttackDamage(player, enemy, true) * 3.0f;
-        if (score < bestScore) {
-            bestScore = score;
-            best = enemy;
-        }
-    }
-    return best.IsValid() &&
-        KindredActionAllowed(
-            best, SDK::KuroTargetSelector::TargetPurpose::Execute) &&
-        E.CastOnUnit(best);
-}
 
 static void ClearForcedETarget() {
     ReleaseKindredFocus();
@@ -805,7 +709,6 @@ static void ClearForcedETarget() {
 
 static void UpdateForcedETarget() {
     EnsureKindredTargetProvider();
-    SyncKindredManualOverride();
     if (!Bool(MenuRoot, "AttackE", true)) {
         ClearForcedETarget();
         return;
@@ -962,7 +865,11 @@ static bool LaneClear() {
         }
         if (static_cast<int>(minions.size()) >= Slider(LaneMenu, "LQC", 3)) {
             if (Bool(LaneMenu, "LQ", true) && Q.IsReady()) {
-                casted = Q.Cast(Game::CursorPos()) || casted;
+                const Vector3 dashPos = player.Position().Extend(
+                    minions.front().Position(), Q.Range);
+                if (IsGoodDashPosition(dashPos)) {
+                    casted = Q.Cast(dashPos) || casted;
+                }
             }
             if (Bool(LaneMenu, "LW", false) && W.IsReady()) {
                 casted = W.Cast() || casted;
@@ -998,7 +905,11 @@ static bool LaneClear() {
         }
     }
     if (Bool(JungleMenu, "JQ", true) && Q.IsReady()) {
-        casted = Q.Cast(Game::CursorPos()) || casted;
+        const Vector3 dashPos = player.Position().Extend(
+            mobs.front().Position(), Q.Range);
+        if (IsGoodDashPosition(dashPos)) {
+            casted = Q.Cast(dashPos) || casted;
+        }
     }
     if (Bool(JungleMenu, "JW", true) && W.IsReady() &&
         (hasBigMob || mobs.size() >= 3)) {
@@ -1042,14 +953,10 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
         ? AIHeroClient(attacked.Handle())
         : KindredTarget(AutoAttack::GetRealAutoAttackRange(player) + Q.Range + 150.0f);
 
-    Vector3 position = {};
-    if (ValidHeroTarget(target)) {
-        position = FindDashPosition(target, false);
+    if (!ValidHeroTarget(target)) {
+        return;
     }
-    if (position.IsZero()) {
-        position = Game::CursorPos();
-    }
-
+    const Vector3 position = FindDashPosition(target, false);
     if (!position.IsZero()) {
         (void)Q.Cast(position);
     }
@@ -1083,10 +990,10 @@ static void OnDraw() {
     if (!Loaded || !player.IsValid() || player.IsDead()) {
         return;
     }
-    if (Bool(DrawMenu, "DQ", true) && Q.IsReady()) {
+    if (Bool(DrawMenu, "DQ", false) && Q.IsReady()) {
         Drawing::DrawCircle(player.Position(), Q.Range, 0xFFFFFFFFu, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DW", true) && W.IsReady()) {
+    if (Bool(DrawMenu, "DW", false) && W.IsReady()) {
         Drawing::DrawCircle(
             player.Position(),
             static_cast<float>(Slider(ComboMenu, "comboDistanceW", 450)),
@@ -1094,10 +1001,10 @@ static void OnDraw() {
             1.5f,
             64);
     }
-    if (Bool(DrawMenu, "DE", true) && E.IsReady()) {
+    if (Bool(DrawMenu, "DE", false) && E.IsReady()) {
         Drawing::DrawCircle(player.Position(), E.Range, 0xFF1E90FFu, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DR", true) && R.IsReady()) {
+    if (Bool(DrawMenu, "DR", false) && R.IsReady()) {
         Drawing::DrawCircle(player.Position(), R.Range, 0xFFADFF2Fu, 1.5f, 64);
     }
 }
@@ -1116,9 +1023,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 
     E.Range = player.AttackRange();
 
-    if (Key(MenuRoot, "FastE", false) && FastBlackE()) {
-        return;
-    }
     UpdateForcedETarget();
     if (AutoR()) {
         return;
@@ -1154,7 +1058,7 @@ static void BuildMenu() {
     }
     ComboMenu->Add(new MenuBool(
         "comboAdvancedE",
-        "Don't E if target health is within two attacks",
+        "Don't E if 2 attacks kill",
         true));
     ComboMenu->Add(new MenuSlider(
         "comboDistanceW", "Use W maximum enemy distance", 450, 180, 900));
@@ -1172,10 +1076,10 @@ static void BuildMenu() {
     JungleMenu->Add(new MenuSlider("Jmana", "Minimum mana percent", 40, 0, 100));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DQ", "Draw Q", true));
-    DrawMenu->Add(new MenuBool("DW", "Draw W trigger distance", true));
-    DrawMenu->Add(new MenuBool("DE", "Draw E", true));
-    DrawMenu->Add(new MenuBool("DR", "Draw R", true));
+    DrawMenu->Add(new MenuBool("DQ", "Draw Q", false));
+    DrawMenu->Add(new MenuBool("DW", "Draw W trigger distance", false));
+    DrawMenu->Add(new MenuBool("DE", "Draw E", false));
+    DrawMenu->Add(new MenuBool("DR", "Draw R", false));
 
     AntiGapMenu = MenuRoot->AddSubMenu(
         new Menu("AntiGapcloser", "Anti-Gapcloser Settings"));
@@ -1183,19 +1087,13 @@ static void BuildMenu() {
     AntiGapMenu->Add(new MenuBool("AntiGapE", "Anti-Gap E", true));
 
     DashMenu = MenuRoot->AddSubMenu(new Menu("QDash", "Dash Spell Settings"));
-    DashMenu->Add(new MenuList(
-        "DashMode", "Dash mode", { "Mouse", "Side", "Smart" }, 2));
     DashMenu->Add(new MenuSlider(
         "EnemyCheck", "Maximum enemies at dash end", 3, 1, 5));
     DashMenu->Add(new MenuSlider(
         "CheckRange", "Enemy detection range", 450, 100, 800));
     DashMenu->Add(new MenuBool("WallCheck", "Don't dash through walls", true));
-    DashMenu->Add(new MenuKeyBind(
-        "TurretCheck",
-        "Don't dash under enemy turret",
-        SDK::Keys::A,
-        KeyBindType::Toggle,
-        true))->Permashow();
+    DashMenu->Add(new MenuBool(
+        "TurretCheck", "Don't dash under enemy turret", true));
     DashMenu->Add(new MenuBool(
         "AAcheck", "Keep an enemy in attack range", true));
     DashMenu->Add(new MenuBool(
@@ -1203,11 +1101,6 @@ static void BuildMenu() {
 
     MenuRoot->Add(new MenuBool("autoR", "Auto R", true));
     MenuRoot->Add(new MenuBool("AttackE", "Force attack E target", true));
-    MenuRoot->Add(new MenuKeyBind(
-        "FastE",
-        "Fast E on blacklisted target",
-        SDK::Keys::E,
-        KeyBindType::Press))->Permashow();
 
     MenuRoot->Attach();
 }
@@ -1215,12 +1108,6 @@ static void BuildMenu() {
 static void RemoveMenu() {
     if (!MenuRoot) {
         return;
-    }
-    if (auto* item = MenuRoot->Get<MenuKeyBind>("FastE")) {
-        item->RemovePermashow();
-    }
-    if (auto* item = DashMenu ? DashMenu->Get<MenuKeyBind>("TurretCheck") : nullptr) {
-        item->RemovePermashow();
     }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;

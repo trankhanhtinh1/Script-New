@@ -153,17 +153,12 @@ inline bool MayCastR(const RContext& context) {
 }
 
 struct ModeContext {
-    bool SelectedTarget = false;
-    bool OrbwalkerTarget = false;
     bool AttackWindingUp = false;
     bool Lethal = false;
-    bool ManualAssist = false;
 };
 
 inline bool MayUseAbility(const ModeContext& context) {
-    if (context.ManualAssist) return false;
-    if (context.AttackWindingUp && !context.Lethal) return false;
-    return context.SelectedTarget || context.OrbwalkerTarget;
+    return !context.AttackWindingUp || context.Lethal;
 }
 
 struct AutomaticContext {

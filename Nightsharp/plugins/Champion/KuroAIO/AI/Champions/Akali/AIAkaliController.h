@@ -1378,14 +1378,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         (void)TryFarm(mode == Mode::LastHit);
         return true;
     }
-    if (Key(Engine::AutomaticMenu, "ManualR", false) && Engine::ValidEnemy(selected)) {
-        if (R2Unlocked()) {
-            (void)CastR2(selected, R2Purpose::Reposition, false, false, true,
-                          Mode::Automatic);
-        } else if (R1Available()) {
-            (void)CastR1(selected, Mode::Automatic, false, false);
-        }
-    }
     return true;
 }
 
@@ -1641,7 +1633,7 @@ inline void OnDraw() {
     if (!CoachMenu || !GameObjects::Player().IsValid()) return;
     const auto player = GameObjects::Player();
     const int now = SDK::Variables::TickCount();
-    if (Bool(CoachMenu, "DrawPassiveRing", true) && PassiveRingActive &&
+    if (Bool(CoachMenu, "DrawPassiveRing", false) && PassiveRingActive &&
         PassiveRingOrigin.IsValid() && !PassiveRingOrigin.IsZero()) {
         Drawing::DrawCircle(PassiveRingOrigin, 500.0f, 0xAA4BFFB0u, 1.65f, 72);
         if (PassiveExitCoachPoint.IsValid() && !PassiveExitCoachPoint.IsZero()) {
@@ -1649,17 +1641,17 @@ inline void OnDraw() {
             Drawing::DrawCircle(PassiveExitCoachPoint, 30.0f, 0xFF56FFC2u, 2.0f, 24);
         }
     }
-    if (Bool(CoachMenu, "DrawShroud", true) && WActive &&
+    if (Bool(CoachMenu, "DrawShroud", false) && WActive &&
         ShroudCenter.IsValid() && !ShroudCenter.IsZero()) {
         Drawing::DrawCircle(ShroudCenter, 340.0f, 0xAA8F63FFu, 1.6f, 64);
     }
-    if (Bool(CoachMenu, "DrawEBackflip", true) &&
+    if (Bool(CoachMenu, "DrawEBackflip", false) &&
         LastEBackflipDestination.IsValid() && !LastEBackflipDestination.IsZero() &&
         now - E1CastTick <= 1200) {
         Drawing::DrawLine(player.Position(), LastEBackflipDestination, 0xFFFFB14Bu, 2.0f);
         Drawing::DrawCircle(LastEBackflipDestination, 35.0f, 0xFFFFB14Bu, 1.8f, 28);
     }
-    if (Bool(CoachMenu, "DrawRRoute", true)) {
+    if (Bool(CoachMenu, "DrawRRoute", false)) {
         if (LastR1Landing.IsValid() && !LastR1Landing.IsZero() && now - R1CastTick <= 1300) {
             Drawing::DrawCircle(LastR1Landing, 42.0f, 0xFFEC4BFFu, 2.0f, 32);
         }
@@ -1668,7 +1660,7 @@ inline void OnDraw() {
             Drawing::DrawCircle(LastR2Destination, 42.0f, 0xFFFF5489u, 2.0f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen = {};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char text[260] = {};
@@ -1691,7 +1683,7 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu = root->AddSubMenu(new Menu("AkaliOneTrick", "Akali one-trick mechanics"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "PassiveRing", "Assassin's Mark ring and kama weaving"));
+        "PassiveRing", "Assassin mark ring/kama weave"));
     PassiveMenu->Add(new MenuBool("HoldForRingExit", "Hold spells while player", true));
     PassiveMenu->Add(new MenuSeparator("PlayerMovement",
         "The AI coaches the ring-exit"));
@@ -1704,7 +1696,7 @@ inline void BuildMenu(Menu* root) {
         "Q is withheld when the route"));
 
     ShroudMenu = TacticsMenu->AddSubMenu(new Menu(
-        "TwilightShroud", "One W: defensive timing and energy battery"));
+        "TwilightShroud", "W defensive timing/energy"));
     ShroudMenu->Add(new MenuBool("UseDefensiveW", "W for incoming line/CC,", true));
     ShroudMenu->Add(new MenuSlider("DefensiveWHP", "Defensive W at own HP (%)", 39, 15, 80));
     ShroudMenu->Add(new MenuBool("SaveVsMordekaiser", "Do not spend offensive W", true));
@@ -1746,7 +1738,7 @@ inline void BuildMenu(Menu* root) {
         "W and Perfect Execution are"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "AkaliCoach", "Live passive, shroud, E, and R route coaching"));
+        "AkaliCoach", "Live passive/shroud/E/R coaching"));
     CoachMenu->Add(new MenuBool("DrawPassiveRing", "Draw confirmed passive ring", false));
     CoachMenu->Add(new MenuBool("DrawShroud", "Draw tracked Shroud center", false));
     CoachMenu->Add(new MenuBool("DrawEBackflip", "Draw E1 backflip dest", false));
@@ -1866,7 +1858,7 @@ inline constexpr const char* Scenarios[] = {
     "Mark only Epic/Legendary monsters with objective E1 below the configured HP gate",
     "Recast objective E2 only when arrival-time health prediction is lethal with damage buffer",
     "Never spend W or either R cast on farming",
-    "Re-plan after manual Q/W/E/R while retaining observed buffs, marks, objects, and recast state",
+    "Re-plan after observed Q W E R state/",
 };
 
 inline constexpr ChampionController Controller = [] {

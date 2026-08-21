@@ -30,13 +30,16 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int QChargeStartTick = 0;
+inline int QReleaseAttemptTick = 0;
+inline int QRuntimeMissingSince = 0;
+inline int QTargetId = 0;
 inline int ETrailUntil = 0;
 inline int WStealthUntil = 0;
 inline int LastRTargetId = 0;
+inline Vector3 QLastAim{};
 inline bool WActive = false;
 inline bool QCharging = false;
 inline bool ETrailActive = false;
@@ -61,22 +64,34 @@ inline bool IsQCharging(const AIHeroClient& player) {
     return player.HasBuff("PykeQ") || player.HasBuff("pykeq") ||
         player.HasBuff("PykeQCharge");
 }
+inline bool RuntimeQCharging() {
+    const auto player = GameObjects::Player();
+    return Engine::RuntimeSpells[0] &&
+        (Engine::RuntimeSpells[0]->IsCharging() ||
+         (player.IsValid() &&
+          (player.Spellbook().IsCharging() || IsQCharging(player))));
+}
+inline float QChargeElapsedSeconds() {
+    return QChargeStartTick > 0
+        ? static_cast<float>(std::max(0, Now() - QChargeStartTick)) / 1000.0f
+        : 0.0f;
+}
+inline void ClearQState() {
+    QChargeStartTick = 0;
+    QReleaseAttemptTick = 0;
+    QRuntimeMissingSince = 0;
+    QTargetId = 0;
+    QLastAim = {};
+    QCharging = false;
+}
 inline bool IsRMarked(const AIHeroClient& target) {
     return Engine::ValidEnemy(target) &&
         (target.HasBuff("PykeRExecute") || target.HasBuff("pykerexecute") ||
          target.HasBuff("PykeRMark"));
 }
 inline bool Lethal(const AIHeroClient& target) {
-    const auto player = GameObjects::Player();
-    return player.IsValid() && Engine::ValidEnemy(target) && Engine::RuntimeSpells[3] &&
-        Engine::RuntimeSpells[3]->GetDamage(target) >= target.Health() + target.AllShield();
-}
-inline bool CursorAgrees(const Vector3& endpoint, float minimumDot = 0.05f) {
-    const auto player = GameObjects::Player();
-    if (!player.IsValid()) return false;
-    const Vector3 toEndpoint = SharedGeometry::Direction2D(player.Position(), endpoint);
-    const Vector3 cursor = SharedGeometry::Direction2D(player.Position(), Game::CursorPos());
-    return toEndpoint.IsZero() || cursor.IsZero() || toEndpoint.Dot(cursor) >= minimumDot;
+    return Engine::ValidEnemy(target) && Engine::RuntimeSpells[3] &&
+        Engine::RuntimeSpells[3]->GetDamage(target) >= target.Health();
 }
 inline bool SafeEndpoint(const Vector3& endpoint, bool defensive, bool lethal = false) {
     const auto player = GameObjects::Player();
@@ -85,45 +100,124 @@ inline bool SafeEndpoint(const Vector3& endpoint, bool defensive, bool lethal = 
         Engine::UnderEnemyTurret(endpoint), Engine::UnderEnemyTurret(player.Position()),
         defensive || lethal, Engine::CountEnemiesAt(endpoint, 250.0f),
         Slider(EMenu, "MaxEndpointEnemies", 2));
-    return safe && (defensive || CursorAgrees(endpoint));
+    return safe;
 }
-inline Vector3 AimFor(const AIHeroClient& target, float delay) {
-    if (!Engine::ValidEnemy(target)) return {};
-    Vector3 aim = PredictPosition(target, delay);
-    if (Engine::RuntimeSpells[0]) {
-        const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
-        if (prediction.Hitchance >= SDK::HitChance::High &&
-            prediction.GetCastPosition().IsValid() && !prediction.GetCastPosition().IsZero())
-            aim = prediction.GetCastPosition();
-    }
-    return aim;
-}
-inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
+inline bool BuildQAim(const AIHeroClient& target, float range,
+                      Vector3& aim, Vector3& predictedUnit,
+                      bool& collisionFree) {
+    aim = {};
+    predictedUnit = {};
+    collisionFree = false;
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Ready(0, mode) || !Throttle(0) || Protected(target) ||
-        PreserveAttack(reactive)) return false;
-    const Vector3 aim = AimFor(target, 0.22f);
-    if (!aim.IsValid() || aim.IsZero()) return false;
-    const float distance = player.Position().Distance2D(aim);
-    const bool charged = QCharging || QIsCharged((Now() - QChargeStartTick) / 1000.0f);
-    const float range = charged ? kQThrowRange : kQTapRange;
-    if (distance > range + target.BoundingRadius() ||
-        !QLineHits(player.Position(), aim, target.Position(), target.BoundingRadius(), range) ||
-        ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kQWidth * 0.5f)) return false;
-    if (!Engine::ControllerCastPosition(0, aim)) return false;
-    LastCastTick[0] = Now();
-    LastRTargetId = static_cast<int>(target.NetworkId());
-    QCharging = false;
-    QChargeStartTick = 0;
+    if (!player.IsValid() || !Engine::RuntimeSpells[0] ||
+        !Engine::ValidEnemy(target, kQMaxRange + target.BoundingRadius())) {
+        return false;
+    }
+    const auto prediction =
+        Engine::RuntimeSpells[0]->GetPrediction(target, false, range);
+    aim = prediction.GetCastPosition();
+    predictedUnit = prediction.GetUnitPosition();
+    if (!predictedUnit.IsValid() || predictedUnit.IsZero()) {
+        predictedUnit = PredictPosition(target, 0.25f);
+    }
+    if (!aim.IsValid() || aim.IsZero()) aim = predictedUnit;
+    collisionFree = prediction.CollisionObjects.empty();
+    return aim.IsValid() && !aim.IsZero() &&
+           predictedUnit.IsValid() && !predictedUnit.IsZero() &&
+           prediction.Hitchance >= SDK::HitChance::High &&
+           QLineHits(player.Position(), aim, predictedUnit,
+                     target.BoundingRadius(), range) &&
+           !ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, kQWidth);
+}
+inline bool StartQ(const AIHeroClient& target, Mode mode,
+                   bool reactive = false) {
+    const auto player = GameObjects::Player();
+    if (!player.IsValid() || QCharging || RuntimeQCharging() ||
+        !Engine::ValidEnemy(target, kQMaxRange + target.BoundingRadius()) ||
+        !Ready(0, mode) || !Throttle(0) || Protected(target) ||
+        PreserveAttack(reactive) || !Engine::RuntimeSpells[0]) {
+        return false;
+    }
+    Vector3 aim{};
+    Vector3 predicted{};
+    bool collisionFree = false;
+    if (!BuildQAim(target, kQMaxRange, aim, predicted, collisionFree) ||
+        !collisionFree) {
+        return false;
+    }
+    Engine::ArmControllerCast(0);
+    if (!Engine::RuntimeSpells[0]->StartCharging(aim)) {
+        Engine::CancelControllerCast(0);
+        return false;
+    }
+    Engine::MarkSuccessfulCast(0);
+    QCharging = true;
+    QChargeStartTick = LastCastTick[0] = Now();
+    QTargetId = static_cast<int>(target.NetworkId());
+    QLastAim = aim;
     return true;
+}
+inline bool ReleaseQ(const AIHeroClient& fallback) {
+    if (!QCharging || !Engine::RuntimeSpells[0] ||
+        Now() - QReleaseAttemptTick < 25) {
+        return false;
+    }
+    auto target = ControllerHelpers::HeroByNetworkId(QTargetId);
+    if (!Engine::ValidEnemy(target, kQMaxRange + 100.0f)) target = fallback;
+    const float elapsed = QChargeElapsedSeconds();
+    const float range = QRangeFromCharge(elapsed);
+    Vector3 aim = QLastAim;
+    Vector3 predicted{};
+    bool collisionFree = false;
+    const bool predictionHits = Engine::ValidEnemy(target) &&
+        BuildQAim(target, range, aim, predicted, collisionFree);
+    const bool inCurrentRange = Engine::ValidEnemy(target) &&
+        GameObjects::Player().Position().Distance2D(predicted) <=
+            range + target.BoundingRadius();
+    const QReleaseContext context{
+        true, Engine::ValidEnemy(target), predictionHits, collisionFree,
+        inCurrentRange, Bool(QMenu, "FullPullOnly", false), elapsed};
+    if (!ShouldReleaseQ(context)) return false;
+    if ((!aim.IsValid() || aim.IsZero()) &&
+        QMustRelease(elapsed)) {
+        aim = QLastAim.IsValid() && !QLastAim.IsZero()
+            ? QLastAim : Game::CursorPos();
+    }
+    if (!aim.IsValid() || aim.IsZero()) return false;
+    QLastAim = aim;
+    QReleaseAttemptTick = Now();
+    Engine::ArmControllerCast(0);
+    if (!Engine::RuntimeSpells[0]->ShootChargedSpell(aim)) {
+        Engine::CancelControllerCast(0);
+        return false;
+    }
+    Engine::MarkSuccessfulCast(0);
+    LastCastTick[0] = Now();
+    LastRTargetId = Engine::ValidEnemy(target)
+        ? static_cast<int>(target.NetworkId()) : 0;
+    ClearQState();
+    return true;
+}
+inline bool CastQ(const AIHeroClient& target, Mode mode,
+                  bool reactive = false) {
+    return StartQ(target, mode, reactive);
 }
 inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Ready(1, mode) || !Throttle(1) || PreserveAttack(reactive)) return false;
-    const bool enemyValid = Engine::ValidEnemy(target);
-    const float distance = enemyValid ? player.Position().Distance2D(target.Position()) : 9999.0f;
+    if (!player.IsValid() || QCharging || RuntimeQCharging() ||
+        !Ready(1, mode) || !Throttle(1) || PreserveAttack(reactive)) {
+        return false;
+    }
+    const bool enemyValid = Engine::ValidEnemy(target, kWChaseRange);
+    const float distance = enemyValid
+        ? player.Position().Distance2D(target.Position()) : 9999.0f;
     const bool attackedRecently = LastAutoTick > 0 && Now() - LastAutoTick < 1100;
-    if (!WStealthTargetAllowed(distance, attackedRecently, enemyValid || reactive)) return false;
+    if ((!reactive &&
+         distance < static_cast<float>(Slider(WMenu, "EngageDistance", 1000))) ||
+        !WStealthTargetAllowed(distance, attackedRecently,
+                               enemyValid || reactive)) {
+        return false;
+    }
     if (!Engine::ControllerCastSelf(1)) return false;
     LastCastTick[1] = Now();
     WActive = true;
@@ -132,32 +226,48 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
 }
 inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Ready(2, mode) || !Throttle(2) || Protected(target) ||
-        PreserveAttack(reactive)) return false;
-    const Vector3 aim = PredictPosition(target, 0.18f);
-    if (!aim.IsValid() || aim.IsZero()) return false;
-    const Vector3 endpoint = ClampDashEndpoint(player.Position(), aim);
-    if (!SafeEndpoint(endpoint, reactive, Lethal(target))) return false;
-    if (!ETrailStuns(player.Position(), endpoint, target.Position(), target.BoundingRadius()) && !reactive)
+    if (!player.IsValid() || QCharging || RuntimeQCharging() ||
+        !Ready(2, mode) || !Throttle(2) || Protected(target) ||
+        PreserveAttack(reactive)) {
         return false;
+    }
+    const Vector3 dashAim = PredictPosition(target, 0.18f);
+    const Vector3 returnTarget = PredictPosition(target, kEReturnDelay);
+    if (!dashAim.IsValid() || dashAim.IsZero() ||
+        !returnTarget.IsValid() || returnTarget.IsZero()) {
+        return false;
+    }
+    const Vector3 endpoint = ClampDashEndpoint(player.Position(), dashAim);
+    if (!SafeEndpoint(endpoint, reactive, Lethal(target)) ||
+        (!reactive &&
+         (!ETrailStuns(player.Position(), endpoint, returnTarget,
+                       target.BoundingRadius()) ||
+          !EFollowupReachable(endpoint, returnTarget)))) {
+        return false;
+    }
     if (!Engine::ControllerCastPosition(2, endpoint)) return false;
     LastCastTick[2] = Now();
     ETrailActive = true;
     ETrailUntil = Now() + 1000;
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 120) || Protected(target) ||
         PreserveAttack(reactive) || player.Position().Distance2D(target.Position()) > kRRange + target.BoundingRadius())
         return false;
-    const Vector3 aim = PredictPosition(target, 0.20f);
-    if (!aim.IsValid() || aim.IsZero() || Engine::UnderEnemyTurret(aim) && !Engine::UnderEnemyTurret(player.Position()))
+    const auto prediction = Engine::RuntimeSpells[3]->GetPrediction(target);
+    const Vector3 aim = prediction.GetCastPosition();
+    if (prediction.Hitchance < SDK::HitChance::High ||
+        !aim.IsValid() || aim.IsZero() ||
+        (Engine::UnderEnemyTurret(aim) &&
+         !Engine::UnderEnemyTurret(player.Position()))) {
         return false;
+    }
     const ExecuteContext context{
         true, Engine::ValidEnemy(target), Lethal(target), IsRMarked(target),
         Engine::CountAlliesAt(target.Position(), 650.0f) > 0,
-        Bool(RMenu, "ShareExecute", true), manual, Protected(target)};
+        Bool(RMenu, "ShareExecute", true), Protected(target)};
     if (!ShouldExecuteR(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
     LastCastTick[3] = Now();
@@ -189,7 +299,8 @@ inline void Harass(const AIHeroClient& target) {
     if (!player.IsValid() || player.ManaPercent() < Slider(WMenu, "HarassMana", 45)) return;
     if (TryGreyHealth(target, Mode::Harass)) return;
     if (CastQ(target, Mode::Harass)) return;
-    (void)CastE(target, Mode::Harass);
+    if (CastE(target, Mode::Harass)) return;
+    (void)CastW(target, Mode::Harass);
 }
 inline void Flee(const AIHeroClient& target) {
     if (TryGreyHealth(target, Mode::Flee)) return;
@@ -201,22 +312,55 @@ inline bool Automatic(const AIHeroClient& target) {
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(target) && CastE(target, Mode::Automatic, true)) return true;
     return Engine::ValidEnemy(target) && Lethal(target) && CastR(target, Mode::Automatic, true);
 }
+inline bool TryAutoExecute() {
+    if (!Bool(RMenu, "AutoExecute", true)) return false;
+    AIHeroClient best{};
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!Engine::ValidEnemy(enemy, kRRange) || !Lethal(enemy) ||
+            Protected(enemy)) {
+            continue;
+        }
+        if (!best.IsValid() || enemy.Health() < best.Health()) best = enemy;
+    }
+    return best.IsValid() &&
+        CastR(best, Mode::Automatic, true);
+}
 inline void ReconcileState() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
     WActive = IsGhostwaterActive(player) || (WActive && WStealthUntil > now);
-    QCharging = player.Spellbook().IsCharging() ||
-        IsQCharging(player) || (QCharging && QChargeStartTick + 1600 > now);
+    const bool runtimeCharging = RuntimeQCharging();
+    if (runtimeCharging) {
+        QCharging = true;
+        QRuntimeMissingSince = 0;
+        if (QChargeStartTick == 0) QChargeStartTick = now;
+    } else if (QCharging) {
+        if (QRuntimeMissingSince == 0) QRuntimeMissingSince = now;
+        if (now - QChargeStartTick > 180 &&
+            now - QRuntimeMissingSince > 120) {
+            ClearQState();
+        }
+    }
     ETrailActive = ETrailActive && ETrailUntil > now;
     if (!WActive) WStealthUntil = 0;
-    if (!QCharging) QChargeStartTick = 0;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline AIHeroClient AutonomousTarget(float range) {
+    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
+    return Engine::SelectTarget(range);
+}
+
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 850.0f : kRRange);
+    const AIHeroClient target = AutonomousTarget(
+        mode == Mode::Flee ? 850.0f : kWChaseRange);
+    if (QCharging || RuntimeQCharging()) {
+        (void)ReleaseQ(target);
+        return true;
+    }
+    if (TryAutoExecute()) return true;
     if (mode == Mode::Automatic) {
         (void)Automatic(target);
         return true;
@@ -248,11 +392,17 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
-        if (slot == 0 && Engine::TextContains(args.SpellName, "charge")) {
-            QCharging = true;
-            QChargeStartTick = now;
+        if (slot == 0) {
+            if (RuntimeQCharging()) {
+                QCharging = true;
+                if (QChargeStartTick == 0) QChargeStartTick = now;
+            } else if (!QCharging) {
+                QCharging = true;
+                QChargeStartTick = now;
+            } else if (now - QChargeStartTick > 100) {
+                ClearQState();
+            }
         }
         return;
     }
@@ -264,37 +414,60 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         IncomingHardCCUntil, std::max(analysis.CommitmentUntilTick, analysis.LineThreatUntilTick));
 }
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
-    if (Engine::TextContains(args.BuffName, "PykeW") || Engine::TextContains(args.BuffName, "pykew")) WActive = true;
-    if (Engine::TextContains(args.BuffName, "PykeQ") || Engine::TextContains(args.BuffName, "pykeq")) {
-        QCharging = true; QChargeStartTick = Now();
+    if (!IsLocalPlayer(args.Sender)) return;
+    if (Engine::TextContains(args.BuffName, "PykeW") ||
+        Engine::TextContains(args.BuffName, "pykew")) {
+        WActive = true;
+    }
+    if (Engine::TextContains(args.BuffName, "PykeQ") ||
+        Engine::TextContains(args.BuffName, "pykeq")) {
+        QCharging = true;
+        if (QChargeStartTick == 0) QChargeStartTick = Now();
     }
     if (Engine::TextContains(args.BuffName, "PykeE")) ETrailActive = true;
 }
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
-    if (Engine::TextContains(args.BuffName, "PykeW") || Engine::TextContains(args.BuffName, "pykew")) WActive = false;
-    if (Engine::TextContains(args.BuffName, "PykeQ") || Engine::TextContains(args.BuffName, "pykeq")) QCharging = false;
+    if (!IsLocalPlayer(args.Sender)) return;
+    if (Engine::TextContains(args.BuffName, "PykeW") ||
+        Engine::TextContains(args.BuffName, "pykew")) {
+        WActive = false;
+    }
+    if (Engine::TextContains(args.BuffName, "PykeQ") ||
+        Engine::TextContains(args.BuffName, "pykeq")) {
+        if (!RuntimeQCharging()) ClearQState();
+    }
     if (Engine::TextContains(args.BuffName, "PykeE")) ETrailActive = false;
+}
+inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
+    if (QCharging || RuntimeQCharging()) {
+        args.Process = false;
+        return;
+    }
+    (void)CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick);
 }
 inline void OnDraw() {
     if (!Bool(CoachMenu, "DrawRanges", false)) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    Drawing::DrawCircle(player.Position(), kQThrowRange, 0xFF7744CCu, 1.5f, 40);
+    Drawing::DrawCircle(player.Position(), kQMaxRange, 0xFF7744CCu, 1.5f, 40);
     Drawing::DrawCircle(player.Position(), kRRange, 0xFFCC4455u, 1.5f, 40);
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("PykeOneTrick", "Pyke ambush tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Bone Skewer"));
+    QMenu->Add(new MenuBool(
+        "FullPullOnly", "Charge Q fully before pulling", false));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Ghostwater"));
     WMenu->Add(new MenuSlider("GreyHealthBelow", "Use grey-health route below HP%", 72, 20, 95));
     WMenu->Add(new MenuSlider("StealthHoldMs", "Expected camouflage hold (ms)", 2600, 500, 6000));
+    WMenu->Add(new MenuSlider("EngageDistance", "Use W beyond this distance", 1000, 600, 1800));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Phantom Undertow"));
     EMenu->Add(new MenuSlider("MaxEndpointEnemies", "Maximum endpoint enemies", 2, 1, 5));
     RMenu = TacticsMenu->AddSubMenu(new Menu("R", "Death from Below"));
-    RMenu->Add(new MenuBool("ShareExecute", "Spend lethal R when an ally can share", true));
+    RMenu->Add(new MenuBool("AutoExecute", "Auto-execute killable enemies", true));
+    RMenu->Add(new MenuBool("ShareExecute", "Share lethal R with allies", true));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("PykeFarm", "Farm resources"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 35, 0, 90));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("PykeCoach", "Visual coaching"));
@@ -302,34 +475,37 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = ManualOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
-    QChargeStartTick = ETrailUntil = WStealthUntil = LastRTargetId = 0;
-    WActive = QCharging = ETrailActive = false;
+    LastAutoTargetId = LastAutoTick = IncomingThreatUntil =
+        IncomingHardCCUntil = 0;
+    ETrailUntil = WStealthUntil = LastRTargetId = 0;
+    ClearQState();
+    WActive = ETrailActive = false;
     LastMode = Mode::None;
 }
 inline void OnUnload() {
     TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
-    WActive = QCharging = ETrailActive = false;
+    ClearQState();
+    WActive = ETrailActive = false;
 }
 inline constexpr const char* Scenarios[] = {
     "Pin all mechanics to Riot 26.15 and CommunityDragon 16.15",
-    "Preserve selected target before orbwalker and selector fallback",
-    "Reconcile grey-health passive, Ghostwater camouflage and Q charging from buffs and polling",
-    "Use grey-health recovery only when missing health exists and nearby detection is safe",
-    "Throw Bone Skewer through a predicted line with collision and tap/charge range distinction",
+    "Use autonomous orbwalker and engine target policy",
+    "Reconcile grey-health passive, Ghostwater camouflage and Q charging from local buffs and runtime state",
+    "Start Bone Skewer as a real charged spell and release it once predicted range reaches the target",
+    "Force-release Bone Skewer at the maximum hold time so charging Q never remains stuck",
+    "Block attacks, Ghostwater and Undertow while Bone Skewer is charging",
+    "Use the current 400-to-1100 linear Bone Skewer range with collision and projectile-wall checks",
     "Never replace an ordinary attack windup with a nonreactive Q or E",
-    "Use Phantom Undertow only when the dash endpoint is valid, cursor-consistent and stun trail reaches target",
+    "Predict the returning Undertow trail and reject dashes that leave no reachable follow-up",
     "Reject E endpoints through walls, enemy turrets and excessive enemy count",
-    "Use Ghostwater targeting only outside detection or for reactive escape",
+    "Use Ghostwater for distant approaches or reactive escape, not inside immediate engage range",
+    "Automatically scan for lethal Death from Below targets in every orbwalker mode",
     "Use Death from Below only against a live lethal target",
     "Respect configured ally share policy and marked execute state",
     "Never execute protected, invulnerable or spell-shielded targets",
-    "Automatic mode is restricted to defense, hard crowd control or lethal execute",
-    "Combo sequences Q, E, Ghostwater and R without taking movement ownership",
-    "Harass preserves mana and avoids unsolicited lethal dives",
     "LaneClear, Jungle and LastHit delegate to shared farm policy",
     "Flee prioritizes grey-health safety, Ghostwater and defensive Undertow",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Reconcile observed Q, W, E and R events",
     "Expose Q, E and R ranges without changing gameplay decisions",
 };
 inline constexpr ChampionController Controller = [] {
@@ -351,6 +527,7 @@ inline constexpr ChampionController Controller = [] {
     controller.OnProcessSpell = &OnProcessSpell;
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
+    controller.OnBeforeAttack = &OnBeforeAttack;
 
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     controller.OnDoCast = &ControllerHelpers::CaptureLocalAutoAttackEvent<&LastAutoTargetId, &LastAutoTick>;

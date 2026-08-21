@@ -37,8 +37,6 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int EnemyThreatUntil = 0;
 inline int HardCcThreatUntil = 0;
 inline int RejuvenationUntil = 0;
@@ -58,24 +56,15 @@ inline bool ProtectedEnemy(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kERange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range = kERange) {
     return Engine::SelectTarget(range);
 }
 
 inline AIHeroClient SelectAlly(bool includePlayer = false) {
     const auto player = GameObjects::Player();
-    const auto ally = SelectProtectionAlly(
-        kWRange, SelectedAllyId, SelectedAllyId == 0 ? 0 : Now() + 260,
-        330.0f, 680.0f);
+    const auto ally = SelectProtectionAlly(kWRange);
     if (Engine::ValidAlly(ally, kWRange) &&
-        (includePlayer || ally.NetworkId() != player.NetworkId())) {
-        SelectedAllyId = static_cast<int>(ally.NetworkId());
-        return ally;
-    }
+        (includePlayer || ally.NetworkId() != player.NetworkId())) return ally;
     if (includePlayer && player.IsValid()) return player;
     return {};
 }
@@ -242,10 +231,9 @@ inline void ReconcileState() {
     if (player.HasBuff("SorakaE")) EquinoxUntil = std::max(EquinoxUntil, now + 150);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = SelectEnemy(selected, mode == Mode::Flee ? 950.0f : kERange);
+    const auto target = SelectEnemy(mode == Mode::Flee ? 950.0f : kERange);
     if (mode == Mode::Automatic && DefensiveAutomatic(target)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -270,11 +258,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-            LastCastTick[slot] = now;
-        }
+        if (slot >= 0 && slot < 4) LastCastTick[slot] = now;
         return;
     }
     const auto analysis = AnalyzeEnemyCast(args);
@@ -348,19 +332,18 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SorakaTactics", "Soraka support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Starcall rejuvenation"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 52, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Astral Infusion health gate"));
     WMenu->Add(new MenuSlider("AllyHealthThreshold", "Heal ally below health %", 72, 20, 95));
     WMenu->Add(new MenuSlider("EmergencyHealth", "Emergency heal below health %", 35, 10, 70));
     WMenu->Add(new MenuSlider("SelfReserve", "Self health reserve %", 18, 5, 50));
-    WMenu->Add(new MenuSlider("MaxSelfThreat", "Maximum nearby enemies for non-emergency W", 2, 0, 5));
+    WMenu->Add(new MenuSlider("MaxSelfThreat", "Max enemies for normal W", 2, 0, 5));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Equinox silence and root"));
     EMenu->Add(new MenuSlider("MaxZoneEnemies", "Maximum enemies at zone", 2, 0, 5));
     RMenu = TacticsMenu->AddSubMenu(new Menu("R", "Wish global ally save"));
     RMenu->Add(new MenuSlider("SaveHealth", "Save ally below health %", 34, 10, 70));
-    RMenu->Add(new MenuSlider("LethalHealth", "Treat threatened ally as lethal below %", 24, 5, 50));
+    RMenu->Add(new MenuSlider("LethalHealth", "Lethal threat health %", 24, 5, 50));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("SorakaFarm", "Farm resources"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 40, 0, 90));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("SorakaCoach", "Visual coaching"));
@@ -369,9 +352,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    ManualOwnershipUntil = EnemyThreatUntil = HardCcThreatUntil = 0;
-    RejuvenationUntil = EquinoxUntil = LastWishTick = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    EnemyThreatUntil = HardCcThreatUntil = 0;
     QReturnPending = false;
     QReturnMissileId = 0;
     LastQImpact = LastEZone = {};
@@ -384,8 +366,7 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Pin mechanics to Riot 26.15 and CommunityDragon PC 16.15 Soraka records",
-    "Select explicit enemy before orbwalker fallback and select a vulnerable non-self ally",
+    "Use the autonomous engine-selected enemy and select a vulnerable non-self ally",
     "Predict Starcall impact, check circle contact and reject projectile-wall shots",
     "Track Q return missile and keep rejuvenation state through buff and polling reconciliation",
     "Use Astral Infusion only on an ally below threshold with a real self-health reserve",
@@ -399,9 +380,9 @@ inline constexpr const char* Scenarios[] = {
     "Harass spends Starcall before Equinox and never burns W as damage logic",
     "Flee prioritizes global Wish, then safe ally infusion and Equinox pursuer zone",
     "LaneClear Jungle and LastHit delegate to farm policy after a support mana reserve",
-    "Preserve selected target, orbwalker target and basic-attack windup ownership",
-    "Yield ownership after observed manual Q W E or R casts and reconcile on polling",
-    "Expose spell, buff, attack, missile, object, gapcloser and interrupt callbacks",
+    "Preserve autonomous routing and basic-attack windup safety",
+    "Use the autonomous engine-selected enemy and preserve basic-attack windup",
+    "Reconcile observed Q W E R casts and support state through polling",
     "Draw Q/E ranges and last Equinox zone without changing decisions",
 };
 

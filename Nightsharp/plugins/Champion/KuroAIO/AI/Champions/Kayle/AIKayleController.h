@@ -362,13 +362,13 @@ inline void BuildMenu(Menu* root) {
     WMenu->Add(new MenuSlider("MinimumMissing", "Minimum missing health", 18, 0, 100));
     WMenu->Add(new MenuSlider("ManaFloor", "W mana floor", 45, 0, 100));
     UltimateMenu = root->AddSubMenu(new Menu("Kayle judgment"));
-    UltimateMenu->Add(new MenuSlider("AllyHP", "Protect ally below health percent", 38, 1, 100));
+    UltimateMenu->Add(new MenuSlider("AllyHP", "Protect ally below HP%", 38, 1, 100));
     UltimateMenu->Add(new MenuSlider("MinimumEnemies", "Minimum enemies for proactive R", 2, 0, 5));
     UltimateMenu->Add(new MenuSlider("MaxEnemies", "Maximum enemies at R center", 3, 0, 5));
     FarmMenu = root->AddSubMenu(new Menu("Kayle ascent farm"));
     FarmMenu->Add(new MenuSlider("LateMana", "Late wave mana floor", 48, 0, 100));
     CoachMenu = root->AddSubMenu(new Menu("Kayle coach"));
-    CoachMenu->Add(new MenuBool("DrawRanges", "Draw level-gated ranges", true));
+    CoachMenu->Add(new MenuBool("DrawRanges", "Draw level-gated ranges", false));
 }
 inline void OnLoad() {
     PassiveStacks = 0; ObservedLevel = 1; CurrentForm = Form::Melee;
@@ -384,7 +384,7 @@ inline void OnUnload() {
 }
 inline void OnDraw() {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Bool(CoachMenu, "DrawRanges", true)) return;
+    if (!player.IsValid() || !Bool(CoachMenu, "DrawRanges", false)) return;
     Drawing::DrawCircle(player.Position(), AttackRangeForLevel(ObservedLevel), 0x448EA7FFu, 1.0f, 64);
     Drawing::DrawCircle(player.Position(), kQRange, 0x2240D8FFu, 1.0f, 72);
 }

@@ -109,7 +109,6 @@ inline constexpr ChampionProfile Yunara = [] {
     p.UltimateTargetHealthPercent = 80.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 24;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.PassiveBuff = "YunaraQ";
     p.FormBuff = "YunaraR";

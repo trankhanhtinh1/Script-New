@@ -90,8 +90,6 @@ inline AIHeroClient SelectTarget(const AIHeroClient& preferred) {
     if (Engine::ValidEnemy(preferred, 1100.0f)) return preferred;
     const auto orb = ControllerHelpers::OrbwalkerHeroTarget(1100.0f);
     if (orb.IsValid()) return orb;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(1100.0f);
-    if (selected.IsValid()) return selected;
     return ControllerHelpers::NearestEnemyToPlayer({}, 1100.0f);
 }
 
@@ -318,9 +316,9 @@ inline void BuildMenu(Menu* root) {
     TumbleMenu = TacticsMenu->AddSubMenu(new Menu("TumblePolicy", "Tumble / Attack Windup"));
     TumbleMenu->Add(new MenuSeparator("AfterAttack", "Prefer Tumble after an attack reset"));
     CondemnMenu = TacticsMenu->AddSubMenu(new Menu("CondemnPolicy", "Condemn Wall Angle"));
-    CondemnMenu->Add(new MenuSeparator("WallAngle", "Require terrain contact or immediate peel"));
+    CondemnMenu->Add(new MenuSeparator("WallAngle", "Require terrain contact or peel"));
     FinalHourMenu = TacticsMenu->AddSubMenu(new Menu("FinalHourPolicy", "Final Hour Posture"));
-    FinalHourMenu->Add(new MenuSeparator("Stealth", "Use R before a committed stealth posture"));
+    FinalHourMenu->Add(new MenuSeparator("Stealth", "Use R for committed stealth"));
 }
 
 inline void OnLoad() {
@@ -344,7 +342,7 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Reconcile Silver Bolts from the live VayneSilveredBolts target marker",
     "Clamp observed Silver Bolts to the two pre-proc stacks",
-    "Preserve the selected target and orbwalker target through target selection",
+    "Preserve the autonomous and orbwalker targets through target selection",
     "Tumble after an attack reset instead of cancelling a meaningful AA windup",
     "Reject Tumble endpoints in terrain or under a new enemy turret",
     "Allow an R posture Tumble to create a stealth re-engage or escape angle",

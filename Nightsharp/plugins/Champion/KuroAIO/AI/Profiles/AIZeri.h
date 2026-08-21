@@ -100,7 +100,6 @@ inline constexpr ChampionProfile Zeri = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.PassiveBuff = "ZeriQPassiveReady";
     p.UltimateBuff = "ZeriR";

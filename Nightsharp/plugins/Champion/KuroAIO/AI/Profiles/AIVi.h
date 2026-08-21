@@ -16,7 +16,7 @@ inline constexpr ChampionProfile Vi = [] {
     p.Mechanics = Mechanic::Charge | Mechanic::Dash | Mechanic::Stack |
                   Mechanic::Mark | Mechanic::Ammo | Mechanic::AutoWeave |
                   Mechanic::AutoReset | Mechanic::Terrain;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::SingleTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Vault Breaker", CastKind::ChargedLine,
@@ -93,14 +93,13 @@ inline constexpr ChampionProfile Vi = [] {
              StepRule::RequireTarget | StepRule::RequireAfterAttack));
 
     p.AllIn = Plan(
-        "safe charged Q, AA-E, preserve target through Denting Blows, manual-safe R",
+        "safe charged Q, AA-E, preserve target through Denting Blows, safe R",
         Step(SDK::SpellSlot::Q,
              StepRule::RequireTarget | StepRule::RequireSafePosition),
         Step(SDK::SpellSlot::E,
              StepRule::RequireTarget | StepRule::RequireAfterAttack),
         Step(SDK::SpellSlot::R,
-             StepRule::RequireTarget | StepRule::RequireSafePosition |
-                 StepRule::ManualAssistOnly));
+             StepRule::RequireTarget | StepRule::RequireSafePosition));
 
     p.Flee = Plan(
         "charge Q toward cursor and release only to a traversable, safer endpoint",
@@ -114,7 +113,6 @@ inline constexpr ChampionProfile Vi = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 36;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "ViPassiveBuff";

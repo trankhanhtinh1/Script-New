@@ -143,7 +143,6 @@ struct RealmCommitContext {
     bool UnderEnemyTurret = false;
     bool LethalWithoutRealm = false;
     bool Defensive = false;
-    bool Manual = false;
     bool TargetLowHealth = false;
     bool TargetAlreadyInRealm = false;
     int NearbyEnemies = 0;
@@ -153,11 +152,12 @@ struct RealmCommitContext {
 inline bool SafeRealmCommit(const RealmCommitContext& context) {
     if (!context.TargetValid || !context.TargetInRange || context.TargetProtected ||
         context.PlayerMobilityLocked || context.TargetAlreadyInRealm) return false;
-    if (context.UnderEnemyTurret && !context.Defensive && !context.LethalWithoutRealm && !context.Manual)
+    if (context.UnderEnemyTurret && !context.Defensive && !context.LethalWithoutRealm)
         return false;
-    if (!context.Defensive && !context.LethalWithoutRealm && !context.Manual &&
-        context.NearbyEnemies > std::max(0, context.MaximumNearbyEnemies)) return false;
-    return context.Manual || context.Defensive || context.LethalWithoutRealm || context.TargetLowHealth;
+    if (!context.Defensive && !context.LethalWithoutRealm &&
+        context.NearbyEnemies > std::max(0, context.MaximumNearbyEnemies))
+        return false;
+    return context.Defensive || context.LethalWithoutRealm || context.TargetLowHealth;
 }
 
 inline constexpr bool RealmActive(int targetId, int expireTick, int now) {

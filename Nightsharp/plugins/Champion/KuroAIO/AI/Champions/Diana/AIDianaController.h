@@ -45,7 +45,7 @@ inline int EResetUntil = 0;
 inline int WExpireTick = 0;
 inline int RCastTick = 0;
 inline int RResetUntil = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline bool RActive = false;
@@ -272,8 +272,7 @@ inline void ReconcileState() {
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
     const auto target = PreferredEnemyTarget(selected,
-        mode == Mode::Flee ? 1000.0f : kQRange);
-    if (ManualOwnershipUntil > Now()) return true;
+        mode == Mode::Flee ? 1000.0f : kQRange);
     if (mode == Mode::Automatic && Automatic(target)) return true;
     if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -298,8 +297,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
             LastAutoTick = now;
             return;
         }
-        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
+        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot))
         if (slot == 2 && LastETargetId != 0) ClearMoonlight(LastETargetId);
         return;
     }
@@ -373,8 +371,7 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("DianaMoonlight", "Diana Moonlight tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("DianaMoonlight", "Diana Moonlight tactics"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Crescent Strike"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 50, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Pale Cascade"));
@@ -403,7 +400,7 @@ inline void ResetState() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = PassiveAttacks = LastQTargetId = 0;
     LastETargetId = EResetUntil = WExpireTick = RCastTick = RResetUntil = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCcUntil = 0;
+    IncomingThreatUntil = IncomingHardCcUntil = 0;
     RActive = false;
     WState = {};
 }
@@ -427,7 +424,7 @@ inline constexpr const char* Scenarios[] = {
     "Evaluate Moonfall pull radius, marks, allies, outside threats and player health",
     "Reject R terrain and unsafe turret/density commits except verified lethal exceptions",
     "Give selected target precedence before orbwalker fallback in every combat mode",
-    "Preserve AA windup and yield to manual spell ownership before automated casts",
+    "Preserve AA windup before automated casts/",
     "Reconcile marks, shield/orbs, reset windows, R state and cooldown assumptions by polling",
     "Automatic mode handles hard-CC pressure, defensive marked dash and lethal/density R",
     "Combo follows Q mark, W shield/orbs, marked E and safe Moonfall burst",

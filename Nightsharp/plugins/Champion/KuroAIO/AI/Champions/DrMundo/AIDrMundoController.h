@@ -38,7 +38,6 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int InterruptTargetId = 0;
@@ -172,7 +171,7 @@ inline bool StartW(Mode mode, bool reactive = false) {
     WTenacityMode = Bool(WMenu, "TenacityToggle", false) ||
         IncomingHardCcUntil > Now();
     const WCastContext context{true, WActive, false, true, CanSpendHealth(1, reactive),
-        !WOwned && PlayerOverrideUntil > Now(), threat, false};
+        false, threat, false};
     if (!ShouldCastW(context)) return false;
     if (!Engine::ControllerCastSelf(1)) return false;
     WActive = true; WOwned = true; WStartTick = Now(); LastCastTick[1] = Now();
@@ -186,10 +185,10 @@ inline bool RecastW(const AIHeroClient& target, Mode mode, bool reactive = false
         PreserveAttack(reactive)) return false;
     const bool lethal = Lethal(target, 1);
     if (PreferWTenacity(WActive,
-            !WOwned && PlayerOverrideUntil > Now(),
+            false,
             IncomingHardCcUntil > Now(), lethal) && WTenacityMode) return false;
     const WCastContext context{true, true, true, true, true,
-        !WOwned && PlayerOverrideUntil > Now(), reactive || IncomingThreatUntil > Now(), lethal};
+        false, reactive || IncomingThreatUntil > Now(), lethal};
     if (!ShouldCastW(context) || !Engine::ControllerCastSelf(1)) return false;
     WActive = false; WOwned = false; LastCastTick[1] = Now();
     return true;
@@ -256,12 +255,12 @@ inline bool TryInterrupt(const AIHeroClient& fallback, Mode mode) {
     const auto target = Engine::ValidEnemy(interrupt, kQRange) ? interrupt : fallback;
     return Engine::ValidEnemy(target) && CastQ(target, mode, true);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     LastMode = mode;
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected,
+    const auto target = Engine::SelectTarget(
         mode == Mode::Flee ? 1050.0f : kQRange);
-    if (PlayerOverrideUntil > Now()) return true;
     if (TryInterrupt(target, mode)) return true;
     const auto player = GameObjects::Player();
     if (player.IsValid() && (IncomingThreatUntil > Now() ||
@@ -270,7 +269,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1050.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, 1050.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit: Farm(mode); break;
@@ -293,7 +292,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
         const bool ours = Engine::WasControllerCast(slot);
-        if (!ours) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 1) { WActive = !WActive; WOwned = ours; WStartTick = now; }
         if (slot == 3) { RActive = true; ROwned = ours; RStartTick = now; }
@@ -335,8 +333,7 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
 }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     if (!args.Target.IsValid()) return;
-    if ((WActive && WOwned && Bool(WMenu, "PreserveBurn", true)) ||
-        (PlayerOverrideUntil > Now() && Bool(TacticsMenu, "ProtectManual", true))) args.Process = false;
+    if (WActive && WOwned && Bool(WMenu, "PreserveBurn", true)) args.Process = false;
 }
 inline void OnDraw() {
     if (!Bool(CoachMenu, "DrawRanges", false)) return;
@@ -349,8 +346,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("DrMundoOneTrick", "Dr. Mundo health tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
-    TacticsMenu->Add(new MenuBool("ProtectManual", "Protect manual windups", true));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("Passive", "Infected Bones cooldown"));
     PassiveMenu->Add(new MenuBool("TrackCanister", "Track canister cooldown/refund", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Infected Bonesaw"));
@@ -369,7 +364,7 @@ inline void BuildMenu(Menu* root) {
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/W/R ranges", false));
 }
 inline void OnLoad() {
-    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCcUntil = InterruptTargetId = InterruptExpireTick = 0;
     PassiveCooldownUntil = LastPassivePickupTick = 0; PassiveReady = true;
     WActive = WOwned = WTenacityMode = RActive = ROwned = false;

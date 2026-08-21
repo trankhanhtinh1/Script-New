@@ -69,7 +69,7 @@ inline constexpr ChampionProfile Yuumi = [] {
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget),
         Step(SDK::SpellSlot::E, StepRule::RequirePlayerLow | StepRule::AllowDuringWindup));
     p.AllIn = Plan(
-        "Attach to the selected carry, shield through Zoomies, and channel Final Chapter toward a safe wave",
+        "Attach to the safest carry, shield through Zoomies, and channel Final Chapter toward a safe wave",
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::RequireSafePosition),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget),
@@ -87,7 +87,6 @@ inline constexpr ChampionProfile Yuumi = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 4;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "YuumiPassive";

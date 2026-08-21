@@ -115,12 +115,11 @@ struct BoomerangContext {
     bool TargetEscaping = false;
     bool OutsideAttackRange = false;
     bool Lethal = false;
-    bool Manual = false;
 };
 
 inline bool ShouldThrowBoomerang(const BoomerangContext& context) {
     if (!context.TargetValid || !context.OutgoingCollisionFree) return false;
-    return context.Manual || context.Lethal || context.OutsideAttackRange ||
+    return context.Lethal || context.OutsideAttackRange ||
            context.ReturnPathAvailable || context.TargetEscaping;
 }
 
@@ -181,14 +180,12 @@ struct RContext {
     bool AlliesMovingWithPlayer = false;
     bool AlliedFollowup = false;
     bool EnemyCommitment = false;
-    bool Manual = false;
     int NearbyAllies = 0;
     int NearbyEnemies = 0;
 };
 
 inline bool ShouldCastOnTheHunt(const RContext& context) {
     if (!context.Ready || !context.HasMana) return false;
-    if (context.Manual) return true;
     if (context.Posture == RPosture::Disengage ||
         context.Posture == RPosture::Peel) {
         return context.PlayerThreatened &&

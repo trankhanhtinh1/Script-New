@@ -279,18 +279,23 @@ inline void Automatic(const AIHeroClient& target) {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcilePoison();
     const int now = Now();
     for (auto& mushroom : Mushrooms) {
         if (!mushroom.Alive) continue;
         mushroom.Armed = TrapCanArm(mushroom.CastTick, now);
         mushroom.Vision = mushroom.Armed;
-        if (mushroom.Position.IsZero() || mushroom.Position.Distance2D(GameObjects::Player().Position()) > 3000.0f)
+        if (mushroom.Position.IsZero() ||
+            mushroom.Position.Distance2D(GameObjects::Player().Position()) > 3000.0f)
             mushroom.Alive = false;
     }
-    if (IncomingThreatUntil < now) { IncomingThreatUntil = 0; IncomingThreatTargetId = 0; IncomingThreatEndpoint = {}; }
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, 980.0f);
+    if (IncomingThreatUntil < now) {
+        IncomingThreatUntil = 0;
+        IncomingThreatTargetId = 0;
+        IncomingThreatEndpoint = {};
+    }
+    const AIHeroClient target = Engine::SelectTarget(980.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -434,7 +439,7 @@ inline constexpr const char* Scenarios[] = {
     "Jungle poison pressure and objective mushroom setup",
     "Flee cursor separation, wall/turret and enemy-count rejection",
     "Turret dive denial and automatic anti-gapcloser mushroom response",
-    "Manual cast and buff/object deletion polling reconciliation",
+    "Runtime cast and buff/object deletion polling reconciliation",
 };
 
 inline constexpr ChampionController Controller = [] {

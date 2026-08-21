@@ -55,8 +55,8 @@ inline float FuryAfterTick(float fury, FormState form, int elapsedMs) {
     return ClampFury(fury + std::floor(seconds));
 }
 
-inline bool CanCastR(float fury, FormState form, bool ready, bool manualOverride = false) {
-    return form == FormState::Human && ready && (manualOverride || ClampFury(fury) >= kRMinimumFury);
+inline bool CanCastR(float fury, FormState form, bool ready) {
+    return form == FormState::Human && ready && ClampFury(fury) >= kRMinimumFury;
 }
 
 inline bool InQResetWindow(QResetState state, int elapsedMs) {

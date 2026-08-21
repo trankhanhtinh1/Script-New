@@ -3,9 +3,9 @@
 // Champion-specific decision contract for KuroAIO AI plugins.
 //
 // AIChampionEngine owns only reusable plumbing (prediction objects, menus,
-// player-input arbitration, target selection, safety scoring and event
-// subscription).  A controller with OwnsDecisionLoop=true is responsible for
-// every combat/farm/flee decision for its champion.  This keeps a generated
+// autonomous target selection, safety scoring and event subscription).  A
+// controller with OwnsDecisionLoop=true is responsible for every
+// combat/farm/flee decision for its champion.  This keeps a generated
 // Q-W-E-R profile from being mistaken for a completed one-trick plugin.
 
 #include "AIChampionProfile.h"

@@ -42,7 +42,6 @@ inline int GapcloserUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int InterruptUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline Mode LastMode = Mode::None;
 
 using ControllerHelpers::Now;
@@ -182,7 +181,7 @@ inline int PredictedLandingEnemies(const Vector3& center) {
     return hits;
 }
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false, bool defensive = false) {
+                  bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) || !Ready(3, mode) ||
         !Throttle(3, 130) || !HasManaFor(3) ||
@@ -199,7 +198,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const LandingContext context{true, true, wall, landingSafe, RammusUnderTurretTransition(aim),
         defensive || player.HealthPercent() <= Slider(RMenu, "DefensiveHealth", 42), lethal,
         center, PredictedLandingEnemies(aim), Slider(RMenu, "MinimumTargets", 2)};
-    if (!manual && !ShouldLandSoaringSlam(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
     LandingTick = Now() + 450;
     RAftershockUntil = LandingTick + static_cast<int>(kRPulseDuration * 1000.0f);
@@ -208,14 +206,14 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
 }
 inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
-    if (Lethal(target, RDamage(target, Ball.Active)) && CastR(target, mode, true, false, false)) return true;
+    if (Lethal(target, RDamage(target, Ball.Active)) && CastR(target, mode, true, false)) return true;
     if (Lethal(target, EDamage(target)) && CastE(target, mode, true, true)) return true;
     if (Lethal(target, QDamage(target)) && CastQ(target, mode, true)) return true;
     return Lethal(target, PassiveDamage(target)) && CastW(target, mode, true);
 }
 inline void Combo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return;
-    if (Ball.Active && CastR(target, Mode::Combo, false, false, false)) return;
+    if (Ball.Active && CastR(target, Mode::Combo, false, false)) return;
     if (!Ball.Active && CastQ(target, Mode::Combo)) return;
     if (CastE(target, Mode::Combo, false, Lethal(target, EDamage(target)))) return;
     if (CastW(target, Mode::Combo)) return;
@@ -232,7 +230,7 @@ inline void Flee(const AIHeroClient& threat) {
     if (CastW(threat, Mode::Flee, true)) return;
     if (Ball.Active && CastQ(threat, Mode::Flee, true, true)) return;
     if (CastE(threat, Mode::Flee, true)) return;
-    (void)CastR(threat, Mode::Flee, true, true, true);
+    (void)CastR(threat, Mode::Flee, true, true);
 }
 inline void ReconcileState() {
     const int now = Now();
@@ -256,13 +254,13 @@ inline void ReconcileState() {
     if (GapcloserUntil <= now) GapcloserTargetId = 0;
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     LastMode = mode;
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected,
+    const auto target = Engine::SelectTarget(
         mode == Mode::Flee ? 1050.0f : SoaringSlamReach(player.MoveSpeed()));
-    if (PlayerOverrideUntil > Now()) return true;
     if (Engine::ValidEnemy(target) && GapcloserTargetId != 0 &&
         static_cast<int>(target.NetworkId()) == GapcloserTargetId &&
         CastE(target, mode, true)) return true;
@@ -283,10 +281,10 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         const bool antiGap = GapcloserTargetId != 0;
         const bool interrupt = InterruptUntil > Now();
         const bool kill = Engine::ValidEnemy(target) && Lethal(target, RDamage(target, Ball.Active));
-        if (AutomaticAllowed({defensive, antiGap, interrupt, kill, false, PlayerOverrideUntil > Now()})) {
+        if (AutomaticAllowed({defensive, antiGap, interrupt, kill, false})) {
             if (Engine::ValidEnemy(target) && (antiGap || interrupt) && CastE(target, mode, true)) return true;
             if (Engine::ValidEnemy(target) && defensive && CastW(target, mode, true)) return true;
-            if (Engine::ValidEnemy(target)) (void)CastR(target, mode, true, false, defensive);
+            if (Engine::ValidEnemy(target)) (void)CastR(target, mode, true, defensive);
         }
         break;
     }
@@ -300,7 +298,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 0) {
             if (!Ball.Active) Ball = {true, false, GameObjects::Player().Position(), args.EndPosition, now, 0};
@@ -378,7 +375,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RammusMechanics", "Rammus armor posture"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Powerball", "Powerball charge and impact"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("BallCurl", "Defensive Ball Curl posture"));
@@ -398,7 +394,8 @@ inline void OnLoad() {
     Ball = {}; CurlActive = false; TauntTargetId = LandingTick = RAftershockUntil = 0;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = GapcloserTargetId = GapcloserUntil = 0;
-    GapcloserEnd = {}; IncomingThreatUntil = IncomingHardCCUntil = InterruptUntil = PlayerOverrideUntil = 0;
+    GapcloserEnd = {};
+    IncomingThreatUntil = IncomingHardCCUntil = InterruptUntil = 0;
     LastMode = Mode::None;
 }
 inline void OnUnload() {
@@ -415,7 +412,6 @@ inline constexpr const char* Scenarios[] = {
     "Treat Frenzying Taunt as a 325-range point-click peel and monster control spell",
     "Intercept an observed gapcloser before selecting offensive casts",
     "Apply Spiked Shell bonus attack damage from live armor and magic resist",
-    "Require selected target before orbwalker fallback and reject protected targets",
     "Compute Soaring Slam reach from movement speed and clamp it to 1700",
     "Predict landing collision, reject walls and unsafe enemy-turret destinations",
     "Require lethal, defensive, Powerball-center or configured multi-target R value",
@@ -424,9 +420,6 @@ inline constexpr const char* Scenarios[] = {
     "Combo prioritizes Powerball impact, Taunt, Curl and safe Soaring Slam",
     "Harass spends mana on Q/E and uses Curl only for an observed threat",
     "LaneClear Jungle and LastHit delegate to shared farm policy",
-    "Flee uses Curl, cancel-safe Powerball, Taunt peel and manual-assist landing",
-    "Automatic mode permits only defense, anti-gapcloser, interruption or kill secure",
-    "Yield after observed manual Q W E or R ownership and reconcile spell buffs",
     "Reject invulnerable, spell-shielded and invalid targets",
     "Never automate items, summoner spells or movement ownership",
     "Draw live Q W E and speed-scaled R reach without changing decisions",

@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Veigar = [] {
     p.UltimateTargetHealthPercent = 55.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 68;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "VeigarPassive";

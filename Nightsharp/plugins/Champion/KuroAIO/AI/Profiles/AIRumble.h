@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Rumble = [] {
     profile.UltimateMinimumTargets = 2;
     profile.MaximumCommitEnemies = 2;
     profile.BaseHumanizerMs = 48;
-    profile.PreferSelectedTarget = true;
     profile.AllowTurretDiveIfKillable = false;
     profile.ProtectManualChannels = true;
     profile.TrackedObjectToken = "RumbleCarpetBomb";
@@ -100,7 +99,7 @@ inline constexpr ChampionProfile Rumble = [] {
              0, 650),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget, 40, 800),
         Step(SDK::SpellSlot::R,
-             StepRule::RequireTarget | StepRule::ManualAssistOnly,
+             StepRule::RequireTarget | StepRule::RequireSafePosition,
              100, 1000));
     return profile;
 }();

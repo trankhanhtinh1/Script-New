@@ -63,18 +63,14 @@ inline std::vector<AIHeroClient> EnemyHeroesByHealth(float range) {
     return result;
 }
 
-// This is the small adapter shared by KuroAIO target callers.  The selector
-// owns the decision; KuroAIO only supplies the action context and identity
-// hints it already tracks.  Keeping request construction here leaves the
-// existing SDK path below intact when the Kuro service is not loaded.
+// This adapter supplies only action context.  The active selector owns target
+// choice and any AI lease; KuroAIO never injects a user-selected target.
 inline SDK::KuroTargetSelector::TargetRequest MakeKuroTargetRequest(
     float range,
     SDK::DamageType damageType,
     SDK::KuroTargetSelector::TargetPurpose purpose,
     SDK::KuroTargetSelector::DecisionPhase phase =
-        SDK::KuroTargetSelector::DecisionPhase::Planning,
-    int preferredTargetId = 0,
-    int lockedTargetId = 0) {
+        SDK::KuroTargetSelector::DecisionPhase::Planning) {
     using namespace SDK::KuroTargetSelector;
 
     TargetRequest request{};
@@ -91,38 +87,29 @@ inline SDK::KuroTargetSelector::TargetRequest MakeKuroTargetRequest(
     request.Route.Start = request.Source;
     request.Route.RequireVisible = true;
     request.Route.TargetableAtExecution = true;
-    request.PreferredTargetId = preferredTargetId;
-    request.LockedTargetId = lockedTargetId;
     request.AllowFallback = true;
-    request.RespectManualSelection = true;
+    request.RespectManualSelection = false;
     request.RequireVisible = true;
     return request;
 }
 
 inline AIHeroClient GetTarget(float range, DamageType damageType) {
     if (auto* kuro = SDK::KuroTargetSelector::ActiveService()) {
-        const auto state = kuro->GetSelectionState();
-        if (!state.Suspended) {
-            auto request = MakeKuroTargetRequest(
-                range,
-                damageType,
-                SDK::KuroTargetSelector::TargetPurpose::General,
-                SDK::KuroTargetSelector::DecisionPhase::Planning,
-                state.PreferSelectedTarget ? state.SelectedNetworkId : 0,
-                0);
-            request.RespectManualSelection = state.PreferSelectedTarget;
+        auto request = MakeKuroTargetRequest(
+            range,
+            damageType,
+            SDK::KuroTargetSelector::TargetPurpose::General,
+            SDK::KuroTargetSelector::DecisionPhase::Planning);
 
-            const auto decision = kuro->Select(request);
-            if (decision.Legal && ValidHeroTarget(decision.Target, range)) {
-                return decision.Target;
-            }
+        const auto decision = kuro->Select(request);
+        if (decision.Legal && ValidHeroTarget(decision.Target, range)) {
+            return decision.Target;
         }
     }
 
     // Preserve the legacy SDK selector and health fallback whenever Kuro is
-    // unavailable, explicitly suspended, or has no legal candidate. Resolve
-    // the SDK implementation by name so this fallback cannot recurse through
-    // the active Kuro implementation.
+    // unavailable or has no legal candidate. Resolve the SDK implementation
+    // by name so this fallback cannot recurse through the active Kuro path.
     if (auto* selector = SDK::TargetSelector::GetTargetSelector("SDK")) {
         const auto selected = selector->GetTarget(range, damageType);
         if (ValidHeroTarget(selected, range)) {
@@ -133,6 +120,7 @@ inline AIHeroClient GetTarget(float range, DamageType damageType) {
     const auto enemies = EnemyHeroesByHealth(range);
     return enemies.empty() ? AIHeroClient() : enemies.front();
 }
+
 
 inline AIHeroClient GetPhysicalTarget(float range) {
     return GetTarget(range, DamageType::Physical);

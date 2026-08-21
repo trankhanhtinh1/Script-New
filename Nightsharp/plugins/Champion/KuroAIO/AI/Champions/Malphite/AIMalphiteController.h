@@ -33,7 +33,6 @@ inline MalphiteState State{};
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -163,11 +162,11 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
     return true;
 }
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool defensive = false, bool manual = false) {
+                  bool defensive = false) {
     const auto p = GameObjects::Player();
     if (!p.IsValid() || Protected(target) || !Ready(3, mode, reactive) ||
         !Throttle(3, 120) || !HasManaFor(3) ||
-        (!reactive && !manual && ControllerHelpers::PreserveAttack(false))) return false;
+        (!reactive && ControllerHelpers::PreserveAttack(false))) return false;
     const Vector3 impact = PredictedRAim(target);
     if (!RProjectileClear(p.Position(), impact) ||
         ControllerHelpers::ProjectileWallBlocksFromPlayer(impact, kRMissileRadius)) return false;
@@ -226,11 +225,10 @@ inline void ReconcileState() {
         State.WResetExpireTick = std::max(State.WResetExpireTick, now + 300);
     if (p.HasBuff("MalphiteE")) State.ECrippleExpireTick = std::max(State.ECrippleExpireTick, now + 250);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected, kRRange);
-    if (ManualOverrideUntil > Now()) return true;
+    const auto target = Engine::SelectTarget(kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastE(target, mode, true, true)) return true;
         if (IncomingHardCCUntil > Now() && CastR(target, mode, true, true)) return true;
@@ -265,7 +263,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now + 600;
         LastCastTick[slot] = now;
         if (slot == 0 && args.TargetNetworkId != 0) {
             State.QStealTargetId = static_cast<int>(args.TargetNetworkId);
@@ -339,7 +336,6 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     State = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = ManualOverrideUntil = 0;
     IncomingThreatUntil = IncomingHardCCUntil = 0;
     GapcloserTargetId = InterruptTargetId = 0;
     GapcloserEnd = {};
@@ -363,8 +359,7 @@ inline constexpr const char* Scenarios[] = {
     "Predict Unstoppable Force impact travel and count targets inside 270 radius",
     "Reject R landing on walls, unsafe mobility, enemy turrets or excessive enemy density",
     "Allow R single-target kill-secure or defensive interrupt only through explicit gates",
-    "Preserve selected target before orbwalker and selector fallback",
-    "Yield after manual Q W E or R ownership and reconcile events by polling",
+    "Use autonomous Engine target selection for combat decisions",
     "Combo prioritizes multi-target/lethal R, then E cripple, W reset and Q chase",
     "Harass uses Q first and only W/E inside actual attack or spell reach",
     "LaneClear Jungle and LastHit retain a mana floor and armor-aware W weave",

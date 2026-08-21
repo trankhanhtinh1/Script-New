@@ -408,25 +408,6 @@ static bool ComboR() {
     return AllDamage(target) >= EffectiveMagicalHealth(target) && CastR(target);
 }
 
-static bool ManualQE() {
-    if (!Key(ComboMenu, "ManualQE") || !Q.IsReady() || !E.IsReady()) {
-        return false;
-    }
-    const auto player = Player();
-    const auto target = GetMagicalTarget(QE.Range);
-    const int mode = List(ComboMenu, "ManualQEMode", 0);
-    if (mode == 0) {
-        return target.IsValid() && target.DistanceToPlayer() > E.Range && CastQE(target);
-    }
-    if (mode == 1) {
-        return CastQEAt(Game::CursorPos());
-    }
-    if (player.CountEnemyHeroesInRange(
-            static_cast<float>(Slider(ComboMenu, "QERange", 1100))) == 0) {
-        return CastQEAt(Game::CursorPos());
-    }
-    return target.IsValid() && target.DistanceToPlayer() > E.Range && CastQE(target);
-}
 
 static void Combo() {
     if (!IsComboMode() || Orbwalker::IsWindingUp()) {
@@ -624,10 +605,10 @@ static void OnDraw() {
     if (!player.IsValid() || player.IsDead()) {
         return;
     }
-    if (Bool(DrawMenu, "DrawQ", true) && Q.IsReady()) {
+    if (Bool(DrawMenu, "DrawQ", false) && Q.IsReady()) {
         Drawing::DrawCircle(player.Position(), Q.Range, 0xFFFFFFFFu, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawQE", true) && Q.IsReady() && E.IsReady()) {
+    if (Bool(DrawMenu, "DrawQE", false) && Q.IsReady() && E.IsReady()) {
         Drawing::DrawCircle(player.Position(), QE.Range, 0xFFFFA500u, 1.5f, 64);
     }
     if (Bool(DrawMenu, "DrawW", false) && W.IsReady()) {
@@ -636,10 +617,10 @@ static void OnDraw() {
     if (Bool(DrawMenu, "DrawE", false) && E.IsReady()) {
         Drawing::DrawCircle(player.Position(), E.Range, 0xFFFF5555u, 1.5f, 64);
     }
-    if (Bool(DrawMenu, "DrawR", true) && R.IsReady()) {
+    if (Bool(DrawMenu, "DrawR", false) && R.IsReady()) {
         Drawing::DrawCircle(player.Position(), R.Range, 0xFF9370DBu, 1.5f, 64);
     }
-    if (!Bool(DrawMenu, "DrawSpheres", true)) {
+    if (!Bool(DrawMenu, "DrawSpheres", false)) {
         return;
     }
     const int now = SDK::Variables::TickCount();
@@ -674,18 +655,11 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         return;
     }
     Killsteal();
-    if (ManualQE()) {
-        return;
-    }
     AutoDashQ();
 
-    const bool autoHarass = Key(HarassMenu, "AutoHarass");
-    if (autoHarass && !IsComboMode()) {
-        Harass();
-    }
     if (IsComboMode()) {
         Combo();
-    } else if (IsHarassMode() && !autoHarass) {
+    } else if (IsHarassMode()) {
         Harass();
     } else if (IsClearMode()) {
         if (!JungleClear()) {
@@ -703,11 +677,6 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuSlider("QERange", "Q + E maximum range", 1100, 800, 1150));
     ComboMenu->Add(new MenuBool("UseW", "Use W", true));
     ComboMenu->Add(new MenuBool("UseE", "Use E with existing spheres", true));
-    auto* manualQE = ComboMenu->Add(new MenuKeyBind(
-        "ManualQE", "Manual Q + E", SDK::Keys::T, KeyBindType::Press));
-    manualQE->Permashow();
-    ComboMenu->Add(new MenuList(
-        "ManualQEMode", "Manual Q + E mode", { "Target", "Cursor", "Smart" }, 0));
 
     RMenu = ComboMenu->AddSubMenu(new Menu("R", "Ultimate Settings"));
     RMenu->Add(new MenuList("Mode", "R mode", { "Damage priority", "Speed priority" }, 0));
@@ -727,9 +696,6 @@ static void BuildMenu() {
     }
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass", "Harass Settings"));
-    auto* autoHarass = HarassMenu->Add(new MenuKeyBind(
-        "AutoHarass", "Auto Harass", SDK::Keys::K, KeyBindType::Toggle));
-    autoHarass->Permashow();
     HarassMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 50, 0, 100));
     HarassMenu->Add(new MenuBool("AutoQDash", "Auto Q dashing targets", true));
     HarassMenu->Add(new MenuBool("UseQ", "Use Q", true));
@@ -739,7 +705,7 @@ static void BuildMenu() {
     AAMenu = MenuRoot->AddSubMenu(new Menu("AA", "Normal Attack Settings"));
     AAMenu->Add(new MenuBool("DisableAA", "Disable normal attacks in Combo", false));
     AAMenu->Add(new MenuSlider("Level", "Disable attacks from level", 6, 1, 18));
-    AAMenu->Add(new MenuBool("EnableCooldown", "Enable attacks when all spells are unavailable", true));
+    AAMenu->Add(new MenuBool("EnableCooldown", "Allow attacks if no spells ready", true));
     AAMenu->Add(new MenuBool("EnableLowMana", "Enable attacks below 20 percent mana", true));
 
     LaneMenu = MenuRoot->AddSubMenu(new Menu("LaneClear", "Lane Clear Settings"));
@@ -761,12 +727,12 @@ static void BuildMenu() {
     KillstealMenu->Add(new MenuSlider("MinimumHealth", "Minimum target health for R", 0, 0, 500));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q range", true));
-    DrawMenu->Add(new MenuBool("DrawQE", "Draw Q + E range", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q range", false));
+    DrawMenu->Add(new MenuBool("DrawQE", "Draw Q + E range", false));
     DrawMenu->Add(new MenuBool("DrawW", "Draw W range", false));
     DrawMenu->Add(new MenuBool("DrawE", "Draw E range", false));
-    DrawMenu->Add(new MenuBool("DrawR", "Draw R range", true));
-    DrawMenu->Add(new MenuBool("DrawSpheres", "Draw sphere timers", true));
+    DrawMenu->Add(new MenuBool("DrawR", "Draw R range", false));
+    DrawMenu->Add(new MenuBool("DrawSpheres", "Draw sphere timers", false));
 
     MenuRoot->Attach();
 }
@@ -774,12 +740,6 @@ static void BuildMenu() {
 static void RemoveMenu() {
     if (!MenuRoot) {
         return;
-    }
-    if (auto* item = ComboMenu ? ComboMenu->Get<MenuKeyBind>("ManualQE") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = HarassMenu ? HarassMenu->Get<MenuKeyBind>("AutoHarass") : nullptr) {
-        item->RemovePermashow();
     }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;

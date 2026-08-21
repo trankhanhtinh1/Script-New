@@ -37,7 +37,6 @@ inline std::array<int, 4> LastCastTick = {};
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int ReflectionCastTick = 0;
-inline int ManualOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastTargetId = 0;
@@ -130,7 +129,7 @@ inline bool CastW(Mode mode, bool reactive = true) {
     LastCastTick[1] = ReflectionCastTick;
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 120) ||
         Protected(target) || PreserveAttack(false)) return false;
@@ -138,7 +137,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
     const bool execute = ExecuteReady(target);
     const UltimateContext context{true, Engine::ValidEnemy(target), marks > 0,
         execute, player.HealthPercent() <= Slider(RMenu, "DefensiveHP", 25),
-        manual, MarkedTargets(), Slider(RMenu, "MinimumTargets", 2)};
+        MarkedTargets(), Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldCastUltimate(context)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
@@ -172,11 +171,10 @@ inline void Flee(const AIHeroClient& target) {
     if (IncomingThreatUntil > Now() && CastW(Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target)) (void)CastE(target, Mode::Flee, true);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1100.0f : kQRange);
-    if (ManualOverrideUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 1100.0f : kQRange);
     if (mode != Mode::Flee && IncomingHardCCUntil > Now() && CastW(mode, true)) return true;
     if (Engine::ValidEnemy(target) && ExecuteReady(target) && CastR(target, mode)) return true;
     switch (mode) {
@@ -191,8 +189,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         break;
     case Mode::Automatic:
         if (Engine::ValidEnemy(target) && AutomaticAllowed({
-            ManualOverrideUntil > Now(), IncomingThreatUntil > Now(),
-            IncomingHardCCUntil > Now(), ExecuteReady(target)})) {
+            IncomingThreatUntil > Now(), IncomingHardCCUntil > Now(),
+            ExecuteReady(target)})) {
             if (IncomingThreatUntil > Now()) (void)CastW(Mode::Automatic, true);
             else (void)CastR(target, Mode::Automatic);
         }
@@ -208,8 +206,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot)) ManualOverrideUntil =
-                now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -252,7 +248,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("MelTactics", "Mel reflection tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Radiant Volley"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 42, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Reflection"));
@@ -267,7 +262,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     Marks.fill({}); LastCastTick.fill(0); IncomingThreatUntil = IncomingHardCCUntil = 0;
-    ReflectionCastTick = ManualOverrideUntil = LastAutoTargetId = LastAutoTick = LastTargetId = 0;
+    ReflectionCastTick = LastAutoTargetId = LastAutoTick = LastTargetId = 0;
     LastMode = Mode::None;
 }
 inline void OnUnload() {
@@ -282,9 +277,9 @@ inline constexpr const char* Scenarios[] = {
     "Use predicted Solar Snare with collision and root-line safety",
     "Reserve Reflection for a verified incoming projectile, hard crowd control or lethal threat",
     "Reconcile Reflection's live buff and 0.75-second denial window",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Preserve AA windup unless reactive safety or confirmed execute requires a cast",
-    "Track cooldowns, mana floors and manual spell ownership per slot",
+    "Track cooldowns, mana floors and event state per slot",
     "Use Golden Eclipse only with live marks, execute value or configured multi-target value",
     "Never spend global ultimate on unmarked targets or speculative telemetry",
     "Combo builds Q/E marks before R and does not consume W offensively",
@@ -293,7 +288,6 @@ inline constexpr const char* Scenarios[] = {
     "Flee reflects committed threats and roots a verified pursuer",
     "Automatic mode permits only defense, projectile denial or confirmed execute",
     "Reject invulnerable, untargetable and spell-shielded targets",
-    "Yield after observed manual Q W E or R ownership",
     "Never automate items, summoner spells or movement ownership",
     "Draw ranges without changing gameplay decisions",
 };

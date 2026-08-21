@@ -113,7 +113,6 @@ inline bool ShouldHop(const HopContext& context) {
 }
 
 struct FateContext {
-    bool ManualRequest = false;
     bool OathswornBound = false;
     bool AllyInRange = false;
     bool AllyLowHealth = false;
@@ -126,7 +125,6 @@ struct FateContext {
 
 inline bool ShouldCallFate(const FateContext& context) {
     if (!context.OathswornBound || !context.AllyInRange) return false;
-    if (context.ManualRequest) return true;
     if (context.SavePolicyEnabled && context.AllyThreatened &&
         (context.AllyLowHealth || context.EnemyNearAlly)) return true;
     return context.EngagePolicyEnabled && context.AlliedFollowup &&

@@ -36,7 +36,6 @@ inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int PassiveCooldownUntil = 0;
 inline int WEmpoweredUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline Mode LastMode = Mode::None;
@@ -248,11 +247,11 @@ inline void ReconcileState() {
     }
     if (player.HasBuff("GragasW") || player.HasBuff("gragasw")) WEmpoweredUntil = std::max(WEmpoweredUntil, now + 250);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     LastMode = mode;
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected, kRRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const auto target = Engine::SelectTarget(kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastE(target, mode, true, false, true)) return true;
         if (CastR(target, mode, true, false, true)) return true;
@@ -261,7 +260,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 950.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, 950.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -271,7 +270,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::Automatic:
         if (AutomaticAllowed({IncomingThreatUntil > Now(), IncomingHardCCUntil > Now(),
             Engine::ValidEnemy(target) && Lethal(target, RDamage(target)),
-            false, PlayerOverrideUntil > Now()})) {
+            false, false})) {
             (void)CastR(target, mode, true, false, IncomingThreatUntil > Now());
         }
         break;
@@ -285,8 +284,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 0 && !Barrel.Active) {
             const Vector3 observed = args.EndPosition.IsValid() &&
@@ -340,7 +337,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("GragasMechanics", "Gragas barrel tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     BarrelMenu = TacticsMenu->AddSubMenu(new Menu("Barrel", "Barrel roll charge/release"));
     BarrelMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 10, 90));
     SlamMenu = TacticsMenu->AddSubMenu(new Menu("BodySlam", "Body Slam collision safety"));
@@ -356,7 +352,7 @@ inline void OnLoad() {
     Barrel = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = PassiveCooldownUntil = WEmpoweredUntil = 0;
-    PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastMode = Mode::None;
 }
 inline void OnUnload() {

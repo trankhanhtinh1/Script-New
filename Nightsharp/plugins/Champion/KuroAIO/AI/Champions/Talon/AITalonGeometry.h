@@ -35,18 +35,14 @@ inline constexpr int kWReturnWindowMs = 1200;
 inline constexpr int kRStealthMs = 2400;
 inline constexpr int kRReturnWindowMs = 4000;
 struct ModeContext {
-    bool SelectedTarget = false;
-    bool OrbwalkerTarget = false;
     bool AttackWindingUp = false;
     bool Lethal = false;
-    bool ManualAssist = false;
 };
 
 inline bool MayUseAbility(const ModeContext& context) {
-    if (context.ManualAssist) return false;
-    if (context.AttackWindingUp && !context.Lethal) return false;
-    return context.SelectedTarget || context.OrbwalkerTarget;
+    return !context.AttackWindingUp || context.Lethal;
 }
+
 
 inline float Finite(float value, float low, float high) {
     return std::isfinite(value) ? std::clamp(value, low, high) : low;

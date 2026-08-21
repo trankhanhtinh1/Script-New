@@ -24,7 +24,7 @@ inline int WCastTick = 0;
 inline int ECastTick = 0;
 inline int RCastTick = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline Vector3 LastQPosition = {};
@@ -198,8 +198,6 @@ inline bool TryFarm(Mode m) {
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient &selected) {
   ReconcileState();
-  if (PlayerOverrideUntil > Now())
-    return true;
   AIHeroClient t = selected;
   if (!Engine::ValidEnemy(t))
     t = Engine::SelectTarget(kRRange);
@@ -247,8 +245,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
   }
   const bool owned =
       a.Slot >= 0 && a.Slot < 4 && Engine::WasControllerCast(a.Slot);
-  if (!owned)
-    PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
+  if (!owned)
   if (a.Slot == 0)
     QCastTick = now;
   else if (a.Slot == 1)
@@ -287,8 +284,6 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu = root->AddSubMenu(
       new Menu("CassiopeiaOneTrick", "Cassiopeia poison mechanics"));
-  TacticsMenu->Add(new MenuSlider(
-      "ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
   TacticsMenu->Add(new MenuSlider("EmergencyHP", "Emergency HP", 32, 10, 70));
   PoisonMenu = TacticsMenu->AddSubMenu(new Menu("Poison", "Poison tracking"));
   PoisonMenu->Add(new MenuBool("UseMiasma", "Use Miasma", true));
@@ -306,7 +301,7 @@ inline void BuildMenu(Menu *root) {
 inline void OnLoad() {
   PassiveStacks = 0;
   QCastTick = WCastTick = ECastTick = RCastTick = 0;
-  IncomingHardCCUntil = PlayerOverrideUntil = 0;
+  IncomingHardCCUntil = 0;
   LastAutoTargetId = LastAutoTick = 0;
   LastQPosition = LastWPosition = LastRPosition = {};
   ReconcileState();
@@ -341,7 +336,7 @@ inline constexpr const char *Scenarios[] = {
     "Automatic mode rejects unsolicited engage",
     "Automatic mode allows defensive, interrupt and kill-secure actions",
     "Preserve AA windup before nonlethal spell casts",
-    "Yield after manual Q/W/E/R and re-plan from observed state",
+    "Re-plan from observed Q/W/E/R state/",
     "Never automate Flash, Ignite, Smite or item actives",
     "Keep profile metadata separate from the owned decision loop",
 };

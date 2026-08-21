@@ -102,7 +102,6 @@ struct ShieldThreatContext {
     bool AllyAlreadyShielded = false;
     bool AllyLowHealth = false;
     bool Lethal = false;
-    bool Manual = false;
     int NearbyEnemies = 0;
 };
 
@@ -110,7 +109,7 @@ inline bool ShouldBlackShield(const ShieldThreatContext& context) {
     if (!context.AllyValid || !context.SpellReady ||
         context.AllyAlreadyShielded || context.Threat == ThreatKind::None)
         return false;
-    if (context.Manual || context.Lethal ||
+    if (context.Lethal ||
         context.Threat == ThreatKind::HardCrowdControl ||
         context.Threat == ThreatKind::Immobilize)
         return true;

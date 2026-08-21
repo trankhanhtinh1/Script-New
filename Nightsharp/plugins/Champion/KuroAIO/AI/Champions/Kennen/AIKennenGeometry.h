@@ -132,7 +132,6 @@ struct UltimateContext {
     bool AreaValid = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     bool AttackWindingUp = false;
     bool UnderEnemyTurret = false;
     int PredictedTargets = 0;
@@ -141,9 +140,9 @@ struct UltimateContext {
 
 inline constexpr bool ShouldCastUltimate(const UltimateContext& context) {
     if (!context.Ready || !context.AreaValid || context.UnderEnemyTurret) return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.Defensive && !context.Manual)
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive)
         return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    return context.Lethal || context.Defensive ||
         context.PredictedTargets >= std::max(1, context.MinimumTargets);
 }
 

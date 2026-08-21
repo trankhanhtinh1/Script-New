@@ -18,7 +18,6 @@ inline constexpr ChampionProfile Jayce = [] {
   p.UltimateMinimumTargets = 1;
   p.MaximumCommitEnemies = 2;
   p.BaseHumanizerMs = 60;
-  p.PreferSelectedTarget = true;
   p.AllowTurretDiveIfKillable = false;
   p.ProtectManualChannels = true;
   p.TrackedObjectToken = "JayceAccelerationGate";
@@ -66,7 +65,7 @@ inline constexpr ChampionProfile Jayce = [] {
            Step(SDK::SpellSlot::R, StepRule::RequireSafePosition, 200, 1000));
   p.Flee = Plan("Hammer disengage",
                 Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 0, 700),
-                Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly, 100, 900));
+                Step(SDK::SpellSlot::R, StepRule::RequireSafePosition, 100, 900));
   return p;
 }();
 } // namespace Plugins::KuroAIO::AI::Profiles

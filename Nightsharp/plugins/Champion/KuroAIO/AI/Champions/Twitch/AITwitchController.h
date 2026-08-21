@@ -305,10 +305,9 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred,
-                                      Mode mode) {
+inline AIHeroClient SelectSmartTarget(Mode mode) {
     LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
-        preferred, 1210.0f,
+        AIHeroClient{}, 1210.0f,
         [mode](const AIHeroClient& enemy) {
             return TargetFacts(enemy, mode);
         });
@@ -320,19 +319,13 @@ inline bool ImmediateAttackKill(const AIHeroClient& target) {
 }
 
 inline AIHeroClient ProtectedImmediateAttackKill() {
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(950.0f);
-    if (ImmediateAttackKill(selected)) return selected;
-    const auto orbTarget = ControllerHelpers::OrbwalkerHeroTarget(950.0f);
-    return ImmediateAttackKill(orbTarget) ? orbTarget : AIHeroClient{};
+    const auto target = Engine::SelectTarget(950.0f);
+    return ImmediateAttackKill(target) ? target : AIHeroClient{};
 }
 
-inline void RefreshVenomFocus(Mode mode,
-                              const AIHeroClient& preferred) {
+inline void RefreshVenomFocus(Mode mode) {
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     auto protectedKill = ProtectedImmediateAttackKill();
-    if (!protectedKill.IsValid() && ImmediateAttackKill(preferred)) {
-        protectedKill = preferred;
-    }
     auto owned = OwnedOrbwalkerFocus(
         OwnedFocusTargetId, OwnedFocusUntil, 950.0f);
     if (!combat || !owned.IsValid() || PoisonStacks(owned) <= 0 ||
@@ -363,8 +356,6 @@ inline void RefreshVenomFocus(Mode mode,
         }
         float score = static_cast<float>(stacks) * 145.0f -
             enemy.HealthPercent();
-        if (preferred.IsValid() &&
-            preferred.NetworkId() == enemy.NetworkId()) score += 190.0f;
         if (ContaminateDamage(enemy) >=
             enemy.Health() + enemy.AllShield()) score += 350.0f;
         if (AutoDamage(enemy) >= enemy.Health() + enemy.AllShield()) {
@@ -406,7 +397,7 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return CastQ(target, mode, false);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     if (!combat) {
@@ -415,13 +406,12 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     if (TryAntiGapcloser()) return true;
     if (TryKillSecure()) return true;
     if (combat) {
-        const auto target = SelectSmartTarget(preferred, mode);
-        RefreshVenomFocus(mode, target);
+        const auto target = SelectSmartTarget(mode);
+        RefreshVenomFocus(mode);
         return TryCombat(target, mode);
     }
     if (mode == Mode::Flee) {
-        const auto threat = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, 990.0f);
+        const auto threat = ControllerHelpers::NearestEnemyToPlayer({}, 990.0f);
         if (Engine::ValidEnemy(threat) &&
             CastW(threat, Mode::Flee, true)) return true;
         return CastQ(threat, Mode::Flee, true);
@@ -493,15 +483,15 @@ inline void BuildMenu(Menu* root) {
     VenomMenu = TacticsMenu->AddSubMenu(new Menu(
         "VenomLogic", "Deadly Venom / Contaminate"));
     VenomMenu->Add(new MenuSeparator(
-        "HoldE", "E waits for lethal, 6 stacks or 3-stack range loss"));
+        "HoldE", "E lethal/stack/range-loss hold"));
     AmbushMenu = TacticsMenu->AddSubMenu(new Menu(
         "AmbushLogic", "Ambush Safety"));
     AmbushMenu->Add(new MenuSeparator(
-        "Incoming", "Q rejects a known incoming damage window"));
+        "Incoming", "Q rejects incoming-damage window"));
     SprayMenu = TacticsMenu->AddSubMenu(new Menu(
         "SprayLogic", "Spray and Pray"));
     SprayMenu->Add(new MenuSlider(
-        "MinimumEnemies", "Minimum targets in the piercing line", 2, 1, 5));
+        "MinimumEnemies", "Min targets in piercing line", 2, 1, 5));
 }
 
 inline void OnLoad() {

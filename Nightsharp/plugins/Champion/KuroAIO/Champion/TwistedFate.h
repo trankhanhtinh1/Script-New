@@ -25,7 +25,6 @@ enum class SelectStatus {
 };
 
 inline Menu* MenuRoot = nullptr;
-inline Menu* CardMenu = nullptr;
 inline Menu* ComboMenu = nullptr;
 inline Menu* AlwaysGoldMenu = nullptr;
 inline Menu* HarassMenu = nullptr;
@@ -330,7 +329,7 @@ static Card HarassCard(const AIHeroClient& target) {
     return fixed == Card::None ? SmartHarassCard(target) : fixed;
 }
 
-static void AttackSelectedTarget(const AIHeroClient& target) {
+static void AttackCardTarget(const AIHeroClient& target) {
     if (LockedCard != Card::None && ValidHeroTarget(target) &&
         AutoAttack::InAutoAttackRange(target) && Orbwalker::CanAttack()) {
         (void)Orbwalker::Attack(target);
@@ -345,7 +344,7 @@ static void Combo() {
     const auto target = HighestPriorityTarget();
     if (Bool(ComboMenu, "UseW", true) && target.IsValid()) {
         (void)SelectCard(ComboCard(target));
-        AttackSelectedTarget(target);
+        AttackCardTarget(target);
     }
 
     if (!Bool(ComboMenu, "UseQ", true) || !Q.IsReady()) {
@@ -369,7 +368,7 @@ static void Harass() {
     const auto target = HighestPriorityTarget();
     if (Bool(HarassMenu, "UseW", true) && target.IsValid()) {
         (void)SelectCard(HarassCard(target));
-        AttackSelectedTarget(target);
+        AttackCardTarget(target);
     }
 
     if (Bool(HarassMenu, "UseQ", true) && Q.IsReady()) {
@@ -482,15 +481,6 @@ static void AutoQ() {
     }
 }
 
-static void HandleCardHotkeys() {
-    if (Key(CardMenu, "GoldKey")) {
-        (void)SelectCard(Card::Gold);
-    } else if (Key(CardMenu, "BlueKey")) {
-        (void)SelectCard(Card::Blue);
-    } else if (Key(CardMenu, "RedKey")) {
-        (void)SelectCard(Card::Red);
-    }
-}
 
 static bool IsGateCast(const Events::ProcessSpellEventArgs& args) {
     return EqualsIgnoreCase(args.SpellName, "Gate") ||
@@ -530,7 +520,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
         ForceGoldUntil = 0;
     }
 
-    HandleCardHotkeys();
     (void)TryCardAction();
     Killsteal();
     AutoQ();
@@ -554,13 +543,6 @@ static void Drawing_OnDraw() {
 static void BuildMenu() {
     MenuRoot = new Menu("champion.kuroaio.twistedfate", "Kuro - Twisted Fate", true);
 
-    CardMenu = MenuRoot->AddSubMenu(new Menu("Cards", "Card Selector"));
-    auto* goldKey = CardMenu->Add(new MenuKeyBind("GoldKey", "Select Gold Card", SDK::Keys::W, KeyBindType::Press));
-    auto* blueKey = CardMenu->Add(new MenuKeyBind("BlueKey", "Select Blue Card", SDK::Keys::E, KeyBindType::Press));
-    auto* redKey = CardMenu->Add(new MenuKeyBind("RedKey", "Select Red Card", SDK::Keys::T, KeyBindType::Press));
-    goldKey->Permashow();
-    blueKey->Permashow();
-    redKey->Permashow();
 
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo", "Combo Settings"));
     ComboMenu->Add(new MenuBool("UseQ", "Use Q", true));
@@ -616,16 +598,8 @@ static void RemoveMenu() {
     if (!MenuRoot) {
         return;
     }
-    if (CardMenu) {
-        for (const char* key : { "GoldKey", "BlueKey", "RedKey" }) {
-            if (auto* item = CardMenu->Get<MenuKeyBind>(key)) {
-                item->RemovePermashow();
-            }
-        }
-    }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;
-    CardMenu = nullptr;
     ComboMenu = nullptr;
     AlwaysGoldMenu = nullptr;
     HarassMenu = nullptr;

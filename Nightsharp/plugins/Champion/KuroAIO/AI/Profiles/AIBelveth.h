@@ -22,7 +22,7 @@ inline constexpr ChampionProfile Belveth = [] {
                   Mechanic::Terrain | Mechanic::AutoWeave |
                   Mechanic::AutoReset | Mechanic::DirectionalSweet |
                   Mechanic::MissingHealth;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::AllIn;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Void Surge", CastKind::Direction,
@@ -122,7 +122,6 @@ inline constexpr ChampionProfile Belveth = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 34;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "BelvethPassiveStacks";

@@ -61,7 +61,7 @@ inline constexpr ChampionProfile Vayne = [] {
     p.Spells[3].PreserveAutoAttack = true;
 
     p.Trade = Plan(
-        "Keep the selected target in attack range, weave Tumble after attacks, and hold Condemn for a wall angle or peel",
+        "Keep the reachable target in attack range, weave Tumble after attacks, and hold Condemn for a wall angle or peel",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireAfterAttack |
              StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireNoCrowdControl));
@@ -83,7 +83,6 @@ inline constexpr ChampionProfile Vayne = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.PassiveBuff = "VayneNightHunter";
     p.MarkBuff = "VayneSilveredBolts";

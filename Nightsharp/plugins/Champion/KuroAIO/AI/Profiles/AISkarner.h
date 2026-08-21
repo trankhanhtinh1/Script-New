@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Skarner = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SkarnerPassive";
@@ -29,7 +28,7 @@ inline constexpr ChampionProfile Skarner = [] {
     p.UltimateBuff = "SkarnerImpale";
     p.TrackedObjectToken = "SkarnerRock";
     p.TacticalSummary =
-        "Crystal-armored vanguard: preserve Q's three-hit state, use W shield for safe proximity, collide E with terrain or the selected target, and reserve R for an observed multi-target impale or a defensive/kill-secure exception.";
+        "Crystal-armored vanguard: preserve Q's three-hit state, use W shield for safe proximity, collide E with terrain or a reachable target, and reserve R for an observed multi-target impale or a defensive/kill-secure exception.";
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15 Summoner's Rift spell metadata, with stun, impale, terrain and mana state reconciled from events and polling.";
 
@@ -81,7 +80,7 @@ inline constexpr ChampionProfile Skarner = [] {
     p.Flee = Plan("Bastion peel",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 650),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 80, 850),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireTarget, 120, 1100));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 120, 1100));
     return p;
 }();
 

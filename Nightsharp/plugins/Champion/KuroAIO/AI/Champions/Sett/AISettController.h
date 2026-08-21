@@ -21,7 +21,6 @@ using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
@@ -43,7 +42,6 @@ inline int LastQConsumeTick = 0;
 inline int WShieldExpireTick = 0;
 inline int WCastTick = 0;
 inline int LastAutoTargetId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -221,7 +219,6 @@ inline void Flee(const AIHeroClient& target) {
 }
 
 inline void Automatic(const AIHeroClient& target) {
-    if (ManualOwnershipUntil > Now()) return;
     if (Engine::ValidEnemy(target)) {
         if (IncomingThreatUntil >= Now() && CastW(target, Mode::Automatic, true)) return;
         if (CastR(target, Mode::Automatic, true)) return;
@@ -255,10 +252,9 @@ inline void ReconcileState() {
     if (cap > 0.0f) Grit = std::min(Grit, cap);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 900.0f : 805.0f);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 900.0f : 805.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -276,11 +272,10 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SettGrit", "Sett grit tactics"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("SettFarm", "Sett farm safety"));
-    TacticsMenu->Add(new MenuSlider("HaymakerHealth", "Use Haymaker under health percent", 58, 1, 100));
+    TacticsMenu->Add(new MenuSlider("HaymakerHealth", "Use Haymaker below health %", 58, 1, 100));
     TacticsMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at slam endpoint", 3, 0, 5));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 700, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve valuable attack windups", true));
-    FarmMenu->Add(new MenuSlider("MinimumHealth", "Minimum health percent for farm casts", 35, 1, 100));
+    FarmMenu->Add(new MenuSlider("MinimumHealth", "Minimum farm health %", 35, 1, 100));
 }
 
 inline void OnLoad() {
@@ -290,7 +285,7 @@ inline void OnLoad() {
     ActiveWShield = 0.0f;
     QHitsRemaining = QExpireTick = QTargetId = LastQConsumeTick = 0;
     WShieldExpireTick = WCastTick = LastAutoTargetId = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    IncomingThreatUntil = IncomingThreatTargetId = 0;
     IncomingThreatEndpoint = LastRLanding = {};
     RTargetId = 0;
     LastCastTick.fill(0);
@@ -308,8 +303,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 700);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 0) {
                 CurrentQ = QState::Armed;
@@ -426,8 +419,8 @@ inline constexpr const char* Scenarios[] = {
     "Haymaker converts Grit into a shield and true center damage with side damage fallback",
     "Facebreaker pulls targets from opposite sides and distinguishes stun from one-side slow",
     "Showstopper computes the target-directed slam endpoint and rejects unsafe landings",
-    "selected target precedence with orbwalker fallback and prediction-aware reach checks",
-    "attack windup preservation, manual ownership and event plus polling reconciliation",
+    "engine-selected target routing with prediction-aware reach checks",
+    "attack windup preservation and event plus polling reconciliation",
     "wall, projectile, turret and nearby-enemy safety gates protect W/E/R commitments",
     "resource, cooldown, true-damage, shield and missing-health lethal boundaries",
     "combo, harass, lane clear, jungle, last-hit, flee and automatic mode policies",

@@ -32,7 +32,7 @@ inline int WStartTick = 0;
 inline int WExpireTick = 0;
 inline int PassiveReadyTick = 0;
 inline int LastCastTick[4]{};
-inline int PlayerOverrideUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -175,7 +175,7 @@ inline AIHeroClient BestAllyForR(bool defensive, Vector3* landing = nullptr) {
     }
     return best;
 }
-inline bool CastR(Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(Mode mode, bool reactive = false) {
     if (!Ready(3, mode) || !Throttle(3, 120)) return false;
     Vector3 landing{};
     const AIHeroClient ally = BestAllyForR(reactive, &landing);
@@ -184,7 +184,7 @@ inline bool CastR(Mode mode, bool reactive = false, bool manual = false) {
     const RLandingContext context{true, true, threatened, landing.IsValid(),
         !SDK::NavMesh::IsWall(landing),
         Engine::UnderEnemyTurret(landing) && !Engine::UnderEnemyTurret(GameObjects::Player().Position()),
-        manual, reactive, false, Engine::CountEnemiesAt(landing, kRRadius),
+        false, reactive, false, Engine::CountEnemiesAt(landing, kRRadius),
         Engine::CountAlliesAt(landing, kRRadius), Slider(RMenu, "MaxLandingEnemies", 3)};
     if (!SafeRLanding(context) || !Engine::ControllerCastUnit(3, ally)) return false;
     LastRAllyId = static_cast<int>(ally.NetworkId());
@@ -208,7 +208,7 @@ inline void Harass(const AIHeroClient& target) {
 inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target) && CastW(target, Mode::Flee, true, true)) return;
     if (Engine::ValidEnemy(target) && CastE(target, Mode::Flee, true)) return;
-    (void)CastR(Mode::Flee, true, true);
+    (void)CastR(Mode::Flee);
 }
 inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
@@ -234,7 +234,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
     ReconcileState();
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kQRange);
-    if (PlayerOverrideUntil > Now()) return true;
+
     const bool defensive = IncomingThreatUntil > Now() ||
         (GameObjects::Player().IsValid() && GameObjects::Player().HealthPercent() <=
             Slider(TacticsMenu, "DefensiveHealth", 38));
@@ -253,7 +253,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::Automatic:
         if (AutomaticAllowed({defensive, IncomingHardCCUntil > Now(),
             Engine::ValidEnemy(target) && Lethal(target, QDamage(target)), false,
-            PlayerOverrideUntil > Now()})) {
+            false})) {
             if (defensive && Engine::ValidEnemy(target) && CastW(target, mode, true, true)) return true;
             (void)CastR(mode, true);
         }
@@ -268,8 +268,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         if (slot == 1) {
             if (!WCharging) {
                 WCharging = true;
@@ -330,7 +328,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("GalioOneTrick", "Galio vanguard tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
+
     TacticsMenu->Add(new MenuSlider("DefensiveHealth", "Defensive health percent", 38, 10, 70));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Winds of War"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Shield of Durand"));
@@ -347,7 +345,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnUnload() {
     TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
     WCharging = false;
-    WStartTick = WExpireTick = PassiveReadyTick = PlayerOverrideUntil = 0;
+    WStartTick = WExpireTick = PassiveReadyTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = InterruptTargetId = InterruptExpireTick = 0;
     LastAutoTargetId = LastAutoTick = LastRAllyId = 0;
     LastQAim = LastEAim = LastRLanding = {};
@@ -356,7 +354,7 @@ inline void OnUnload() {
 }
 inline void OnLoad() {
     WCharging = false;
-    WStartTick = WExpireTick = PassiveReadyTick = PlayerOverrideUntil = 0;
+    WStartTick = WExpireTick = PassiveReadyTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = InterruptTargetId = InterruptExpireTick = 0;
     LastAutoTargetId = LastAutoTick = LastRAllyId = 0;
     LastQAim = LastEAim = LastRLanding = {};
@@ -378,10 +376,10 @@ inline constexpr const char* Scenarios[] = {
     "Use R for defensive rescue and interrupt response; ordinary engage remains conservative",
     "Preserve selected target before orbwalker and selector fallback",
     "Preserve AA windup unless W release, interruption or lethal response justifies commitment",
-    "Reconcile manual Q W E R ownership and yield before synthetic casts",
+    "Reconcile Q W E R state before synthetic casts/",
     "Reconcile enemy process-spell threats for automatic defensive and interrupt rules",
     "Automatic mode permits only defense, interrupt or kill secure, never fresh engage",
-    "Flee uses W taunt peel, E disengage and manual-assist R ally landing",
+    "Flee uses W taunt peel, E disengage and safe R ally landing/",
     "LaneClear Jungle and LastHit delegate to shared farm policy after mana reserve",
     "Reject protected, invulnerable and spell-shielded targets",
     "Draw range and last R landing without changing gameplay decisions",

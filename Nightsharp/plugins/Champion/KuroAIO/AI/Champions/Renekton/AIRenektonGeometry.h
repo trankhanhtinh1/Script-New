@@ -126,7 +126,6 @@ struct DashSafetyContext {
     bool Defensive = false;
     bool Lethal = false;
     bool Fleeing = false;
-    bool CursorAgrees = true;
     int EnemiesAtEndpoint = 0;
     int MaximumEnemies = 2;
 };
@@ -134,7 +133,6 @@ inline constexpr bool DashSafe(const DashSafetyContext& context) {
     if (!context.Ready || !context.EndpointValid || !context.EndpointWalkable ||
         context.DashHazard || context.PointClickThreat || !context.ThroughTarget) return false;
     if (context.EndpointUnderNewTurret && !context.Defensive && !context.Lethal) return false;
-    if (!context.CursorAgrees && !context.Defensive && !context.Fleeing) return false;
     return context.Defensive || context.Fleeing || context.Lethal ||
            context.EnemiesAtEndpoint <= std::max(0, context.MaximumEnemies);
 }
@@ -171,15 +169,15 @@ struct DominusContext {
     bool PlayerLow = false;
     bool TargetLow = false;
     bool AllIn = false;
-    bool Manual = false;
+    bool Defensive = false;
     int NearbyEnemies = 0;
     int MinimumEnemies = 2;
 };
 inline constexpr bool ShouldCastDominus(const DominusContext& context) {
     if (!context.Ready || !context.TargetValid || !context.InRange) return false;
-    return context.Manual || context.IncomingHardCC || context.PlayerLow ||
-           context.TargetLow || (context.AllIn &&
-           context.NearbyEnemies >= std::max(1, context.MinimumEnemies));
+    return context.IncomingHardCC || context.PlayerLow ||
+           context.TargetLow || context.Defensive ||
+           (context.AllIn && context.NearbyEnemies >= std::max(1, context.MinimumEnemies));
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Renekton::Geometry

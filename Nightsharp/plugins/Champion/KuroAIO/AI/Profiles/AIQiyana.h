@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Qiyana = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 62;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "QiyanaPassive";
@@ -112,7 +111,7 @@ inline constexpr ChampionProfile Qiyana = [] {
         Step(SDK::SpellSlot::Q, StepRule::RequireNoCrowdControl | StepRule::RequireSafePosition, 0, 700),
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 80, 850),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 150, 950),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 250, 1200));
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::RequireMultiTarget, 250, 1200));
     return p;
 }();
 

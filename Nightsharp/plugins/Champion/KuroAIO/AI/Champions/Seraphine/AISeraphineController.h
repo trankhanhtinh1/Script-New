@@ -22,7 +22,6 @@ using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::ProjectileWallBlocks;
 using ControllerHelpers::Ready;
-using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::SpellRank;
 using ControllerHelpers::Now;
 
@@ -36,7 +35,6 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int EnemyThreatUntil = 0;
 inline int HardCcThreatUntil = 0;
 inline int Notes = 0;
@@ -46,12 +44,6 @@ inline Vector3 LastRAim{};
 
 inline bool Throttle(int slot, int delay = 44) {
     return ControllerHelpers::CastThrottleReady(LastCastTick, slot, delay);
-}
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
 }
 inline bool Protected(const AIHeroClient& target) {
     return !Engine::ValidEnemy(target) || target.IsInvulnerable() || HasSpellShieldOrImmunity(target);
@@ -96,9 +88,8 @@ inline float RRawDamage(const AIHeroClient& target) {
     return player.CalculateMagicDamage(target, 100.0f + 100.0f * static_cast<float>(rank - 1) + player.AP() * 0.4f);
 }
 
-inline bool CastQ(const AIHeroClient& selected, Mode mode, bool reactive = false) {
+inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    const auto target = SelectEnemy(selected, kQRange);
     if (!player.IsValid() || !Engine::ValidEnemy(target, kQRange + kQRadius) || Protected(target) ||
         !Ready(0, mode) || !Throttle(0) || (!reactive && AttackWindingUp()) ||
         player.ManaPercent() < Slider(QMenu, "MinimumMana", 42) || !SafeCommit(reactive)) return false;
@@ -133,9 +124,8 @@ inline bool CastW(Mode mode, bool reactive = false) {
     return true;
 }
 
-inline bool CastE(const AIHeroClient& selected, Mode mode, bool reactive = false) {
+inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    const auto target = SelectEnemy(selected, kERange);
     if (!player.IsValid() || !Engine::ValidEnemy(target, kERange) || Protected(target) ||
         !Ready(2, mode) || !Throttle(2) || (!reactive && AttackWindingUp())) return false;
     const Vector3 predicted = PredictPosition(target, TravelSeconds(player.Position().Distance2D(target.Position())));
@@ -161,9 +151,8 @@ inline int RChampionContacts(const Vec3& origin, const Vec3& endpoint) {
         if (Engine::ValidEnemy(enemy, ExtendedRRange(4)) && LineContacts(origin, endpoint, enemy.Position(), kRWidth, enemy.BoundingRadius())) ++contacts;
     return contacts;
 }
-inline bool CastR(const AIHeroClient& selected, Mode mode, bool reactive = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
-    const auto target = SelectEnemy(selected, kRRange);
     if (!player.IsValid() || !Engine::ValidEnemy(target, ExtendedRRange(4)) || Protected(target) ||
         !Ready(3, mode) || !Throttle(3, 140) || (!reactive && AttackWindingUp())) return false;
     const Vector3 predicted = PredictPosition(target, TravelSeconds(player.Position().Distance2D(target.Position()), kCastDelay, kMissileSpeed));
@@ -220,14 +209,12 @@ inline void ReconcileState() {
     if (player.HasBuff("SeraphinePassiveNotes") || player.HasBuff("SeraphinePassiveNotesBuff"))
         Notes = std::clamp(player.GetBuffCount("SeraphinePassiveNotes"), 0, 4);
     if (EchoUntil <= now) EchoUntil = 0;
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
     if (EnemyThreatUntil <= now) EnemyThreatUntil = 0;
     if (HardCcThreatUntil <= now) HardCcThreatUntil = 0;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = SelectEnemy(selected, mode == Mode::Flee ? 1400.0f : ExtendedRRange(4));
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1400.0f : ExtendedRRange(4));
     if (mode == Mode::Automatic) Automatic(target);
     else if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -247,7 +234,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                 Notes = AdvanceNotes(Notes, NearbyAllies(800.0f));
                 EchoUntil = Notes >= 3 ? now + 2600 : EchoUntil;
             }
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
         }
         return;
     }
@@ -297,7 +283,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SeraphineTactics", "Seraphine Echo and team tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 600, 180, 1400));
     TacticsMenu->Add(new MenuSlider("MaxTurretEnemies", "Max enemies under turret", 2, 0, 5));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "High Note execute"));
     QMenu->Add(new MenuSlider("MinimumMana", "Minimum Q mana %", 42, 0, 90));
@@ -315,15 +300,14 @@ inline void BuildMenu(Menu* root) {
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/E/R ranges", false));
 }
 inline void OnLoad() {
-    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = 0;
     EnemyThreatUntil = HardCcThreatUntil = Notes = EchoUntil = RLastCastTick = 0; LastRAim = {};
 }
 inline void OnUnload() { TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr; LastRAim = {}; }
 
 inline constexpr const char* Scenarios[] = {
-    "Reconcile Notes from passive buffs and spell events, including manual ownership windows",
-    "Advance Notes for Q W E and consume exactly three on a basic attack Echo",
-    "Respect selected target, then orbwalker target, then engine fallback",
+    "Reconcile Notes from passive buffs and spell events",
+    "Use the autonomous engine-selected enemy for Q/E/R decisions",
     "Predict Q area contact and apply the 25 percent execute amplification",
     "Use Surround Sound for allied shield, missing-health heal, speed, and peel windows",
     "Escalate Beat Drop from slow to root or echoed stun using target crowd-control state",

@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Malzahar = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 60;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "MalzaharPassive";
@@ -105,7 +104,7 @@ inline constexpr ChampionProfile Malzahar = [] {
         "Silence and suppression only as reactive peel; do not turret dive",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::AllowDuringWindup, 0, 900),
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition |
-             StepRule::ManualAssistOnly, 160, 2800));
+             StepRule::HoldForExecute, 160, 2800));
     return p;
 }();
 

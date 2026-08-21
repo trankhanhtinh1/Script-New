@@ -39,7 +39,6 @@ inline int RBuffExpireTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int AttackWindupUntil = 0;
 inline int QTargetId = 0;
 inline Vector3 LastQEndpoint = {};
@@ -47,10 +46,6 @@ inline Vector3 LastEEndpoint = {};
 inline Vector3 LastREndpoint = {};
 inline bool RActive = false;
 inline bool QCastPendingEvent = false;
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 
 using ControllerHelpers::Now;
 
@@ -103,11 +98,9 @@ inline float RDamage(const AIHeroClient& target) {
 }
 using ControllerHelpers::Lethal;
 
-inline bool MayCast(const AIHeroClient& target, bool selected, bool orbwalker,
-                    bool lethal, bool manual = false) {
-    return MayUseAbility({ selected, orbwalker,
-                           Orbwalker::IsWindingUp() || AttackWindupUntil > Now(),
-                           lethal, manual });
+inline bool MayCast(const AIHeroClient& target, bool lethal) {
+    (void)target;
+    return MayUseAbility({ Orbwalker::IsWindingUp() || AttackWindupUntil > Now(), lethal });
 }
 
 inline Vector3 Predicted(const AIHeroClient& target, float delay) {
@@ -121,8 +114,7 @@ inline Vector3 Predicted(const AIHeroClient& target, float delay) {
     return PredictPosition(target, delay);
 }
 
-inline bool CastQ(const AIHeroClient& target, Mode mode, bool selected, bool orbwalker,
-                  bool fleeing = false) {
+inline bool CastQ(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     if (!Engine::ValidEnemy(target, kQRange + 45.0f) || !Ready(0, mode) ||
         !Throttle(0, 40) || TargetProtected(target)) return false;
     const auto player = GameObjects::Player();
@@ -134,7 +126,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool selected, bool orb
     if (endpoint.IsZero() || !endpoint.IsValid() || SDK::NavMesh::IsWall(endpoint) ||
         player.Position().Distance2D(endpoint) < 20.0f) return false;
     const bool lethal = Lethal(target, QDamage(target, stage));
-    if (!MayCast(target, selected, orbwalker, lethal)) return false;
+    if (!MayCast(target, lethal)) return false;
     if (!Engine::ControllerCastPosition(0, endpoint)) return false;
     QLastCastTick = Now();
     QWindowExpireTick = Now() + kQRecastWindowMs;
@@ -142,63 +134,53 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool selected, bool orb
     QCastPendingEvent = true;
     QTargetId = static_cast<int>(target.NetworkId());
     LastQEndpoint = endpoint;
-    QWasManual = false;
     return true;
 }
 
-inline bool CastW(const AIHeroClient& target, Mode mode, bool selected, bool orbwalker,
-                  bool reactive = false) {
+inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) {
     if (!Engine::ValidEnemy(target, kWRange + target.BoundingRadius()) || !Ready(1, mode) ||
         !Throttle(1, 65) || TargetProtected(target) ||
         GameObjects::Player().Position().Distance2D(target.Position()) >
             kWRange + target.BoundingRadius()) return false;
     const bool lethal = Lethal(target, WDamage(target));
-    if (!reactive && !MayCast(target, selected, orbwalker, lethal)) return false;
+    if (!reactive && !MayCast(target, lethal)) return false;
     if (!Engine::ControllerCastSelf(1)) return false;
     WLastCastTick = Now();
-    WWasManual = false;
     return true;
 }
 
-inline bool CastE(const AIHeroClient& target, Mode mode, bool selected, bool orbwalker,
-                  bool fleeing = false, bool manual = false) {
+inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false,
+                  bool reactive = false) {
     if (!Ready(2, mode) || !Throttle(2, 70)) return false;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     Vector3 aim = fleeing ? Game::CursorPos() : Predicted(target, 0.12f);
-    if (!aim.IsValid() || aim.IsZero()) aim = Game::CursorPos();
+    if (!aim.IsValid() || aim.IsZero()) return false;
     const Vector3 endpoint = ClampDashEndpoint(player.Position(), aim);
     if (endpoint.IsZero() || SDK::NavMesh::IsWall(endpoint)) return false;
     const int enemies = Engine::CountEnemiesAt(endpoint, 425.0f);
     const bool lethal = Engine::ValidEnemy(target) && Lethal(target, QDamage(target, QStageState));
-    const bool cursorIntent = !Bool(ChainMenu, "RespectCursor", true) || fleeing ||
-                              endpoint.Distance2D(Game::CursorPos()) < 360.0f ||
-                              endpoint.Distance2D(aim) < 120.0f;
     if (!EEndpointSafe(!SDK::NavMesh::IsWall(endpoint), Engine::UnderEnemyTurret(endpoint),
                        Engine::UnderEnemyTurret(player.Position()), enemies,
-                       Slider(FarmMenu, "MaxEndpointEnemies", 2), lethal, fleeing,
-                       cursorIntent, manual)) return false;
-    if (!fleeing && Engine::ValidEnemy(target) && !MayCast(target, selected, orbwalker, lethal, manual)) return false;
+                       Slider(FarmMenu, "MaxEndpointEnemies", 2), lethal, fleeing)) return false;
+    if (!fleeing && Engine::ValidEnemy(target) && !MayCast(target, lethal)) return false;
     if (!Engine::ControllerCastPosition(2, endpoint)) return false;
     ELastCastTick = Now();
     LastEEndpoint = endpoint;
-    EWasManual = false;
     return true;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool selected, bool orbwalker,
-                  bool defensive = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false) {
     if (!Ready(3, mode) || !Throttle(3, 110)) return false;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
     if (!IsRActive()) {
         if (!Engine::ValidEnemy(target) && !defensive) return false;
-        if (!defensive && !MayCast(target, selected, orbwalker, false)) return false;
+        if (!defensive && !MayCast(target, false)) return false;
         if (!Engine::ControllerCastSelf(3)) return false;
         RActive = true;
         RLastCastTick = Now();
         RBuffExpireTick = Now() + kRBuffDurationMs;
-        RWasManual = false;
         return true;
     }
     if (!Engine::ValidEnemy(target, kRRange + 60.0f) || TargetProtected(target)) return false;
@@ -226,7 +208,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool selected, bool orb
     RLastCastTick = Now();
     LastREndpoint = predicted;
     RActive = false;
-    RWasManual = false;
     return true;
 }
 
@@ -244,36 +225,36 @@ inline void ReconcileState() {
     if (AttackWindupUntil > 0 && now > AttackWindupUntil) AttackWindupUntil = 0;
 }
 
-inline bool TryKillSecure(const AIHeroClient& target, Mode mode, bool selected, bool orbwalker) {
+inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
-    if (Lethal(target, RDamage(target)) && CastR(target, mode, selected, orbwalker)) return true;
-    if (Lethal(target, WDamage(target)) && CastW(target, mode, selected, orbwalker, true)) return true;
-    return Lethal(target, QDamage(target, QStageState)) && CastQ(target, mode, selected, orbwalker);
+    if (Lethal(target, RDamage(target)) && CastR(target, mode)) return true;
+    if (Lethal(target, WDamage(target)) && CastW(target, mode, true)) return true;
+    return Lethal(target, QDamage(target, QStageState)) && CastQ(target, mode);
 }
 
-inline bool TryCombo(const AIHeroClient& target, bool selected, bool orbwalker) {
+inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
     if (!IsRActive() && target.HealthPercent() <= Slider(UltimateMenu, "RStartHP", 70) &&
-        CastR(target, Mode::Combo, selected, orbwalker)) return true;
-    if (IsQWindowOpen() && QStageState == 3 && CastQ(target, Mode::Combo, selected, orbwalker)) return true;
-    if (CastW(target, Mode::Combo, selected, orbwalker)) return true;
-    if (!IsQWindowOpen() && CastE(target, Mode::Combo, selected, orbwalker)) return true;
-    if (CastQ(target, Mode::Combo, selected, orbwalker)) return true;
+        CastR(target, Mode::Combo)) return true;
+    if (IsQWindowOpen() && QStageState == 3 && CastQ(target, Mode::Combo)) return true;
+    if (CastW(target, Mode::Combo)) return true;
+    if (!IsQWindowOpen() && CastE(target, Mode::Combo)) return true;
+    if (CastQ(target, Mode::Combo)) return true;
     if (IsRActive() && target.HealthPercent() <= Slider(UltimateMenu, "ExecuteHP", 55) &&
-        CastR(target, Mode::Combo, selected, orbwalker)) return true;
+        CastR(target, Mode::Combo)) return true;
     return false;
 }
 
-inline bool TryHarass(const AIHeroClient& target, bool selected, bool orbwalker) {
+inline bool TryHarass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || GameObjects::Player().HealthPercent() < 45.0f) return false;
-    if (CastQ(target, Mode::Harass, selected, orbwalker)) return true;
-    return CastW(target, Mode::Harass, selected, orbwalker);
+    if (CastQ(target, Mode::Harass)) return true;
+    return CastW(target, Mode::Harass);
 }
 
 inline bool TryFlee(const AIHeroClient& threat) {
-    if (CastE(threat, Mode::Flee, false, true, true, true)) return true;
-    if (Engine::ValidEnemy(threat) && CastQ(threat, Mode::Flee, false, true, true)) return true;
-    return Engine::ValidEnemy(threat) && CastW(threat, Mode::Flee, false, true, true);
+    if (CastE(threat, Mode::Flee, true, true)) return true;
+    if (Engine::ValidEnemy(threat) && CastQ(threat, Mode::Flee, true)) return true;
+    return Engine::ValidEnemy(threat) && CastW(threat, Mode::Flee, true);
 }
 
 inline bool TryFarm(Mode mode) {
@@ -283,17 +264,15 @@ inline bool TryFarm(Mode mode) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    const bool selectedTarget = Engine::ValidEnemy(selected);
-    AIHeroClient target = selectedTarget ? selected : Engine::SelectTarget(kRRange + 60.0f);
-    const bool orbwalkerTarget = !selectedTarget && Engine::ValidEnemy(target);
+    const AIHeroClient target = Engine::SelectTarget(kRRange + 60.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 900.0f);
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
-    if (TryKillSecure(target, mode, selectedTarget, orbwalkerTarget)) return true;
+    if (TryKillSecure(target, mode)) return true;
     switch (mode) {
-    case Mode::Combo: (void)TryCombo(target, selectedTarget, orbwalkerTarget); break;
-    case Mode::Harass: (void)TryHarass(target, selectedTarget, orbwalkerTarget); break;
+    case Mode::Combo: (void)TryCombo(target); break;
+    case Mode::Harass: (void)TryHarass(target); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit: (void)TryFarm(mode); break;
@@ -301,10 +280,9 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         if (Engine::ValidEnemy(target) && AutomaticAllowed({
                 IncomingHardCCUntil > Now(), IncomingHardCCUntil > Now(),
                 Lethal(target, RDamage(target)), false })) {
-            if (IncomingHardCCUntil > Now() && CastW(threat, Mode::Automatic,
-                                                    selectedTarget, orbwalkerTarget, true))
+            if (IncomingHardCCUntil > Now() && CastW(threat, Mode::Automatic, true))
                 break;
-            (void)TryKillSecure(target, Mode::Automatic, selectedTarget, orbwalkerTarget);
+            (void)TryKillSecure(target, Mode::Automatic);
         }
         break;
     default: break;
@@ -325,19 +303,17 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (args.IsAutoAttack) { LastAutoTick = now; LastAutoTargetId = static_cast<int>(args.TargetNetworkId); return; }
     const int slot = args.Slot;
     const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
     if (slot == 0) {
         QLastCastTick = now; QWindowExpireTick = now + kQRecastWindowMs;
-        QWasManual = !owned;
         if (owned && QCastPendingEvent) {
             QCastPendingEvent = false;
         } else {
             QStageState = NextQStage(QStageState);
         }
-    } else if (slot == 1) { WLastCastTick = now; WWasManual = !owned; }
-    else if (slot == 2) { ELastCastTick = now; EWasManual = !owned; }
+    } else if (slot == 1) { WLastCastTick = now; }
+    else if (slot == 2) { ELastCastTick = now; }
     else if (slot == 3) {
-        RLastCastTick = now; RWasManual = !owned;
+        RLastCastTick = now;
         if (Engine::TextContains(args.SpellName, "Izuna") || Engine::TextContains(args.SpellName, "WindSlash")) RActive = false;
         else RActive = true;
     }
@@ -377,10 +353,8 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RivenMechanics", "Riven Q weave and safety"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     ChainMenu = TacticsMenu->AddSubMenu(new Menu("BrokenWings", "Q chain timing"));
     ChainMenu->Add(new MenuBool("HoldThirdQ", "Hold Q3 for knock-up", true));
-    ChainMenu->Add(new MenuBool("RespectCursor", "Respect cursor dash intent", true));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu("BladeOfExile", "R execute policy"));
     UltimateMenu->Add(new MenuSlider("RStartHP", "Activate R below target HP (%)", 70, 20, 100));
     UltimateMenu->Add(new MenuSlider("ExecuteHP", "Wind Slash execute HP (%)", 55, 10, 100));
@@ -394,10 +368,9 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     QStageState = 1; QLastCastTick = QWindowExpireTick = WLastCastTick = ELastCastTick = RLastCastTick = 0;
-    RBuffExpireTick = LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = PlayerOverrideUntil = AttackWindupUntil = 0;
+    RBuffExpireTick = LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = AttackWindupUntil = 0;
     QTargetId = 0; LastQEndpoint = LastEEndpoint = LastREndpoint = {};
     RActive = false; QCastPendingEvent = false;
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     ReconcileState();
 }
 inline void OnUnload() {
@@ -414,19 +387,16 @@ inline constexpr const char* Scenarios[] = {
     "Reject Q dash endpoints in walls or zero-length directions",
     "Use Ki Burst only inside its 260-range stun radius",
     "Respect spell shields, invulnerability, and stasis before W",
-    "Use Valor as a shielded cursor-respecting dash",
-    "Reject E endpoints under a new turret unless lethal or manual",
+    "Use Valor as a safe shielded dash",
+    "Reject E endpoints under a new turret unless lethal",
     "Limit E destination enemy count outside fleeing or lethal routes",
     "Activate Blade of the Exile only for an intended commit",
     "Track R activation and Wind Slash recast through buff and spell names",
     "Evaluate Wind Slash line width, wall safety, and endpoint safety",
     "Require lethal, execute-window, defensive, or multi-target value for R2",
     "Scale Q, W, E shield, and R damage with pinned rank arithmetic",
-    "Preserve selected target before orbwalker fallback",
     "Preserve attack windup unless the cast is lethal or reactive",
-    "Yield to manual Q/W/E/R casts for the configured ownership window",
-    "Reconcile manual Q stage without erasing observed R or E state",
-    "Combo starts E only when the cursor endpoint is safe",
+    "Combo starts E only when the predicted endpoint is safe",
     "Combo sequences Q/W/E and finishes with R execute",
     "Harass uses Q/W and does not unsolicitedly activate R",
     "LaneClear and Jungle use shared farm logic without spending R",
@@ -445,7 +415,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIRiven.md";
     controller.ImplementationSummary =
-        "Q chain timing and AA weaving, W stun gating, cursor-safe E shield/dash, "
+        "Q chain timing and AA weaving, W stun gating, safe E shield/dash, "
         "R activation and Wind Slash execute line, wall/turret endpoint safety, and event reconciliation.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);

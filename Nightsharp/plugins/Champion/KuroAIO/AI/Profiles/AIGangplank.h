@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Gangplank = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "GangplankPassive";
@@ -87,7 +86,7 @@ inline constexpr ChampionProfile Gangplank = [] {
     p.Flee = Plan("Scurvy and barrage peel",
         Step(SDK::SpellSlot::W, StepRule::RequireNoCrowdControl | StepRule::RequirePlayerLow, 0, 700),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 80, 900),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly, 150, 1500));
+        Step(SDK::SpellSlot::R, StepRule::RequireMultiTarget | StepRule::RequireSafePosition, 150, 1500));
     return p;
 }();
 

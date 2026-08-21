@@ -181,14 +181,13 @@ inline bool MayDash(const DashSafety& context) {
 
 inline bool ShouldCastUltimate(bool ready,
                                bool active,
-                               bool manual,
                                bool committed,
                                bool lethal,
                                bool safe,
                                int nearbyEnemies,
                                int minimumEnemies) {
     if (!ready || active || !safe) return false;
-    if (manual || lethal) return true;
+    if (lethal) return true;
     return committed && nearbyEnemies >= std::max(1, minimumEnemies);
 }
 

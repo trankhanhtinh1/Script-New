@@ -36,7 +36,6 @@ inline int PassiveStacks = 0;
 inline int LastPassiveObservationTick = 0;
 inline int LastCastTick[4] = {};
 inline int LastAutoTargetId = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline int IncomingThreatUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -306,10 +305,9 @@ inline void ReconcileState() {
     if (PassiveStacks > 10000) PassiveStacks = 10000;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kRRange);
+    const AIHeroClient target = Engine::SelectTarget(kRRange);
     if (mode == Mode::Flee) Flee(target);
     else if (mode == Mode::Automatic) Automatic(target);
     else if (mode == Mode::Combo) Combo(target);
@@ -320,7 +318,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 }
 
 inline void OnLoad() {
-    PassiveStacks = 0; LastPassiveObservationTick = 0; ManualOverrideUntil = 0;
+    PassiveStacks = 0; LastPassiveObservationTick = 0;
     IncomingThreatTargetId = IncomingThreatUntil = GapcloserTargetId = GapcloserUntil = 0;
     InterruptTargetId = InterruptUntil = CageTargetId = CageExpireTick = 0;
     CageStunnedTargetId = MeteorTargetId = MeteorImpactTick = 0;
@@ -332,9 +330,6 @@ inline void OnUnload() { TacticsMenu = nullptr; FarmMenu = nullptr; UltimateMenu
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     if (IsLocalPlayer(args.Sender)) {
-        const bool owned = args.Slot >= 0 && args.Slot < 4 &&
-            Engine::WasControllerCast(static_cast<int>(args.Slot));
-        if (!owned) ManualOverrideUntil = Now() + ControllerHelpers::Slider(TacticsMenu, "ManualOwnershipMs", 550);
         if (args.Slot >= 0 && args.Slot < 4) {
             LastCastTick[static_cast<std::size_t>(args.Slot)] = Now();
         }
@@ -405,7 +400,6 @@ inline void OnDraw() {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("VeigarTactics", "AP stacks and cage policy"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 550, 150, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 0, 100));
     TacticsMenu->Add(new MenuSlider("MaxCageEnemies", "Maximum enemies at cage center", 2, 1, 5));
     TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum enemies for execute", 2, 1, 5));
@@ -424,7 +418,7 @@ inline constexpr const char* Scenarios[] = {
     "W meteor impact delay, passive cooldown reduction and cage-stun setup",
     "E Event Horizon edge placement, terrain, turret and enemy-count safety",
     "R missing-health execute damage and shield-aware lethal gate",
-    "Combo cage-safe priority and manual auto-attack windup protection",
+    "Combo cage-safe priority and auto-attack windup protection",
     "Harass Q poke, lane clear Q line, jungle meteor and Q LastHit",
     "Flee peel cage and Automatic gapcloser or interrupt response",
 };

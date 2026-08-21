@@ -131,7 +131,7 @@ inline constexpr ChampionProfile AurelionSol = [] {
     p.ThemeTo = 0xFF8A52FFu;
     p.ThemeSpeed = 0.62f;
     p.TacticalSummary =
-        "Keep movement, cursor steering and attacks player-owned; expose the "
+        "Automate movement, cursor-guided steering and attacks; expose the "
         "real first Q body and preserve continuous burst contact; cast W only "
         "on sampled offset routes that retain Q range while avoiding live CC; "
         "place E for champion-seconds, executions, cannon waves and line "

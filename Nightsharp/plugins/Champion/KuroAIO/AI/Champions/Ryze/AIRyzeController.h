@@ -21,7 +21,6 @@ using ControllerHelpers::CaptureGapcloser;
 using ControllerHelpers::CaptureInterruptable;
 using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::CountAlliedFollowup;
-using ControllerHelpers::CursorDirectionAgrees;
 using ControllerHelpers::EnemyFlashReady;
 using ControllerHelpers::EnemySpellReady;
 using ControllerHelpers::HasEnemyChampionNear;
@@ -67,7 +66,6 @@ enum class Sequence : std::uint8_t {
     FluxBridge,
     WaveEEQ,
     JungleBranch,
-    PlayerResetAssist,
     RealmWarpChannel,
 };
 
@@ -105,7 +103,7 @@ struct EPlan {
 struct WarpPlan {
     Vector3 Destination = {};
     CastEvaluation Evaluation = {};
-    WarpPurpose Purpose = WarpPurpose::ManualCursor;
+    WarpPurpose Purpose = WarpPurpose::EmergencyEscape;
     int AlliesInPortal = 1;
     bool Valid = false;
 };
@@ -170,8 +168,6 @@ inline constexpr std::array<MobilityRule, 39> MobilityRules = {
     MobilityRule{ SDK::ChampionId::Yone, SDK::SpellSlot::E },
     MobilityRule{ SDK::ChampionId::Zed, SDK::SpellSlot::W },
 };
-inline constexpr int kManualOwnershipMs = 520;
-inline constexpr int kManualResetWindowMs = 1100;
 inline constexpr int kCombatSequenceMs = 4200;
 inline constexpr int kWaveSequenceMs = 5600;
 
@@ -224,10 +220,6 @@ inline int LastLocalAutoTick = 0;
 inline std::array<int, 4> LastRegisteredCastTick = {};
 inline std::array<int, 4> LastRegisteredTargetId = {};
 
-inline int PlayerOverrideUntil = 0;
-inline int ManualResetTargetId = 0;
-inline int ManualResetCastTick = 0;
-inline int ManualResetExpireTick = 0;
 inline int RootedTargetId = 0;
 inline int RootedUntilTick = 0;
 inline int WarpChannelUntil = 0;
@@ -466,28 +458,6 @@ inline float DefensiveManaReserve() {
     return reserve;
 }
 
-inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
-                                   float range = 1120.0f) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const AIHeroClient locked = HeroByNetworkId(Engine::LockedTargetNetworkId);
-    if (Engine::ValidEnemy(locked, range)) return locked;
-    const auto player = GameObjects::Player();
-    AIHeroClient best{};
-    float bestScore = -FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy, range)) continue;
-        float score = (100.0f - enemy.HealthPercent()) * 2.4f -
-            player.Position().Distance2D(enemy.Position()) * 0.10f;
-        score += std::max(enemy.TotalAttackDamage(), enemy.AP() * 0.78f) * 0.24f;
-        if (Engine::IsHardCrowdControlled(enemy)) score += 260.0f;
-        if (Fluxed(static_cast<int>(enemy.NetworkId()))) score += 150.0f;
-        if (score > bestScore) {
-            best = enemy;
-            bestScore = score;
-        }
-    }
-    return best;
-}
 
 inline AIHeroClient ProtectedAlly() {
     return RawAllyById(ProtectedAllyId);
@@ -662,10 +632,6 @@ inline QPlan BuildQPlan(const AIBaseClient& intended,
             ComboMenu, "PreserveSpeedQ", true);
         context.PriorityVictimHitByFluxSpread =
             priorityVictimId != intendedId && priorityHit;
-        context.CursorAgrees = purpose == QPurpose::Clear ||
-            purpose == QPurpose::Objective ||
-            CursorDirectionAgrees(priority.Position(), -0.16f) ||
-            (Orbwalker::ActiveMode() == OrbwalkingMode::Combo);
         context.FluxVictims = std::max(1, static_cast<int>(victims.size()));
         context.NearbyEnemies = priority.IsHero()
             ? Engine::CountEnemiesAt(priority.Position(), 650.0f) : 1;
@@ -994,8 +960,6 @@ inline QPurpose SequenceQPurpose() {
     if (ActiveSequence == Sequence::FluxBridge) return QPurpose::FluxBurst;
     if (ActiveSequence == Sequence::WaveEEQ) return QPurpose::Clear;
     if (ActiveSequence == Sequence::JungleBranch) return QPurpose::Objective;
-    if (ActiveSequence == Sequence::PlayerResetAssist)
-        return QPurpose::ManualResetAssist;
     if (ActiveSequence == Sequence::ReactiveRoot) return QPurpose::SpeedExit;
     if (ActiveBranch == ComboBranch::FastTradeQEQ) return QPurpose::Harass;
     if (ActiveBranch == ComboBranch::ImmediateRootWQEQ ||
@@ -1181,8 +1145,7 @@ inline int AlliesInPortal(const Vector3& origin) {
     return count;
 }
 
-inline WarpPlan BuildWarpPlan(WarpPurpose purpose,
-                              bool manualAuthorized) {
+inline WarpPlan BuildWarpPlan(WarpPurpose purpose) {
     WarpPlan plan{};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3)) return plan;
@@ -1192,9 +1155,6 @@ inline WarpPlan BuildWarpPlan(WarpPurpose purpose,
     WarpContext context{};
     context.Ready = true;
     context.HasMana = player.Mana() + 0.5f >= SpellCost(3);
-    context.ManualAuthorized = manualAuthorized;
-    context.AutomaticEmergencyOptIn = Bool(
-        WarpMenu, "EmergencyOptIn", false);
     context.OriginValid = player.Position().IsValid();
     context.DestinationValid = destination.IsValid();
     context.DestinationNavigable = !SDK::NavMesh::IsWall(destination);
@@ -1206,8 +1166,6 @@ inline WarpPlan BuildWarpPlan(WarpPurpose purpose,
         HasReadyPointClickThreatAt(player.Position());
     context.AllyChannelWouldBeBroken =
         ProtectedAllyChannelInPortal(player.Position());
-    context.CursorAgrees = CursorDirectionAgrees(destination, 0.80f);
-    context.AllowUnsafeManual = Bool(WarpMenu, "UnsafeManual", false);
     context.PlayerInLethalDanger = player.HealthPercent() <=
         static_cast<float>(Slider(WarpMenu, "EmergencyHp", 17)) &&
         Engine::CountEnemiesAt(player.Position(), 700.0f) > 0;
@@ -1235,25 +1193,12 @@ inline bool CastWarpPlan(const WarpPlan& plan) {
     return true;
 }
 
-inline bool ManualWarpKeyActive() {
-    const auto* key = WarpMenu
-        ? WarpMenu->Get<MenuKeyBind>("ManualWarp") : nullptr;
-    return key && key->Active;
-}
 
-inline bool TryRealmWarp(bool allowEmergency) {
+
+inline bool TryRealmWarp() {
     if (!Ready(3) || WarpChannelUntil >= Now()) return false;
-    if (ManualWarpKeyActive()) {
-        return CastWarpPlan(BuildWarpPlan(
-            WarpPurpose::ManualCursor, true));
-    }
-    if (allowEmergency && Bool(WarpMenu, "EmergencyOptIn", false)) {
-        return CastWarpPlan(BuildWarpPlan(
-            WarpPurpose::EmergencyEscape, false));
-    }
-    return false;
+    return CastWarpPlan(BuildWarpPlan(WarpPurpose::EmergencyEscape));
 }
-
 inline bool TryFluxBridge(const AIHeroClient& victim,
                           bool harass) {
     if (!Bool(FluxMenu, "IndirectEQ", true) ||
@@ -1278,25 +1223,6 @@ inline bool TryFluxBridge(const AIHeroClient& victim,
     return TryActiveSequence();
 }
 
-inline bool TryManualResetAssist(Mode mode) {
-    if (!Bool(ComboMenu, "AssistManualReset", true) ||
-        ManualResetTargetId == 0 || Now() > ManualResetExpireTick ||
-        Now() - ManualResetCastTick < 35 ||
-        (mode != Mode::Combo && mode != Mode::Harass && mode != Mode::Flee)) {
-        return false;
-    }
-    const AIBaseClient target = UnitByNetworkId(ManualResetTargetId);
-    if (!target.IsValid() || !target.IsHero() || !Ready(0)) return false;
-    const QPlan plan = BuildQPlan(
-        target, ManualResetTargetId,
-        QPurpose::ManualResetAssist, false);
-    if (!plan.Valid) return false;
-    if (!CastQPlan(plan, false)) return false;
-    ManualResetTargetId = 0;
-    ManualResetExpireTick = 0;
-    ActiveSequence = Sequence::PlayerResetAssist;
-    return true;
-}
 
 inline bool BeginReactiveRoot(const AIHeroClient& target,
                               bool interrupt) {
@@ -1462,8 +1388,7 @@ inline ComboContext RuntimeComboContext(const AIHeroClient& target,
     return context;
 }
 
-inline bool TryCombo(const AIHeroClient& selected) {
-    const AIHeroClient target = PreferredEnemy(selected, 1120.0f);
+inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
     CurrentPosture = Posture::RootCatch;
     const auto player = GameObjects::Player();
@@ -1492,10 +1417,9 @@ inline bool TryCombo(const AIHeroClient& selected) {
     return false;
 }
 
-inline bool TryHarass(const AIHeroClient& selected) {
+inline bool TryHarass(const AIHeroClient& target) {
     if (PlayerManaPercent() < static_cast<float>(Slider(
             ComboMenu, "HarassMana", 47))) return false;
-    const AIHeroClient target = PreferredEnemy(selected, 1080.0f);
     if (!Engine::ValidEnemy(target)) return false;
     CurrentPosture = Posture::ShortTrade;
     const auto player = GameObjects::Player();
@@ -1535,9 +1459,9 @@ inline AIHeroClient NearestPursuer(const AIHeroClient& fallback = {}) {
     return best;
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
+inline bool TryFlee(const AIHeroClient& target) {
     CurrentPosture = Posture::Kite;
-    const AIHeroClient pursuer = NearestPursuer(selected);
+    const AIHeroClient pursuer = NearestPursuer(target);
     if (Engine::ValidEnemy(pursuer, kERange + 100.0f) &&
         BeginReactiveRoot(pursuer, false)) return true;
     if (Engine::ValidEnemy(pursuer, kQRange + 80.0f) && Ready(0) &&
@@ -1547,7 +1471,7 @@ inline bool TryFlee(const AIHeroClient& selected) {
             QPurpose::SpeedExit, true);
         if (CastQPlan(q, true)) return true;
     }
-    return TryRealmWarp(true);
+    return TryRealmWarp();
 }
 
 inline bool TryBestFluxedWaveQ(int minimumVictims, QPurpose purpose) {
@@ -1689,7 +1613,6 @@ inline void RefreshRuntimeState() {
         }
     }
     if (RootedUntilTick < now) RootedTargetId = 0;
-    if (ManualResetExpireTick < now) ManualResetTargetId = 0;
     if (GapcloserExpireTick < now) GapcloserTargetId = 0;
     if (InterruptExpireTick < now) InterruptTargetId = 0;
     if (PeelThreatUntil < now) PeelThreatId = 0;
@@ -1704,29 +1627,29 @@ inline void RefreshRuntimeState() {
         ? static_cast<int>(protectedAlly.NetworkId()) : 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     RefreshRuntimeState();
     const auto player = GameObjects::Player();
     if (!player.IsValid() || player.IsDead()) return true;
 
-    if (TryRealmWarp(false)) return true;
     if (WarpChannelUntil >= Now() ||
         ActiveSequence == Sequence::RealmWarpChannel) return true;
-    if (TryManualResetAssist(mode)) return true;
     if (TryInterrupt()) return true;
     if (TryGapcloser()) return true;
     if (TryPeel()) return true;
-    if (PlayerOverrideUntil >= Now()) return true;
     if (ActiveSequence != Sequence::None) {
         (void)TryActiveSequence();
         return true;
     }
-    if (TryKillSecure(PreferredEnemy(selected, 1120.0f))) return true;
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? kQRange + 80.0f : 1120.0f);
+    if (TryKillSecure(target)) return true;
 
     CurrentPosture = Posture::Neutral;
-    if (mode == Mode::Combo) return TryCombo(selected);
-    if (mode == Mode::Harass) return TryHarass(selected);
-    if (mode == Mode::Flee) return TryFlee(selected);
+    if (mode == Mode::Combo) return TryCombo(target);
+    if (mode == Mode::Harass) return TryHarass(target);
+    if (mode == Mode::Flee) return TryFlee(target);
     if (mode == Mode::Jungle) {
         CurrentPosture = Posture::Farm;
         return TryJungleFarm();
@@ -1779,29 +1702,12 @@ inline void ObserveLocalSpell(
     const int slot = EventSlot(args);
     if (slot < 0) return;
     const int targetId = EventTargetId(args);
-    const bool controllerOwned = Engine::WasControllerCast(slot, 700);
     RegisterLocalSpellState(slot, targetId);
-    if (controllerOwned) return;
-
-    ClearSequence();
-    PlayerOverrideUntil = Now() + Slider(
-        TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
-    if ((slot == 1 || slot == 2) && targetId != 0 &&
-        Bool(ComboMenu, "AssistManualReset", true)) {
-        const AIBaseClient target = UnitByNetworkId(targetId);
-        if (target.IsValid() && target.IsHero()) {
-            ManualResetTargetId = targetId;
-            ManualResetCastTick = Now();
-            ManualResetExpireTick = Now() + kManualResetWindowMs;
-        }
-    }
     if (slot == 3) {
-        WarpChannelUntil = Now() + static_cast<int>(
-            (kRealmWarpChargeSeconds + kRealmWarpTeleportSeconds) * 1000.0f);
         ActiveSequence = Sequence::RealmWarpChannel;
     }
-}
 
+}
 inline void OnProcessSpell(
     const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
@@ -1901,7 +1807,6 @@ inline const char* SequenceName(Sequence sequence) {
     case Sequence::FluxBridge: return "indirect EQ";
     case Sequence::WaveEEQ: return "wave EEQ";
     case Sequence::JungleBranch: return "jungle resets";
-    case Sequence::PlayerResetAssist: return "player reset";
     case Sequence::RealmWarpChannel: return "R channel";
     default: return "none";
     }
@@ -1927,7 +1832,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kQRange,
                             0x665C9DFFu, 1.25f, 72);
         Drawing::DrawCircle(player.Position(), kERange,
@@ -1937,7 +1842,7 @@ inline void OnDraw() {
                                 0x334C79FFu, 1.0f, 96);
         }
     }
-    if (Bool(CoachMenu, "DrawQ", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawQ", false) && LastQPlan.Valid) {
         const std::uint32_t color = LastQPlan.Lethal
             ? 0xFFF5C84Cu
             : (LastQPlan.PriorityVictimId != LastQPlan.IntendedBodyId
@@ -1950,7 +1855,7 @@ inline void OnDraw() {
                 kQMissileRadius + 18.0f, color, 2.0f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawFlux", true)) {
+    if (Bool(CoachMenu, "DrawFlux", false)) {
         for (const auto& record : FluxRecords) {
             if (record.NetworkId == 0 || record.ExpiresTick <= Now()) continue;
             const AIBaseClient unit = UnitByNetworkId(record.NetworkId);
@@ -1971,7 +1876,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawProtected", true)) {
+    if (Bool(CoachMenu, "DrawProtected", false)) {
         const AIHeroClient ally = ProtectedAlly();
         if (ally.IsValid()) {
             Drawing::DrawCircle(
@@ -1979,7 +1884,7 @@ inline void OnDraw() {
                 0xAA69E8A8u, 1.5f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawWarp", true) && LastWarpPlan.Valid) {
+    if (Bool(CoachMenu, "DrawWarp", false) && LastWarpPlan.Valid) {
         Drawing::DrawCircle(
             LastWarpPlan.Destination, kRealmWarpRadius,
             0xCC6E7DFFu, 2.0f, 64);
@@ -1987,7 +1892,7 @@ inline void OnDraw() {
             player.Position(), LastWarpPlan.Destination,
             0x887A91FFu, 1.3f);
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             const RuneLedger runes = NormalizeRunes(
@@ -1995,10 +1900,9 @@ inline void OnDraw() {
             char state[512]{};
             _snprintf_s(
                 state, sizeof(state), _TRUNCATE,
-                "Ryze OTP | %s | %s %s | runes %d | owner %s",
+                "Ryze OTP | %s | %s %s | runes %d",
                 PostureName(CurrentPosture), SequenceName(ActiveSequence),
-                BranchName(ActiveBranch), runes.Stacks,
-                PlayerOverrideUntil >= Now() ? "player" : "controller");
+                BranchName(ActiveBranch), runes.Stacks);
             Drawing::DrawText(
                 screen.x - 245.0f, screen.y - 110.0f,
                 0xFFD7F6FFu, state);
@@ -2014,15 +1918,9 @@ inline void BuildMenu(Menu* root) {
         "KillSecure", "Secure mitigated spells", true));
     TacticsMenu->Add(new MenuSlider(
         "KiteHp", "2-rune escape HP (%)", 36, 5, 80));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)",
-        kManualOwnershipMs, 150, 1000));
-    TacticsMenu->Add(new MenuSeparator(
-        "Ownership",
-        "Movement, target selection,"));
 
     ComboMenu = TacticsMenu->AddSubMenu(new Menu(
-        "ComboRhythm", "Reset cadence, roots and auto-weave windows"));
+        "ComboRhythm", "Reset cadence and weave windows"));
     ComboMenu->Add(new MenuBool(
         "FullDps", "Use Q-E-Q-W-Q-E-Q on", true));
     ComboMenu->Add(new MenuBool(
@@ -2031,8 +1929,6 @@ inline void BuildMenu(Menu* root) {
         "PreserveSpeedQ", "Preserve 2-rune Q", true));
     ComboMenu->Add(new MenuBool(
         "WeaveAutos", "Leave safe cooldown gaps to", true));
-    ComboMenu->Add(new MenuBool(
-        "AssistManualReset", "Buffer Q after W/E", true));
     ComboMenu->Add(new MenuSlider(
         "HarassMana", "Min mana Q-E-Q (%)", 47, 0, 100));
     ComboMenu->Add(new MenuSeparator(
@@ -2040,7 +1936,7 @@ inline void BuildMenu(Menu* root) {
         "W and E reset Overload;"));
 
     FluxMenu = TacticsMenu->AddSubMenu(new Menu(
-        "SpellFlux", "First-body Q, indirect E-Q and four-second marks"));
+        "SpellFlux", "Q bodies, indirect E-Q, 4s marks"));
     FluxMenu->Add(new MenuList(
         "QHitchance", "Ordinary moving Q prediction",
         { "Medium", "High", "Very high", "Immobile only" }, 2));
@@ -2051,7 +1947,7 @@ inline void BuildMenu(Menu* root) {
         "Every Q resolves moving"));
 
     PrisonMenu = TacticsMenu->AddSubMenu(new Menu(
-        "RunePrison", "Root conversion, interrupt and protected-carry peel"));
+        "RunePrison", "Root, interrupt, and carry peel"));
     PrisonMenu->Add(new MenuBool(
         "Interrupt", "E-W root channels", true));
     PrisonMenu->Add(new MenuBool(
@@ -2065,7 +1961,7 @@ inline void BuildMenu(Menu* root) {
         "Unfluxed W is treated as a"));
 
     WaveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Wave", "E-E-Q compression, exact Q last hits and jungle resets"));
+        "Wave", "E-E-Q wave, last hits, jungle"));
     WaveMenu->Add(new MenuBool(
         "Lane", "Champion Flux wave logic", true));
     WaveMenu->Add(new MenuBool(
@@ -2089,34 +1985,27 @@ inline void BuildMenu(Menu* root) {
         "The chosen second-E and Q"));
 
     WarpMenu = TacticsMenu->AddSubMenu(new Menu(
-        "RealmWarp", "Player-authorized endpoint and portal safety"));
-    WarpMenu->Add(new MenuKeyBind(
-        "ManualWarp", "Safe Realm Warp toward cursor [G]",
-        SDK::Keys::G, KeyBindType::Press));
-    WarpMenu->Add(new MenuBool(
-        "EmergencyOptIn", "R escape lethal HP", false));
+        "RealmWarp", "Autonomous portal safety"));
     WarpMenu->Add(new MenuSlider(
-        "EmergencyHp", "Emergency R HP (%)", 17, 5, 50));
-    WarpMenu->Add(new MenuBool(
-        "UnsafeManual", "Allow manual turret/blind", false));
+        "EmergencyHp", "Flee R HP (%)", 17, 5, 50));
     WarpMenu->Add(new MenuSeparator(
         "NoAbduction",
         "R rejects walls, losing"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "Ryze one-trick geometry and reset state"));
+        "Coach", "Ryze geometry and reset state"));
     CoachMenu->Add(new MenuBool(
-        "DrawRanges", "Draw Q, W/E and ready-R ranges", true));
+        "DrawRanges", "Draw Q, W/E and ready-R ranges", false));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q line/first body", true));
+        "DrawQ", "Draw Q line/first body", false));
     CoachMenu->Add(new MenuBool(
-        "DrawFlux", "Draw Flux expiry", true));
+        "DrawFlux", "Draw Flux expiry", false));
     CoachMenu->Add(new MenuBool(
-        "DrawProtected", "Mark protected ally", true));
+        "DrawProtected", "Mark protected ally", false));
     CoachMenu->Add(new MenuBool(
-        "DrawWarp", "Draw last Warp dest", true));
+        "DrawWarp", "Draw last Warp dest", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw posture/runes", true));
+        "DrawState", "Draw posture/runes", false));
 }
 
 inline void OnLoad() {
@@ -2144,8 +2033,7 @@ inline void OnLoad() {
     LastLocalAutoTargetId = LastLocalAutoTick = 0;
     LastRegisteredCastTick.fill(0);
     LastRegisteredTargetId.fill(0);
-    PlayerOverrideUntil = ManualResetTargetId = ManualResetCastTick = 0;
-    ManualResetExpireTick = RootedTargetId = RootedUntilTick = 0;
+    RootedTargetId = RootedUntilTick = 0;
     WarpChannelUntil = LastWeaveOpportunityTick = 0;
     RefreshRuntimeState();
 }
@@ -2178,7 +2066,7 @@ inline constexpr const char* Scenarios[] = {
     "Read live Q, W, E and R mana costs from the spellbook",
     "Price every combo branch independently",
     "Reserve E-W-Q mana during nonlethal harass",
-    "Allow an all-in to spend the defensive reserve only in its selected branch",
+    "Allow an all-in to spend the defensive reserve only in its chosen branch",
     "Use Q cast delay 0.25 seconds",
     "Use Q missile speed 1700",
     "Use Q missile radius 55 plus target bounding radius",
@@ -2207,8 +2095,8 @@ inline constexpr const char* Scenarios[] = {
     "Allow medium Q after a verified root, dash endpoint or peel emergency",
     "Preserve attack windup before ordinary Q",
     "Allow reactive or lethal Q to preempt an attack windup",
-    "Respect player cursor direction for proactive champion Q",
-    "Ignore cursor disagreement for explicit wave and objective Q",
+    "Use predicted champion Q direction for ordinary casts",
+    "Use deterministic wave and objective Q corridors",
     "Track each target's Spell Flux expiry independently",
     "Refresh Flux from confirmed buff add and update events",
     "Remove Flux immediately on confirmed buff removal",
@@ -2274,7 +2162,7 @@ inline constexpr const char* Scenarios[] = {
     "Root a diver moving closer to the protected ally",
     "Do not peel an enemy outside the configured protection radius",
     "Use W slow as last-resort peel when E is unavailable",
-    "Keep Orbwalker ownership of every basic attack",
+    "Keep Orbwalker control of every basic attack",
     "Never issue a movement order to create spell range",
     "Never issue an attack order to force an auto weave",
     "Expose safe cooldown gaps so Orbwalker can weave an auto",
@@ -2283,16 +2171,10 @@ inline constexpr const char* Scenarios[] = {
     "Do not weave inside the W/E-to-Q buffer window",
     "Do not weave before a lethal Q",
     "Do not weave before critical peel",
-    "Preserve a player-issued attack even near the next reset",
+    "Preserve an attack windup near the next reset",
     "Track before-attack, after-attack and local auto events separately",
-    "Yield controller ownership after every player spell cast",
-    "Clear an automatic sequence when the player changes the spell cadence",
-    "Optionally assist a player W with one clean buffered Q",
-    "Optionally assist a player E with one clean buffered Q",
-    "Never change the aim of a player-cast Q",
-    "Never auto-assist a manual W or E cast onto a nonchampion",
-    "Expire manual reset assistance after a bounded window",
-    "Keep Flash, movement, target selection and attack-move player-owned",
+    "Reconcile local spell events without changing autonomous cadence",
+    "Leave summoner spells, movement and attack-move to shared services",
     "Find an indirect E primary inside 550 range",
     "Require indirect E to mark the priority champion",
     "Require the chosen indirect Q body to survive E damage",
@@ -2327,14 +2209,12 @@ inline constexpr const char* Scenarios[] = {
     "Use lethal W when Q and E cannot secure",
     "Start lethal E-Q when E will reset a cooling Q",
     "Do not interrupt an active champion sequence with opportunistic kill secure",
-    "Clamp Realm Warp cursor endpoint to 3000 range",
-    "Reject Realm Warp cursor endpoints inside the 1000 minimum",
+    "Clamp Flee Realm Warp cursor endpoint to 3000 range",
+    "Reject Flee Realm Warp cursor endpoints inside the 1000 minimum",
     "Use portal radius 365 for allied occupancy",
     "Include allied bounding radius when evaluating portal occupants",
-    "Require explicit player key authorization for ordinary Realm Warp",
-    "Keep automatic emergency Realm Warp disabled by default",
-    "Require explicit opt-in and lethal-health danger for emergency Realm Warp",
-    "Use the player's cursor even for opted-in emergency escape",
+    "Require lethal danger before autonomous Flee Realm Warp",
+    "Use the Flee cursor for emergency escape placement",
     "Reject Realm Warp endpoint inside NavMesh wall",
     "Reject Realm Warp while rooted or grounded",
     "Reject Realm Warp channel into likely incoming crowd control",
@@ -2349,17 +2229,16 @@ inline constexpr const char* Scenarios[] = {
     "Use visible enemy presence as destination vision evidence",
     "Reject teleporting an allied protected channel inside the portal",
     "Recognize common allied channeled ultimates and Meditate",
-    "Permit explicit unsafe manual override only for endpoint danger gates",
-    "Do not let unsafe override bypass walls or rooted state",
+    "Reject endpoint danger rather than bypassing walls or rooted state",
     "Yield all spell logic throughout Realm Warp charge and teleport phase",
-    "Track both player-cast and controller-cast Realm Warp channels",
-    "Draw Q's selected corridor and actual moving first body",
+    "Track both local and controller Realm Warp channels",
+    "Draw Q's chosen corridor and actual moving first body",
     "Distinguish direct Q and indirect Flux bridge colors",
     "Draw confirmed and predicted Flux with remaining duration",
     "Draw current Rune count without reading mana as Rune state",
     "Draw the dynamically protected ally",
     "Draw last Warp dest",
-    "Expose posture, exact branch and player/controller ownership",
+    "Expose posture, exact branch and autonomous decision state",
     "Own Ryze's complete spell loop without generic Q-W-E-R fallback",
 };
 
@@ -2372,8 +2251,8 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Analytical moving first-body Q, independent four-second Flux and "
         "two-Rune ledgers, indirect wave E-Q, reset-aware QEQWQEQ/QEWQ/EWQ "
-        "branching, protected-carry roots, delayed EEQ clear, player-buffered "
-        "resets, and explicitly authorized no-abduction Realm Warp safety.";
+        "branching, protected-carry roots, delayed EEQ clear, and autonomous "
+        "no-abduction Realm Warp safety.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

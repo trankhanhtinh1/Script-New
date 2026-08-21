@@ -38,7 +38,6 @@ inline Vector3 GapcloserEndpoint = {};
 inline int IncomingThreatUntil = 0;
 inline int PendingUltimateTargetId = 0;
 inline int PendingUltimateUntil = 0;
-inline bool PendingUltimateManual = false;
 inline int OwnedFocusTargetId = 0;
 inline int OwnedFocusUntil = 0;
 inline Mode LastMode = Mode::None;
@@ -350,12 +349,10 @@ inline int CountConeTargets(const Vector3& aim,
 
 inline BulletTimeContext BuildBulletTimeContext(
     const AIHeroClient& target,
-    const Vector3& aim,
-    bool manual) {
+    const Vector3& aim) {
     const auto player = GameObjects::Player();
     const int count = CountConeTargets(aim);
     BulletTimeContext context{};
-    context.Manual = manual;
     context.SafeChannel = ChannelSafe();
     context.TargetInCone = player.IsValid() && DirectionConeContains(
         ToVec2(player.Position()), ToVec2(aim), ToVec2(aim),
@@ -373,15 +370,14 @@ inline BulletTimeContext BuildBulletTimeContext(
 }
 
 inline bool CastR(const AIHeroClient& target,
-                  Mode mode,
-                  bool manual) {
+                  Mode mode) {
     if (BulletTimeActive() || !Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target, 1400.0f) ||
         !CastThrottlePassed(LastRCastTick, 160)) return false;
-    if (!manual && !CanUse(3, mode)) return false;
+    if (!CanUse(3, mode)) return false;
     const Vector3 aim = ControllerHelpers::PredictPosition(target, 0.30f);
-    const auto context = BuildBulletTimeContext(target, aim, manual);
+    const auto context = BuildBulletTimeContext(target, aim);
     if (!ShouldStartBulletTime(context) ||
         !Engine::ControllerCastPosition(3, aim)) return false;
     LastRCastTick = Now();
@@ -418,7 +414,7 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     rain.Immobilized = IsImmobile(target);
     const bool e = eHit && ShouldMakeItRain(rain);
     const Vector3 rAim = ControllerHelpers::PredictPosition(target, 0.30f);
-    const auto rContext = BuildBulletTimeContext(target, rAim, false);
+    const auto rContext = BuildBulletTimeContext(target, rAim);
     const bool r = CanUse(3, mode) && distance <= 1400.0f &&
         ShouldStartBulletTime(rContext);
     const std::array<bool, 4> reachable = {q, false, e, r};
@@ -522,10 +518,6 @@ inline void RefreshLoveTapFocus(Mode mode,
     if (!current.IsValid()) current = smartTarget;
     if (!Engine::ValidEnemy(current) || !LoveTapMarked(current) ||
         !InAutoAttackRange(current)) return;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(800.0f);
-    if (selected.IsValid() && selected.NetworkId() == current.NetworkId()) {
-        return;
-    }
     const float currentTwoAutos = AutoDamage(current) * 2.0f;
     const bool currentKillableSoon = currentTwoAutos >=
         current.Health() + current.AllShield();
@@ -596,11 +588,10 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
 }
 
 inline bool TryUltimate(const AIHeroClient& target,
-                        Mode mode,
-                        bool manual) {
+                        Mode mode) {
     if (!Engine::ValidEnemy(target, 1400.0f)) return false;
     const Vector3 aim = ControllerHelpers::PredictPosition(target, 0.30f);
-    const auto ultimate = BuildBulletTimeContext(target, aim, manual);
+    const auto ultimate = BuildBulletTimeContext(target, aim);
     if (!ShouldStartBulletTime(ultimate)) return false;
     const bool controlled = IsImmobile(target) ||
         SDK::HasBuffOfType(target, SDK::BuffType::Slow);
@@ -611,21 +602,18 @@ inline bool TryUltimate(const AIHeroClient& target,
     if (canPrime && CastE(target, mode, false, true)) {
         PendingUltimateTargetId = static_cast<int>(target.NetworkId());
         PendingUltimateUntil = Now() + 1100;
-        PendingUltimateManual = manual;
         return true;
     }
-    return CastR(target, mode, manual);
+    return CastR(target, mode);
 }
 
 inline bool TryPendingUltimate(Mode mode) {
     if (PendingUltimateTargetId == 0) return false;
     if (Now() > PendingUltimateUntil) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
         return false;
     }
-    if (!PendingUltimateManual &&
-        mode != Mode::Combo && mode != Mode::Harass) {
+    if (mode != Mode::Combo && mode != Mode::Harass) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
         return false;
     }
@@ -633,23 +621,19 @@ inline bool TryPendingUltimate(Mode mode) {
         PendingUltimateTargetId);
     if (!Engine::ValidEnemy(target, 1400.0f)) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
         return false;
     }
     if (!ChannelSafe()) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
         return false;
     }
     const Vector3 aim = ControllerHelpers::PredictPosition(target, 0.30f);
     if (PositionProjectileWall(3, aim, 45.0f)) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
         return false;
     }
-    if (CastR(target, mode, PendingUltimateManual)) {
+    if (CastR(target, mode)) {
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
         return true;
     }
     // Keep the short E -> R plan stable while Make It Rain is landing. The
@@ -659,7 +643,7 @@ inline bool TryPendingUltimate(Mode mode) {
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
-    if (mode == Mode::Combo && TryUltimate(target, mode, false)) return true;
+    if (mode == Mode::Combo && TryUltimate(target, mode)) return true;
     if (CastQ(target, mode)) return true;
     return CastE(target, mode, false, false);
 }
@@ -678,12 +662,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     }
     if (TryPendingUltimate(
             combat ? mode : Mode::Automatic)) return true;
-    if (ManualUltimatePressed()) {
-        const auto target = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, 1400.0f);
-        if (Engine::ValidEnemy(target) &&
-            TryUltimate(target, Mode::Automatic, true)) return true;
-    }
     if (TryAntiGapcloser()) return true;
     if (TryKillSecure(preferred)) return true;
     if (combat) {
@@ -740,7 +718,6 @@ inline void ObserveSpell(
                    args, {"missfortunebullettime"})) {
         LastRCastTick = now;
         PendingUltimateTargetId = PendingUltimateUntil = 0;
-        PendingUltimateManual = false;
     }
 }
 
@@ -773,11 +750,11 @@ inline void BuildMenu(Menu* root) {
     LoveTapMenu = TacticsMenu->AddSubMenu(new Menu(
         "LoveTapLogic", "Love Tap / Orbwalker"));
     LoveTapMenu->Add(new MenuBool(
-        "EnableSwitch", "Switch to an unmarked reachable target", true));
+        "EnableSwitch", "Switch to unmarked target", true));
     BounceMenu = TacticsMenu->AddSubMenu(new Menu(
         "DoubleUpLogic", "Double Up Bounce"));
     BounceMenu->Add(new MenuSeparator(
-        "ExactBounce", "Q bounce rejects a closer body in the cone"));
+        "ExactBounce", "Q bounce rejects closer body"));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
         "BulletTimeLogic", "Bullet Time"));
     UltimateMenu->Add(new MenuSlider(
@@ -793,7 +770,6 @@ inline void OnLoad() {
     GapcloserEndpoint = {};
     IncomingThreatUntil = 0;
     PendingUltimateTargetId = PendingUltimateUntil = 0;
-    PendingUltimateManual = false;
     OwnedFocusTargetId = OwnedFocusUntil = 0;
     LastMode = Mode::None;
     BulletTimeOwnsOrbwalkerPause = false;
@@ -804,7 +780,6 @@ inline void OnLoad() {
 inline void OnUnload() {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
     PendingUltimateTargetId = PendingUltimateUntil = 0;
-    PendingUltimateManual = false;
     if (BulletTimeOwnsOrbwalkerPause) {
         Orbwalker::AttackEnabled(PreviousAttackEnabled);
         Orbwalker::MoveEnabled(PreviousMoveEnabled);
@@ -816,12 +791,12 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Reject a selected target with no AA/direct-Q/bounce-Q/E/R route",
+    "Reject a target with no AA/direct-Q/bounce-Q/E/R route",
     "Use a direct Q inside range and solve a minion bounce outside range",
     "Reject a Q bounce when a closer body occupies the same cone",
     "Preserve a ready attack and weave Q immediately after the attack",
     "Switch Love Tap only from a marked non-killable current target",
-    "Never override an explicitly selected current target for Love Tap",
+    "Switch Love Tap only when a safer alternate route is available",
     "Redirect BeforeAttack to the owned Love Tap target and cast W",
     "Release Love Tap focus after the attack or when the mode ends",
     "Use E for escape control, anti-gapcloser, lethal or R setup",

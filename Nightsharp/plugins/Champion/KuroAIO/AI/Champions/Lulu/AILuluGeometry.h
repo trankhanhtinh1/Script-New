@@ -75,15 +75,14 @@ inline WPosture ChooseWPosture(bool enemyThreat, bool allyThreat,
 }
 
 inline float AllyPriority(float healthPercent, float totalAttackDamage,
-                          float abilityPower, int nearbyEnemies,
-                          bool selected = false) {
+                          float abilityPower, int nearbyEnemies) {
     if (!std::isfinite(healthPercent) || !std::isfinite(totalAttackDamage) ||
         !std::isfinite(abilityPower)) return -1.0e9f;
     const float missing = 100.0f - std::clamp(healthPercent, 0.0f, 100.0f);
     const float carry = std::max(0.0f, totalAttackDamage) * 0.78f +
         std::max(0.0f, abilityPower) * 0.70f;
     const float threat = static_cast<float>(std::max(0, nearbyEnemies)) * 250.0f;
-    return missing * 1.7f + carry + threat + (selected ? 500.0f : 0.0f);
+    return missing * 1.7f + carry + threat;
 }
 
 inline bool EShieldWorthwhile(float allyHealthPercent, int nearbyEnemies,

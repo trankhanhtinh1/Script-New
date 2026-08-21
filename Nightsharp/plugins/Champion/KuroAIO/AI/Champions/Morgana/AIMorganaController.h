@@ -36,7 +36,6 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int ThreatAllyId = 0;
 inline int ThreatUntil = 0;
 inline int HardCcUntil = 0;
@@ -78,13 +77,6 @@ inline bool LethalWith(const AIHeroClient& target, int slot,
         target.Health() + target.AllShield();
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kQRange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
-}
 
 inline AIHeroClient SelectThreatAlly(bool includeSelf = true) {
     const auto player = GameObjects::Player();
@@ -181,8 +173,7 @@ inline ThreatKind ActiveThreat() {
     return ThreatKind::None;
 }
 
-inline bool CastE(const AIHeroClient& ally, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastE(const AIHeroClient& ally, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || ProtectedAlly(ally) ||
         !AllyInShieldRange(player.Position(), ally.Position(), ally.BoundingRadius()) ||
@@ -197,7 +188,6 @@ inline bool CastE(const AIHeroClient& ally, Mode mode, bool reactive = false,
         ally.HasBuff("MorganaE") || ally.HasBuff("BlackShield"),
         ally.HealthPercent() <= Slider(EMenu, "LowHealthThreshold", 48),
         allyThreatened && ally.HealthPercent() <= 30.0f,
-        manual,
         Engine::CountEnemiesAt(ally.Position(), 700.0f)};
     if (!ShouldBlackShield(context)) return false;
     if (!Engine::ControllerCastUnit(2, ally)) return false;
@@ -258,7 +248,7 @@ inline bool Automatic(const AIHeroClient& target) {
     const auto ally = SelectThreatAlly(true);
     if (Engine::ValidAlly(ally, kERange) &&
         (HardCcUntil > Now() || ThreatUntil > Now()) &&
-        CastE(ally, Mode::Automatic, true, true)) return true;
+        CastE(ally, Mode::Automatic, true)) return true;
     if (Engine::ValidEnemy(target) && HardCcUntil > Now() &&
         CastQ(target, Mode::Automatic, true)) return true;
     if (Engine::ValidEnemy(target) && ThreatUntil > Now() &&
@@ -291,7 +281,7 @@ inline void Flee(const AIHeroClient& pursuer) {
         ThreatAllyId = static_cast<int>(player.NetworkId());
         ThreatUntil = Now() + 250;
         HardCcUntil = Now() + 250;
-        if (CastE(player, Mode::Flee, true, true)) return;
+        if (CastE(player, Mode::Flee, true)) return;
     }
     if (CastQ(pursuer, Mode::Flee, true)) return;
     (void)CastR(pursuer, Mode::Flee, true, true);
@@ -328,10 +318,9 @@ inline void ReconcileState() {
     if (HardCcUntil < now) HardCcUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = SelectEnemy(selected, mode == Mode::Flee ? 900.0f : kQRange);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 900.0f : kQRange);
     if (RRecastPending && Engine::ValidEnemy(target)) (void)RecastSoulShackles(target);
     if (mode == Mode::Automatic) { (void)Automatic(target); return true; }
     switch (mode) {
@@ -352,8 +341,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
             if (slot == 3) {
                 RActive = true; RRecastPending = true; RStartedTick = now;
@@ -414,7 +401,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("MorganaTactics", "Morgana binding and protection"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Dark Binding"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Tormented Shadow"));
@@ -432,7 +418,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     ThreatAllyId = ThreatUntil = HardCcUntil = 0;
     RStartedTick = RTetherUntil = RStunReadyTick = LastRTargetId = 0;
     RActive = RRecastPending = BlackShieldActive = false;
@@ -444,7 +430,7 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Morgana mechanics to Riot 26.15 and CommunityDragon 16.15",
-    "Preserve selected enemy before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Require High prediction for Dark Binding, including delay and projectile flight",
     "Stop Q at the first collision instead of treating it as a free line",
     "Never replace an ordinary attack windup with nonreactive Q or W",
@@ -463,7 +449,7 @@ inline constexpr const char* Scenarios[] = {
     "Flee protects self, binds the pursuer and uses defensive shackles without turret diving",
     "LaneClear, Jungle and LastHit use W-specific objective placement before farm policy",
     "Respect real reach, target validity, spell shields, invulnerability and enemy count gates",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Reconcile event-driven Q, W, E and R state with threat polling",
     "Reconcile R, Black Shield and threat state from buffs, process-spell events and polling",
     "Expose Q and R geometry without changing gameplay decisions",
     "Assign every ChampionController callback, including object and missile lifecycle hooks",

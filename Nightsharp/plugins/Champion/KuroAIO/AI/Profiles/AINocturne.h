@@ -14,7 +14,7 @@ inline constexpr ChampionProfile Nocturne = [] {
     p.Mechanics = Mechanic::Dash | Mechanic::Recast | Mechanic::Global |
                   Mechanic::SpellShield | Mechanic::Tether |
                   Mechanic::AutoWeave;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::SingleTarget;
     p.PreferredCombatDistance = 175.0f;
     p.EngageHealthPercent = 46.0f;
     p.DefensiveHealthPercent = 30.0f;
@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Nocturne = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 48;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "NocturneUmbraBlades";
@@ -105,8 +104,7 @@ inline constexpr ChampionProfile Nocturne = [] {
              80, 950));
     p.AllIn = Plan("Paranoia trail tether all-in",
         Step(SDK::SpellSlot::R,
-             StepRule::RequireTarget | StepRule::RequireSafePosition |
-                 StepRule::ManualAssistOnly,
+             StepRule::RequireTarget | StepRule::RequireSafePosition,
              0, 700),
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget, 120, 900),
         Step(SDK::SpellSlot::E,

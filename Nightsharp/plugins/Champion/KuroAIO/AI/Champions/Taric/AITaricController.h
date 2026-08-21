@@ -24,7 +24,6 @@ using ControllerHelpers::InAutoAttackRange;
 
 using ControllerHelpers::PlayerManaPercent;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::RawAllyHeroByNetworkId;
 using ControllerHelpers::Ready;
@@ -42,10 +41,8 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
-inline int SelectedAllyId = 0;
 inline int BastionAllyId = 0;
 inline int BastionLinkUntil = 0;
 inline int BravadoCharges = 0;
@@ -108,13 +105,11 @@ inline AIHeroClient SelectBastionAlly(bool defensive = false) {
                           ally.AP() * 0.48f);
         score += static_cast<float>(enemies) * (defensive ? 330.0f : 170.0f);
         score -= distance * 0.14f;
-        if (static_cast<int>(ally.NetworkId()) == SelectedAllyId) score += 280.0f;
         if (score > bestScore) {
             best = ally;
             bestScore = score;
         }
     }
-    if (best.IsValid()) SelectedAllyId = static_cast<int>(best.NetworkId());
     return best;
 }
 
@@ -177,7 +172,7 @@ inline bool CastW(const AIHeroClient& requested, Mode mode,
         Engine::CountEnemiesAt(player.Position(), 700.0f) >
             Engine::CountAlliesAt(player.Position(), 760.0f) + 1) return false;
     if (!Engine::ControllerCastUnit(1, ally)) return false;
-    BastionAllyId = SelectedAllyId = static_cast<int>(ally.NetworkId());
+    BastionAllyId = static_cast<int>(ally.NetworkId());
     BastionLinkUntil = Now() + 9000;
     LastCastTick[1] = Now();
     BravadoCharges = 2;
@@ -306,15 +301,13 @@ inline void ReconcileState() {
         RCastTick = 0;
         RObservedActive = false;
     }
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = PreferredEnemyTarget(selected,
+    const AIHeroClient target = Engine::SelectTarget(
         mode == Mode::Flee ? 900.0f : kERange);
-    if (ManualOwnershipUntil > Now()) return true;
     if (mode == Mode::Automatic && DefensiveAutomatic(target)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -333,6 +326,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     }
     return true;
 }
+ 
+ 
 
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
@@ -341,8 +336,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         if (args.IsAutoAttack) return;
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 620);
         LastCastTick[slot] = now;
         BravadoCharges = 2;
         BravadoExpireTick = now + static_cast<int>(kBravadoWindowSeconds * 1000.0f);
@@ -449,7 +442,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("TaricTactics", "Taric ally-link tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual cast (ms)", 620, 180, 1400));
     TacticsMenu->Add(new MenuSlider("AutomaticAllyHealth", "Automatic ally health", 62, 10, 95));
     TacticsMenu->Add(new MenuSlider("AutomaticSelfHealth", "Automatic self health", 45, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Starlight's Touch"));
@@ -472,8 +464,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
-    IncomingThreatUntil = IncomingHardCcUntil = SelectedAllyId = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    IncomingThreatUntil = IncomingHardCcUntil = 0;
     BastionAllyId = BastionLinkUntil = BravadoExpireTick = 0;
     BravadoCharges = 0;
     QChargesObserved = 1;
@@ -490,7 +482,6 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Taric values to Riot 26.15 and CommunityDragon PC 16.15",
-    "Select the explicit enemy before orbwalker and selector fallback",
     "Score a vulnerable high-value ally and retain the Bastion link id",
     "Reconcile TaricW and TaricWAllyBuff link state through events and polling",
     "Track Bravado two-hit empowerment, five-second expiry and attack consumption",
@@ -508,7 +499,7 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear Jungle and LastHit preserve Q charges and use shared farm policy",
     "Flee scores a safe ally, heals, predicts peel E and pre-casts defensive R",
     "Automatic mode only responds to ally/self danger, hard CC, gapclosers or multi-target fights",
-    "Preserve selected target, orbwalker intent, manual ownership and AA windup",
+    "Preserve autonomous Engine target selection, orbwalker intent and AA windup",
     "Expose every process, buff, attack, gapcloser, interrupt, object and missile callback",
     "Draw E/R/linked-Q coaching ranges without changing decisions",
 };

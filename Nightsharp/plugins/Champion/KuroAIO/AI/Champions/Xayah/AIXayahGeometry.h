@@ -115,7 +115,6 @@ struct BladecallerContext {
     bool Lethal = false;
     bool AttackWindingUp = false;
     bool TurretUnsafe = false;
-    bool ManualCast = false;
     int FeatherHits = 0;
     int MinimumFeathers = 1;
 };
@@ -123,8 +122,7 @@ struct BladecallerContext {
 inline bool ShouldBladecaller(const BladecallerContext& context) {
     if (!context.Ready || !context.TargetValid ||
         !context.PredictionAccepted || context.TurretUnsafe) return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.RootReady &&
-        !context.ManualCast) return false;
+    if (context.AttackWindingUp && !context.Lethal && !context.RootReady) return false;
     const int minimum = std::max(1, context.MinimumFeathers);
     return context.FeatherHits >= minimum || context.RootReady || context.Lethal;
 }

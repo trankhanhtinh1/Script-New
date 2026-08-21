@@ -87,7 +87,6 @@ inline constexpr ChampionProfile Tristana = [] {
     p.UltimateTargetHealthPercent = 25.0f;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 20;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.MarkBuff = "TristanaECharge";
     p.ThemeFrom = 0xFF5EA8FFu;

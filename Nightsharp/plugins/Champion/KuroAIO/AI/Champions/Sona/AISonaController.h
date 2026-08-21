@@ -38,8 +38,6 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int EnemyThreatUntil = 0;
 inline int HardCcThreatUntil = 0;
 inline int InterruptTargetId = 0;
@@ -69,24 +67,16 @@ inline bool SafeAura(bool defensive = false) {
                             Slider(TacticsMenu, "MaxTurretEnemies", 2), defensive);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range) {
     return Engine::SelectTarget(range);
 }
 
 inline AIHeroClient SelectAlly(bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return {};
-    auto ally = SelectProtectionAlly(1000.0f, SelectedAllyId,
-                                     SelectedAllyId == 0 ? 0 : Now() + 300,
-                                     300.0f, 600.0f);
+    const auto ally = SelectProtectionAlly(1000.0f);
     if (Engine::ValidAlly(ally, 1000.0f) &&
-        ally.Position().Distance2D(player.Position()) <= kAuraRange) {
-        SelectedAllyId = static_cast<int>(ally.NetworkId());
-        return ally;
-    }
+        ally.Position().Distance2D(player.Position()) <= kAuraRange) return ally;
     if (defensive && player.HealthPercent() <=
             Slider(TacticsMenu, "PlayerHealthThreshold", 42)) return player;
     return {};
@@ -174,11 +164,10 @@ inline bool CastE(Mode mode, bool reactive = false) {
     return true;
 }
 
-inline bool CastR(const AIHeroClient& selected, Mode mode, bool reactive = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 120) ||
         ControllerHelpers::PreserveAttack(reactive)) return false;
-    AIHeroClient target = SelectEnemy(selected, kRRange);
     if (!Engine::ValidEnemy(target, kRRange) || ProtectedTarget(target)) return false;
     const Vector3 predicted = PredictPosition(target, TravelSeconds(
         player.Position().Distance2D(target.Position()), kCastDelay, kRSpeed));
@@ -254,16 +243,14 @@ inline void ReconcileState() {
     AccelerandoStacks = std::clamp(player.GetBuffCount("SonaPassiveAccelerandoCount"), 0, 120);
     if (PowerChordStacks >= 3) ReadyChord = ChordForAura(CurrentAura);
     else ReadyChord = PowerChord::None;
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
     if (EnemyThreatUntil <= now) EnemyThreatUntil = 0;
     if (HardCcThreatUntil <= now) HardCcThreatUntil = 0;
     if (InterruptUntil <= now) InterruptTargetId = InterruptUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = SelectEnemy(selected, mode == Mode::Flee ? 1000.0f : kRRange);
+    const AIHeroClient target = SelectEnemy(mode == Mode::Flee ? 1000.0f : kRRange);
     if (mode == Mode::Automatic) Automatic(target);
     else if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -285,8 +272,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                 PowerChordStacks = AdvanceChordStacks(PowerChordStacks);
                 ReadyChord = ChordToConsume(PowerChordStacks, CurrentAura);
             }
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
         }
         return;
     }
@@ -362,7 +347,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SonaTactics", "Sona aura and support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 600, 180, 1400));
     TacticsMenu->Add(new MenuSlider("MaxTurretEnemies", "Max enemies under turret for aura", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("PlayerHealthThreshold", "Emergency self-health %", 42, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Hymn of Valor poke"));
@@ -385,8 +369,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    ManualOwnershipUntil = EnemyThreatUntil = HardCcThreatUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    EnemyThreatUntil = HardCcThreatUntil = 0;
     InterruptTargetId = InterruptUntil = RLastCastTick = 0;
     PowerChordStacks = AccelerandoStacks = 0;
     CurrentAura = Aura::None;
@@ -403,14 +387,14 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile Q W E aura buffs and Accelerando stacks from both events and polling",
     "Advance exactly one Power Chord stack per basic spell and consume it on the next attack",
     "Map Hymn Staccato Aria Diminuendo and Celerity Tempo to the active aura",
-    "Respect selected target first, then orbwalker target, then engine fallback",
+    "Use the autonomous engine-selected enemy for Crescendo and poke",
     "Predict Q missile contact and reject projectile-wall paths or protected targets",
     "Cast Aria only for a real low-health ally or player inside the 400 aura",
     "Cast Celerity for grouped ally movement, chase or escape without turret overcommit",
     "Predict piercing Crescendo endpoint and enforce 140 width and wall checks",
     "Use Crescendo for multi-hit engage, low-health secure or incoming hard crowd control",
     "Preserve auto attack windup unless a defensive reaction is urgent",
-    "Yield to manual Q W E R ownership before polling decisions resume",
+    "Reconcile Q W E R cast state from events and polling before decisions resume",
     "Automatic mode is defensive and cannot start a fresh engage without threat",
     "Combo prioritizes Crescendo then Q poke, W sustain and E follow-up speed",
     "Harass uses Q with a mana floor and W only inside an actual heal window",

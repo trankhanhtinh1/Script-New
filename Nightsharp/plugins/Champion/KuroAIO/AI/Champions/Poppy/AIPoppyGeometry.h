@@ -115,11 +115,10 @@ struct DashInterceptContext {
     bool TargetInWRange = false;
     bool ThreateningPlayer = false;
     bool PlayerLow = false;
-    bool ManualOwnership = false;
 };
 inline bool ShouldInterceptDash(const DashInterceptContext& context) {
     return context.Ready && context.TargetDashing && context.TargetInWRange &&
-        context.ThreateningPlayer && !context.ManualOwnership &&
+        context.ThreateningPlayer &&
         (context.PlayerLow || context.ThreateningPlayer);
 }
 
@@ -150,7 +149,6 @@ struct UltimateContext {
     bool KnockbackAway = false;
     bool Defensive = false;
     bool Lethal = false;
-    bool Manual = false;
     bool PlayerLow = false;
     int PredictedHits = 0;
     int MinimumHits = 2;
@@ -158,10 +156,10 @@ struct UltimateContext {
 inline bool ShouldReleaseUltimate(const UltimateContext& context) {
     if (!context.Ready || !context.TargetValid || !context.PredictionHits ||
         context.ProjectileWall) return false;
-    if (context.Charging && !context.KnockbackAway && !context.Manual) return false;
-    if (context.PlayerLow && !context.Defensive && !context.Lethal && !context.Manual)
+    if (context.Charging && !context.KnockbackAway) return false;
+    if (context.PlayerLow && !context.Defensive && !context.Lethal)
         return false;
-    return context.Defensive || context.Lethal || context.Manual ||
+    return context.Defensive || context.Lethal ||
         context.PredictedHits >= std::max(1, context.MinimumHits);
 }
 
@@ -171,10 +169,9 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
         (context.Defensive || context.AntiGapcloser || context.Interrupt ||
          context.KillSecure);
 }

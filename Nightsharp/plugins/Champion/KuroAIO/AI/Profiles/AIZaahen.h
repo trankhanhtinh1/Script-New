@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Zaahen = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "ZaahenPassive";
@@ -93,8 +92,8 @@ inline constexpr ChampionProfile Zaahen = [] {
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireMultiTarget | StepRule::SkipIfKillableWithout, 240, 900));
     p.Flee = Plan("Rush and return peel",
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 0, 600),
-        Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::ManualAssistOnly, 120, 850),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 180, 900));
+        Step(SDK::SpellSlot::W, StepRule::RequireTarget, 120, 850),
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::RequireMultiTarget, 180, 900));
     return p;
 }();
 

@@ -22,7 +22,6 @@ inline constexpr ChampionProfile MonkeyKing = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 45;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "MonkeyKingStoneSkin";
@@ -90,7 +89,7 @@ inline constexpr ChampionProfile MonkeyKing = [] {
     p.Flee = Plan("Decoy and Nimbus disengage",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition));
 
     return p;
 }();

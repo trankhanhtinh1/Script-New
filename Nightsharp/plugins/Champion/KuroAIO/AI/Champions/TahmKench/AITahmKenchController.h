@@ -20,7 +20,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::RawAllyHeroByNetworkId;
 using ControllerHelpers::Ready;
@@ -37,7 +36,6 @@ inline Menu* FarmMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline int LastAutoTargetId = 0;
@@ -204,10 +202,10 @@ inline void Farm(Mode mode) {
     (void)Engine::TryFarm(mode);
 }
 
-inline void Automatic(const AIHeroClient& selected) {
+inline void Automatic() {
     const auto ally = ProtectedAlly();
     if (Engine::ValidAlly(ally) && CastRAlly(ally, Mode::Automatic, true)) return;
-    const auto target = Engine::ValidEnemy(selected) ? selected : NearestEnemyToPlayer({}, kQRange);
+    const auto target = Engine::SelectTarget(kQRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastQ(target, Mode::Automatic, true)) return;
         (void)CastE(Mode::Automatic, true);
@@ -240,10 +238,9 @@ inline void ReconcileState() {
     else GreyHealthObserved = std::min(player.MaxHealth() * 0.55f, std::max(GreyHealthObserved, missing * 0.55f));
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 1300.0f : kQRange);
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1300.0f : kQRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -251,7 +248,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::Jungle:
     case Mode::LastHit: Farm(mode); break;
     case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1300.0f)); break;
-    case Mode::Automatic: Automatic(target); break;
+    case Mode::Automatic: Automatic(); break;
     default: break;
     }
     return true;
@@ -263,7 +260,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 1) WChannelUntil = now + static_cast<int>(kWChannelSeconds * 1000.0f);
             if (slot == 3) RChannelUntil = now + static_cast<int>(kRChannelSeconds * 1000.0f);
@@ -354,8 +350,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("TahmKenchTactics", "Tahm Kench tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1400));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Tongue Lash"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Abyssal Dive"));
@@ -372,8 +366,6 @@ inline void BuildMenu(Menu* root) {
 }
 
 inline void ResetState() {
-    LastCastTick.fill(0);
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
     LastAutoTargetId = LastAutoTick = PassiveTargetId = PassiveStacks = PassiveLastTick = 0;
     GreyHealthObserved = 0.0f;
     WChannelUntil = RChannelUntil = RTargetId = 0;
@@ -387,16 +379,14 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Pin Tahm Kench passive, Q, W, E and R to Riot 26.15 and CommunityDragon 16.15",
-    "Track Acquired Taste stacks on the selected target from auto attacks, Q and buff polling",
+    "Track Acquired Taste stacks on the active enemy from auto attacks, Q and buff polling",
     "Decay passive stacks on the live one-second cadence and clear stale target state",
     "Predict Tongue Lash at 900 range with missile collision and projectile-wall rejection",
     "Apply Q slow and require three observed stacks before enemy Devour",
     "Use Abyssal Dive channel, radius, knock-up and rank-scaled reach",
     "Reject W walls, projectile barriers, turrets and over-committed landing endpoints",
     "Track Thick Skin grey health and spend only observed missing-health value on E shield",
-    "Preserve AA windup unless a reactive rescue or lethal response justifies the cast",
-    "Prefer selected target, then orbwalker target, then engine selector",
+    "Use autonomous Engine target selection with orbwalker attack safety",
     "Devour threatened allies only when rescue safety and channel range are valid",
     "Devour enemies only with three stacks and lethal or isolated safe policy",
     "Keep R channel ownership bounded and reconcile ally or enemy channel buffs",

@@ -15,11 +15,16 @@ using SharedGeometry::ProjectPointToSegment2D;
 inline constexpr float kQRange = 1050.0f;
 inline constexpr float kQWidth = 50.0f;
 inline constexpr float kQDelay = 0.25f;
-inline constexpr float kQSplitAngleRadians = 0.7853981633974483f;
+inline constexpr float kQSpeed = 1300.0f;
+inline constexpr float kQSplitRange = 1100.0f;
+inline constexpr float kQSplitWidth = 45.0f;
+inline constexpr float kQSplitSpeed = 2100.0f;
+inline constexpr float kQExtendedRange = 1485.0f;
+inline constexpr float kQMinimumSideAngleRadians = 0.4886921905584123f;
+inline constexpr float kQMaximumSideAngleRadians = 0.7853981633974483f;
+inline constexpr float kHalfPiRadians = 1.5707963267948966f;
 inline constexpr float kWRange = 1050.0f;
 inline constexpr float kWWidth = 88.0f;
-inline constexpr float kWFirstLength = 500.0f;
-inline constexpr float kWSecondLength = 500.0f;
 inline constexpr float kWDelay = 0.25f;
 inline constexpr float kWSecondDelay = 0.75f;
 inline constexpr float kERange = 800.0f;
@@ -45,7 +50,7 @@ inline bool LineHits(const Vec3& start, const Vec3& end, const Vec3& target,
 
 inline bool QLineHits(const Vec3& start, const Vec3& end, const Vec3& target,
                       float targetRadius = 0.0f) {
-    return LineHits(start, end, target, kQWidth * 0.5f, targetRadius);
+    return LineHits(start, end, target, kQWidth, targetRadius);
 }
 
 inline bool QCollisionFree(float targetDistance, float firstCollisionDistance,
@@ -54,18 +59,72 @@ inline bool QCollisionFree(float targetDistance, float firstCollisionDistance,
     return targetDistance + std::max(0.0f, targetRadius) < firstCollisionDistance;
 }
 
-inline Vec3 QSplitDirection(const Vec3& origin, const Vec3& target,
-                            bool left) {
-    const Vec3 direction = Direction2D(origin, target);
-    if (direction.IsZero()) return {};
-    return SharedGeometry::Rotate2D(
-        direction, left ? kQSplitAngleRadians : -kQSplitAngleRadians);
+struct QSideCast {
+    Vec3 Aim{};
+    Vec3 SplitOrigin{};
+    bool Left = false;
+    bool Valid = false;
+};
+
+inline QSideCast BuildQSideCast(const Vec3& origin, const Vec3& target,
+                                bool left) {
+    QSideCast result{};
+    if (!origin.IsValid() || !target.IsValid()) return result;
+    const Vec3 targetDirection = Direction2D(origin, target);
+    const float distance = origin.Distance2D(target);
+    if (targetDirection.IsZero() || distance <= 0.0f ||
+        distance > kQExtendedRange) {
+        return result;
+    }
+
+    float angle = kQMinimumSideAngleRadians;
+    if (distance * std::cos(angle) > kQRange) {
+        angle = std::acos(std::clamp(kQRange / distance, 0.0f, 1.0f));
+    }
+    angle = std::clamp(angle, kQMinimumSideAngleRadians,
+                       kQMaximumSideAngleRadians);
+    const float projectedForward = distance * std::cos(angle);
+    const float forward = std::min(projectedForward, kQRange);
+    const float lateral = distance * std::sin(angle);
+    if (projectedForward > kQRange + 1.0f ||
+        lateral > kQSplitRange + 0.01f) {
+        return result;
+    }
+
+    const Vec3 castDirection = SharedGeometry::Rotate2D(
+        targetDirection, left ? angle : -angle);
+    if (castDirection.IsZero()) return result;
+    result.Aim = origin + castDirection * kQRange;
+    result.SplitOrigin = origin + castDirection * forward;
+    result.Left = left;
+    result.Valid = result.Aim.IsValid() && result.SplitOrigin.IsValid();
+    return result;
 }
 
-inline Vec3 QSplitEndpoint(const Vec3& splitOrigin, const Vec3& originalTarget,
-                           bool left, float range = kQRange) {
-    const Vec3 direction = QSplitDirection(splitOrigin, originalTarget, left);
-    return direction.IsZero() ? Vec3{} : splitOrigin + direction * std::max(0.0f, range);
+inline Vec3 QSplitDirection(const Vec3& missileDirection, bool left) {
+    if (missileDirection.IsZero()) return {};
+    return SharedGeometry::Rotate2D(
+        missileDirection, left ? kHalfPiRadians : -kHalfPiRadians);
+}
+
+inline Vec3 QSplitEndpoint(const Vec3& splitOrigin,
+                           const Vec3& missileDirection,
+                           bool left,
+                           float range = kQSplitRange) {
+    const Vec3 direction = QSplitDirection(missileDirection, left);
+    return direction.IsZero()
+        ? Vec3{}
+        : splitOrigin + direction * std::max(0.0f, range);
+}
+
+inline bool QSplitLineHits(const Vec3& splitOrigin,
+                           const Vec3& missileDirection,
+                           const Vec3& target,
+                           float targetRadius = 0.0f) {
+    const Vec3 left = QSplitEndpoint(splitOrigin, missileDirection, true);
+    const Vec3 right = QSplitEndpoint(splitOrigin, missileDirection, false);
+    return LineHits(splitOrigin, left, target, kQSplitWidth, targetRadius) ||
+           LineHits(splitOrigin, right, target, kQSplitWidth, targetRadius);
 }
 
 inline bool ZoneContains(const Vec3& center, const Vec3& target,
@@ -77,18 +136,7 @@ inline bool ZoneContains(const Vec3& center, const Vec3& target,
 
 inline bool WLineHits(const Vec3& start, const Vec3& end, const Vec3& target,
                       float targetRadius = 0.0f) {
-    return LineHits(start, end, target, kWWidth * 0.5f, targetRadius);
-}
-
-inline Vec3 WSecondEndpoint(const Vec3& origin, const Vec3& target) {
-    const Vec3 direction = Direction2D(origin, target);
-    return direction.IsZero() ? Vec3{} : origin + direction * kWSecondLength;
-}
-
-enum class WStage : unsigned char { None, First, Second };
-
-inline bool WStageCanDamage(WStage stage, bool targetAlive) {
-    return targetAlive && stage != WStage::None;
+    return LineHits(start, end, target, kWWidth, targetRadius);
 }
 
 struct DeconstructionState {
@@ -129,7 +177,7 @@ inline void ClearRayMark(DeconstructionState& state) {
 
 inline bool RLineHits(const Vec3& origin, const Vec3& target,
                       const Vec3& victim, float victimRadius = 0.0f) {
-    return LineHits(origin, target, victim, kRWidth * 0.5f, victimRadius);
+    return LineHits(origin, target, victim, kRWidth, victimRadius);
 }
 
 inline bool RChannelInterrupted(bool hardCrowdControl, bool silenced,

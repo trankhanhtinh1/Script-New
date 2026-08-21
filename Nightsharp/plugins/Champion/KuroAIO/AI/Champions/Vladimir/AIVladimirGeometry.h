@@ -131,14 +131,13 @@ struct VladimirUltimateContext {
     bool TargetLow = false;
     bool MultiTarget = false;
     bool PlayerSafe = false;
-    bool Manual = false;
 };
 
 inline constexpr bool ShouldCastHemoplague(
     const VladimirUltimateContext& context) {
     if (!context.Ready || !context.TargetValid || !context.TargetInCircle ||
         !context.PlayerSafe) return false;
-    return context.Manual || context.TargetLow || context.MultiTarget;
+    return context.TargetLow || context.MultiTarget;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Vladimir::Geometry

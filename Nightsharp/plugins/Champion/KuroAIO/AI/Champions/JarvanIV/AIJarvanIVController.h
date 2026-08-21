@@ -47,11 +47,10 @@ inline int PendingFlagReady = 0;
 inline int PendingFlagExpire = 0;
 inline int QTick = 0, WTick = 0, ETick = 0, RTick = 0, LastAutoId = 0,
            LastAutoTick = 0;
-inline int ThreatUntil = 0, HardCCUntil = 0, ManualUntil = 0;
+inline int ThreatUntil = 0, HardCCUntil = 0;
 inline bool ArenaActive = false;
 inline Vector3 ArenaCenter = {}, ArenaLanding = {};
 inline int ArenaExpire = 0, ArenaTargetId = 0;
-inline constexpr int kManualMs = 520, kFlagMs = 8000, kArenaMs = 3500;
 using ControllerHelpers::Now;
 inline int Rank(int i) {
   return i >= 0 && i < 4 && Engine::RuntimeSpells[i]
@@ -289,7 +288,7 @@ inline bool CastE(const Vector3 &desired, const AIHeroClient &t, Mode m,
   ETick = Now();
   PendingFlag = flag;
   PendingFlagReady = ETick + 90;
-  PendingFlagExpire = ETick + kFlagMs;
+  PendingFlagExpire = ETick + static_cast<int>(kFlagLifetimeSeconds * 1000.0f);
   return true;
 }
 inline bool CastW(const AIHeroClient &t, Mode m, bool defensive = false) {
@@ -356,7 +355,7 @@ inline bool CastR(const AIHeroClient &t, Mode m, bool defensive = false) {
   if (!RSafe(t, lethal, defensive) || !Engine::ControllerCastUnit(3, t))
     return false;
   RTick = Now();
-  ArenaExpire = RTick + kArenaMs;
+  ArenaExpire = RTick + static_cast<int>(kArenaWallDurationSeconds * 1000.0f);
   ArenaTargetId = static_cast<int>(t.NetworkId());
   ArenaActive = true;
   return true;
@@ -438,13 +437,9 @@ inline bool Flee(const AIHeroClient &t) {
   return CastW(t, Mode::Flee, true) ||
          (Engine::ValidEnemy(t) && CastQTarget(t, Mode::Flee, true));
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient &selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient &) {
   Reconcile();
-  if (ManualUntil > Now())
-    return true;
-  auto target = selected;
-  if (!Engine::ValidEnemy(target))
-    target = Engine::SelectTarget(kFlagCastRange + 80);
+  auto target = Engine::SelectTarget(kFlagCastRange + 80);
   const auto threat = NearestEnemyToPlayer(target, 1200);
   if (mode == Mode::Flee) {
     (void)Flee(threat);
@@ -495,21 +490,15 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
     }
     return;
   }
-  const bool owned =
-      a.Slot >= 0 && a.Slot < 4 && Engine::WasControllerCast(a.Slot);
-  if (!owned && a.Slot >= 0 && a.Slot < 4)
-    ManualUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", kManualMs);
   if (a.Slot == 0)
     QTick = now;
   else if (a.Slot == 1)
     WTick = now;
   else if (a.Slot == 2) {
     ETick = now;
-    if (!owned && a.CastPosition.IsValid()) {
-      PendingFlag = a.CastPosition;
-      PendingFlagReady = now + 90;
-      PendingFlagExpire = now + kFlagMs;
-    }
+    PendingFlag = a.CastPosition;
+    PendingFlagReady = now + 90;
+    PendingFlagExpire = now + static_cast<int>(kFlagLifetimeSeconds * 1000.0f);
   } else if (a.Slot == 3) {
     RTick = now;
     if (ArenaActive) {
@@ -517,7 +506,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
       ArenaExpire = 0;
     } else {
       ArenaActive = true;
-      ArenaExpire = now + kArenaMs;
+      ArenaExpire = now + static_cast<int>(kArenaWallDurationSeconds * 1000.0f);
       ArenaCenter = a.CastPosition;
     }
   }
@@ -531,7 +520,9 @@ inline void OnBuffAdd(const SDK::Events::BuffEventArgs &a) {
       IsLocalPlayer(a.Sender)) {
     ArenaActive = true;
     ArenaExpire = Now() + ControllerHelpers::RemainingMilliseconds(
-                              a.EndTime, kArenaMs, 250, 5000);
+                              a.EndTime, static_cast<int>(
+                                  kArenaWallDurationSeconds * 1000.0f),
+                              250, 5000);
   }
 }
 inline void OnBuffRemove(const SDK::Events::BuffEventArgs &a) {
@@ -557,7 +548,7 @@ inline void OnObjectCreate(const SDK::Events::ObjectEventArgs &a) {
   if (IsStandard(a.Sender.Name, a.Sender.CharacterName) &&
       ControllerHelpers::ObjectEventIsAllied(a)) {
     Standard = {static_cast<int>(a.Sender.NetworkId), a.Sender.Position, Now(),
-                Now() + kFlagMs, true};
+                Now() + static_cast<int>(kFlagLifetimeSeconds * 1000.0f), true};
     return;
   }
   if (ArenaActive && IsArena(a.Sender.Name, a.Sender.CharacterName) &&
@@ -588,8 +579,7 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu = root->AddSubMenu(
       new Menu("JarvanIVOneTrick", "Jarvan IV one-trick mechanics"));
-  TacticsMenu->Add(new MenuSlider(
-      "ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
+  TacticsMenu->Add(new MenuSeparator("Policy", "Autonomous cast policy"));
   ComboMenu = TacticsMenu->AddSubMenu(
       new Menu("FlagCombo", "Demacian Standard / Dragon Strike"));
   ComboMenu->Add(new MenuSlider("MaxEQEnemies",
@@ -622,7 +612,6 @@ inline void OnLoad() {
   Standard = {};
   PendingFlag = ArenaCenter = ArenaLanding = {};
   PendingFlagReady = PendingFlagExpire = QTick = WTick = ETick = RTick =
-      LastAutoId = LastAutoTick = ThreatUntil = HardCCUntil = ManualUntil =
           ArenaExpire = ArenaTargetId = 0;
   ArenaActive = false;
 }
@@ -659,13 +648,13 @@ inline constexpr const char *Scenarios[] = {
     "Track and expire the 3.5-second arena",
     "Collapse R for flee, ally exit or escaped target",
     "Preserve initial arena cast window",
-    "Preserve selected target and orbwalker attacks",
+    "Preserve autonomous target selection and orbwalker attacks",
     "Combo owns passive, E-Q, W and R economy",
     "Harass avoids unsolicited E-Q dive",
     "LaneClear, Jungle and LastHit preserve mana",
     "Flee uses cursor flag then Q",
     "Automatic only defends, kill-secures or cleans arena",
-    "Yield after manual Q W E or R",
+    "Resume autonomous decisions after Q W E or R spell events",
     "Never automate summoners or items",
     "Keep profile and controller responsibilities separate"};
 inline constexpr ChampionController Controller = [] {
@@ -676,8 +665,7 @@ inline constexpr ChampionController Controller = [] {
   c.ResearchArtifact = "AI/Research/AIJarvanIV.md";
   c.ImplementationSummary =
       "Per-target passive economy, reconciled flag tracking, prediction and "
-      "safety-gated E-Q, pressure shielding and terrain-safe Cataclysm "
-      "ownership.";
+      "safety-gated E-Q, pressure shielding and terrain-safe Cataclysm.";
   c.Scenarios = Scenarios;
   c.ScenarioCount = std::size(Scenarios);
   c.OwnsDecisionLoop = true;

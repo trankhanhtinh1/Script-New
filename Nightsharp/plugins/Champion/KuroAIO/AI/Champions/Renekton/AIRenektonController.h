@@ -35,7 +35,6 @@ inline EStage ECastStage = EStage::Slice;
 inline CooldownState Cooldowns{};
 inline int ArmorShredTargetId = 0;
 inline int ArmorShredExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -92,10 +91,7 @@ inline float DominusDamage(const AIHeroClient& target) {
         ? player.CalculateMagicDamage(target, RRawDamagePerTick(Rank(3), AP())) : 0.0f;
 }
 using ControllerHelpers::Lethal;
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range = 1000.0f) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectTarget(float range = 1000.0f) {
     return Engine::SelectTarget(range);
 }
 inline bool IsArmorShredActive(const AIHeroClient& target) {
@@ -127,7 +123,7 @@ inline void ReconcileState() {
         // Dominus state is observed here; cooldown readiness remains runtime-owned.
     }
     if (player.HasBuff("RenektonDice") || player.HasBuff("RenektonE2")) ECastStage = EStage::Dice;
-    if (now > PlayerOverrideUntil) PlayerOverrideUntil = 0;
+    (void)now;
 }
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
@@ -167,7 +163,6 @@ inline bool SafeDashEndpoint(const Vector3& origin, const Vector3& endpoint,
     context.Defensive = fleeing;
     context.Lethal = lethal;
     context.Fleeing = fleeing;
-    context.CursorAgrees = fleeing || endpoint.Distance2D(Game::CursorPos()) <= origin.Distance2D(Game::CursorPos()) + 325.0f;
     context.EnemiesAtEndpoint = Engine::CountEnemiesAt(endpoint, 500.0f);
     context.MaximumEnemies = Slider(EMenu, "MaxEndpointEnemies", 2);
     return DashSafe(context);
@@ -211,7 +206,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false)
     context.PlayerLow = player.HealthPercent() <= Slider(RMenu, "PlayerHP", 48);
     context.TargetLow = target.HealthPercent() <= Slider(RMenu, "TargetHP", 45);
     context.AllIn = mode == Mode::Combo;
-    context.Manual = defensive;
+    context.Defensive = defensive;
     context.NearbyEnemies = Engine::CountEnemiesAt(player.Position(), kRRadius);
     context.MinimumEnemies = Slider(RMenu, "MinimumTargets", 2);
     if (!ShouldCastDominus(context)) return false;
@@ -249,10 +244,10 @@ inline bool TryFarm(Mode mode) {
     return Engine::TryFarm(mode);
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     LastMode = mode;
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    const AIHeroClient target = SelectTarget(selected, mode == Mode::Flee ? 900.0f : 1000.0f);
+    const AIHeroClient target = SelectTarget(mode == Mode::Flee ? 900.0f : 1000.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 900.0f);
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(threat) && CastR(threat, mode, true)) return true;
@@ -279,8 +274,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot >= 4) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-        if (slot == 2 && !Engine::WasControllerCast(slot))
+        if (slot == 2)
             ECastStage = ECastStage == EStage::Slice ? EStage::Dice : EStage::Slice;
         return;
     }
@@ -312,7 +306,7 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
         ArmorShredTargetId == static_cast<int>(args.Sender.NetworkId)) ArmorShredExpireTick = 0;
 }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (args.Target.IsValid() && PlayerOverrideUntil > Now()) args.Process = true;
+    (void)args;
 }
 inline void OnDraw() {
     const auto player = GameObjects::Player();
@@ -323,7 +317,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RenektonOneTrick", "Renekton fury diver"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("RenektonQ", "Cull the Meek"));
     QMenu->Add(new MenuSlider("SustainHP", "Prefer empowered Q below player HP", 65, 20, 95));
     QMenu->Add(new MenuSlider("HarassFury", "Minimum fury for harass", 30, 0, 100));
@@ -344,7 +337,7 @@ inline void OnLoad() {
     Fury = 0.0f;
     ECastStage = EStage::Slice;
     Cooldowns = {};
-    ArmorShredTargetId = ArmorShredExpireTick = PlayerOverrideUntil = 0;
+    ArmorShredTargetId = ArmorShredExpireTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = LastAutoTargetId = LastAutoTick = 0;
     LastMode = Mode::None;
     ReconcileState();
@@ -362,15 +355,13 @@ inline constexpr const char* Scenarios[] = {
     "Use Q area and missing-health sustain without interrupting an AA windup",
     "Track W targeted range, two-hit ordinary damage and three-hit empowered stun",
     "Track Slice then Dice recast stage from process-spell and buff callbacks",
-    "Require E to pass through the selected target before offensive commitment",
     "Reject E endpoints that are walls, new enemy turrets, hazards or overcrowded",
     "Apply empowered Dice armor shred to the observed target for four seconds",
     "Use Dominus for low-health defense, hard-CC response or configured all-ins",
-    "Preserve selected target before orbwalker and selector fallback",
     "Reconcile cooldown and resource state through event callbacks and polling",
     "Cover Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Automatic mode kill-secures or responds to threat without fresh engagement",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Preserve event-reconciled Q, W, E and R state without manual ownership windows",
     "Preserve attack windup unless reactive or lethal cast value is observed",
     "Reject invulnerable, untargetable, spell-shielded and uncertain targets",
     "Never automate movement ownership, item actives or summoner spells",
@@ -383,7 +374,8 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIRenekton.md";
     controller.ImplementationSummary =
-        "Fury-threshold Q/W/E selection, selected-target dash safety, armor-shred tracking and defensive Dominus ownership.";
+        "Fury-threshold Q/W/E selection, autonomous dash safety, armor-shred "
+        "tracking and defensive Dominus policy.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

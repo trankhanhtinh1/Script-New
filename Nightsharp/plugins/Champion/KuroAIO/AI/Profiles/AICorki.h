@@ -100,7 +100,6 @@ inline constexpr ChampionProfile Corki = [] {
     p.UltimateTargetHealthPercent = 24.0f;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.UltimateBuff = "CorkiMissileBarrageCounterBig";

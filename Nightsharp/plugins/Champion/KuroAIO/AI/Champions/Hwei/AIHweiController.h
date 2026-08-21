@@ -27,7 +27,7 @@ inline Menu* FarmMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 inline SpellbookState Book{};
 inline int LastCastTick[4]{};
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -195,12 +195,12 @@ inline void ReconcileState() {
         player.HasBuff("HweiPassive"));
     Reconcile(Book, now, zone, mark);
     if (!zone && now - LastModeTick > 3000) Book.ZoneActive = false;
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
+
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (ManualOwnershipUntil > Now()) return true;
+
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastPaint(Stance::Turmoil, Paint::Q, target, mode, true, false, true)) return true;
     if (KillSecure(target, mode)) return true;
@@ -232,8 +232,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
         }
         return;
     }
@@ -269,7 +267,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("HweiOneTrick", "Hwei paint tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 600, 180, 1300));
+
     TacticsMenu->Add(new MenuSlider("MaxZoneEnemies", "Maximum enemies in a zone", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("MinimumRTargets", "Minimum Despair targets", 2, 1, 5));
     DisasterMenu = TacticsMenu->AddSubMenu(new Menu("Disaster", "Disaster paints"));
@@ -285,7 +283,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     Book = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = LastPassiveTargetId = LastModeTick = 0;
 }
 inline void OnUnload() {
@@ -314,7 +312,7 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear, Jungle and LastHit delegate to shared farm policy under mana floors",
     "Flee prioritizes movement current, fear and safe defensive paint",
     "Automatic mode allows only observed defense, hard-CC response or lethal Despair",
-    "Yield for manual Q W E R ownership and protect manual channels",
+    "Reconcile Q W E R state and protect active channels/",
     "Track R zone presence and clear stale state when observed buffs expire",
     "Draw ranges for coaching without modifying decisions",
 };

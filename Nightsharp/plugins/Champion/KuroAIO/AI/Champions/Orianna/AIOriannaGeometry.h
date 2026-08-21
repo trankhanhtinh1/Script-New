@@ -173,7 +173,6 @@ struct ShockwaveContext {
     bool AttackWindingUp = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int PredictedHits = 0;
     int MinimumHits = 2;
 };
@@ -181,9 +180,9 @@ struct ShockwaveContext {
 inline bool ShouldCastShockwave(const ShockwaveContext& context) {
     if (!context.Ready || !context.BallKnown || context.BallInTransit ||
         !context.IntendedTargetInside || context.TargetProtected) return false;
-    if (context.AttackWindingUp && !context.Lethal &&
-        !context.Defensive && !context.Manual) return false;
-    return context.Manual || context.Defensive || context.Lethal ||
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive)
+        return false;
+    return context.Defensive || context.Lethal ||
         context.PredictedHits >= std::max(1, context.MinimumHits);
 }
 

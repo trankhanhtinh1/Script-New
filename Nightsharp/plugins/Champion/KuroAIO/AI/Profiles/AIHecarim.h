@@ -20,7 +20,6 @@ inline constexpr ChampionProfile Hecarim = [] {
     p.UltimateTargetHealthPercent = 55.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "HecarimPassive";

@@ -162,16 +162,15 @@ struct RContext {
     bool AttackWindingUp = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int PredictedHits = 0;
     int MinimumTargets = 2;
 };
 inline bool ShouldImpale(const RContext& context) {
     if (!context.Ready || !context.TargetValid || !context.PredictionAccepted ||
         !context.TerrainClear) return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.Defensive && !context.Manual)
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive)
         return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    return context.Lethal || context.Defensive ||
         context.PredictedHits >= std::max(1, context.MinimumTargets);
 }
 
@@ -180,10 +179,9 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
         (context.Defensive || context.Interrupt || context.KillSecure);
 }
 

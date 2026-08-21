@@ -272,7 +272,7 @@ inline TerrainCandidate SelectTerrainCandidate(
         if (candidate.Kind == Element::None || candidate.Position.IsZero() ||
             !MobilitySafe(candidate.Safety)) continue;
         float score = candidate.Kind == desired ? 700.0f : 0.0f;
-        score -= candidate.CursorDistance * (defensive ? 0.40f : 0.12f);
+        score -= candidate.CursorDistance * (defensive ? 0.40f : 0.0f);
         score -= candidate.TargetDistance * (defensive ? 0.03f : 0.10f);
         score -= static_cast<float>(candidate.Safety.NearbyEnemies) * 180.0f;
         if (score > bestScore) {

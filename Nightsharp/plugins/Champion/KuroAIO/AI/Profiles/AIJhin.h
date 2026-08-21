@@ -14,7 +14,7 @@ inline constexpr ChampionProfile Jhin = [] {
     p.Mechanics = Mechanic::Ammo | Mechanic::Mark | Mechanic::Trap |
                   Mechanic::Channel | Mechanic::Recast |
                   Mechanic::AutoWeave | Mechanic::MissingHealth;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::SingleTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Dancing Grenade", CastKind::EnemyTarget,
@@ -91,7 +91,6 @@ inline constexpr ChampionProfile Jhin = [] {
     p.UltimateTargetHealthPercent = 28.0f;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 23;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "JhinPassiveReload";
@@ -106,7 +105,7 @@ inline constexpr ChampionProfile Jhin = [] {
         "place E on committed paths, and solve every Curtain Call shot inside its cone.";
     p.ResearchSummary =
         "Ported from TestOrbwalker AllChampions/Jhin.cs: after-AA Q/W, reload "
-        "windows, spotted-debuff W roots, anti-gap E and click-selected R cone shots; "
+        "windows, spotted-debuff W roots, anti-gap E and reach-scored R cone shots; "
         "upgraded with first-champion collision and reachable-target scoring.";
     return p;
 }();

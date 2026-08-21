@@ -35,10 +35,8 @@ inline Menu* CoachMenu = nullptr;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
 inline int LastEnemyThreatUntil = 0;
 inline int LastHardCcThreatUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int RActiveUntil = 0;
 inline int ELastCastTick = 0;
 inline bool EReturnPending = false;
@@ -60,21 +58,13 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kQRange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range = kQRange) {
     return Engine::SelectTarget(range);
 }
 
 inline AIHeroClient SelectAlly(bool defensive = false) {
-    const auto ally = SelectProtectionAlly(
-        700.0f, SelectedAllyId, SelectedAllyId == 0 ? 0 : Now() + 300);
-    if (Engine::ValidAlly(ally, 700.0f)) {
-        SelectedAllyId = static_cast<int>(ally.NetworkId());
-        return ally;
-    }
+    const auto ally = SelectProtectionAlly(700.0f);
+    if (Engine::ValidAlly(ally, 700.0f)) return ally;
     if (defensive) {
         const auto player = GameObjects::Player();
         if (player.IsValid()) return player;
@@ -171,15 +161,13 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     if (!defensive && nearby < Slider(RMenu, "MinimumTargets", 2) &&
         (!Engine::ValidEnemy(target) ||
          player.Position().Distance2D(target.Position()) > 700.0f)) return false;
-    if (!defensive && !ControllerHelpers::CursorDirectionAgrees(
-            Engine::ValidEnemy(target) ? target.Position() : Game::CursorPos(),
-            -0.18f) && Orbwalker::ActiveMode() != OrbwalkingMode::Combo) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
     RActiveUntil = Now() + 4000;
     LastRDirection = Engine::ValidEnemy(target)
         ? Direction2D(player.Position(), target.Position())
-        : Direction2D(player.Position(), Game::CursorPos());
+        : mode == Mode::Flee
+            ? Direction2D(player.Position(), Game::CursorPos()) : Vec3{};
     return true;
 }
 
@@ -240,10 +228,10 @@ inline void ReconcileState() {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileState();
     const auto player = GameObjects::Player();
-    const AIHeroClient target = SelectEnemy(selected, mode == Mode::Flee ? 900.0f : 1000.0f);
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = SelectEnemy(mode == Mode::Flee ? 900.0f : 1000.0f);
     if (EReturnPending && mode != Mode::LaneClear &&
         mode != Mode::Jungle && mode != Mode::LastHit) {
         const auto returnAlly = SelectAlly(mode == Mode::Automatic ||
@@ -276,8 +264,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
         }
         return;
@@ -311,7 +297,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RakanTactics", "Rakan support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("AllyHealthThreshold", "Protect ally below health %", 48, 10, 90));
     TacticsMenu->Add(new MenuSlider("PlayerHealthThreshold", "Defend self below health %", 35, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Gleaming Quill heal"));
@@ -330,8 +315,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    LastEnemyThreatUntil = LastHardCcThreatUntil = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    LastEnemyThreatUntil = LastHardCcThreatUntil = 0;
     RActiveUntil = ELastCastTick = 0;
     EReturnPending = false;
     LastRDirection = LastWLanding = {};
@@ -358,8 +343,6 @@ inline constexpr const char* Scenarios[] = {
     "Harass spends Q first and keeps mana floor before W poke",
     "Flee prioritizes ally E, then peel W and defensive R",
     "LaneClear Jungle and LastHit delegate to shared farm policy",
-    "Preserve selected-target, orbwalker and auto-attack windup intent",
-    "Yield ownership after observed manual Q W E or R casts",
     "Expose spell, buff, attack and polling event callbacks",
     "Draw W/R safety ranges without changing decisions",
 };

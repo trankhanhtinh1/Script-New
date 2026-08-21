@@ -97,7 +97,6 @@ enum class RReleaseReason : int {
     TargetEnteringCover,
     BlockerCleared,
     FullMagazine,
-    Manual,
 };
 
 inline Menu* TacticsMenu = nullptr;
@@ -1536,10 +1535,9 @@ inline bool CanStartR(const AIHeroClient& target,
 
 inline bool CastR1(const AIHeroClient& target,
                    Mode mode,
-                   bool requireLethal,
-                   bool manual = false) {
+                   bool requireLethal) {
     if (!SpellEnabled(3, mode) || !CastThrottleReady(3) ||
-        (!manual && !Engine::CanAct(false)) ||
+        !Engine::CanAct(false) ||
         !CanStartR(target, requireLethal)) {
         return false;
     }
@@ -2203,12 +2201,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     if (TryGapcloserResponse(target, mode)) return true;
     if (HoldPendingSecondShot()) return true;
     if (TryKillSecure(target, mode)) return true;
-
-    if (Key(Engine::AutomaticMenu, "ManualR", false) &&
-        Engine::ValidEnemy(target)) {
-        (void)CastR1(target, Mode::Automatic, false, true);
-        return true;
-    }
     if (mode == Mode::Combo) {
         (void)TryCombo(target);
         return true;
@@ -2526,7 +2518,7 @@ inline const char* EPhaseName(EPhase phase) {
 inline void OnDraw() {
     if (!CoachMenu || !GameObjects::Player().IsValid()) return;
     const auto player = GameObjects::Player();
-    if (Bool(CoachMenu, "DrawQ", true) && QActive &&
+    if (Bool(CoachMenu, "DrawQ", false) && QActive &&
         QMissilePosition.IsValid() && !QMissilePosition.IsZero()) {
         Drawing::DrawCircle(QMissilePosition, 34.0f,
             QReturning ? 0xFFFFC857u : 0xFF42D9D0u, 2.0f, 32);
@@ -2537,14 +2529,14 @@ inline void OnDraw() {
                 QReturning ? 0xAAFFC857u : 0xAA42D9D0u, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawQReturnCoach", true) && QReturning &&
+    if (Bool(CoachMenu, "DrawQReturnCoach", false) && QReturning &&
         QReturnCoachPoint.IsValid() && !QReturnCoachPoint.IsZero()) {
         Drawing::DrawLine(player.Position(), QReturnCoachPoint,
                           0xFF6BFFA8u, 2.0f);
         Drawing::DrawCircle(QReturnCoachPoint, 38.0f,
                             0xFF6BFFA8u, 2.0f, 28);
     }
-    if (Bool(CoachMenu, "DrawSwing", true) &&
+    if (Bool(CoachMenu, "DrawSwing", false) &&
         PlannedAnchor.IsValid() && !PlannedAnchor.IsZero()) {
         const float radius = PlannedAnchor.Distance2D(player.Position());
         Drawing::DrawCircle(PlannedAnchor, std::max(25.0f, radius),
@@ -2557,7 +2549,7 @@ inline void OnDraw() {
         }
     }
     AIHeroClient rTarget = HeroByNetworkId(RTargetId);
-    if (Bool(CoachMenu, "DrawR", true) && RChannelActive &&
+    if (Bool(CoachMenu, "DrawR", false) && RChannelActive &&
         Engine::ValidEnemy(rTarget)) {
         Drawing::DrawLine(player.Position(), RTrackedTargetPosition,
                           RLastBlockerId == 0 ? 0xFF63FF88u : 0xFFFF6B6Bu,
@@ -2570,12 +2562,12 @@ inline void OnDraw() {
         }
     }
     const AIHeroClient scoundrel = HeroByNetworkId(ScoundrelTargetId);
-    if (Bool(CoachMenu, "DrawScoundrel", true) &&
+    if (Bool(CoachMenu, "DrawScoundrel", false) &&
         Engine::ValidEnemy(scoundrel)) {
         Drawing::DrawCircle(scoundrel.Position(),
             scoundrel.BoundingRadius() + 75.0f, 0xFFFFC247u, 2.0f, 42);
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen = {};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[300] = {};
@@ -2614,7 +2606,7 @@ inline void BuildMenu(Menu* root) {
         "ReturnOwnership", "Return-Q move is coached"));
 
     RogueMenu = TacticsMenu->AddSubMenu(new Menu(
-        "GoingRogue", "Scoundrel hunt and camouflage economy"));
+        "GoingRogue", "Scoundrel hunt and camouflage"));
     RogueMenu->Add(new MenuBool(
         "AutoRoamW", "W for safe cursor-aligned", true));
     RogueMenu->Add(new MenuSlider(
@@ -2629,7 +2621,7 @@ inline void BuildMenu(Menu* root) {
         "NoCombatW", "Going Rogue is not treated"));
 
     SwingMenu = TacticsMenu->AddSubMenu(new Menu(
-        "HeroicSwing", "Three-cast wall/orbit/dismount solver"));
+        "HeroicSwing", "Wall/orbit/dismount solver"));
     SwingMenu->Add(new MenuSlider(
         "MinimumDamageShots", "Min shots nonlethal E", 3, 1, 12));
     SwingMenu->Add(new MenuSlider(
@@ -2656,7 +2648,7 @@ inline void BuildMenu(Menu* root) {
         "MarkedTarget", "Damage E requires Akshan's"));
 
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Comeuppance", "Ammo, blocker, and release state machine"));
+        "Comeuppance", "Ammo/blocker/release state"));
     UltimateMenu->Add(new MenuSlider(
         "StartRTargetHP", "Nonlethal R HP< (%)", 48, 10, 90));
     UltimateMenu->Add(new MenuSlider(
@@ -2673,7 +2665,7 @@ inline void BuildMenu(Menu* root) {
         "NoEShotsDuringR", "E is angle-only while"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "AkshanFarm", "Two-leg and extension-aware Q farming"));
+        "AkshanFarm", "Two-leg extension-aware Q farming"));
     FarmMenu->Add(new MenuSlider(
         "QMinions", "Min unique Q lane hits", 3, 1, 8));
     FarmMenu->Add(new MenuSlider(
@@ -2682,7 +2674,7 @@ inline void BuildMenu(Menu* root) {
         "NoFarmSwing", "W, E, and Comeuppance are"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "AkshanCoach", "Live return, swing, blocker, and Scoundrel coaching"));
+        "AkshanCoach", "Live swing/blocker coaching"));
     CoachMenu->Add(new MenuBool("DrawQ", "Draw tracked Q leg", false));
     CoachMenu->Add(new MenuBool(
         "DrawQReturnCoach", "Draw return-Q align", false));
@@ -2842,7 +2834,7 @@ inline constexpr const char* Scenarios[] = {
     "Treat interruptable channels as commitment because Akshan has no hard interrupt",
     "Farm Q with unique two-leg hits, extension count, and arrival health prediction",
     "Never spend W, E, or R for routine waveclear",
-    "Re-plan around manual Q-W-E-R while retaining observed recast and missile state",
+    "Re-plan around observed Q-W-E-R recast and missile state/",
     "Prioritize patch 26.1-plus autos and Q instead of the obsolete E-first damage identity",
     "Coordinate through state holds and coaching without taking permanent movement control",
 };

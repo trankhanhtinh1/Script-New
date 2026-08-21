@@ -786,17 +786,6 @@ inline bool TryRDefense(Mode mode) {
     return false;
 }
 
-inline bool HasCursorConsent(const AIHeroClient& target) {
-    if (!Bool(RoleMenu, "RespectCursor", true)) return true;
-    const auto player = GameObjects::Player();
-    const Vector3 toTarget = SharedGeometry::Direction2D(
-        player.Position(), target.Position());
-    const Vector3 toCursor = SharedGeometry::Direction2D(
-        player.Position(), Game::CursorPos());
-    if (toTarget.IsZero() || toCursor.IsZero()) return true;
-    return toTarget.Dot(toCursor) >= -0.10f;
-}
-
 inline bool EngageSafetyAllows(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     const int enemies = Engine::CountEnemiesAt(target.Position(), 725.0f);
@@ -811,7 +800,7 @@ inline bool EngageSafetyAllows(const AIHeroClient& target) {
             return false;
         }
     }
-    return HasCursorConsent(target);
+    return true;
 }
 
 inline bool CanStandardEngage(const AIHeroClient& target) {
@@ -1387,31 +1376,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     return true;
 }
 
-inline bool ManualWShouldBuffer(const AIHeroClient& target) {
-    if (!Bool(HeadbuttMenu, "AssistManualWQ", true) ||
-        !Engine::ValidEnemy(target) ||
-        !Engine::RuntimeSpells[0] || !Engine::RuntimeSpells[0]->IsReady()) {
-        return false;
-    }
-    const KnockbackPlan plan = BuildKnockbackPlan(target, false, WCastOrigin);
-    if (plan.PinsToWall) return false;
-    const AIHeroClient ally = ProtectedAlly();
-    if (ally.IsValid() &&
-        PeelSeparationGain(ally.Position(), plan.TargetAtImpact,
-                           plan.EffectiveEndpoint) >=
-            static_cast<float>(Slider(HeadbuttMenu, "PeelMinimumGain", 170))) {
-        return false;
-    }
-    const Vector3 goal = AlliedDisplacementGoal(target);
-    if (goal.IsValid() &&
-        TowardPointGain(plan.TargetAtImpact, plan.EffectiveEndpoint, goal) >=
-            static_cast<float>(Slider(HeadbuttMenu, "InsecMinimumGain", 260))) {
-        return false;
-    }
-    return CountAlliedFollowup(target.Position(), 875.0f) >= 1 ||
-           SoloKillable(target);
-}
-
 inline void ObserveLocalW(const SDK::Events::ProcessSpellEventArgs& args) {
     const auto player = GameObjects::Player();
     WCastOrigin = args.StartPosition.IsValid() && !args.StartPosition.IsZero()
@@ -1429,21 +1393,6 @@ inline void ObserveLocalW(const SDK::Events::ProcessSpellEventArgs& args) {
                 player.BoundingRadius(), target.BoundingRadius()) * 1000.0f));
         WExpectedContactTick = WCastTick + std::max(20, contactMs);
         WSequenceExpireTick = WExpectedContactTick + kWStateGraceMs;
-        WDashActive = true;
-    }
-
-    if (!Engine::WasControllerCast(1) && target.IsValid() && target.IsHero()) {
-        const AIHeroClient hero(target.Address());
-        WQBufferWanted = ManualWShouldBuffer(hero);
-        WQBuffered = false;
-        CurrentHeadbuttPurpose = WQBufferWanted
-            ? HeadbuttPurpose::BufferedEngage
-            : HeadbuttPurpose::None;
-        if (WQBufferWanted) {
-            // Cast inside the event boundary so the engine's manual-input
-            // arbitration does not make a legitimate W-Q buffer arrive late.
-            (void)TryBufferQ(Mode::Combo);
-        }
     }
 }
 
@@ -1676,11 +1625,11 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawQ", true)) {
+    if (Bool(CoachMenu, "DrawQ", false)) {
         Drawing::DrawCircle(player.Position(), kQRadius,
                             0x887C63FFu, 1.5f, 64);
     }
-    if (Bool(CoachMenu, "DrawKnockback", true) &&
+    if (Bool(CoachMenu, "DrawKnockback", false) &&
         LastKnockbackPlan.TargetAtImpact.IsValid() &&
         Now() <= WSequenceExpireTick + 650) {
         Drawing::DrawLine(
@@ -1693,7 +1642,7 @@ inline void OnDraw() {
             LastKnockbackPlan.PinsToWall ? 0xFFFFB347u : 0xFFB68CFFu,
             2.0f, 40);
     }
-    if (Bool(CoachMenu, "DrawInsec", true) &&
+    if (Bool(CoachMenu, "DrawInsec", false) &&
         InsecCoachPoint.IsValid() && Now() <= InsecExpireTick) {
         Drawing::DrawCircle(InsecCoachPoint, 55.0f,
                             0xFF55EEAAu, 2.5f, 48);
@@ -1702,7 +1651,7 @@ inline void OnDraw() {
                               0xAA55EEAAu, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawPeel", true)) {
+    if (Bool(CoachMenu, "DrawPeel", false)) {
         const AIHeroClient ally = ProtectedAlly();
         const AIHeroClient threat = HeroByNetworkId(PeelThreatId);
         if (ally.IsValid()) {
@@ -1714,7 +1663,7 @@ inline void OnDraw() {
                               0xFFFF6677u, 2.5f);
         }
     }
-    if (Bool(CoachMenu, "DrawEStun", true) && EStunTargetId != 0) {
+    if (Bool(CoachMenu, "DrawEStun", false) && EStunTargetId != 0) {
         const AIHeroClient target = HeroByNetworkId(EStunTargetId);
         if (target.IsValid()) {
             Drawing::DrawCircle(target.Position(),
@@ -1722,7 +1671,7 @@ inline void OnDraw() {
                                 0xFFFFE066u, 3.0f, 48);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[256]{};
@@ -1753,7 +1702,6 @@ inline void BuildMenu(Menu* root) {
     RoleMenu->Add(new MenuSlider("PeelThreatScore", "Minimum carry-threat score", 620, 250, 1100));
     RoleMenu->Add(new MenuSlider("MinimumFollowup", "Min allies for W-Q", 1, 0, 4));
     RoleMenu->Add(new MenuSlider("MaxEngageEnemies", "Max enemies at engage", 3, 1, 5));
-    RoleMenu->Add(new MenuBool("RespectCursor", "Do not hard-engage opposite", true));
     RoleMenu->Add(new MenuBool("DoNotOverlapCC", "Wait instead of overlapping", true));
     RoleMenu->Add(new MenuBool("UseCCForPassiveHeal", "At 6 passive stacks, CC to", true));
     RoleMenu->Add(new MenuSlider("PassiveHealAllyHp", "Ally HP passive setup (%)", 42, 15, 75));
@@ -1762,7 +1710,6 @@ inline void BuildMenu(Menu* root) {
     HeadbuttMenu = TacticsMenu->AddSubMenu(new Menu(
         "Headbutt", "Headbutt displacement branches"));
     HeadbuttMenu->Add(new MenuBool("UseWQ", "Use buffered W-Q for", true));
-    HeadbuttMenu->Add(new MenuBool("AssistManualWQ", "Buffer Q after manual W", true));
     HeadbuttMenu->Add(new MenuBool("PeelW", "W push diver away", true));
     HeadbuttMenu->Add(new MenuSlider("PeelMinimumGain", "Minimum peel separation gain", 170, 60, 500));
     HeadbuttMenu->Add(new MenuBool("UseWallPin", "Full W vs thick terrain", true));
@@ -1789,7 +1736,7 @@ inline void BuildMenu(Menu* root) {
         "BufferRule", "Buffered Q is immediate;"));
 
     TrampleMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Trample", "Trample pulse and empowered-AA ownership"));
+        "Trample pulse and empowered AA"));
     TrampleMenu->Add(new MenuBool("FourStackAttack", "Start AA at 4 stacks when", true));
     TrampleMenu->Add(new MenuBool("ForceBestStunTarget", "Force orbwalker only to the", true));
     TrampleMenu->Add(new MenuBool("HoldForPriorityChampion", "Block a lower-priority", true));
@@ -1897,8 +1844,8 @@ inline constexpr const char* Scenarios[] = {
     "Keep full W displacement for peel instead of blindly buffering Q",
     "Keep full W displacement for insec instead of blindly buffering Q",
     "Keep full W displacement for wall pin instead of blindly buffering Q",
-    "Infer whether a manual W wants Q by checking peel, wall and insec value",
-    "Issue manual-W Q inside the event window before manual-input arbitration delays it",
+    "Infer whether a W wants Q by checking peel, wall and insec value",
+    "Issue W-Q inside the event window before cast scheduling delays it",
     "Reject W-Q without an allied follow-up unless Alistar's own conservative damage is lethal",
     "Reject an engage opposite the player's cursor",
     "Reject an over-numbered engage while R is unavailable",

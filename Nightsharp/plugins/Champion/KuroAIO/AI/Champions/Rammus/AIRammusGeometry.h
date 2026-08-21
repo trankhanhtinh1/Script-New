@@ -136,10 +136,9 @@ struct ArmorPosture {
     bool AttackThreat = false;
     bool HardCrowdControlThreat = false;
     bool LowHealth = false;
-    bool ManualOwnership = false;
 };
 inline bool ShouldCurl(const ArmorPosture& posture) {
-    return !posture.ManualOwnership && posture.CurlActive == false &&
+    return posture.CurlActive == false &&
         (posture.AttackThreat || posture.HardCrowdControlThreat || posture.LowHealth);
 }
 
@@ -188,10 +187,9 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
         (context.Defensive || context.AntiGapcloser || context.Interrupt || context.KillSecure);
 }
 

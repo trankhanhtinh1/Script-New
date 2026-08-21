@@ -36,7 +36,6 @@ inline int LastLocalAutoTick = 0;
 inline int IncomingBasicAttackUntil = 0;
 inline int IncomingBasicAttackSourceId = 0;
 inline int IncomingBurstUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int QCastTick = 0;
 inline int WCastTick = 0;
 inline int ECastTick = 0;
@@ -317,11 +316,9 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(kQRange + 100.0f);
+    AIHeroClient target = Engine::SelectTarget(kQRange + 100.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 950.0f);
 
     if (mode == Mode::Flee) {
@@ -339,7 +336,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::LastHit: (void)Engine::TryFarm(mode); break;
     case Mode::Automatic: {
         AutomaticContext context{};
-        context.ManualOwnership = PlayerOverrideUntil > Now();
         context.Defensive = IncomingBurstUntil >= Now();
         context.IncomingBasicAttack = IncomingBasicAttackUntil >= Now();
         context.KillSecure = Engine::ValidEnemy(target) &&
@@ -386,9 +382,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
 
     if (args.IsAutoAttack) return;
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now +
-        Slider(TacticsMenu, "ManualOwnershipMs", 560);
     if (slot == 0) {
         QCastTick = now;
         if (args.EndPosition.IsValid() && !args.EndPosition.IsZero())
@@ -467,17 +460,16 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("JaxOneTrick", "Jax duel mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("EmergencyHP", "Emergency E/R threshold", 32, 10, 70));
     TacticsMenu->Add(new MenuSlider("HarassPassiveStacks", "Passive stacks before leap harass", 3, 0, 8));
     LeapMenu = TacticsMenu->AddSubMenu(new Menu("LeapStrike", "Leap endpoint safety"));
     LeapMenu->Add(new MenuSlider("MaxLeapEnemies", "Maximum enemies at Q endpoint", 2, 1, 5));
     CounterStrikeMenu = TacticsMenu->AddSubMenu(new Menu("CounterStrike", "Counter Strike timing"));
-    CounterStrikeMenu->Add(new MenuSeparator("DodgeRule", "Hold E for dodge value; recast for stun/escape"));
+    CounterStrikeMenu->Add(new MenuSeparator("DodgeRule", "Hold E for dodge; recast stun"));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu("Grandmaster", "Defensive and duel R"));
     UltimateMenu->Add(new MenuSlider("RDefensiveHP", "R defensive HP threshold", 48, 15, 85));
-    FarmMenu = TacticsMenu->AddSubMenu(new Menu("JaxFarm", "Orbwalker-owned farm"));
-    FarmMenu->Add(new MenuSeparator("FarmRule", "Shared farm path preserves AA ownership"));
+    FarmMenu = TacticsMenu->AddSubMenu(new Menu("JaxFarm", "Orbwalker farm timing"));
+    FarmMenu->Add(new MenuSeparator("FarmRule", "Farm path preserves AA timing"));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("JaxCoach", "Mechanic visualization"));
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/E range and leap route", false));
 }
@@ -489,7 +481,6 @@ inline void OnLoad() {
     LastAfterAttackTargetId = LastAfterAttackTick = 0;
     LastLocalAutoTargetId = LastLocalAutoTick = 0;
     IncomingBasicAttackUntil = IncomingBasicAttackSourceId = IncomingBurstUntil = 0;
-    PlayerOverrideUntil = 0;
     QCastTick = WCastTick = ECastTick = RCastTick = 0;
     PendingWTargetId = PendingWUntil = 0;
     RExpireTick = 0;
@@ -518,7 +509,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject crowded Q endpoints above the configured enemy limit",
     "Require Q to make cursor-relative retreat progress in Flee",
     "Preserve the current AA windup before a nonlethal Q",
-    "Respect selected target before the shared orbwalker target fallback",
+    "Use autonomous target selection with shared orbwalker fallback",
     "Use W only after an exact-target completed attack or for lethal damage",
     "Preserve an in-progress basic attack instead of clipping it with W",
     "Keep AA-W-AA reset timing inside the observed reset window",
@@ -542,7 +533,7 @@ inline constexpr const char* Scenarios[] = {
     "Combo gives W priority only in its valid reset window",
     "Harass requires passive preparation before an optional leap",
     "Harass never spends R as an unsolicited trade tool",
-    "LaneClear remains on the shared orbwalker-owned farm path",
+    "LaneClear remains on the shared orbwalker farm path",
     "Jungle remains on the shared farm path while W/E profile semantics apply",
     "LastHit does not spend Q or E on an unsolicited champion route",
     "Flee prioritizes E dodge and stun timing before any leap",
@@ -550,8 +541,7 @@ inline constexpr const char* Scenarios[] = {
     "Automatic mode may answer incoming basic attacks and burst",
     "Automatic mode may use in-range W or active-E lethal damage",
     "Automatic mode never starts an unsolicited Q engage",
-    "Track manual Q/W/E/R casts and yield the owned decision loop",
-    "Keep manual spell state visible to event and polling reconciliation",
+    "Track Q/W/E/R spell events and resume autonomous decisions",
     "Never automate Flash, Ignite, Smite, item actives or movement orders",
 };
 
@@ -563,7 +553,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ResearchArtifact = "AI/Research/AIJax.md";
     controller.ImplementationSummary =
         "Eight-stack passive reconciliation, safe targeted Q endpoints, AA-W-AA reset "
-        "ownership, attack-dodging Counter Strike timing, and defensive/duel-gated R.";
+        "state, attack-dodging Counter Strike timing, and defensive/duel-gated R.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

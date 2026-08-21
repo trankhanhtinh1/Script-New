@@ -172,9 +172,8 @@ inline bool QCollisionOwned(const CollisionResult& first, int intendedTargetId) 
     return first.Hit && intendedTargetId != 0 && first.NetworkId == intendedTargetId;
 }
 
-inline bool PreserveAttackWindup(bool windingUp, bool reactive, bool lethal,
-                                 bool manualOwnership) {
-    return windingUp && !reactive && !lethal && !manualOwnership;
+inline bool PreserveAttackWindup(bool windingUp, bool reactive, bool lethal) {
+    return windingUp && !reactive && !lethal;
 }
 
 inline bool ShouldUseW(bool active, bool targetInRange, bool marked,
@@ -189,12 +188,11 @@ struct RContext {
     bool TargetValid = false;
     bool InitialGate = false;
     bool Recast = false;
-    bool Manual = false;
     bool Lethal = false;
 };
 inline bool ShouldCastR(const RContext& context) {
     if (!context.Ready || !context.PredictionAccepted || !context.TargetValid) return false;
-    return context.Recast || context.InitialGate || context.Lethal || context.Manual;
+    return context.Recast || context.InitialGate || context.Lethal;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Urgot::Geometry

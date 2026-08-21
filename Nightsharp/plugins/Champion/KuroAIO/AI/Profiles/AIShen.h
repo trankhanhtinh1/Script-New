@@ -24,7 +24,6 @@ inline constexpr ChampionProfile Shen = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 50;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "ShenPassiveShield";
@@ -108,7 +107,7 @@ inline constexpr ChampionProfile Shen = [] {
         "Spirit's Refuge against autos, taunt away from danger and channel only to save an ally",
         Step(SDK::SpellSlot::W, StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup),
-        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::ManualAssistOnly));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget));
     return p;
 }();
 

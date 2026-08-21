@@ -208,17 +208,12 @@ inline bool RRecastAllowed(const RRecastContext& context) {
 }
 
 struct ModeContext {
-    bool SelectedTarget = false;
-    bool OrbwalkerTarget = false;
     bool AttackWindingUp = false;
     bool Lethal = false;
-    bool ManualOwnership = false;
 };
 
 inline bool MayUseAbility(const ModeContext& context) {
-    if (context.ManualOwnership) return false;
-    if (context.AttackWindingUp && !context.Lethal) return false;
-    return context.SelectedTarget || context.OrbwalkerTarget;
+    return !context.AttackWindingUp || context.Lethal;
 }
 
 struct AutomaticContext {
@@ -226,11 +221,10 @@ struct AutomaticContext {
     bool Interrupt = false;
     bool KillSecure = false;
     bool Engage = false;
-    bool ManualOwnership = false;
 };
 
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership && !context.Engage &&
+    return !context.Engage &&
         (context.Defensive || context.Interrupt || context.KillSecure);
 }
 

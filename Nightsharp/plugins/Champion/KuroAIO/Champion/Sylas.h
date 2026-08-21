@@ -87,7 +87,7 @@ static void Combo() {
             if (Bool(EMenu, "E1", true)) {
                 const auto target = GetPhysicalTarget(E.Range);
                 if (target.IsValid()) {
-                    if (E.Cast(Bool(EMenu, "ECursor", false) ? Game::CursorPosition() : target.Position())) {
+                    if (E.Cast(target.Position())) {
                         return;
                     }
                 }
@@ -171,7 +171,7 @@ static void Harass() {
             if (Bool(EMenu, "E1", true)) {
                 const auto target = GetPhysicalTarget(E.Range);
                 if (target.IsValid()) {
-                    if (E.Cast(Bool(EMenu, "ECursor", false) ? Game::CursorPosition() : target.Position())) {
+                    if (E.Cast(target.Position())) {
                         return;
                     }
                 }
@@ -309,7 +309,7 @@ static void OnAfterAttack(OrbwalkingActionArgs& args) {
             if (Bool(EMenu, "E1", true)) {
                 const auto target = GetPhysicalTarget(E.Range);
                 if (target.IsValid()) {
-                    if (E.Cast(Bool(EMenu, "ECursor", false) ? Game::CursorPosition() : target.Position())) {
+                    if (E.Cast(target.Position())) {
                         return;
                     }
                 }
@@ -355,13 +355,13 @@ static void OnDraw() {
     }
 
     const Vector3 pos = player.Position();
-    if (Q.IsReady() && Bool(DrawMenu, "DrawQ", true)) {
+    if (Q.IsReady() && Bool(DrawMenu, "DrawQ", false)) {
         Drawing::DrawCircle(pos, Q.Range, 0xFFFFFFFF, 1.5f, 64);
     }
-    if (W.IsReady() && Bool(DrawMenu, "DrawW", true)) {
+    if (W.IsReady() && Bool(DrawMenu, "DrawW", false)) {
         Drawing::DrawCircle(pos, W.Range, 0xFF00FF00, 1.5f, 64);
     }
-    if (E.IsReady() && Bool(DrawMenu, "DrawE", true)) {
+    if (E.IsReady() && Bool(DrawMenu, "DrawE", false)) {
         Drawing::DrawCircle(pos, E.Range, 0xFFFF0000, 1.5f, 64);
     }
 }
@@ -383,14 +383,13 @@ static void BuildMenu() {
     EMenu = MenuRoot->AddSubMenu(new Menu("EMenu", "E Settings"));
     EMenu->Add(new MenuBool("UseECombo", "Use E in Combo", true));
     EMenu->Add(new MenuBool("E1", "Use E1 (Dash)", true));
-    EMenu->Add(new MenuBool("ECursor", "Dash to Cursor (Else Target)", false));
     EMenu->Add(new MenuBool("E2", "Use E2 (Chain)", true));
     EMenu->Add(new MenuBool("UseEHarass", "Use E in Harass", true));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", true));
-    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", false));
+    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", false));
 
     MenuRoot->Attach();
 }

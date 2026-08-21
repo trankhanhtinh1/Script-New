@@ -18,7 +18,6 @@ using ControllerHelpers::CurrentResource;
 using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::NearestEnemyToPlayer;
-using ControllerHelpers::OrbwalkerHeroTarget;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::RuntimeNameContains;
 using ControllerHelpers::SpellCost;
@@ -42,7 +41,6 @@ inline int FlurryStacks = 0;
 inline int FlurryExpireTick = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int QCastTick = 0;
 inline int WCastTick = 0;
 inline int ECastTick = 0;
@@ -53,12 +51,6 @@ inline Vector3 LastQLine = {};
 inline Vector3 LastSafeguardEndpoint = {};
 inline Vector3 LastKickEndpoint = {};
 inline Vector3 SuggestedBehindPosition = {};
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
-
-inline constexpr int kManualOwnershipMs = 520;
 inline constexpr int kCastThrottleMs = 70;
 
 using ControllerHelpers::Now;
@@ -106,14 +98,6 @@ inline bool TargetCannotBeDamaged(const AIHeroClient& target) {
            target.HasBuff("kindredrnodeathbuff") || target.HasBuff("ChronoShift");
 }
 
-inline bool CursorAgrees(const Vector3& endpoint, float minimumDot = -0.05f) {
-    const auto player = GameObjects::Player();
-    if (!player.IsValid()) return false;
-    const Vec3 towardCursor = Direction2D(player.Position(), Game::CursorPos());
-    const Vec3 towardEndpoint = Direction2D(player.Position(), endpoint);
-    return towardCursor.IsZero() || towardEndpoint.IsZero() ||
-           towardCursor.Dot(towardEndpoint) >= minimumDot;
-}
 
 inline float RawQ1(const AIBaseClient& target) {
     const auto player = GameObjects::Player();
@@ -266,8 +250,7 @@ inline bool CastQ1(const AIBaseClient& target, Mode mode, bool reactive = false)
         ? prediction.GetCastPosition() : PredictPosition(target, 0.25f);
     const SDK::HitChance required = reactive ? SDK::HitChance::Medium : SDK::HitChance::High;
     if (prediction.Hitchance < required || predicted.IsZero() ||
-        player.Position().Distance2D(predicted) > kQ1Range + target.BoundingRadius() ||
-        !CursorAgrees(predicted, reactive ? -0.35f : 0.0f)) return false;
+        player.Position().Distance2D(predicted) > kQ1Range + target.BoundingRadius()) return false;
     const Vec3 direction = Direction2D(player.Position(), predicted);
     if (direction.IsZero()) return false;
     const Vector3 end = player.Position() + direction * kQ1Range;
@@ -286,7 +269,6 @@ inline bool CastQ1(const AIBaseClient& target, Mode mode, bool reactive = false)
     QMarkExpireTick = Now() + kRecastWindowMs;
     QMarkConfirmed = false;
     LastQLine = end;
-    QWasManual = false;
     return true;
 }
 
@@ -305,10 +287,8 @@ inline bool CastQ2(Mode mode, bool fleeing = false) {
     if (!MayTakeResonatingStrike(true, QMarkConfirmed, true,
             EndpointSafe(safety), lethal, exitAvailable,
             safety.NearbyEnemies, safety.MaximumEnemies)) return false;
-    if (!CursorAgrees(target.Position(), fleeing ? -0.60f : -0.05f)) return false;
     if (!Engine::ControllerCastUnit(0, target)) return false;
     QCastTick = Now();
-    QWasManual = false;
     ClearQMark();
     return true;
 }
@@ -329,9 +309,11 @@ inline std::vector<SafeguardCandidate> SafeguardCandidates(bool fleeing,
         candidate.Targetable = unit.IsTargetable();
         candidate.IsWard = ward;
         candidate.IsChampion = champion;
-        candidate.CursorDistance = unit.Position().Distance2D(Game::CursorPos());
-        candidate.RouteGain = player.Position().Distance2D(Game::CursorPos()) -
-                              unit.Position().Distance2D(Game::CursorPos());
+        const Vector3 cursor = fleeing ? Game::CursorPos() : Vector3{};
+        candidate.CursorDistance = fleeing ? unit.Position().Distance2D(cursor) : 0.0f;
+        candidate.RouteGain = fleeing
+            ? player.Position().Distance2D(cursor) - unit.Position().Distance2D(cursor)
+            : 1.0f;
         candidate.Safety = SafetyAt(unit.Position(), fleeing, false,
             Slider(SafeguardMenu, "MaxEndpointEnemies", 2));
         if (MaySafeguard(candidate,
@@ -353,13 +335,11 @@ inline bool CastSafeguardHop(Mode mode, bool fleeing, bool combo) {
     if (WSecondCast() || !Ready(1, mode) || !Throttle(1) || !EnergyFor(1)) return false;
     const SafeguardCandidate candidate = SelectSafeguard(
         SafeguardCandidates(fleeing, combo), true, true);
-    if (candidate.NetworkId == 0 || !CursorAgrees(candidate.Position,
-            fleeing ? 0.15f : -0.05f)) return false;
+    if (candidate.NetworkId == 0) return false;
     const AIBaseClient target = UnitByNetworkId(candidate.NetworkId);
     if (!target.IsValid() || !Engine::ControllerCastUnit(1, target)) return false;
     WCastTick = Now();
     LastSafeguardEndpoint = candidate.Position;
-    WWasManual = false;
     return true;
 }
 
@@ -368,7 +348,6 @@ inline bool CastSelfSafeguard(Mode mode) {
     if (!Engine::ControllerCastSelf(1)) return false;
     WCastTick = Now();
     LastSafeguardEndpoint = GameObjects::Player().Position();
-    WWasManual = false;
     return true;
 }
 
@@ -377,7 +356,6 @@ inline bool CastIronWill(Mode mode) {
     if (FlurryStacks > 0 && Now() - LastAutoTick > 500 && CurrentResource() < 90.0f) return false;
     if (!Engine::ControllerCastSelf(1)) return false;
     WCastTick = Now();
-    WWasManual = false;
     return true;
 }
 
@@ -393,7 +371,6 @@ inline bool CastTempest(const AIBaseClient& target, Mode mode) {
     ECastTick = Now();
     TempestTargetId = static_cast<int>(target.NetworkId());
     TempestMarkExpireTick = Now() + kRecastWindowMs;
-    EWasManual = false;
     return true;
 }
 
@@ -408,7 +385,6 @@ inline bool CastCripple(const AIBaseClient& target, Mode mode, bool defensive = 
     ECastTick = Now();
     TempestTargetId = 0;
     TempestMarkExpireTick = 0;
-    EWasManual = false;
     return true;
 }
 
@@ -422,7 +398,7 @@ inline Vector3 AlliedKickGoal(const AIHeroClient& target) {
         ++count;
     }
     if (count > 0) return sum / static_cast<float>(count);
-    return target.IsValid() ? Game::CursorPos() : Vector3{};
+    return target.IsValid() ? GameObjects::Player().Position() : Vector3{};
 }
 
 inline std::vector<Body> KickBodies(int primaryId) {
@@ -461,7 +437,6 @@ inline bool CastKick(const AIHeroClient& target, Mode mode, bool defensive = fal
     RCastTick = Now();
     LastKickEndpoint = plan.Endpoint;
     SuggestedBehindPosition = plan.Behind;
-    RWasManual = false;
     return true;
 }
 
@@ -560,18 +535,10 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return Engine::ValidEnemy(threat) && CastKick(threat, Mode::Flee, true);
 }
 
-inline AIHeroClient CooperativeTarget(const AIHeroClient& selected) {
-    if (Engine::ValidEnemy(selected, kQ2Range + 80.0f)) return selected;
-    const AIHeroClient orbTarget = OrbwalkerHeroTarget(kQ2Range + 80.0f);
-    if (Engine::ValidEnemy(orbTarget)) return orbTarget;
-    return Engine::SelectTarget(kQ2Range + 80.0f);
-}
-
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    const AIHeroClient target = CooperativeTarget(selected);
-    const AIHeroClient threat = NearestEnemyToPlayer(target, 1250.0f);
+    const AIHeroClient target = Engine::SelectTarget(kQ2Range + 80.0f);
+    const AIHeroClient threat = NearestEnemyToPlayer({}, 1250.0f);
     if (mode == Mode::Flee) {
         (void)TryFlee(threat);
         return true;
@@ -616,24 +583,18 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     const int slot = args.Slot;
     if (slot < 0 || slot > 3) return;
-    const bool controllerOwned = Engine::WasControllerCast(slot);
-    if (!controllerOwned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
     if (slot == 0) {
         QCastTick = now;
-        QWasManual = !controllerOwned;
         if (args.TargetNetworkId != 0) QMarkTargetId = static_cast<int>(args.TargetNetworkId);
         if (!QSecondCast()) QMarkExpireTick = now + kRecastWindowMs;
     } else if (slot == 1) {
         WCastTick = now;
-        WWasManual = !controllerOwned;
         if (args.Target.IsValid()) LastSafeguardEndpoint = args.Target.Position;
     } else if (slot == 2) {
         ECastTick = now;
-        EWasManual = !controllerOwned;
         TempestMarkExpireTick = now + kRecastWindowMs;
     } else {
         RCastTick = now;
-        RWasManual = !controllerOwned;
     }
     FlurryStacks = 2;
     FlurryExpireTick = now + 3000;
@@ -713,23 +674,22 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LeeSinOneTrick", "Lee Sin one-trick mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     SonicMenu = TacticsMenu->AddSubMenu(new Menu("Sonic", "Sonic Wave and safe Q2"));
     SonicMenu->Add(new MenuBool("HarassTakeQ2", "Take safe Q2 during harass", false));
-    SafeguardMenu = TacticsMenu->AddSubMenu(new Menu("Safeguard", "Ally and existing-ward endpoint safety"));
+    SafeguardMenu = TacticsMenu->AddSubMenu(new Menu("Safeguard", "Ally/ward endpoint safety"));
     SafeguardMenu->Add(new MenuBool("AllowExistingWardHop", "Hop only to an existing allied ward", true));
     SafeguardMenu->Add(new MenuSlider("MaxEndpointEnemies", "Maximum endpoint enemies", 2, 1, 5));
     SafeguardMenu->Add(new MenuSlider("EmergencyHP", "Self shield below HP", 30, 10, 70));
     TempestMenu = TacticsMenu->AddSubMenu(new Menu("Tempest", "Tempest mark and Cripple timing"));
-    TempestMenu->Add(new MenuBool("HoldCrippleForFlurry", "Wait for Flurry energy before Cripple", true));
+    TempestMenu->Add(new MenuBool("HoldCrippleForFlurry", "Wait for Flurry before Cripple", true));
     KickMenu = TacticsMenu->AddSubMenu(new Menu("DragonsRage", "Kick collision and teamward geometry"));
     KickMenu->Add(new MenuSlider("MinimumKickHits", "Minimum total kick-line hits", 2, 1, 5));
     KickMenu->Add(new MenuSlider("MinimumTeamwardGain", "Minimum teamward displacement", 260, 80, 700));
-    FarmMenu = TacticsMenu->AddSubMenu(new Menu("LeeSinFarm", "Energy-reserved lane and jungle usage"));
+    FarmMenu = TacticsMenu->AddSubMenu(new Menu("LeeSinFarm", "Energy reserve for lane/jungle"));
     FarmMenu->Add(new MenuSlider("EnergyReserve", "Energy kept after farm", 70, 0, 160));
     FarmMenu->Add(new MenuSlider("LaneEHits", "Lane E minimum units", 3, 1, 8));
     FarmMenu->Add(new MenuSlider("JungleEHits", "Jungle E minimum units", 1, 1, 4));
-    CoachMenu = TacticsMenu->AddSubMenu(new Menu("LeeSinCoach", "Manual insec and route coaching"));
+    CoachMenu = TacticsMenu->AddSubMenu(new Menu("LeeSinCoach", "Insec and route coaching"));
     CoachMenu->Add(new MenuBool("DrawPlans", "Draw Q, W and kick geometry", false));
 }
 
@@ -737,11 +697,10 @@ inline void OnLoad() {
     ClearQMark();
     TempestTargetId = TempestMarkExpireTick = 0;
     FlurryStacks = FlurryExpireTick = 0;
-    IncomingThreatUntil = IncomingHardCCUntil = PlayerOverrideUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     QCastTick = WCastTick = ECastTick = RCastTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
     LastQLine = LastSafeguardEndpoint = LastKickEndpoint = SuggestedBehindPosition = {};
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     ReconcileState();
 }
 
@@ -768,7 +727,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject Q2 into an unsafe turret, point-click threat or dash hazard",
     "Reject Q2 into excess enemies unless the strike is lethal",
     "Require an ally, ready Safeguard or low enemy count as a Q2 exit",
-    "Preserve cursor agreement before taking an automatic Q2",
+    "Use endpoint safety and available exits before automatic Q2",
     "Use Safeguard only on Lee Sin, a live ally, allied minion or existing allied ward",
     "Never place a ward, press an item active or synthesize a ward-hop anchor",
     "Require an existing ward to be visible and targetable",
@@ -795,8 +754,8 @@ inline constexpr const char* Scenarios[] = {
     "Never move, ward, Flash or issue attack-move to manufacture an insec",
     "Allow a single-target kick for lethal damage, peel or interrupt",
     "Require multi-hit or meaningful teamward gain for an ordinary proactive kick",
-    "Preserve the selected target while it is legally reachable",
-    "Cooperate with the orbwalker target before policy target selection",
+    "Keep legally reachable targets stable while evaluating a route",
+    "Use autonomous Engine target selection for every combat route",
     "Combo uses safe Q2, Tempest, Cripple, kick geometry, Q1 and bounded W routing",
     "Harass defaults to Q1 and does not take Q2 unless explicitly enabled",
     "LaneClear preserves energy and requires configured Tempest unit count",
@@ -805,8 +764,8 @@ inline constexpr const char* Scenarios[] = {
     "Flee prefers an existing cursorward anchor before Cripple or defensive kick",
     "Automatic mode remains reactive to lethal, hard CC and defensive pressure",
     "Reconcile Q, E and Flurry state through both events and runtime polling",
-    "Yield the full decision loop after every player-owned Q, W, E or R",
-    "Continue observing marks after a manual cast without claiming ownership",
+    "Preserve the decision loop while reconciling local Q W E and R casts",
+    "Continue observing marks after local casts without yielding the decision loop",
     "Preserve attack windups except for a verified lethal spell",
     "Never automate Flash, Ignite, Smite, trinkets or item actives",
 };
@@ -820,7 +779,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Collision-authoritative Q and marked Q2 safety, existing-anchor-only "
         "Safeguard routing, Flurry-aware energy, Tempest mark timing, kick-line "
-        "geometry and manual insec ownership across every orbwalker mode.";
+        "geometry and autonomous insec and route policy across every orbwalker mode.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

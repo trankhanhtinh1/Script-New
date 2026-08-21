@@ -25,7 +25,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::MissileEventIsLocal;
 using ControllerHelpers::Now;
 using ControllerHelpers::NearestEnemyToPlayer;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::Slider;
@@ -52,7 +51,6 @@ inline Vector3 GapcloserEndpoint = {};
 inline int GapcloserUntil = 0;
 inline int InterruptTargetId = 0;
 inline int InterruptUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int QPendingUntil = 0;
 inline int EEmpowerHits = 0;
 inline int WPendingUntil = 0;
@@ -307,9 +305,8 @@ inline void Automatic(const AIHeroClient& target) {
     if (CastW(target, ally, Mode::Automatic, true)) return;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const int now = Now();
-    if (ManualOwnershipUntil > now) return true;
     if (QPendingUntil && QPendingUntil < now) QPendingUntil = 0;
     if (WPendingUntil && WPendingUntil < now) WPendingUntil = 0;
     if (EEmpowerUntil && EEmpowerUntil < now) {
@@ -318,7 +315,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     if (RActiveUntil && RActiveUntil < now) { RActiveUntil = 0; RMissileId = 0; }
     if (GapcloserUntil < now) GapcloserTargetId = 0;
     if (InterruptUntil < now) InterruptTargetId = 0;
-    const auto target = PreferredEnemyTarget(selected, kRRange);
+    const auto target = Engine::SelectTarget(kRRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -336,7 +333,6 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("Nami tactics"));
     TacticsMenu->Add(new MenuSlider("MinCommitHealth", "Minimum health to commit", 30, 1, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual spell ownership window", 600, 150, 1400));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Aqua Prison"));
     QMenu->Add(new MenuBool("RequireHighHitchance", "Require high hitchance", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("Ebb and Flow"));
@@ -359,7 +355,7 @@ inline void OnLoad() {
     LastAutoTargetId = LastAutoTick = ProtectedAllyId = 0;
     TargetedAllyThreatId = TargetedAllyThreatUntil = GapcloserTargetId = GapcloserUntil = 0;
     GapcloserEndpoint = {};
-    InterruptTargetId = InterruptUntil = ManualOwnershipUntil = 0;
+    InterruptTargetId = InterruptUntil = 0;
     QPendingUntil = WPendingUntil = EEmpowerUntil = EEmpowerAllyId = EEmpowerHits = 0;
     RActiveUntil = RMissileId = 0;
 }
@@ -374,8 +370,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
             CastTicks[static_cast<std::size_t>(slot)] = Now();
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = Now() +
-                Slider(TacticsMenu, "ManualOwnershipMs", 600);
         }
         return;
     }
@@ -454,10 +448,10 @@ inline constexpr const char* Scenarios[] = {
     "Tidal Wave projects a 2550-range 325-width wave with first-collision ownership",
     "Tidal Wave endpoint rejects walls, turrets and unsafe enemy piles except peel or lethal",
     "resource, cooldown, damage, healing and shield gates protect every cast",
-    "selected target is preferred before orbwalker target fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "orbwalker AA windup is preserved unless lethal or reactive peel is required",
     "Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic have distinct policies",
-    "events and polling reconcile manual ownership, buffs and R missile lifecycle",
+    "Events and polling reconcile buffs, threats and R missile lifecycle",
 };
 
 inline constexpr ChampionController Controller = [] {

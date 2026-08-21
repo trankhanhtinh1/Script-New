@@ -21,7 +21,6 @@ using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
 using ControllerHelpers::CastThrottleReady;
-using ControllerHelpers::CursorDirectionAgrees;
 
 inline Menu* TacticsMenu = nullptr;
 inline Menu* QMenu = nullptr;
@@ -37,7 +36,6 @@ inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastBeforeAttackTargetId = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int FlightUntil = 0;
@@ -133,10 +131,12 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return true;
 }
 inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool lethal = false, bool manual = false) {
+                  bool lethal = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2, mode) || PreserveAttack(reactive, lethal)) return false;
-    const Vector3 requested = Game::CursorPos();
+    const bool fleeing = mode == Mode::Flee;
+    const Vector3 requested = fleeing ? Game::CursorPos() :
+        PredictPosition(target, kEFlightSeconds);
     const Vector3 endpoint = ClampFlightEndpoint(player.Position(), requested);
     if (endpoint.IsZero()) return false;
     const bool defensive = reactive || player.HealthPercent() <=
@@ -147,7 +147,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
         !defensive && Engine::UnderEnemyTurret(endpoint),
         !defensive && Engine::CountEnemiesAt(endpoint, 250.0f) >
             Slider(EMenu, "MaxEndpointEnemies", 1),
-        CursorDirectionAgrees(endpoint, -0.02f), defensive, lethal, manual,
+        !fleeing, defensive, lethal,
         player.Position().Distance2D(endpoint), kERange};
     if (!ShouldTakeFlight(context)) return false;
     if (!Engine::ControllerCastPosition(2, endpoint)) return false;
@@ -157,8 +157,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
     FlightEndpoint = endpoint;
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(3, mode) ||
         PreserveAttack(reactive, Lethal(target, RDamage(target)))) return false;
@@ -173,7 +172,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     }
     const bool centerLethal = Lethal(target, RDamage(target, true));
     const RContext context{true, true, false, centerLethal || Lethal(target, RDamage(target)),
-        reactive || player.HealthPercent() <= Slider(RMenu, "DefensiveHp", 38), manual,
+        reactive || player.HealthPercent() <= Slider(RMenu, "DefensiveHp", 38),
         targets, Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldCastR(context)) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
@@ -226,11 +225,10 @@ inline void ReconcileState() {
         FlightEndpoint = {};
     }
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kRRange);
+    const AIHeroClient target = Engine::SelectTarget(kRRange);
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(target) &&
         CastR(target, mode, true)) return true;
     switch (mode) {
@@ -251,8 +249,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now +
-                Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
             if (args.IsAutoAttack) {
                 LastAutoTargetId = static_cast<int>(args.TargetNetworkId);
@@ -284,7 +280,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SmolderOneTrick", "Smolder dragon tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HumanizerMs", "Minimum cast spacing (ms)", 30, 18, 150));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Dragon Practice and Q evolution"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Achoo line"));
@@ -304,7 +299,7 @@ inline void OnLoad() {
     ObservedStacks = PredictedStacks = 0;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = LastBeforeAttackTargetId = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     FlightUntil = FlightStartTick = 0;
     FlightEndpoint = LastQAim = LastWAim = LastRAim = {};
     LastMode = Mode::None;
@@ -319,15 +314,15 @@ inline constexpr const char* Scenarios[] = {
     "Track Dragon Practice from buff events plus polling reconciliation",
     "Evolve Q exactly at 25, 125 and 225 observed stacks",
     "Keep Q stack-scaled damage and explosion area boundary-safe",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use the autonomous engine-selected enemy for combat",
     "Use W prediction, width, collision and line reach before casting",
-    "Use E only with a valid cursor endpoint and safe flight destination",
+    "Use cursor-directed flight only while fleeing and predicted-target flight in combat",
     "Reject E endpoints through walls, turrets or excessive enemy threat",
-    "Preserve cursor intent and never own player movement after flight",
+    "Keep movement ownership local to the flight action and preserve endpoint safety",
     "Use R for center execute, area damage, defensive heal or configured team value",
     "Reject R through projectile walls and require observed prediction",
     "Preserve AA windup unless a reactive or lethal cast is justified",
-    "Respect manual Q W E R ownership windows from process-spell events",
+    "Reconcile Q W E R cast state from process-spell events",
     "Reconcile flight lifecycle from polling after cast and expiry",
     "Combo uses W/Q pressure, safe E and area/execute R",
     "Harass spends mana only above the configured reserve",

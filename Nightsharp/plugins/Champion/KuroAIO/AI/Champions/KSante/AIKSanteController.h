@@ -30,9 +30,7 @@ inline int QStacks = 0;
 inline int QStackExpireTick = 0;
 inline int WChargeStartTick = 0;
 inline int WTargetId = 0;
-inline bool WOwned = false;
 inline WPurpose WCurrentPurpose = WPurpose::Combo;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -83,12 +81,6 @@ inline bool Unstoppable(const AIHeroClient &t) {
          t.HasBuff("SettR") || t.HasBuff("BriarE") || t.HasBuff("GalioE");
 }
 
-inline bool CursorAgrees(const Vector3 &p, float dot = -0.05f) {
-  const auto me = GameObjects::Player();
-  const Vec3 a = Direction2D(me.Position(), Game::CursorPos()),
-             b = Direction2D(me.Position(), p);
-  return a.IsZero() || b.IsZero() || a.Dot(b) >= dot;
-}
 
 inline bool TerrainBlocks(const Vector3 &a, const Vector3 &b) {
   const Vec3 d = Direction2D(a, b);
@@ -148,17 +140,12 @@ inline void ReconcileState() {
       Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsCharging();
   if (!charging && now > LastWCastTick + 180) {
     WChargeStartTick = WTargetId = 0;
-    WOwned = false;
   } else if (charging && WChargeStartTick == 0) {
     WChargeStartTick = now;
-    WOwned = false;
   }
 }
 
-inline AIHeroClient ResolveTarget(const AIHeroClient &selected,
-                                  float range = 950) {
-  if (Engine::ValidEnemy(selected, range))
-    return selected;
+inline AIHeroClient ResolveTarget(float range = 950) {
   const auto orb = OrbwalkerHeroTarget(range);
   return Engine::ValidEnemy(orb, range) ? orb : Engine::SelectTarget(range);
 }
@@ -208,13 +195,10 @@ inline bool CastQ(const AIHeroClient &t, Mode m, bool defensive = false) {
       TerrainBlocks(me.Position(), aim) || Q3Collision(t, aim))
     return false;
   ModeContext c{};
-  c.ManualOwnership = ManualOwnershipUntil > Now();
   c.AttackWindingUp = Orbwalker::IsWindingUp();
-  c.SelectedTarget = true;
-  c.OrbwalkerTarget = ControllerHelpers::OrbwalkerTargets(t, range);
   c.Defensive = defensive;
   c.KillSecure = QLethal(t);
-  if (!MayUseAbility(c) || (!CursorAgrees(aim, -.2f) && !defensive))
+  if (!MayUseAbility(c))
     return false;
   const bool q3 = IsQ3(QStacks);
   if (!Engine::ControllerCastPosition(0, aim))
@@ -236,7 +220,6 @@ inline bool EndpointSafe(const Vector3 &p, const AIHeroClient &t,
   c.StartedUnderEnemyTurret = Engine::UnderEnemyTurret(me.Position());
   c.PointClickThreat = ControllerHelpers::HasReadyPointClickThreatAt(p);
   c.DashHazard = ControllerHelpers::HasReadyDashHazardAt(p);
-  c.CursorAgrees = CursorAgrees(p, defensive ? -1.f : -.05f);
   c.AllyTarget = ally;
   c.AllyAlive = allyAlive;
   c.AllyInRange = allyRange;
@@ -270,14 +253,13 @@ inline bool StartW(const AIHeroClient &t, Mode m, WPurpose purpose) {
   Engine::MarkSuccessfulCast(1);
   WChargeStartTick = LastWCastTick = Now();
   WTargetId = (int)t.NetworkId();
-  WOwned = true;
   WCurrentPurpose = purpose;
   return true;
 }
 
 inline bool ReleaseW(const AIHeroClient &fallback) {
   if (!Engine::RuntimeSpells[1] || !Engine::RuntimeSpells[1]->IsCharging() ||
-      !WOwned || !WChargeStartTick)
+      !WChargeStartTick)
     return false;
   auto t = HeroByNetworkId(WTargetId);
   if (!Engine::ValidEnemy(t, 900))
@@ -323,7 +305,6 @@ inline bool ReleaseW(const AIHeroClient &fallback) {
   Engine::MarkSuccessfulCast(1);
   LastWCastTick = Now();
   WChargeStartTick = WTargetId = 0;
-  WOwned = false;
   return true;
 }
 
@@ -336,8 +317,7 @@ inline AIHeroClient BestDashAlly() {
         a.NetworkId() == me.NetworkId() ||
         !EndpointSafe(a.Position(), {}, true, false, true, true, true))
       continue;
-    const float s = -a.Position().Distance2D(Game::CursorPos()) * .35f +
-                    Engine::CountAlliesAt(a.Position(), 650) * 110.f -
+    const float s = Engine::CountAlliesAt(a.Position(), 650) * 110.f -
                     Engine::CountEnemiesAt(a.Position(), 600) * 170.f;
     if (s > score) {
       best = a;
@@ -408,7 +388,6 @@ inline IsolationResult IsolationFor(const AIHeroClient &t) {
   c.PlayerExitAvailable = Ready(2, Mode::Combo, true) ||
                           Engine::CountAlliesAt(landing, 850) > 0 ||
                           Engine::CountEnemiesAt(landing, 650) <= 1;
-  c.CursorAgrees = CursorAgrees(t.Position(), -.1f);
   c.Lethal = t.HealthPercent() <= Slider(RMenu, "LethalHp", 24);
   c.EnemiesBefore = Engine::CountEnemiesAt(t.Position(), 750);
   c.EnemiesAfter = Engine::CountEnemiesAt(landing, 750);
@@ -443,14 +422,14 @@ inline bool TryReactive(const AIHeroClient &fallback, Mode m) {
   t = HeroByNetworkId(GapcloserTargetId);
   if (GapcloserExpireTick > Now() && Engine::ValidEnemy(t, 850)) {
     if (StartW(t, m, WPurpose::Peel) ||
-        CastESelf(Game::CursorPos(), m, t, true))
+        CastESelf(t.Position(), m, t, true))
       return true;
   }
   if (IncomingHardCCUntil > Now() || IncomingThreatUntil > Now()) {
     const auto a = BestDashAlly();
     if (a.IsValid() && CastEAlly(a, m))
       return true;
-    return CastESelf(Game::CursorPos(), m, fallback, true);
+    return CastESelf(fallback.Position(), m, fallback, true);
   }
   return false;
 }
@@ -485,16 +464,13 @@ inline bool Flee(const AIHeroClient &t) {
   return Engine::ValidEnemy(t) && IsQ3(QStacks) && CastQ(t, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode m, const AIHeroClient &selected) {
+inline bool OnUpdate(Mode m, const AIHeroClient &) {
   ReconcileState();
-  const auto t = ResolveTarget(selected, kQ3Range + 100);
+  const auto t = ResolveTarget(kQ3Range + 100);
   if (Engine::RuntimeSpells[1] && Engine::RuntimeSpells[1]->IsCharging()) {
-    if (WOwned)
-      (void)ReleaseW(t);
+    (void)ReleaseW(t);
     return true;
   }
-  if (ManualOwnershipUntil > Now())
-    return true;
   if (TryReactive(t, m == Mode::None ? Mode::Automatic : m))
     return true;
   switch (m) {
@@ -546,9 +522,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
     return;
   }
   const int s = a.Slot;
-  const bool owned = s >= 0 && s < 4 && Engine::WasControllerCast(s);
-  if (!owned)
-    ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
   if (s == 0) {
     LastQCastTick = now;
     const bool q3 = Engine::TextContains(a.SpellName, "Q3");
@@ -556,10 +529,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
     QStackExpireTick = QStacks ? now + kQStackDurationMs : 0;
   } else if (s == 1) {
     LastWCastTick = now;
-    if (!owned) {
-      WOwned = false;
+    if (WChargeStartTick == 0)
       WChargeStartTick = now;
-    }
   } else if (s == 2)
     LastECastTick = now;
   else if (s == 3) {
@@ -600,7 +571,6 @@ inline void UpdateBuff(const SDK::Events::BuffEventArgs &a, bool add) {
       WChargeStartTick = now;
     if (!add) {
       WChargeStartTick = WTargetId = 0;
-      WOwned = false;
     }
   }
 }
@@ -627,12 +597,10 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu =
       root->AddSubMenu(new Menu("KSanteOneTrick", "K'Sante one-trick tactics"));
-  TacticsMenu->Add(new MenuSlider(
-      "ManualOwnershipMs", "Yield after manual spell (ms)", 560, 300, 1000));
   TacticsMenu->Add(new MenuBool("DrawRanges", "Draw live Q/E ranges", false));
   WMenu = TacticsMenu->AddSubMenu(new Menu("PathMaker", "Path Maker charge"));
-  WMenu->Add(new MenuSeparator("OwnedCharge",
-                               "Only controller-started W is auto-released"));
+  WMenu->Add(new MenuSeparator("ChargeTiming",
+                               "Path Maker charge timing"));
   EMenu = TacticsMenu->AddSubMenu(new Menu("Footwork", "Footwork safety"));
   EMenu->Add(new MenuSlider("MaxEndpointEnemies",
                             "Maximum enemies at E endpoint", 2, 1, 5));
@@ -647,8 +615,7 @@ inline void OnLoad() {
   CurrentStance = Stance::Tank;
   AllOutExpireTick = QStacks = QStackExpireTick = 0;
   WChargeStartTick = WTargetId = 0;
-  WOwned = false;
-  ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+  IncomingThreatUntil = IncomingHardCCUntil = 0;
   GapcloserTargetId = GapcloserExpireTick = 0;
   GapcloserEndpoint = {};
   InterruptTargetId = InterruptExpireTick = 0;
@@ -660,7 +627,6 @@ inline void OnLoad() {
 
 inline void OnUnload() {
   TacticsMenu = WMenu = EMenu = RMenu = nullptr;
-  WOwned = false;
   TerrainBlocksCaches.fill({});
   TerrainBlocksCacheCursor = 0;
 }
@@ -673,7 +639,7 @@ inline constexpr const char *Scenarios[] = {
     "rejection",
     "Preserve orbwalker windup except defensive or lethal casts",
     "Own W start, target, purpose, charge threshold and release",
-    "Never release a manually started W charge",
+    "Release an observed W charge after minimum timing, prediction and safety checks",
     "Respect 400 ms Tank and 750 ms All Out W minimum charge",
     "Release W for interrupt, peel, lethal, full charge or expiry",
     "Capture gapclosers and interruptible channels for W/Q3 peel",
@@ -683,14 +649,13 @@ inline constexpr const char *Scenarios[] = {
     "Use ally E only on a living in-range ally with a safe endpoint",
     "Reject R into unstoppable or spell-shielded targets",
     "Sample terrain behind R target and require measurable isolation",
-    "Require R exit, landing safety, numerical safety and cursor consent",
+    "Require R exit, landing safety, numerical safety and terrain separation",
     "Combo builds Q3 and commits W/E/R only through safety gates",
     "Harass preserves All Out, W and E",
     "LaneClear, Jungle and LastHit use resource-aware farm execution",
     "Flee prioritizes ally E, self E, W peel and Q3",
     "Automatic allows defensive, interrupt and kill-secure reactions only",
-    "Preserve selected and orbwalker target cooperation",
-    "Yield after manual spells and preserve manual W ownership",
+    "Use autonomous target selection and resume after observed spell events",
     "Never automate summoners, items or movement orders"};
 
 inline constexpr ChampionController Controller = [] {
@@ -700,9 +665,8 @@ inline constexpr ChampionController Controller = [] {
   c.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
   c.ResearchArtifact = "AI/Research/AIKSante.md";
   c.ImplementationSummary =
-      "Event/poll reconciled All Out and Q stacks; owned W charge/interrupt; "
-      "safe self/ally E; terrain-scored R isolation; mode, orbwalker and "
-      "manual ownership.";
+      "Event/poll reconciled All Out and Q stacks; W charge timing and interrupt; "
+      "safe self/ally E; terrain-scored R isolation; mode and orbwalker safety.";
   c.Scenarios = Scenarios;
   c.ScenarioCount = std::size(Scenarios);
   c.OwnsDecisionLoop = true;

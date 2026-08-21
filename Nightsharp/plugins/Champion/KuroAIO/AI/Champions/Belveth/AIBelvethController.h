@@ -80,7 +80,6 @@ enum class RReason : int {
     HealSave,
     EnhancedMacro,
     Expiring,
-    Manual,
 };
 
 struct EnemyWindow {
@@ -212,7 +211,6 @@ inline RPassiveTracker RAttackTracker = {};
 inline EPlan LastEPlan = {};
 inline int LastECastTick = 0;
 inline int LastLocalSpellTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int SequenceExpireTick = 0;
 
 inline std::array<EnemyWindow, 16> EnemyWindows = {};
@@ -1351,7 +1349,7 @@ inline int EnemyLaneMinionsAt(const Vector3& position, float radius) {
     return count;
 }
 
-inline RPlan BuildRPlan(bool manual = false) {
+inline RPlan BuildRPlan() {
     RPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3) || RChannelActive) return best;
@@ -1400,7 +1398,7 @@ inline RPlan BuildRPlan(bool manual = false) {
         context.IncomingLethalDamage = IncomingThreatUntil >= now &&
             IncomingDamage >= player.Health() * 0.72f;
         context.PlayerWindingUp = Orbwalker::IsWindingUp();
-        context.PlayerExplicitlyRequested = manual;
+        context.PlayerExplicitlyRequested = false;
         context.CurrentFormSeconds = TrueFormSecondsRemaining();
         context.PlayerMissingHealth = std::max(
             0.0f, player.MaxHealth() - player.Health());
@@ -1434,9 +1432,6 @@ inline RPlan BuildRPlan(bool manual = false) {
         if (!evaluation.Cast) continue;
         float score = evaluation.Score;
         if (coral.Enhanced) score += 250.0f;
-        if (manual) {
-            score -= 0.20f * coral.Position.Distance2D(Game::CursorPos());
-        }
         if (score <= bestScore) continue;
         bestScore = score;
         best.CoralId = coral.NetworkId;
@@ -1444,8 +1439,7 @@ inline RPlan BuildRPlan(bool manual = false) {
         best.Context = context;
         best.Evaluation = evaluation;
         best.Evaluation.Score = score;
-        if (manual) best.Reason = RReason::Manual;
-        else if (anyEnhanced) best.Reason = RReason::EnhancedMacro;
+        if (anyEnhanced) best.Reason = RReason::EnhancedMacro;
         else if (context.KillCount > 0) best.Reason = RReason::Execute;
         else if (context.IncomingLethalDamage ||
                  context.PlayerLow) best.Reason = RReason::HealSave;
@@ -1497,11 +1491,6 @@ inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
     return true;
 }
 
-inline AIHeroClient PreferredEnemy(const AIHeroClient& selected,
-                                   float range = 1800.0f) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    return NearestEnemyToPlayer({}, range);
-}
 
 inline bool WallBetweenPlayerAnd(const AIBaseClient& target) {
     const auto player = GameObjects::Player();
@@ -1589,13 +1578,9 @@ inline AIBaseClient BestFarmUnit(bool jungle) {
     return best;
 }
 
-inline bool TryManualCoral() {
-    if (!Key(RMenu, "ManualCoral", false)) return false;
-    return CastRPlan(BuildRPlan(true), true);
-}
 
 inline bool TryReactive(const AIHeroClient& selected) {
-    AIHeroClient target = PreferredEnemy(selected, 1250.0f);
+    AIHeroClient target = Engine::SelectTarget(1250.0f);
     if (EActive) {
         const bool cast = HandleEChannel(target);
         return cast || EActive;
@@ -1627,7 +1612,7 @@ inline bool TryReactive(const AIHeroClient& selected) {
     }
     if (IncomingThreatUntil >= Now() &&
         Bool(RMenu, "Survival", true)) {
-        if (CastRPlan(BuildRPlan(false), true)) return true;
+        if (CastRPlan(BuildRPlan(), true)) return true;
     }
     return false;
 }
@@ -1649,7 +1634,7 @@ inline bool TryKillSecure(const AIHeroClient& target) {
         if (e.Valid && e.Context.Execute && CastEPlan(e, true)) return true;
     }
     if (Ready(3) && ActiveCoralCount() > 0) {
-        const RPlan r = BuildRPlan(false);
+        const RPlan r = BuildRPlan();
         if (r.Valid && r.Context.KillCount > 0 && CastRPlan(r, true)) {
             return true;
         }
@@ -1660,7 +1645,7 @@ inline bool TryKillSecure(const AIHeroClient& target) {
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target, 1800.0f)) {
         return Bool(RMenu, "Automatic", true) &&
-            CastRPlan(BuildRPlan(false));
+            CastRPlan(BuildRPlan());
     }
     if (CurrentPosture == Posture::SecondEntry &&
         !TeamfightReadyToEnter(target)) {
@@ -1669,7 +1654,7 @@ inline bool TryCombo(const AIHeroClient& target) {
         return false;
     }
     if (Bool(RMenu, "Automatic", true)) {
-        const RPlan r = BuildRPlan(false);
+        const RPlan r = BuildRPlan();
         if (r.Valid && (r.Context.KillCount > 0 ||
             r.Context.IncomingLethalDamage ||
             r.Context.AnyEnhancedCoral ||
@@ -1740,7 +1725,7 @@ inline bool TryHarass(const AIHeroClient& target) {
 }
 
 inline bool TryFlee(const AIHeroClient& selected) {
-    const AIHeroClient threat = PreferredEnemy(selected, 1050.0f);
+    const AIHeroClient threat = NearestEnemyToPlayer({}, 1050.0f);
     if (EActive) {
         const bool cast = HandleEChannel(threat);
         return cast || EActive;
@@ -1845,14 +1830,13 @@ inline void RefreshRuntimeState() {
     if (EActive && now > EEndTick + 180) EActive = false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     RefreshRuntimeState();
-    const AIHeroClient target = PreferredEnemy(selected, 1800.0f);
+    const AIHeroClient target = Engine::SelectTarget(1800.0f);
     LastDecisionTargetId = target.IsValid()
         ? static_cast<int>(target.NetworkId()) : 0;
     CurrentPosture = DeterminePosture(mode, target);
-    if (TryManualCoral()) return true;
-    if (PlayerOverrideUntil >= Now()) return false;
     if (TryReactive(target)) return true;
     if (TryKillSecure(target)) return true;
     if (mode == Mode::Flee) return TryFlee(target);
@@ -1862,7 +1846,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         mode == Mode::Jungle) return TryFarm(mode);
     if ((mode == Mode::None || mode == Mode::Automatic) &&
         Bool(RMenu, "Automatic", true)) {
-        return CastRPlan(BuildRPlan(false));
+        return CastRPlan(BuildRPlan());
     }
     return false;
 }
@@ -1986,10 +1970,8 @@ inline void ObserveLocalSpell(
     }
 
     if (!controllerOwned) {
-        PlayerOverrideUntil = now + Slider(
-            TacticsMenu, "ManualOwnershipMs", 520);
         ActiveSequence = Sequence::PlayerLed;
-        SequenceExpireTick = PlayerOverrideUntil + 180;
+        SequenceExpireTick = now + 700;
     }
 }
 
@@ -2266,7 +2248,6 @@ inline const char* RReasonName(RReason reason) {
     case RReason::HealSave: return "heal save";
     case RReason::EnhancedMacro: return "enhanced";
     case RReason::Expiring: return "expiring";
-    case RReason::Manual: return "manual";
     default: return "hold";
     }
 }
@@ -2275,7 +2256,7 @@ inline void OnDraw() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     const int now = Now();
-    if (Bool(CoachMenu, "DrawQ", true)) {
+    if (Bool(CoachMenu, "DrawQ", false)) {
         for (int i = 0; i < 4; ++i) {
             const Quadrant quadrant = static_cast<Quadrant>(i);
             const Vector3 end = player.Position() +
@@ -2296,12 +2277,12 @@ inline void OnDraw() {
                 0xDDF2A4FFu, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawW", true) && LastWPlan.Valid) {
+    if (Bool(CoachMenu, "DrawW", false) && LastWPlan.Valid) {
         Drawing::DrawLine(
             player.Position(), LastWPlan.Aim,
             0xCC72D9F4u, 2.0f);
     }
-    if (Bool(CoachMenu, "DrawE", true)) {
+    if (Bool(CoachMenu, "DrawE", false)) {
         Drawing::DrawCircle(
             player.Position(), kERadius,
             EActive ? 0xDDF35B83u : 0x668A4BAAu,
@@ -2313,7 +2294,7 @@ inline void OnDraw() {
                 0xDDF35B83u, 2.0f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawCorals", true)) {
+    if (Bool(CoachMenu, "DrawCorals", false)) {
         for (const auto& coral : Corals) {
             if (coral.NetworkId == 0 || coral.ExpireTick < now ||
                 !coral.Position.IsValid()) continue;
@@ -2327,7 +2308,7 @@ inline void OnDraw() {
                 1.1f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[640]{};
@@ -2356,21 +2337,18 @@ inline void BuildMenu(Menu* root) {
         "KillSecure", "Exact lethal windows", true));
     TacticsMenu->Add(new MenuSlider(
         "KiteHp", "Kite posture HP (%)", 36, 10, 80));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)",
-        520, 180, 1200));
     TacticsMenu->Add(new MenuSeparator(
         "SecondEntry",
         "Bel'Veth waits for enemy"));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "DeathInLavender", "Three-second spell haste and persistent R ramp"));
+        "DeathInLavender", "Spell haste and R ramp"));
     PassiveMenu->Add(new MenuSeparator(
         "Weave",
-        "Each ability starts the passive attack-speed window"));
+        "Ability attack-speed window"));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
-        "VoidSurge", "Four map-fixed Q sectors and AA reset"));
+        "VoidSurge", "Map-fixed Q sectors and AA reset"));
     QMenu->Add(new MenuBool(
         "Combo", "Q farm sectors in combo", true));
     QMenu->Add(new MenuBool(
@@ -2392,7 +2370,7 @@ inline void BuildMenu(Menu* root) {
         "BelvethQHudIcon0..15 is"));
 
     WMenu = TacticsMenu->AddSubMenu(new Menu(
-        "AboveAndBelow", "Reliable knock-up and multi-sector Q refund"));
+        "AboveAndBelow", "Knock-up and Q refund policy"));
     WMenu->Add(new MenuBool(
         "Combo", "W for a reliable lock or", true));
     WMenu->Add(new MenuBool(
@@ -2407,7 +2385,7 @@ inline void BuildMenu(Menu* root) {
         "Mobile targets must first"));
 
     EMenu = TacticsMenu->AddSubMenu(new Menu(
-        "RoyalMaelstrom", "Forced-target execute and damage reduction"));
+        "RoyalMaelstrom", "Forced execute and damage reduction"));
     EMenu->Add(new MenuBool(
         "Combo", "E after W/Q window", true));
     EMenu->Add(new MenuBool(
@@ -2424,22 +2402,19 @@ inline void BuildMenu(Menu* root) {
         "After 0.75s, E cancels for"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
-        "EndlessBanquet", "Global coral consumption and form economy"));
+        "EndlessBanquet", "Coral use and form economy"));
     RMenu->Add(new MenuBool(
         "Automatic", "Consume a safe valuable coral", true));
     RMenu->Add(new MenuBool(
         "Survival", "Use coral heal vs tracked", true));
     RMenu->Add(new MenuSlider(
         "HealHp", "Coral heal HP (%)", 36, 5, 75));
-    RMenu->Add(new MenuKeyBind(
-        "ManualCoral", "Consume best safe cursor-side coral [T]",
-        SDK::Keys::T, KeyBindType::Press));
     RMenu->Add(new MenuSeparator(
         "GlobalConsume",
         "Casting R consumes every"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "AA-reset clear and jungle wall cancel"));
+        "Farm", "AA-reset clear and wall cancel"));
     FarmMenu->Add(new MenuBool(
         "LaneQ", "Use lane Q only after AA or", true));
     FarmMenu->Add(new MenuBool(
@@ -2455,17 +2430,17 @@ inline void BuildMenu(Menu* root) {
         "Orbwalker owns attacks and"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "Bel'Veth one-trick geometry and state"));
+        "Coach", "Bel'Veth geometry and state"));
     CoachMenu->Add(new MenuBool(
-        "DrawQ", "Draw Q sectors", true));
+        "DrawQ", "Draw Q sectors", false));
     CoachMenu->Add(new MenuBool(
-        "DrawW", "Draw the last selected W line", true));
+        "DrawW", "Draw the last selected W line", false));
     CoachMenu->Add(new MenuBool(
-        "DrawE", "Draw E radius/target", true));
+        "DrawE", "Draw E radius/target", false));
     CoachMenu->Add(new MenuBool(
-        "DrawCorals", "Draw ordinary and enhanced", true));
+        "DrawCorals", "Draw ordinary and enhanced", false));
     CoachMenu->Add(new MenuBool(
-        "DrawState", "Draw state/seq,", true));
+        "DrawState", "Draw state/seq,", false));
 }
 
 inline void OnLoad() {
@@ -2514,7 +2489,7 @@ inline void OnLoad() {
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEnd = {};
     InterruptTargetId = InterruptExpireTick = 0;
-    LastLocalSpellTick = PlayerOverrideUntil = SequenceExpireTick = 0;
+    LastLocalSpellTick = SequenceExpireTick = 0;
 }
 
 inline void OnUnload() {

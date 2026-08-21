@@ -21,9 +21,7 @@ using ControllerHelpers::IsEpicMonster;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
-using ControllerHelpers::OrbwalkerHeroTarget;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Protected;
 using ControllerHelpers::SelectJungleTarget;
@@ -46,7 +44,6 @@ inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastDamageTick = 0;
 inline int FrostBrokenTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -57,7 +54,6 @@ inline int InterruptUntil = 0;
 inline int RMissileId = 0;
 inline int RCastTick = 0;
 inline bool RInFlight = false;
-inline bool RControllerOwned = false;
 
 inline int EIndex(int id, bool create = true) {
     if (id == 0) return -1;
@@ -178,7 +174,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     ClearEStack(static_cast<int>(target.NetworkId()));
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto p = GameObjects::Player();
     if (!p.IsValid() || !Engine::ValidEnemy(target, kRRange) || !ReadyFor(3, mode, reactive) ||
         !CanAct(reactive) || Protected(target)) return false;
@@ -194,11 +190,11 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, 
     const bool lethal = Lethal(target, RDamage(target, false));
     const bool defensive = reactive || IncomingThreatUntil >= Now() ||
         p.HealthPercent() <= Slider(TacticsMenu, "DefensiveHealth", 35);
-    if (!ShouldCastR(true, true, true, false, lethal, defensive, manual,
+    if (!ShouldCastR(true, true, true, false, lethal, defensive,
         hits, Slider(RMenu, "MinimumTargets", 2))) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
     LastCastTick[3] = RCastTick = Now();
-    RInFlight = true; RControllerOwned = true;
+    RInFlight = true;
     return true;
 }
 inline void Combo(const AIHeroClient& target) {
@@ -231,7 +227,7 @@ inline void Farm(Mode mode) {
 inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target, kERange) && CastE(target, Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target, kQRange) && CastQ(target, Mode::Flee, true)) return;
-    (void)CastR(target, Mode::Flee, true, true);
+    (void)CastR(target, Mode::Flee, true);
 }
 inline void Automatic(const AIHeroClient& target) {
     if (GapcloserTargetId && GapcloserUntil >= Now()) {
@@ -256,9 +252,7 @@ inline void ReconcileState() {
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    AIHeroClient target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 900.0f : kRRange);
-    if (!target.IsValid()) target = OrbwalkerHeroTarget(kRRange);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 900.0f : kRRange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -278,7 +272,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = now;
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -333,7 +326,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SejuaniOneTrick", "Sejuani frost tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("DefensiveHealth", "Defensive health percent", 35, 10, 80));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve AA windup", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Arctic Assault"));
@@ -351,9 +343,9 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     EIds.fill(0); EStacks.fill(0); EExpiry.fill(0); LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = LastDamageTick = FrostBrokenTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = LastDamageTick = FrostBrokenTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = GapcloserTargetId = GapcloserUntil = 0;
-    InterruptTargetId = InterruptUntil = RMissileId = RCastTick = 0; RInFlight = RControllerOwned = false;
+    InterruptTargetId = InterruptUntil = RMissileId = RCastTick = 0; RInFlight = false;
 }
 inline void OnUnload() {
     TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
@@ -365,11 +357,11 @@ inline constexpr const char* Scenarios[] = {
     "Use passive bonus armor and magic resistance as a defensive resource, never as permission to turret dive",
     "Use Q Arctic Assault as a 625-unit, 1000-speed dash with sampled terrain and endpoint safety gates",
     "Reject Q endpoints through walls, unsafe turrets, excessive enemies or uncertain walkability",
-    "Preserve selected target before orbwalker target and selector fallback",
+    "Use the autonomous engine-selected target before every combat branch",
     "Predict W first and second flail phases and keep both hit windows distinct",
     "Track Permafrost marks per target with four-stack and five-second expiry reconciliation",
     "Cast E stun only on observed four-stack targets and clear the consumed mark state",
-    "Respect AA windup and yield after manual Q W E or R ownership",
+    "Respect AA windup and observed Q W E R event state",
     "Predict R projectile collision, 1300 reach, 120 width and 1600 speed before casting",
     "Model R frost explosion, two-second zone and empowered 1.5-second stun outcome",
     "Reserve nonlethal R for configured multi-target value while allowing lethal or defensive casts",
@@ -381,7 +373,7 @@ inline constexpr const char* Scenarios[] = {
     "Combo sequences Q, two-phase W, four-stack E and then Glacial Prison",
     "Harass spends W/E only above the configured mana reserve and never initiates R",
     "LaneClear Jungle and LastHit delegate to shared farm policy after objective safety checks",
-    "Flee prioritizes Permafrost peel, safe Q exit and manual-assist R",
+    "Flee prioritizes Permafrost peel, safe Q exit and defensive R",
     "Automatic mode only answers defense, interrupt or kill-secure opportunities, never fresh engage",
     "Never automate items, summoner spells or unrelated movement ownership",
     "Draw ranges and passive state without changing gameplay decisions",

@@ -19,7 +19,7 @@ inline constexpr ChampionProfile Bard = [] {
                   Mechanic::Ammo | Mechanic::Terrain |
                   Mechanic::WallInteraction | Mechanic::AllyTarget |
                   Mechanic::Dash;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::MultiTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Cosmic Binding", CastKind::Line,
@@ -85,13 +85,13 @@ inline constexpr ChampionProfile Bard = [] {
              StepRule::RequireTarget | StepRule::RequireAfterAttack));
 
     p.AllIn = Plan(
-        "clean R catch, time Q for stasis exit, then let the player weave meeps",
+        "clean R catch, time Q for stasis exit, then weave meeps autonomously",
         Step(SDK::SpellSlot::R,
              StepRule::RequireTarget | StepRule::RequireSafePosition),
         Step(SDK::SpellSlot::Q,
              StepRule::RequireTarget | StepRule::RequireCrowdControl),
         Step(SDK::SpellSlot::E,
-             StepRule::RequireSafePosition | StepRule::ManualAssistOnly));
+             StepRule::RequireSafePosition));
 
     p.Flee = Plan(
         "speed the retreat, expose a safe cursor-side portal, then Q/R pursuers",
@@ -112,7 +112,6 @@ inline constexpr ChampionProfile Bard = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 34;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "BardPChimes";
@@ -123,8 +122,8 @@ inline constexpr ChampionProfile Bard = [] {
     p.ThemeTo = 0xFF5EDFD4u;
     p.ThemeSpeed = 0.54f;
     p.TacticalSummary =
-        "Keep movement, portal entry, attacks, target choice, Flash and Smite "
-        "player-owned. Use meep slow before ordinary Q, preserve Q for a true "
+        "Automate movement, portal entry, attacks and target choice while preserving "
+        "Flash and Smite safety. Use meep slow before ordinary Q, preserve Q for a true "
         "second-body/wall stun, treat chimes as route bonuses, cast E only into "
         "verified terrain, and reject any R that freezes allied damage.";
     p.ResearchSummary =

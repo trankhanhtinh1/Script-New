@@ -163,15 +163,13 @@ struct UltimateContext {
     bool PlayerSafe = false;
     bool CommittedCombat = false;
     bool EmpoweredWLethal = false;
-    bool Manual = false;
     int NearbyEnemies = 0;
     int MaximumEnemies = 2;
 };
 
 inline bool MayTranscend(const UltimateContext& context) {
-    if (!context.Ready || context.AlreadyActive) return false;
-    if (context.Manual) return true;
-    if (!context.TargetReachable || !context.PlayerSafe ||
+    if (!context.Ready || context.AlreadyActive ||
+        !context.TargetReachable || !context.PlayerSafe ||
         context.NearbyEnemies > std::max(0, context.MaximumEnemies)) {
         return false;
     }

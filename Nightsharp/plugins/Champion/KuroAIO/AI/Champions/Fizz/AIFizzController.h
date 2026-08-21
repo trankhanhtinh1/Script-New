@@ -29,7 +29,7 @@ inline Menu* TacticsMenu = nullptr;
 inline Menu* FarmMenu = nullptr;
 inline Menu* UltimateMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOwnershipUntil = 0;
+
 inline int LastAutoTargetId = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
@@ -256,8 +256,7 @@ inline void Automatic(const AIHeroClient& target) {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
-    ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
+    ReconcileState();
     const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected,
         mode == Mode::Flee ? 900.0f : kRRange);
     if (ERecastAvailable(EPhase, Now()) &&
@@ -279,7 +278,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
 inline void OnLoad() {
     TacticsMenu = nullptr; FarmMenu = nullptr; UltimateMenu = nullptr;
-    LastCastTick = {}; ManualOwnershipUntil = LastAutoTargetId = 0;
+    LastCastTick = {}; LastAutoTargetId = 0;
     IncomingThreatUntil = IncomingThreatTargetId = 0; IncomingThreatEndpoint = {};
     EPhase = {}; EFirstEndpoint = {}; WArmedUntil = WTargetId = 0;
     RTargetId = RImpactTick = 0; RSize = SharkSize::Small; RTravelDistance = 0.0f;
@@ -292,8 +291,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = Now();
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = Now() + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             if (slot == 1) WArmedUntil = Now() + 900;
             if (slot == 2 && !EPhase.OnPole)
                 EPhase = {true, Now(), Now() + kERecastWindowMs, Now() + kEUntargetableMs};
@@ -362,15 +359,14 @@ inline void OnDraw() {}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("FizzTactics", "Urchin Strike, Trident and Trickster policy"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 150, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("FizzTactics", "Urchin, Trident and Trickster"));
     TacticsMenu->Add(new MenuSlider("ManaReserve", "Mana reserve percent", 20, 0, 80));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 0, 100));
     TacticsMenu->Add(new MenuSlider("MaxEEnemies", "Maximum enemies at E endpoint", 2, 1, 5));
     FarmMenu = root->AddSubMenu(new Menu("FizzFarm", "Lane and jungle farming"));
     FarmMenu->Add(new MenuSlider("LaneMana", "Lane clear mana percent", 40, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleMana", "Jungle mana percent", 30, 0, 100));
-    UltimateMenu = root->AddSubMenu(new Menu("FizzUltimate", "Chum projectile collision and shark size"));
+    UltimateMenu = root->AddSubMenu(new Menu("FizzUltimate", "Chum collision and shark size"));
     UltimateMenu->Add(new MenuSlider("ManaReserve", "R mana reserve", 15, 0, 80));
     UltimateMenu->Add(new MenuSlider("HarassTargetHP", "Harass R target health percent", 70, 1, 100));
 }
@@ -383,7 +379,7 @@ inline constexpr const char* Scenarios[] = {
     "R Chum projectile prediction, first enemy-champion collision and wall rejection",
     "R shark travel distance size tiers, impact clock, collision target and shield-aware lethal gate",
     "Combo Q-W-E weave, Harass poke, lane/jungle/LastHit farm and Flee Trickster route",
-    "Automatic gapcloser/interrupt threat response and manual spell ownership handoff",
+    "Automatic gapcloser/interrupt threat response and cast-state reconciliation/",
 };
 
 inline constexpr ChampionController Controller = [] {

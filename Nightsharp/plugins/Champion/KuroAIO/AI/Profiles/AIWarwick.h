@@ -20,7 +20,6 @@ inline constexpr ChampionProfile Warwick = [] {
     p.UltimateTargetHealthPercent = 45.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "WarwickPassive";

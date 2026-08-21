@@ -37,7 +37,7 @@ inline int LastShotTick = 0;
 inline int ReloadReadyTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int ThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int QTargetId = 0;
@@ -107,7 +107,7 @@ inline void ReconcileShellState() {
     }
 }
 
-inline bool ManualLocked() { return ManualOwnershipUntil > Now(); }
+
 
 inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
     return PreferredEnemyTarget(selected, range);
@@ -125,7 +125,7 @@ inline bool SafePosition(const Vector3& position, bool defensive = false) {
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::RuntimeSpells[0] || !Engine::ValidEnemy(target, kQRange + 50.0f) ||
-        !Ready(0, mode) || !Throttle(0) || ManualLocked() || PreserveAttack(reactive)) return false;
+        !Ready(0, mode) || !Throttle(0) || PreserveAttack(reactive)) return false;
     const auto prediction = Engine::RuntimeSpells[0]->GetPrediction(target);
     Vector3 aim = prediction.GetCastPosition();
     if (!aim.IsValid() || aim.IsZero()) aim = PredictPosition(target, kQDelay);
@@ -155,7 +155,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) 
 inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::RuntimeSpells[1] || !Engine::ValidEnemy(target, kWRange + 50.0f) ||
-        !Ready(1, mode) || !Throttle(1, 80) || ManualLocked() || PreserveAttack(reactive)) return false;
+        !Ready(1, mode) || !Throttle(1, 80) || PreserveAttack(reactive)) return false;
     const auto prediction = Engine::RuntimeSpells[1]->GetPrediction(target);
     Vector3 aim = prediction.GetCastPosition();
     if (!aim.IsValid() || aim.IsZero()) aim = PredictPosition(target, kWDelay);
@@ -184,7 +184,7 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false) 
 
 inline bool CastE(const AIHeroClient& target, Mode mode, bool defensive = false) {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Engine::RuntimeSpells[2] || !Ready(2, mode) || !Throttle(2) || ManualLocked()) return false;
+    if (!player.IsValid() || !Engine::RuntimeSpells[2] || !Ready(2, mode) || !Throttle(2)) return false;
     const Vector3 requested = defensive ? Game::CursorPos() : (target.IsValid() ? target.Position() : Game::CursorPos());
     const Vector3 destination = ClampEndpoint(player.Position(), requested, kEDashRange);
     if (!destination.IsValid() || destination.IsZero()) return false;
@@ -220,7 +220,7 @@ inline bool RLineHasFirstCollision(const AIHeroClient& target, const Vector3& ai
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::RuntimeSpells[3] || !Engine::ValidEnemy(target, kRRange + 70.0f) ||
-        !Ready(3, mode) || !Throttle(3, 160) || ManualLocked() || PreserveAttack(reactive)) return false;
+        !Ready(3, mode) || !Throttle(3, 160) || PreserveAttack(reactive)) return false;
     const auto prediction = Engine::RuntimeSpells[3]->GetPrediction(target);
     Vector3 aim = prediction.GetCastPosition();
     if (!aim.IsValid() || aim.IsZero()) aim = PredictPosition(target, kRDelay);
@@ -280,7 +280,6 @@ inline bool Farm(Mode mode) {
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileShellState();
     LastMode = mode;
-    if (ManualLocked()) return false;
     if (ThreatUntil > Now() && mode == Mode::Automatic) {
         const auto threat = SelectTarget(selected, kWRange);
         if (Engine::ValidEnemy(threat) && CastW(threat, Mode::Automatic, true)) return true;
@@ -316,8 +315,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     const int slot = args.Slot;
     if (slot < 0 || slot >= 4) return;
-    LastCastTick[static_cast<std::size_t>(slot)] = Now();
-    if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = Now() + 650;
+    LastCastTick[static_cast<std::size_t>(slot)] = Now();
     if (slot == 0) {
         QImpactTick = Now() + static_cast<int>(kQDelay * 1000.0f);
         QEndpoint = args.EndPosition;
@@ -440,7 +438,7 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     std::fill(LastCastTick.begin(), LastCastTick.end(), 0);
-    LastShotTick = ReloadReadyTick = LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastShotTick = ReloadReadyTick = LastAutoTargetId = LastAutoTick = 0;
     ThreatUntil = IncomingHardCCUntil = QTargetId = QImpactTick = 0;
     QEndpoint = {};
     QExplosionPending = false;
@@ -474,7 +472,7 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile GravesBasicAttackAmmo1/2 buffs with shell count and reload timing",
     "Do not spend the final shell while a lethal Q route is unavailable",
     "Allow Q through prediction only when the line and end explosion are reachable",
-    "Track Q terrain endpoint and explosion timing after local and manual casts",
+    "Track Q terrain endpoint and explosion timing after local casts/",
     "Reject Q through terrain walls while preserving genuine close-range shell damage",
     "Place Smoke Screen on a predicted target only through a clear projectile route",
     "Track smoke cloud object and four-second vision/impact lifetime by polling",
@@ -486,7 +484,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject R when a champion blocks the selected target or the recoil endpoint is unsafe",
     "Apply R primary physical damage, 400-unit recoil and turret landing safety",
     "Use R for lethal automatic execute and multi-mode combat only with real reach",
-    "Preserve orbwalker attack windup and yield after manual spell ownership",
+    "Preserve orbwalker attack windup and cast state/",
     "Handle distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Complete shell, smoke, dash, recoil, threat, object and missile callbacks",
 };

@@ -53,7 +53,7 @@ inline constexpr ChampionProfile Milio = [] {
     p.Spells[3].MaximumEnemiesAtDestination = 3;
     p.Spells[3].PreserveAutoAttack = true;
 
-    p.Trade = Plan("Kick a predicted threat, then sustain the selected ally with Campfire",
+    p.Trade = Plan("Kick a predicted threat, then sustain the safest ally with Campfire",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireOutsideAaRange),
         Step(SDK::SpellSlot::W, StepRule::RequirePlayerLow));
     p.AllIn = Plan("Q peel/setup, Cozy Campfire sustain, Warm Hugs shields and cleanse heal",
@@ -73,7 +73,6 @@ inline constexpr ChampionProfile Milio = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 44;
-    p.PreferSelectedTarget = true;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "MilioPassive";
     p.MarkBuff = "MilioPBuff";

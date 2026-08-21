@@ -90,9 +90,7 @@ inline int LastAfterAttackTick = 0;
 inline int LastAfterAttackTargetId = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline Mode LastMode = Mode::None;
-inline AIHeroClient LastSmartTarget = {};
 
 inline bool FeatherObject(const SDK::Events::ObjectEventArgs& args) {
     return ControllerHelpers::AnyTextContains(
@@ -277,7 +275,6 @@ inline BladecallerContext BuildEContext(const AIHeroClient& target,
             target.Health() + target.AllShield();
     context.AttackWindingUp = Orbwalker::IsWindingUp();
     context.TurretUnsafe = !TurretSafe(context.Lethal, reactive);
-    context.ManualCast = PlayerOverrideUntil >= Now();
     return context;
 }
 
@@ -320,7 +317,6 @@ inline bool CastW(const AIHeroClient& target, Mode mode) {
 inline RPostureContext BuildRContext(
     const AIHeroClient& target,
     bool defensive,
-    bool manual = false,
     SDK::PredictionOutput* predictionOutput = nullptr) {
     RPostureContext context{};
     const auto player = GameObjects::Player();
@@ -339,7 +335,7 @@ inline RPostureContext BuildRContext(
     context.Lethal = context.TargetValid &&
         SpellDamage(3, target) + AutoDamage(target) >=
             target.Health() + target.AllShield();
-    context.Defensive = defensive || manual || context.PlayerLow;
+    context.Defensive = defensive || context.PlayerLow;
     context.TurretUnsafe = player.IsValid() &&
         Engine::UnderEnemyTurret(player.Position()) &&
         !context.Defensive && !context.Lethal;
@@ -350,12 +346,12 @@ inline RPostureContext BuildRContext(
 }
 
 inline bool CastR(const AIHeroClient& target, Mode mode,
-                  bool defensive = false, bool manual = false) {
+                  bool defensive = false) {
     if (!TargetUsable(target) || !CanUse(3, mode, true) ||
         !CastThrottlePassed(LastRCastTick, 110)) return false;
     SDK::PredictionOutput prediction{};
     const auto context = BuildRContext(
-        target, defensive, manual, &prediction);
+        target, defensive, &prediction);
     if (!ShouldFeatherstorm(context) ||
         !Engine::ControllerCastPosition(3, prediction.GetCastPosition())) {
         return false;
@@ -376,24 +372,10 @@ inline bool CastR(const AIHeroClient& target, Mode mode,
     return true;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& preferred) {
+inline AIHeroClient SelectTarget() {
     constexpr float kTargetRange = kQRange + 75.0f;
-    if (TargetWithinRange(preferred, kTargetRange)) {
-        LastSmartTarget = preferred;
-        return LastSmartTarget;
-    }
-
-    const auto orbTarget =
-        ControllerHelpers::OrbwalkerHeroTarget(kTargetRange);
-    if (TargetWithinRange(orbTarget, kTargetRange)) {
-        LastSmartTarget = orbTarget;
-        return LastSmartTarget;
-    }
-
-    const auto fallback = Engine::SelectTarget(kTargetRange);
-    LastSmartTarget = TargetWithinRange(fallback, kTargetRange)
-        ? fallback : AIHeroClient{};
-    return LastSmartTarget;
+    const auto target = Engine::SelectTarget(kTargetRange);
+    return TargetWithinRange(target, kTargetRange) ? target : AIHeroClient{};
 }
 
 inline bool TryAntiGapcloser() {
@@ -425,8 +407,8 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return CastQ(target, mode, false);
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto target = ControllerHelpers::NearestEnemyToPlayer(preferred, kQRange);
+inline bool TryFlee() {
+    const auto target = Engine::SelectTarget(kQRange);
     if (!TargetUsable(target)) return false;
     if (CastR(target, Mode::Flee, true)) return true;
     return CastE(target, Mode::Flee, true);
@@ -439,19 +421,17 @@ inline bool TryFarm(Mode mode) {
     return CanUse(0, mode, false) && Engine::TryFarmSpell(0, jungle, lastHit);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileFeathers();
-    const int now = Now();
-    if (PlayerOverrideUntil >= now && mode != Mode::Automatic) return false;
     if (TryAntiGapcloser()) return true;
 
-    const auto target = SelectTarget(preferred);
+    const auto target = SelectTarget();
     if (TryKillSecure(target)) return true;
     if (mode == Mode::Combo || mode == Mode::Harass) {
         return TryCombat(target, mode);
     }
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    if (mode == Mode::Flee) return TryFlee();
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
         mode == Mode::LastHit) return TryFarm(mode);
     return false;
@@ -459,10 +439,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
 
 inline void ObserveLocalSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!IsLocalPlayer(args.Sender) || args.Slot < 0 || args.Slot > 3) return;
-    const int now = Now();
-    const bool ours = Engine::WasControllerCast(args.Slot);
-    if (!ours) PlayerOverrideUntil = now + 520;
     if (args.IsAutoAttack) return;
+    const int now = Now();
     const auto player = GameObjects::Player();
     const Vector3 origin = args.StartPosition.IsValid() &&
             !args.StartPosition.IsZero()
@@ -522,7 +500,7 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
 
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
     // Never cancel an attack: E/W/Q are inserted by OnUpdate after the
-    // orbwalker's windup gate and the selected/orbwalker target remains owned
+    // orbwalker's windup gate and the orbwalker's attack remains owned
     // by the orbwalker itself.
     if (Orbwalker::IsWindingUp() &&
         Bool(Engine::HumanMenu, "PreserveAttacks", true)) return;
@@ -565,10 +543,8 @@ inline void OnLoad() {
     ClearFeathers();
     NextFeatherId = 1;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
-    LastAfterAttackTick = LastAfterAttackTargetId = 0;
-    GapcloserTargetId = GapcloserExpireTick = PlayerOverrideUntil = 0;
+    GapcloserTargetId = GapcloserExpireTick = 0;
     LastMode = Mode::None;
-    LastSmartTarget = {};
     ResetFeatherHitCache();
 }
 
@@ -576,17 +552,16 @@ inline void OnUnload() {
     ClearFeathers();
     TacticsMenu = FeatherMenu = PostureMenu = nullptr;
     LastMode = Mode::None;
-    LastSmartTarget = {};
     ResetFeatherHitCache();
 }
 
 inline constexpr const char* Scenarios[] = {
     "Reconcile Q, R, passive and object-created feathers without duplicate records",
     "Expire feathers after their live six-second lifetime and remove deleted objects",
-    "Prefer the selected target while retaining a reachable orbwalker attack route",
+    "Use the engine-selected target with a reachable orbwalker attack route",
     "Recall E only when a predicted target has enough feather pass-throughs",
     "Root at the configured three-feather threshold unless an execute is available",
-    "Preserve an AA windup and never cancel a selected/orbwalker attack",
+    "Preserve an AA windup and never cancel the orbwalker's attack",
     "Use W only for an actual attack posture or defensive lethal window",
     "Use R for invulnerability, peel, lethal setup or a verified multi-target line",
     "Reject Q/R predicted lines blocked by collision or projectile terrain",

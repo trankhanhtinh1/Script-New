@@ -21,7 +21,6 @@ inline constexpr ChampionProfile TahmKench = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 60;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "TahmKenchPassive";
@@ -84,7 +83,7 @@ inline constexpr ChampionProfile TahmKench = [] {
     p.Flee = Plan("Grey health rescue",
         Step(SDK::SpellSlot::E, StepRule::RequirePlayerLow | StepRule::AllowDuringWindup, 0, 700),
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 80, 1000),
-        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::ManualAssistOnly, 140, 1200));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget, 140, 1200));
     return p;
 }();
 

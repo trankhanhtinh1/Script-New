@@ -21,7 +21,6 @@ inline constexpr ChampionProfile FiddleSticks = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 70;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "FiddlesticksEffigy";
@@ -104,7 +103,7 @@ inline constexpr ChampionProfile FiddleSticks = [] {
     p.Flee = Plan("Fear and brush retreat",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::AllowDuringWindup, 0, 850),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup, 80, 950),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 180, 2200),
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::RequireTarget, 180, 2200),
         Step(SDK::SpellSlot::W, StepRule::RequirePlayerLow | StepRule::RequireSafePosition, 300, 1900));
     return p;
 }();

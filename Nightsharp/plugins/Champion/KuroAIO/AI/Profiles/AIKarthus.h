@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Karthus = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 60;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "KarthusDeathDefied";
@@ -112,7 +111,7 @@ inline constexpr ChampionProfile Karthus = [] {
              StepRule::AllowDuringWindup, 0, 700),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup, 120, 900),
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition |
-             StepRule::ManualAssistOnly, 220, 3000));
+             StepRule::HoldForExecute, 220, 3000));
     return p;
 }();
 

@@ -118,7 +118,6 @@ struct ReturnContext {
     bool ReturnHit = false;
     bool LethalOnEitherPass = false;
     bool MultiTarget = false;
-    bool Manual = false;
     bool CashInSafe = false;
     bool ProjectileWall = false;
     bool TargetEscaping = false;
@@ -126,7 +125,6 @@ struct ReturnContext {
 
 inline bool ShouldCastReturn(const ReturnContext& context) {
     if (context.ProjectileWall) return false;
-    if (context.Manual) return context.OutgoingHit || context.ReturnHit;
     return context.LethalOnEitherPass ||
            (context.MultiTarget && (context.OutgoingHit || context.ReturnHit)) ||
            (context.TargetEscaping && context.OutgoingHit && context.CashInSafe);
@@ -136,15 +134,14 @@ struct CashInContext {
     bool PassiveStacks = false;
     bool TargetLethal = false;
     bool SafeCatch = false;
-    bool SelectedTarget = false;
+    bool PreferredTarget = false;
     bool EnemyNearBase = false;
-    bool Manual = false;
 };
 
 inline bool ShouldCashIn(const CashInContext& context) {
     if (!context.PassiveStacks || !context.TargetLethal || !context.SafeCatch) return false;
-    if (context.EnemyNearBase && !context.Manual) return false;
-    return context.SelectedTarget || context.Manual;
+    if (context.EnemyNearBase) return false;
+    return context.PreferredTarget;
 }
 
 struct AttackPolicyContext {
@@ -152,16 +149,16 @@ struct AttackPolicyContext {
     bool CatchReachable = false;
     bool CatchSafe = false;
     bool TargetKillable = false;
-    bool SelectedTarget = false;
+    bool PreferredTarget = false;
     bool AxeWouldExpire = false;
-    bool ManualCastPending = false;
+    bool ControllerCastPending = false;
 };
 
 inline bool AllowAttackDuringWindup(const AttackPolicyContext& context) {
-    if (context.ManualCastPending) return false;
+    if (context.ControllerCastPending) return false;
     if (!context.Windup) return true;
     if (!context.CatchReachable || !context.CatchSafe) return true;
-    return context.TargetKillable || context.SelectedTarget || context.AxeWouldExpire;
+    return context.TargetKillable || context.PreferredTarget || context.AxeWouldExpire;
 }
 
 inline bool ReturnIntersectsTarget(const Vec3& outgoingStart,

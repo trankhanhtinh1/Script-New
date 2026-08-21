@@ -37,6 +37,8 @@ struct OrbwalkerRuntimeContext {
     int lastAutoAttackResetTick = 0;
     int postFlashAttackGraceUntilTick = 0;
     int postFlashTargetNetworkId = 0;
+    int attackReleaseSafeTick = 0;
+    int settLastPunchTick = 0;
 
     int pendingAkshanSecondShotTick = 0;
     int lastFakeMoveClickTick = 0;
@@ -74,6 +76,7 @@ struct OrbwalkerRuntimeContext {
     bool lastAttackDoCastComplete = false;
     bool isAkshanSecondShotPending = false;
     bool isAkshanSecondShotActive = false;
+    bool settNextPunchIsRight = false;
     bool fakeCursorScreenValid = false;
     bool fakeCursorTextureLoadTried = false;
     bool cachedShouldWait = false;

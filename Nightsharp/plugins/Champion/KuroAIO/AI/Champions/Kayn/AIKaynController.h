@@ -24,7 +24,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PlayerManaPercent;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Slider;
 using ControllerHelpers::SpellEnabled;
@@ -41,7 +40,6 @@ inline int RMarkedTargetId = 0;
 inline int TransformStartTick = 0;
 inline int RCastTick = 0;
 inline int RHostUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -171,9 +169,10 @@ inline bool CastE(Mode mode, bool reactive = false, bool fleeing = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2, mode, reactive) || !ResourceGate(mode, reactive) ||
         PreserveAttack(reactive) || player.HasBuff("KaynE")) return false;
-    Vector3 destination = Game::CursorPos();
-    if (!destination.IsValid() || destination.IsZero()) return false;
-    destination = ClampDashEndpoint(player.Position(), destination, kERange);
+    Vector3 destination = (fleeing && mode == Mode::Flee)
+        ? Game::CursorPos()
+        : (IncomingThreatEndpoint.IsValid() && !IncomingThreatEndpoint.IsZero()
+            ? IncomingThreatEndpoint : player.Position());
     const bool defensive = fleeing || player.HealthPercent() <= 34.0f;
     const int maximumEnemies = Slider(TacticsMenu, "MaxDashEnemies", 2);
     const WallTraversalContext context{
@@ -218,7 +217,11 @@ inline bool CastRRecast(Mode mode, bool reactive = false, bool fleeing = false) 
     const bool hostValid = Engine::ValidEnemy(host, RHostRange(CurrentForm) + 100.0f);
     const bool lethal = hostValid && LethalPhysical(host, SpellDamage(host, 3));
     const bool defensive = fleeing || player.HealthPercent() <= 30.0f;
-    const Vector3 endpoint = ClampDashEndpoint(player.Position(), Game::CursorPos(), RJumpOutRange(CurrentForm));
+    const Vector3 requested = (fleeing && mode == Mode::Flee)
+        ? Game::CursorPos()
+        : (hostValid ? host.Position() : player.Position());
+    const Vector3 endpoint = ClampDashEndpoint(player.Position(), requested,
+                                               RJumpOutRange(CurrentForm));
     const RRecastContext context{
         true, true, !hostValid, !endpoint.IsZero(), endpoint.IsValid() && !SDK::NavMesh::IsWall(endpoint),
         hostValid && Engine::UnderEnemyTurret(endpoint) && !Engine::UnderEnemyTurret(player.Position()),
@@ -315,10 +318,10 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected, std::max(kRAssassinRange, WRange(CurrentForm)) + 100.0f);
+    const AIHeroClient target = Engine::SelectTarget(
+        std::max(kRAssassinRange, WRange(CurrentForm)) + 100.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -338,7 +341,6 @@ inline void BuildMenu(Menu* root) {
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Kayn farming"));
     TacticsMenu->Add(new MenuSlider("MaxDashEnemies", "Maximum enemies at dash endpoint", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Minimum harass mana percent", 45, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("FarmMana", "Minimum farm mana percent", 25, 0, 100));
 }
@@ -349,7 +351,7 @@ inline void OnLoad() {
     CurrentForm = Form::Untransformed;
     Transforming = RHostActive = false;
     RHostId = RMarkedTargetId = TransformStartTick = RCastTick = RHostUntil = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    IncomingThreatUntil = IncomingThreatTargetId = 0;
     IncomingThreatEndpoint = {};
     LastAutoTargetId = LastAutoTick = 0;
     LastCastTick.fill(0);
@@ -372,8 +374,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
         LastCastTick[static_cast<std::size_t>(slot)] = now;
         if (slot == 3 && !RHostActive && args.TargetNetworkId != 0) {
             RHostId = static_cast<int>(args.TargetNetworkId);
@@ -471,7 +471,7 @@ inline constexpr const char* Scenarios[] = {
     "Riot 26.15 and CommunityDragon 16.15 Kayn route values",
     "Track melee and ranged passive orbs before transformation",
     "Reconcile KaynTransforming and KaynAssReady/KaynSlayReady form transitions by polling and buffs",
-    "Preserve manual ownership and attack windup around every cast",
+    "Preserve autonomous spell state and attack windup around every cast",
     "Dash Q to a bounded endpoint, slash the predicted target and reject blocked or unsafe routes",
     "Predict W line impact, reject collision and projectile-wall failures, and model Darkin knockup",
     "Traverse E only across a real wall path with walkable, turret and enemy-count endpoint gates",
@@ -479,7 +479,7 @@ inline constexpr const char* Scenarios[] = {
     "Enter R only on a marked, damageable host within form-aware range",
     "Recast R for lethal, defensive, expiring-host or fleeing exits with safe landing checks",
     "Reconcile host, mark, transformation and threat state from events and polling",
-    "Prefer selected target then orbwalker target before engine fallback",
+    "Use autonomous target selection before orbwalker and engine fallback",
     "Cover Combo, Harass, LaneClear, Jungle, LastHit, Flee and conservative Automatic modes",
     "Apply mana, cooldown, turret, collision, wall and nearby-enemy safety policy",
 };

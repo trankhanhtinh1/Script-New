@@ -12,14 +12,9 @@ struct MechanicFacts {
     bool RAtDeathFloor = false;
 };
 
-inline bool RZoneBlocksAction(const MechanicFacts& facts,
-                              bool manualAssist) {
-    // ManualAssist is an inspection/selection request, not a damage route.
-    // Keep the identity explainable there, but never let a damage action
-    // consume a target protected by Kindred's ultimate once the target sits
-    // at the death floor.  A target still above the floor can be damaged
-    // normally, so only the floor-level protection blocks the selection.
-    return facts.RAtDeathFloor && !manualAssist;
+inline bool RZoneBlocksAction(const MechanicFacts& facts) {
+    // The ultimate death floor is always protected during automatic targeting.
+    return facts.RAtDeathFloor;
 }
 
 inline float Score(const MechanicFacts& facts) {

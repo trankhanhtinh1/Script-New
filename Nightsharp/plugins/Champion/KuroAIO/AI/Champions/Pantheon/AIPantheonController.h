@@ -5,8 +5,6 @@
 #include "AIPantheonGeometry.h"
 
 #include <algorithm>
-#include <array>
-#include <cfloat>
 
 namespace Plugins::KuroAIO::AI::Controllers::Pantheon {
 
@@ -14,7 +12,6 @@ using namespace Geometry;
 using ControllerHelpers::CaptureAfterAttack;
 using ControllerHelpers::CaptureGapcloser;
 using ControllerHelpers::CaptureInterruptable;
-using ControllerHelpers::CountAlliedFollowup;
 using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::IsCommonUntargetableOrImmune;
@@ -27,7 +24,6 @@ using ControllerHelpers::SpellEventNameContainsAny;
 using MarksmanControllerHelpers::CanUse;
 using MarksmanControllerHelpers::CastThrottlePassed;
 using MarksmanControllerHelpers::ClearTemporaryOrbwalkerFocus;
-using MarksmanControllerHelpers::ManualUltimatePressed;
 using MarksmanControllerHelpers::OwnedOrbwalkerFocus;
 using MarksmanControllerHelpers::PredictionProjectileWall;
 using MarksmanControllerHelpers::RedirectBeforeAttackToFocus;
@@ -39,7 +35,6 @@ inline Menu* PassiveMenu = nullptr;
 inline Menu* QMenu = nullptr;
 inline Menu* WMenu = nullptr;
 inline Menu* EMenu = nullptr;
-inline Menu* RMenu = nullptr;
 inline Menu* CoachMenu = nullptr;
 
 inline int PassiveStacks = 0;
@@ -48,7 +43,6 @@ inline int PassiveObservedTick = 0;
 inline int QCastTick = 0;
 inline int QChargeStartTick = 0;
 inline int QTargetId = 0;
-inline bool QControllerOwned = false;
 inline bool QPreserveFullDamage = false;
 inline int WCastTick = 0;
 inline int WTargetId = 0;
@@ -64,8 +58,6 @@ inline int EExpireTick = 0;
 inline int RCastTick = 0;
 inline bool RChannelActive = false;
 inline int RChannelUntil = 0;
-inline Vector3 LastRLanding = {};
-inline int PlayerOverrideUntil = 0;
 inline int LastAfterAttackTargetId = 0;
 inline int LastAfterAttackTick = 0;
 inline int IncomingThreatId = 0;
@@ -149,12 +141,10 @@ inline void ReconcileState() {
     if (QRuntimeCharging()) {
         if (QChargeStartTick <= 0) {
             QChargeStartTick = now;
-            QControllerOwned = false;
         }
     } else if (QChargeStartTick > 0 && now - QChargeStartTick > 120) {
         QChargeStartTick = 0;
         QTargetId = 0;
-        QControllerOwned = false;
         QPreserveFullDamage = false;
     }
     const bool eBuff = EBuffActive(player);
@@ -186,12 +176,9 @@ inline void ReconcileState() {
     if (InterruptExpireTick < now) InterruptTargetId = 0;
 }
 
-inline AIHeroClient ResolveTarget(const AIHeroClient& preferred, float range) {
-    if (Engine::ValidEnemy(preferred, range)) return preferred;
+inline AIHeroClient ResolveTarget(float range) {
     const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
     if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(range);
-    if (Engine::ValidEnemy(selected, range)) return selected;
     return Engine::SelectTarget(range);
 }
 
@@ -295,7 +282,6 @@ inline bool CastTapQ(const AIHeroClient& target, Mode mode,
             kTapQRange + target.BoundingRadius();
     context.AttackWindingUp = PreservingAttack(reactive);
     context.Lethal = lethal;
-    context.ManualOwnership = PlayerOverrideUntil > Now();
     if (!ShouldTapQ(context)) return false;
     const bool empowered = PassiveEmpowered();
     if (!Engine::ControllerCastPosition(0, prediction.GetCastPosition())) return false;
@@ -324,7 +310,6 @@ inline bool StartThrowQ(const AIHeroClient& target, Mode mode,
     context.Execute = execute;
     context.FirstBodyClear = QFirstBodyClear(prediction);
     context.AttackWindingUp = PreservingAttack(reactive);
-    context.ManualOwnership = PlayerOverrideUntil > Now();
     if (!ShouldStartQCharge(context) ||
         PredictionProjectileWall(0, prediction, kQRadius)) return false;
     Engine::ArmControllerCast(0);
@@ -336,13 +321,12 @@ inline bool StartThrowQ(const AIHeroClient& target, Mode mode,
     QCastTick = Now();
     QChargeStartTick = Now();
     QTargetId = static_cast<int>(target.NetworkId());
-    QControllerOwned = true;
     QPreserveFullDamage = PassiveEmpowered() || execute;
     return true;
 }
 
 inline bool ReleaseThrowQ(const AIHeroClient& fallback) {
-    if (!QCharging() || !QControllerOwned || !Engine::RuntimeSpells[0]) return false;
+    if (!QCharging() || !Engine::RuntimeSpells[0]) return false;
     auto target = HeroByNetworkId(QTargetId);
     if (!Engine::ValidEnemy(target, kThrowQRange + 100.0f)) target = fallback;
     if (!Engine::ValidEnemy(target, kThrowQRange + 100.0f)) return false;
@@ -372,7 +356,7 @@ inline bool ReleaseThrowQ(const AIHeroClient& fallback) {
     PassiveStacks = empowered ? 0 : std::min(5, PassiveStacks + 1);
     PassiveReadyConfirmed = false;
     QChargeStartTick = QTargetId = 0;
-    QControllerOwned = QPreserveFullDamage = false;
+    QPreserveFullDamage = false;
     return true;
 }
 
@@ -409,7 +393,6 @@ inline bool CastE(const AIHeroClient& threat, Mode mode,
     context.PlayerLow = PlayerLow();
     context.Fleeing = fleeing;
     context.AttackWindingUp = PreservingAttack(reactive);
-    context.ManualOwnership = PlayerOverrideUntil > Now();
     if (!ShouldCastE(context)) return false;
     const bool empowered = PassiveEmpowered();
     if (!Engine::ControllerCastPosition(2, facing)) return false;
@@ -432,45 +415,6 @@ inline bool TryDefensiveE(const AIHeroClient& fallback,
            CastE(threat, mode, committed, mode == Mode::Flee);
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed() || RChannelActive || QCharging() ||
-        !Ready(3) || !CastThrottlePassed(RCastTick, 120)) return false;
-    const auto player = GameObjects::Player();
-    const auto target = ResolveTarget(preferred, kRRange);
-    if (!player.IsValid() || TargetBlocked(target)) return false;
-    const Vector3 destination = PredictPosition(target, 2.20f);
-    if (!destination.IsValid() || destination.IsZero()) return false;
-    const float distance = player.Position().Distance2D(destination);
-    const int enemies = Engine::CountEnemiesAt(destination, 700.0f);
-    const int allies = CountAlliedFollowup(destination, 900.0f, false);
-    const bool lethal = SpellDamage(3, target) + 2.0f >=
-        TargetEffectiveHealth(target);
-    const bool escapeRoute =
-        !ControllerHelpers::HasReadyDashHazardAt(destination, 700.0f) &&
-        !ControllerHelpers::HasReadyPointClickThreatAt(destination);
-    RLandingContext context{};
-    context.ManualRequested = true;
-    context.DestinationValid = true;
-    context.DestinationWalkable = !SDK::NavMesh::IsWall(destination);
-    context.InRange = distance <= kRRange;
-    context.BeyondLocalCombat = distance > kThrowQRange;
-    context.TargetPredictedInside = true;
-    context.EnemyTurret = Engine::UnderEnemyTurret(destination);
-    context.EscapeRoute = escapeRoute;
-    context.Lethal = lethal;
-    context.NearbyEnemies = enemies;
-    context.MaximumEnemies = Slider(RMenu, "MaximumEnemies", 2);
-    context.AlliedFollowup = allies;
-    if (Bool(RMenu, "RequireAlly", true) && allies <= 0 && !lethal)
-        context.EscapeRoute = false;
-    if (!RLandingSafe(context)) return false;
-    if (!Engine::ControllerCastPosition(3, destination)) return false;
-    RCastTick = Now();
-    RChannelActive = true;
-    RChannelUntil = Now() + 4200;
-    LastRLanding = destination;
-    return true;
-}
 
 inline bool TryInterrupt() {
     if (!Bool(Engine::AutomaticMenu, "Interrupt", true) ||
@@ -491,9 +435,9 @@ inline bool TryAntiGapcloser() {
            CastW(target, Mode::Automatic, true, false);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = ResolveTarget(preferred, kThrowQRange);
+    const auto target = ResolveTarget(kThrowQRange);
     if (TargetBlocked(target) || !QLethal(target) ||
         !AutomaticAllowed({ false, false, true, false })) return false;
     const auto player = GameObjects::Player();
@@ -540,8 +484,8 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto threat = CurrentThreat(preferred);
+inline bool TryFlee(const AIHeroClient& fallback) {
+    const auto threat = CurrentThreat(fallback);
     if (!Engine::ValidEnemy(threat, 1200.0f)) return false;
     if (CastE(threat, Mode::Flee, true, true)) return true;
     if (Engine::ValidEnemy(threat, kWRange + 35.0f) && PlayerLow())
@@ -574,24 +518,23 @@ inline bool TryFarm(Mode mode) {
     return false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
+    const AIHeroClient target = ResolveTarget(kThrowQRange);
     if (RChannelActive) return true;
     if (QCharging()) {
-        if (!QControllerOwned) return true;
-        auto target = HeroByNetworkId(QTargetId);
-        if (!Engine::ValidEnemy(target))
-            target = ResolveTarget(preferred, kThrowQRange);
-        (void)ReleaseThrowQ(target);
+        auto qTarget = HeroByNetworkId(QTargetId);
+        if (!Engine::ValidEnemy(qTarget))
+            qTarget = target;
+        (void)ReleaseThrowQ(qTarget);
         return true;
     }
-    if (PlayerOverrideUntil > Now()) return true;
-    if (TryManualR(preferred) || TryInterrupt() || TryAntiGapcloser() ||
-        TryDefensiveE(preferred) || TryKillSecure(preferred)) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    if (TryInterrupt() || TryAntiGapcloser() ||
+        TryDefensiveE(target) || TryKillSecure()) return true;
+    if (mode == Mode::Flee) return TryFlee(target);
     if (mode == Mode::Combo || mode == Mode::Harass)
-        return TryCombat(ResolveTarget(preferred, kThrowQRange), mode);
+        return TryCombat(target, mode);
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
         mode == Mode::LastHit) return TryFarm(mode);
     return false;
@@ -618,15 +561,7 @@ inline void ObserveLocalSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) {
-        PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 520);
-        if (slot == 0 && QRuntimeCharging()) {
-            QChargeStartTick = now;
-            QControllerOwned = false;
-        }
-    }
+    if (slot == 0 && QRuntimeCharging()) QChargeStartTick = now;
     if (slot == 0 || SpellEventNameContainsAny(args, { "pantheonq", "cometspear" })) {
         QCastTick = now;
     } else if (slot == 1 || SpellEventNameContainsAny(args, { "pantheonw", "shieldvault" })) {
@@ -709,23 +644,20 @@ inline void OnDraw() {
     Drawing::DrawCircle(player.Position(), kWRange, 0xFF6E86C7u, 1.2f, 40);
     if (QCharging())
         Drawing::DrawCircle(player.Position(), kThrowQRange, 0xFFF1C75Bu, 2.0f, 48);
-    if (LastRLanding.IsValid() && !LastRLanding.IsZero())
-        Drawing::DrawCircle(LastRLanding, kRDamageRadius, 0xFFB385E8u, 2.0f, 48);
 }
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("PantheonOneTrick", "Pantheon one-trick mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("MortalWill", "Mortal Will"));
     PassiveMenu->Add(new MenuBool("PreserveEmpoweredFarm", "Preserve empowered passive in lane", true));
     PassiveMenu->Add(new MenuBool("SpendOnJungle", "Allow empowered W on jungle", true));
-    PassiveMenu->Add(new MenuSeparator("Priority", "Defensive E > safe W engage > clean Q"));
+    PassiveMenu->Add(new MenuSeparator("Priority", "E defense > W engage > Q"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("CometSpear", "Comet Spear"));
     QMenu->Add(new MenuBool("UseTap", "Use tap Q inside 575", true));
     QMenu->Add(new MenuBool("UseThrow", "Use thrown Q outside 575", true));
     QMenu->Add(new MenuBool("UseFarm", "Use tap Q for farm", true));
-    QMenu->Add(new MenuSeparator("FirstBody", "Empowered/execute throws preserve first-body damage"));
+    QMenu->Add(new MenuSeparator("FirstBody", "Preserve first-body Q damage"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("ShieldVault", "Shield Vault"));
     WMenu->Add(new MenuBool("UseWCombo", "Use W in combo", true));
     WMenu->Add(new MenuBool("UseWJungle", "Use W in jungle", true));
@@ -733,11 +665,7 @@ inline void BuildMenu(Menu* root) {
     EMenu = TacticsMenu->AddSubMenu(new Menu("AegisAssault", "Aegis Assault"));
     EMenu->Add(new MenuSlider("EmergencyHp", "Defensive E health (%)", 30, 10, 70));
     EMenu->Add(new MenuBool("UseFarm", "Use E for clear", false));
-    EMenu->Add(new MenuSeparator("Direction", "Face the observed damage source; never rotate away"));
-    RMenu = TacticsMenu->AddSubMenu(new Menu("GrandStarfall", "Grand Starfall"));
-    RMenu->Add(new MenuBool("RequireAlly", "Require ally follow-up unless lethal", true));
-    RMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at landing", 2, 1, 5));
-    RMenu->Add(new MenuSeparator("ManualOnly", "R remains manual-assist with landing validation"));
+    EMenu->Add(new MenuSeparator("Direction", "Face incoming damage source"));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("PantheonCoach", "Coach overlay"));
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw tactical ranges", false));
 }
@@ -745,12 +673,11 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     PassiveStacks = PassiveObservedTick = 0; PassiveReadyConfirmed = false;
     QCastTick = QChargeStartTick = QTargetId = 0;
-    QControllerOwned = QPreserveFullDamage = false;
     WCastTick = WTargetId = EmpoweredWFollowupUntil = 0;
     EmpoweredWFollowupPending = false; OwnedFocusTargetId = OwnedFocusUntil = 0;
     ECastTick = EStartTick = EExpireTick = 0; EActive = EWasEmpowered = false;
-    RCastTick = RChannelUntil = 0; RChannelActive = false; LastRLanding = {};
-    PlayerOverrideUntil = LastAfterAttackTargetId = LastAfterAttackTick = 0;
+    RCastTick = RChannelUntil = 0; RChannelActive = false;
+    LastAfterAttackTargetId = LastAfterAttackTick = 0;
     IncomingThreatId = IncomingThreatUntil = 0; IncomingThreatSource = {};
     GapcloserTargetId = GapcloserExpireTick = 0; GapcloserEndpoint = {};
     InterruptTargetId = InterruptExpireTick = 0; LastMode = Mode::None;
@@ -758,8 +685,7 @@ inline void OnLoad() {
 }
 inline void OnUnload() {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
-    TacticsMenu = PassiveMenu = QMenu = WMenu = EMenu = RMenu = CoachMenu = nullptr;
-    LastRLanding = {};
+    TacticsMenu = PassiveMenu = QMenu = WMenu = EMenu = CoachMenu = nullptr;
 }
 
 inline constexpr const char* Scenarios[] = {
@@ -770,27 +696,23 @@ inline constexpr const char* Scenarios[] = {
     "Prefer empowered W only when the vault endpoint is safe",
     "Preserve empowered Q for reachable or execute-value targets",
     "Model empowered W as one attack with three Mortal Will-generating strikes",
-    "Force only the owned empowered-W target and release it after the attack",
+    "Force only the empowered-W target and release it after the attack",
     "Tap Q inside 575 for the sixty-percent cooldown refund path",
     "Start thrown Q only for a high-confidence target inside 1200",
     "Hold thrown Q through the 0.35-second tap/throw boundary",
     "Reject thrown Q through a live projectile wall",
     "Preserve first-body Q damage for empowered and execute throws",
     "Force release at the 0.80-second charge boundary when the line is valid",
-    "Block orbwalker attacks only during owned Q charge, E shield, or R channel",
+    "Block orbwalker attacks only during Q charge, E shield, or R channel",
     "Use W stun for safe combo engage and interrupt reactions",
     "Reject W into walls, spell shields, unsafe crowding, or nonlethal turret entry",
     "Face E toward the observed enemy damage source rather than movement direction",
     "Keep E active for its directional protection instead of early damage recast",
     "Use empowered E as defensive protection and its post-slam speed route",
-    "Keep R manual-assist and reject local-range casts",
-    "Predict R landing after the channel and require walkable destination geometry",
-    "Reject R landing under enemy turret unless lethal",
-    "Reject crowded R landing without lethal value",
-    "Require allied follow-up, lethal damage, or a verified escape route for R",
-    "Preserve selected target, then orbwalker target, before policy fallback",
-    "Yield temporarily after every non-controller player spell",
-    "Protect manual Q charge, E direction, and R channel ownership",
+    "Track Grand Starfall channel state through events",
+    "Use autonomous orbwalker and engine target policy",
+    "Reconcile every local spell event and preserve channel state",
+    "Preserve Q charge, E direction, and R channel state",
     "Automatic mode allows only defensive E/W, interrupts, and Q kill secure",
     "Combo uses safe W, protected triple attack, Q, and defensive E exit",
     "Harass uses Q without unsolicited W or R commitment",
@@ -798,7 +720,7 @@ inline constexpr const char* Scenarios[] = {
     "Jungle supports W, tap Q, and opt-in E without global actions",
     "LastHit uses tap Q only when the empowered-passive policy allows it",
     "Flee faces E into pursuit and uses W only as an emergency stun",
-    "Never automate Flash, summoner spells, item actives, or Grand Starfall engage",
+    "Never issue Flash, summoner spells, item actives, or Grand Starfall engage",
 };
 
 inline constexpr ChampionController Controller = [] {
@@ -810,8 +732,8 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Five-action Mortal Will reconciliation and empowered Q/W/E priority; "
         "tap-versus-held Comet Spear with first-body preservation; safe targeted "
-        "W and protected triple attack; source-facing E defense; manual-only "
-        "Grand Starfall with predicted landing safety and full mode ownership.";
+        "W and protected triple attack; source-facing E defense; tracked "
+        "Grand Starfall channel state and complete mode policy.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

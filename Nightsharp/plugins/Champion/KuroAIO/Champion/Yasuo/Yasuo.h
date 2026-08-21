@@ -17,7 +17,6 @@ inline Menu* EMenu = nullptr;
 inline Menu* EQMenu = nullptr;
 inline Menu* RMenu = nullptr;
 inline Menu* ClearMenu = nullptr;
-inline Menu* KeyMenu = nullptr;
 inline Menu* DrawMenu = nullptr;
 
 inline Spell Q{ SpellSlot::Q, 475.0f };
@@ -25,14 +24,11 @@ inline Spell Q3{ SpellSlot::Q, 1100.0f };
 inline Spell W{ SpellSlot::W, 100.0f };
 inline Spell E{ SpellSlot::E, 475.0f };
 inline Spell R{ SpellSlot::R, 1400.0f };
-inline Spell Flash{ SpellSlot::Unknown, 425.0f };
-inline SpellSlot FlashSlot = SpellSlot::Unknown;
 
 inline bool Loaded = false;
 inline int LastE = 0;
 inline int LastQ = 0;
 inline int LastDashQ = 0;
-inline int LastEQFlash = 0;
 inline bool EObjectsReady = false;
 inline std::vector<AIBaseClient> EObjectsCache{};
 
@@ -42,9 +38,6 @@ static void OnDash(const Events::Dash::DashArgs& args);
 static void OnDraw();
 static void OnUnload();
 
-static bool IsFlashReady() {
-    return FlashSlot != SpellSlot::Unknown && Flash.IsReady();
-}
 
 static Spell& CurrentQ() {
     return HaveQ3() ? Q3 : Q;
@@ -57,7 +50,7 @@ static float CurrentQRange() {
 }
 
 static bool AllowTurret() {
-    return Key(KeyMenu, "AllowTurret");
+    return Bool(MenuRoot, "AllowTurret", false);
 }
 static bool IsEnemyHeroInAutoAttackRange() {
     const auto target = Orbwalker::GetTarget();
@@ -344,11 +337,7 @@ static bool CastQDuringDash() {
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
         if (ValidHeroTarget(enemy) &&
             enemy.Position().Distance2D(player.Position()) <= radius + enemy.BoundingRadius() + 30.0f) {
-            if ((!HaveQ3() || !SDK::Collision::HasProjectileWallCollision(
-                    player.Position(),
-                    player.Position().Extend(Game::CursorPos(), Q3.Range),
-                    Q3.Width * 0.5f)) &&
-                CastQSpell(Q, player.Position())) {
+            if (CastQSpell(Q, player.Position())) {
                 LastQ = now;
                 return true;
             }
@@ -496,7 +485,7 @@ static bool TryR() {
             continue;
         }
 
-        // ONLY execute EQR (E+Q before R). Normal R is manual only by user decision.
+        // Prefer the automatic EQR route before the configured R policy.
         if (TryEQR(target, castPosition)) {
             return true;
         }
@@ -596,83 +585,6 @@ static bool TryEGapClose(const AIHeroClient& target) {
     return CastE(dash);
 }
 
-static Vector3 BestEQFlashPosition() {
-    AIHeroClient bestTarget;
-    Vector3 bestPosition;
-    int bestCount = 0;
-
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!ValidHeroTarget(enemy, 875.0f)) {
-            continue;
-        }
-
-        const Vector3 position = enemy.Position();
-        const int count = CountEnemyHeroesNear(position, 175.0f);
-        if (count > bestCount) {
-            bestTarget = enemy;
-            bestPosition = position;
-            bestCount = count;
-        }
-    }
-
-    if (!bestPosition.IsZero()) {
-        return bestPosition;
-    }
-
-    const auto target = GetPhysicalTarget(875.0f);
-    return ValidHeroTarget(target, 875.0f) ? target.Position() : Vector3();
-}
-
-static bool TryEQFlash(bool requireKey) {
-    if ((requireKey && !Key(KeyMenu, "EQFlash")) ||
-        !HaveQ3() ||
-        !Q.IsReady() ||
-        !IsFlashReady()) {
-        return false;
-    }
-
-    const int now = SDK::Variables::TickCount();
-    if (now - LastEQFlash < 800) {
-        return false;
-    }
-
-    const auto player = Player();
-    if (!player.IsValid()) {
-        return false;
-    }
-
-    const Vector3 flashPosition = BestEQFlashPosition();
-    if (flashPosition.IsZero()) {
-        return false;
-    }
-
-    if (!player.IsDashing()) {
-        if (!E.IsReady()) {
-            return false;
-        }
-
-        AIBaseClient dash = BestCachedDashObjectNear(
-            flashPosition,
-            Flash.Range + 170.0f,
-            false,
-            AllowTurret());
-        return dash.IsValid() && CastE(dash);
-    }
-
-    if (flashPosition.Distance2D(player.Position()) > Flash.Range + 170.0f) {
-        return false;
-    }
-
-    const bool qCast = CastQSpell(Q, player.Position());
-    if (Flash.Cast(flashPosition)) {
-        LastEQFlash = now;
-        if (qCast) {
-            LastQ = now;
-        }
-        return true;
-    }
-    return false;
-}
 
 static bool TryWBlock(const Events::ProcessSpellEventArgs& args) {
     const auto player = Player();
@@ -726,8 +638,9 @@ static void ApplyDefaultSettings() {
     SetBool(ClearMenu, "Q3Clear", true);
     SetSlider(ClearMenu, "Q3Minions", 3);
     SetBool(ClearMenu, "EClear", false);
-    SetBool(DrawMenu, "DrawQ", true);
-    SetBool(DrawMenu, "DrawE", true);
+    SetBool(MenuRoot, "AllowTurret", false);
+    SetBool(DrawMenu, "DrawQ", false);
+    SetBool(DrawMenu, "DrawE", false);
     SetBool(DrawMenu, "DrawR", false);
 }
 
@@ -772,17 +685,11 @@ static void BuildMenu() {
     ClearMenu->Add(new MenuSlider("Q3Minions", "Q3 Minions >=", 3, 1, 6));
     ClearMenu->Add(new MenuBool("EClear", "E Clear", false));
 
-    KeyMenu = MenuRoot->AddSubMenu(new Menu("YasuoKeys", "Keys Settings"));
-    KeyMenu->Add(new MenuKeyBind("Flee", "Flee E", SDK::Keys::E, KeyBindType::Press));
-    KeyMenu->Add(new MenuKeyBind("AutoQ", "Auto Q Harass", SDK::Keys::A, KeyBindType::Toggle));
-    KeyMenu->Add(new MenuKeyBind("AutoStack", "Auto Q Stack", SDK::Keys::N, KeyBindType::Toggle));
-    KeyMenu->Add(new MenuKeyBind("AllowTurret", "Allow Turret Dash", SDK::Keys::T, KeyBindType::Toggle))->Permashow();
-    KeyMenu->Add(new MenuKeyBind("EQFlash", "EQ Flash", SDK::Keys::G, KeyBindType::Press))->Permashow();
-    KeyMenu->Add(new MenuKeyBind("ComboEQFlash", "Combo EQ Flash", SDK::Keys::H, KeyBindType::Toggle))->Permashow();
+    MenuRoot->Add(new MenuBool("AllowTurret", "Allow Turret Dash", false));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("YasuoDraw", "Draw Settings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q"));
-    DrawMenu->Add(new MenuBool("DrawE", "Draw E"));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q", false));
+    DrawMenu->Add(new MenuBool("DrawE", "Draw E", false));
     DrawMenu->Add(new MenuBool("DrawR", "Draw R", false));
 
     MenuRoot->Add(new MenuBool("reset", "Reset Yasuo", false));
@@ -808,9 +715,6 @@ static void Combo() {
         return;
     }
 
-    if (Key(KeyMenu, "ComboEQFlash") && TryEQFlash(false)) {
-        return;
-    }
 
     if (CastQDuringDash()) {
         return;
@@ -841,10 +745,9 @@ static void Combo() {
 }
 
 static void Harass() {
-    if (!Q.IsReady() || (!IsHarassMode() && !Key(KeyMenu, "AutoQ"))) {
+    if (!Q.IsReady() || !IsHarassMode()) {
         return;
     }
-
     const auto target = GetPhysicalTarget(CurrentQRange());
     if (ValidHeroTarget(target, CurrentQRange())) {
         (void)CastQOnTarget(target, Bool(QMenu, "HarassQ"), Bool(QMenu, "UseQ3"));
@@ -882,7 +785,7 @@ static void Clear() {
             return;
         }
 
-        if (IsClearMode() || Key(KeyMenu, "AutoStack")) {
+        if (IsClearMode()) {
             for (const auto& unit : ClearUnits(Q.Range)) {
                 if (CastQSpell(Q, unit.Position())) {
                     LastQ = SDK::Variables::TickCount();
@@ -902,9 +805,6 @@ static void Clear() {
 }
 
 static void Flee() {
-    if (!Key(KeyMenu, "Flee")) {
-        return;
-    }
 
     const auto player = Player();
     const Vector3 cursor = Game::CursorPos();
@@ -948,18 +848,6 @@ static void Flee() {
     }
 }
 
-static void AutoStack() {
-    if (!Key(KeyMenu, "AutoStack") || HaveQ3() || !Q.IsReady() || IsComboMode()) {
-        return;
-    }
-
-    for (const auto& unit : ClearUnits(Q.Range)) {
-        if (CastQSpell(Q, unit.Position())) {
-            LastQ = SDK::Variables::TickCount();
-            return;
-        }
-    }
-}
 
 static void Game_OnUpdate(const GameUpdateEventArgs&) {
     const auto player = Player();
@@ -969,14 +857,12 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 
     CheckMenu();
     UpdateEObjectsCache();
-    if (Key(KeyMenu, "EQFlash")) {
-        (void)TryEQFlash(true);
+    if (Orbwalker::ActiveMode() == OrbwalkingMode::Flee) {
+        Flee();
     }
-    Flee();
     Combo();
     Harass();
     Clear();
-    AutoStack();
 }
 
 static void OnProcessSpell(const Events::ProcessSpellEventArgs& args) {
@@ -1011,7 +897,6 @@ static bool ShouldQOnDashEnd(const Vector3& endPosition) {
         }
 
         if ((HaveQ1() || HaveQ2()) &&
-            Key(KeyMenu, "AutoStack") &&
             HasEObjectNear(endPosition, eqRange, false)) {
             return true;
         }
@@ -1050,7 +935,7 @@ static void OnDraw() {
         return;
     }
 
-    if (Bool(DrawMenu, "DrawQ")) {
+    if (Bool(DrawMenu, "DrawQ", false)) {
         Drawing::DrawCircle(
             player.Position(),
             HaveQ3() ? Q3.Range : Q.Range,
@@ -1059,7 +944,7 @@ static void OnDraw() {
             64);
     }
 
-    if (Bool(DrawMenu, "DrawE")) {
+    if (Bool(DrawMenu, "DrawE", false)) {
         Drawing::DrawCircle(player.Position(), E.Range, 0xFF77DD77u, 1.5f, 64);
         Drawing::DrawCircle(
             player.Position(),
@@ -1079,15 +964,6 @@ static void RemoveMenu() {
         return;
     }
 
-    if (auto* item = KeyMenu ? KeyMenu->Get<MenuKeyBind>("AllowTurret") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = KeyMenu ? KeyMenu->Get<MenuKeyBind>("EQFlash") : nullptr) {
-        item->RemovePermashow();
-    }
-    if (auto* item = KeyMenu ? KeyMenu->Get<MenuKeyBind>("ComboEQFlash") : nullptr) {
-        item->RemovePermashow();
-    }
 
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;
@@ -1098,7 +974,6 @@ static void RemoveMenu() {
     EQMenu = nullptr;
     RMenu = nullptr;
     ClearMenu = nullptr;
-    KeyMenu = nullptr;
     DrawMenu = nullptr;
 }
 
@@ -1118,11 +993,6 @@ static void OnGameLoad() {
     E.SetTargetted(0.0f, 1000.0f);
     R = Spell(SpellSlot::R, 1400.0f);
 
-    FlashSlot = player.GetSpellSlot("summonerflash");
-    if (FlashSlot != SpellSlot::Unknown) {
-        Flash = Spell(FlashSlot, 425.0f);
-        Flash.SetSkillshot(0.0f, 175.0f, FLT_MAX, false, SkillshotType::SkillshotCircle);
-    }
 
     BuildMenu();
 

@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Nasus = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 62;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "NasusSoulEater";
@@ -31,7 +30,7 @@ inline constexpr ChampionProfile Nasus = [] {
     p.FormBuff = "NasusR";
     p.TacticalSummary =
         "Scaling juggernaut: preserve Siphoning Strike for a deliberate last-hit or attack reset, "
-        "Wither the selected threat, place Spirit Fire only through a verified target pocket, and "
+        "Wither the reachable threat, place Spirit Fire only through a verified target pocket, and "
         "reserve Fury of the Sands for a safe all-in or low-health defense.";
     p.ResearchSummary =
         "Riot live 26.15 / CommunityDragon 16.15 Summoner's Rift values; Q stacks, Wither target "
@@ -92,7 +91,7 @@ inline constexpr ChampionProfile Nasus = [] {
     p.Flee = Plan("Wither peel and defensive Fury",
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 850),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 80, 900),
-        Step(SDK::SpellSlot::R, StepRule::RequirePlayerLow | StepRule::ManualAssistOnly, 150, 900));
+        Step(SDK::SpellSlot::R, StepRule::RequirePlayerLow | StepRule::RequireSafePosition, 150, 900));
     return p;
 }();
 

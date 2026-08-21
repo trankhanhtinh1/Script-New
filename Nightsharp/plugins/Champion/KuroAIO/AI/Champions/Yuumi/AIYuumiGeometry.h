@@ -66,14 +66,14 @@ inline bool WAttachAllowed(const Vec3& ally, bool allyValid, bool underTurret,
 
 inline float AllyPriority(float healthPercent, float attackDamage,
                           float abilityPower, int nearbyEnemies,
-                          bool selected = false, bool bestFriend = false) {
+                          bool bestFriend = false) {
     if (!std::isfinite(healthPercent) || !std::isfinite(attackDamage) ||
         !std::isfinite(abilityPower)) return -1.0e9f;
     const float missing = 100.0f - std::clamp(healthPercent, 0.0f, 100.0f);
     const float carry = std::max(0.0f, attackDamage) * 0.60f +
         std::max(0.0f, abilityPower) * 0.45f;
     const float threat = static_cast<float>(std::max(0, nearbyEnemies)) * 230.0f;
-    return missing * 1.8f + carry + threat + (selected ? 380.0f : 0.0f) +
+    return missing * 1.8f + carry + threat +
         (bestFriend ? 520.0f : 0.0f);
 }
 

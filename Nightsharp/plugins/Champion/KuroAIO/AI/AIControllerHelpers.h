@@ -483,20 +483,15 @@ inline bool OrbwalkerTargets(const AIBaseClient& target,
     return hero.IsValid() && hero.NetworkId() == target.NetworkId();
 }
 
-inline AIHeroClient PlayerSelectedEnemy(float range = FLT_MAX) {
-    if (auto* selector = SDK::TargetSelector::Instance()) {
-        const auto selected = selector->GetSelectedTarget();
-        if (Engine::ValidEnemy(selected, range)) return selected;
-    }
-    return {};
-}
 
-inline AIHeroClient PreferredEnemyTarget(const AIHeroClient& selected,
+inline AIHeroClient PreferredEnemyTarget(const AIHeroClient&,
                                          float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
+    const auto target = Engine::SelectTarget(range);
+    if (Engine::ValidEnemy(target, range)) {
+        return target;
+    }
     const auto orbTarget = OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orbTarget, range)) return orbTarget;
-    return Engine::SelectTarget(range);
+    return Engine::ValidEnemy(orbTarget, range) ? orbTarget : AIHeroClient{};
 }
 
 inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
@@ -521,12 +516,11 @@ inline AIHeroClient NearestEnemyToPlayer(const AIHeroClient& fallback = {},
 }
 
 // The builder supplies champion-specific reach facts (prediction, collision,
-// marks, charge state and real combo damage). The shared loop guarantees that
-// a selected or locked target never wins merely by preference when no legal
-// damage route can actually reach it.
+// marks, charge state and real combo damage). The shared loop ranks every
+// legal candidate without elevating a user-selected target.
 template <typename ContextBuilder>
 inline AIHeroClient SelectReachableEnemy(
-    const AIHeroClient& preferred,
+    const AIHeroClient&,
     float searchRange,
     ContextBuilder&& buildContext,
     MarksmanTargeting::TargetEvaluation* chosenEvaluation = nullptr) {
@@ -535,8 +529,6 @@ inline AIHeroClient SelectReachableEnemy(
 
     AIHeroClient best{};
     MarksmanTargeting::TargetEvaluation bestEvaluation{};
-    const int preferredId = Engine::ValidEnemy(preferred)
-        ? static_cast<int>(preferred.NetworkId()) : 0;
     const auto orbTarget = OrbwalkerHeroTarget(searchRange);
     const int orbTargetId = orbTarget.IsValid()
         ? static_cast<int>(orbTarget.NetworkId()) : 0;
@@ -555,9 +547,6 @@ inline AIHeroClient SelectReachableEnemy(
         context.EffectiveHealth = std::max(
             context.EffectiveHealth,
             std::max(1.0f, enemy.Health()));
-        context.Selected = context.Selected ||
-            (preferredId != 0 &&
-             static_cast<int>(enemy.NetworkId()) == preferredId);
         context.Locked = context.Locked ||
             (Engine::LockedTargetNetworkId != 0 &&
              static_cast<int>(enemy.NetworkId()) ==

@@ -67,9 +67,7 @@ enum class Sequence : std::uint8_t {
     StasisExitQ,
     PortalExitQ,
     PortalBait,
-    DiveReset,
     SaveStasis,
-    ObjectiveDeny,
     PlayerLed,
 };
 
@@ -104,7 +102,6 @@ enum class EPurpose : std::uint8_t {
     None,
     DefensiveEscape,
     CarryEscape,
-    PlayerCommit,
     RoamAccess,
     PortalBait,
     ObjectiveAccess,
@@ -116,8 +113,6 @@ enum class RPurpose : std::uint8_t {
     BacklineIsolation,
     Peel,
     AllySave,
-    DiveTurret,
-    ObjectiveDeny,
     EnemyJunglerDeny,
     Interrupt,
     Flee,
@@ -287,7 +282,6 @@ inline int LastQCastTick = 0;
 inline int LastWCastTick = 0;
 inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int SequenceTargetId = 0;
 inline int SequenceExpireTick = 0;
 inline int PortalTravellerId = 0;
@@ -307,7 +301,6 @@ inline Vector3 GapcloserEndpoint = {};
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
 
-inline constexpr int kManualOwnershipMs = 320;
 inline constexpr int kMeepQWindowMs = 950;
 inline constexpr int kPortalTravellerGraceMs = 1300;
 inline constexpr int kStasisEventGraceMs = 700;
@@ -1337,8 +1330,6 @@ inline RPlan BuildCatchRPlan(const AIHeroClient& preferred,
         const float impact = RImpactSeconds(distance);
         const Vector3 center = PredictPosition(enemy, impact);
         if (!center.IsValid() || center.IsZero()) continue;
-        if (!flee && Bool(RoleMenu, "RespectCursor", true) &&
-            !CursorDirectionAgrees(center, -0.28f)) continue;
         const int followup = CountAlliedFollowup(center, 950.0f);
         if (!flee && followup < Slider(RMenu, "CatchFollowup", 1)) continue;
         StasisContext context{};
@@ -1420,53 +1411,6 @@ inline RPlan BuildInterruptRPlan() {
     return plan;
 }
 
-inline RPlan BuildDiveTurretRPlan() {
-    RPlan best{};
-    const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Ready(3) ||
-        !Key(RMenu, "DiveTurret", false)) return best;
-    for (const auto& turret : GameObjects::EnemyTurrets()) {
-        if (!turret.IsValid() || turret.IsDead() ||
-            player.Position().Distance2D(turret.Position()) > kRCastRange) {
-            continue;
-        }
-        if (Engine::CountAlliesAt(turret.Position(), 900.0f) < 1) continue;
-        StasisContext context{};
-        context.DiveTower = true;
-        context.MaximumFriendlyGrief = 0;
-        RPlan plan = EvaluateRPlanAt(
-            turret.Position(), static_cast<int>(turret.NetworkId()),
-            RPurpose::DiveTurret, context, true);
-        if (BetterRPlan(plan.Evaluation, best.Evaluation)) best = plan;
-    }
-    return best;
-}
-
-inline RPlan BuildObjectiveRPlan() {
-    RPlan best{};
-    const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Ready(3) ||
-        !Key(RMenu, "ObjectiveDeny", false)) return best;
-    for (const auto& monster : GameObjects::Jungle()) {
-        if (!monster.IsValid() || monster.IsDead() ||
-            !monster.IsTargetable() || !IsEpicMonster(monster) ||
-            player.Position().Distance2D(monster.Position()) > kRCastRange) {
-            continue;
-        }
-        const int enemies = Engine::CountEnemiesAt(monster.Position(), 950.0f);
-        const int allies = Engine::CountAlliesAt(monster.Position(), 950.0f);
-        if (enemies <= 0 || allies > enemies + 1) continue;
-        StasisContext context{};
-        context.ObjectiveDeny = true;
-        context.AlliesSecuringObjective = allies > 0 && enemies == 0;
-        context.MaximumFriendlyGrief = 0;
-        RPlan plan = EvaluateRPlanAt(
-            monster.Position(), static_cast<int>(monster.NetworkId()),
-            RPurpose::ObjectiveDeny, context, true);
-        if (BetterRPlan(plan.Evaluation, best.Evaluation)) best = plan;
-    }
-    return best;
-}
 
 inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
     if (!plan.Valid || !Ready(3) ||
@@ -1481,10 +1425,6 @@ inline bool CastRPlan(const RPlan& plan, bool reactive = false) {
     PendingRManual = plan.Manual;
     if (plan.Purpose == RPurpose::AllySave) {
         ActiveSequence = Sequence::SaveStasis;
-    } else if (plan.Purpose == RPurpose::DiveTurret) {
-        ActiveSequence = Sequence::DiveReset;
-    } else if (plan.Purpose == RPurpose::ObjectiveDeny) {
-        ActiveSequence = Sequence::ObjectiveDeny;
     } else {
         ActiveSequence = Sequence::StasisExitQ;
     }
@@ -1812,29 +1752,6 @@ inline bool TryReactive(Mode mode) {
     return false;
 }
 
-inline bool TryManualInputs(const AIHeroClient& selected) {
-    if (Key(EMenu, "PlayerPortal", false)) {
-        const EPlan portal = BuildPortalPlan(
-            Game::CursorPos(), EPurpose::PlayerCommit, false, true);
-        if (CastEPlan(portal, true)) return true;
-    }
-    if (Key(RMenu, "DiveTurret", false)) {
-        const RPlan dive = BuildDiveTurretRPlan();
-        if (CastRPlan(dive, true)) return true;
-    }
-    if (Key(RMenu, "ObjectiveDeny", false)) {
-        const RPlan objective = BuildObjectiveRPlan();
-        if (CastRPlan(objective, true)) return true;
-    }
-    if (Key(RMenu, "ManualCatch", false)) {
-        const AIHeroClient target = Engine::ValidEnemy(selected)
-            ? selected : CursorEnemy();
-        RPlan catchPlan = BuildCatchRPlan(target);
-        catchPlan.Manual = true;
-        if (CastRPlan(catchPlan, true)) return true;
-    }
-    return false;
-}
 
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
@@ -2001,12 +1918,11 @@ inline void RefreshRuntimeState() {
         ? static_cast<int>(protectedAlly.NetworkId()) : 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     RefreshRuntimeState();
-    const AIHeroClient target = PreferredEnemy(selected, 2000.0f);
+    const AIHeroClient target = Engine::SelectTarget(2000.0f);
     CurrentPosture = DeterminePosture(mode, target);
-    if (TryManualInputs(selected)) return true;
-    if (PlayerOverrideUntil >= Now()) return false;
     if (TryReactive(mode)) return true;
     if (TryKillSecure(target)) return true;
     if (mode == Mode::Flee) return TryFlee(target);
@@ -2185,38 +2101,9 @@ inline void ObserveLocalSpell(
     if (controllerOwned) return;
 
     ClearSequence();
-    PlayerOverrideUntil = now +
-        Slider(TacticsMenu, "ManualOwnershipMs", 520);
     ActiveSequence = Sequence::PlayerLed;
     SequenceTargetId = EventTargetId(args);
-    SequenceExpireTick = PlayerOverrideUntil + 120;
-
-    // A manual R remains player-owned. Optional assistance starts only
-    // after the ownership window and only times Q against the actual Bard R
-    // stasis buff; it never changes the cast center or issues movement.
-    if (slot == 3 && Bool(RMenu, "AssistManualR", true)) {
-        Vector3 center = args.EndPosition;
-        if (!center.IsValid() || center.IsZero()) center = args.CastPosition;
-        AIHeroClient primary{};
-        float closest = kRRadius + 150.0f;
-        for (const auto& enemy : GameObjects::EnemyHeroes()) {
-            if (!Engine::ValidEnemy(enemy, kRCastRange + 200.0f)) continue;
-            const float distance = enemy.Position().Distance2D(center);
-            if (distance < closest) {
-                primary = enemy;
-                closest = distance;
-            }
-        }
-        if (primary.IsValid()) {
-            PendingRPrimaryId = static_cast<int>(primary.NetworkId());
-            PendingRImpactTick = now + static_cast<int>(
-                RImpactSeconds(GameObjects::Player().Position().Distance2D(
-                    center)) * 1000.0f);
-            PendingRManual = true;
-            SequenceTargetId = PendingRPrimaryId;
-            SequenceExpireTick = PendingRImpactTick + 3800;
-        }
-    }
+    SequenceExpireTick = now + 3920;
 }
 
 inline void OnProcessSpell(
@@ -2406,9 +2293,7 @@ inline const char* SequenceName(Sequence sequence) {
     case Sequence::StasisExitQ: return "R exit Q";
     case Sequence::PortalExitQ: return "portal exit Q";
     case Sequence::PortalBait: return "portal bait";
-    case Sequence::DiveReset: return "turret stasis reset";
     case Sequence::SaveStasis: return "ally save";
-    case Sequence::ObjectiveDeny: return "objective deny";
     case Sequence::PlayerLed: return "player-led";
     default: return "idle";
     }
@@ -2456,7 +2341,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kQInitialTargetRange,
                             0x3356B9E9u, 1.0f, 72);
         Drawing::DrawCircle(player.Position(), kWCastRange,
@@ -2464,7 +2349,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(player.Position(), kECastRange,
                             0x33E4B95Cu, 1.0f, 72);
     }
-    if (Bool(CoachMenu, "DrawQ", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawQ", false) && LastQPlan.Valid) {
         Drawing::DrawLine(
             player.Position(), LastQPlan.Evaluation.CastPosition,
             0xDDA4E6FFu, 2.0f);
@@ -2485,7 +2370,7 @@ inline void OnDraw() {
                 0xCCB56DFFu, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawShrines", true)) {
+    if (Bool(CoachMenu, "DrawShrines", false)) {
         for (const auto& shrine : GeometryShrines()) {
             const float charge = WShrineChargeFraction(shrine.AgeSeconds);
             Drawing::DrawCircle(
@@ -2494,7 +2379,7 @@ inline void OnDraw() {
                 charge >= 0.99f ? 2.0f : 1.2f, 36);
         }
     }
-    if (Bool(CoachMenu, "DrawPortal", true) && LastEPlan.Valid) {
+    if (Bool(CoachMenu, "DrawPortal", false) && LastEPlan.Valid) {
         Drawing::DrawLine(
             LastEPlan.Portal.Entrance, LastEPlan.Portal.Exit,
             LastEPlan.Defensive ? 0xDD62E7B0u : 0xDDE8BD60u,
@@ -2504,7 +2389,7 @@ inline void OnDraw() {
             LastEPlan.Valid ? 0xCC62E7B0u : 0xCCEF6363u,
             1.8f, 32);
     }
-    if (Bool(CoachMenu, "DrawR", true) && LastRPlan.Valid) {
+    if (Bool(CoachMenu, "DrawR", false) && LastRPlan.Valid) {
         Drawing::DrawCircle(
             LastRPlan.Evaluation.Center, kRRadius,
             LastRPlan.Evaluation.FriendlyGrief == 0
@@ -2514,7 +2399,7 @@ inline void OnDraw() {
             player.Position(), LastRPlan.Evaluation.Center,
             0x88E9C55Eu, 1.3f);
     }
-    if (Bool(PassiveMenu, "DrawChimeRoute", true)) {
+    if (Bool(PassiveMenu, "DrawChimeRoute", false)) {
         float routeScore = -FLT_MAX;
         const ChimeRecord* chime = BestChimeSuggestion(routeScore);
         if (chime && routeScore >= Slider(PassiveMenu, "RouteScore", 180)) {
@@ -2532,7 +2417,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawProtectedAlly", true)) {
+    if (Bool(CoachMenu, "DrawProtectedAlly", false)) {
         const AIHeroClient ally = RawAllyById(ProtectedAllyId);
         if (ally.IsValid()) {
             Drawing::DrawCircle(
@@ -2540,7 +2425,7 @@ inline void OnDraw() {
                 0xAA72E7A7u, 1.6f, 36);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[640]{};
@@ -2549,7 +2434,7 @@ inline void OnDraw() {
                 "Bard OTP | %s | %s | chimes %d | meeps %d/%d | shrines %d | owner %s",
                 PostureName(CurrentPosture), SequenceName(ActiveSequence),
                 ChimeCount, MeepAmmo, MeepMaximum, ActiveShrineCount(),
-                PlayerOverrideUntil >= Now() ? "player" : "controller");
+                "controller");
             Drawing::DrawText(
                 screen.x - 285.0f, screen.y - 112.0f,
                 0xFFE5CB68u, state);
@@ -2566,17 +2451,9 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider(
         "DefensiveHp", "Defensive posture HP (%)",
         42, 10, 90));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)",
-        520, 180, 1200));
-    TacticsMenu->Add(new MenuSeparator(
-        "Ownership",
-        "Movement, attacks, Flash,"));
 
     RoleMenu = TacticsMenu->AddSubMenu(new Menu(
         "Conductor", "Carry protection and catch posture"));
-    RoleMenu->Add(new MenuBool(
-        "RespectCursor", "Require cursor agreement for", true));
     RoleMenu->Add(new MenuSeparator(
         "Carry",
         "The ally is re-ranked from"));
@@ -2584,7 +2461,7 @@ inline void BuildMenu(Menu* root) {
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
         "TravelersCall", "Chime and meep route policy"));
     PassiveMenu->Add(new MenuBool(
-        "DrawChimeRoute", "Suggest chimes that fit the", true));
+        "DrawChimeRoute", "Suggest chimes that fit the", false));
     PassiveMenu->Add(new MenuSlider(
         "RouteScore", "Minimum safe chime route score", 180, -300, 500));
     PassiveMenu->Add(new MenuSeparator(
@@ -2613,7 +2490,7 @@ inline void BuildMenu(Menu* root) {
         "In attack range Bard waits"));
 
     WMenu = TacticsMenu->AddSubMenu(new Menu(
-        "CaretakersShrine", "Direct heal, speed and shrine economy"));
+        "CaretakersShrine", "Heal, speed and shrine policy"));
     WMenu->Add(new MenuBool(
         "EmergencyDirect", "W direct on ally", true));
     WMenu->Add(new MenuSlider(
@@ -2639,15 +2516,12 @@ inline void BuildMenu(Menu* root) {
         "RespectDashHazards", "Reject anti-dash exits", true));
     EMenu->Add(new MenuSlider(
         "MinimumSafety", "Minimum portal safety score", 220, -200, 900));
-    EMenu->Add(new MenuKeyBind(
-        "PlayerPortal", "Trace best portal through cursor [G]",
-        SDK::Keys::G, KeyBindType::Press));
     EMenu->Add(new MenuSeparator(
         "PlayerEntry",
         "The controller creates a"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
-        "TemperedFate", "Mixed-team stasis and no-grief policy"));
+        "TemperedFate", "Team stasis and no-grief policy"));
     RMenu->Add(new MenuBool(
         "AutomaticCatch", "Catch an overextended target", true));
     RMenu->Add(new MenuSlider(
@@ -2668,17 +2542,6 @@ inline void BuildMenu(Menu* root) {
         "FleeMinimum", "Pursuers required for flee R", 2, 1, 5));
     RMenu->Add(new MenuBool(
         "FleeR", "R multi-pursuer escape", true));
-    RMenu->Add(new MenuBool(
-        "AssistManualR", "Q exit after player R", true));
-    RMenu->Add(new MenuKeyBind(
-        "ManualCatch", "Manual no-grief catch near cursor [T]",
-        SDK::Keys::T, KeyBindType::Press));
-    RMenu->Add(new MenuKeyBind(
-        "DiveTurret", "Stasis enemy turret for a player-led dive [H]",
-        SDK::Keys::H, KeyBindType::Press));
-    RMenu->Add(new MenuKeyBind(
-        "ObjectiveDeny", "Deny contested epic objective [J]",
-        SDK::Keys::J, KeyBindType::Press));
     RMenu->Add(new MenuSeparator(
         "NoGrief",
         "Automatic R rejects allied"));
@@ -2748,7 +2611,6 @@ inline void OnLoad() {
     LastMeepAttackTargetId = LastMeepAttackTick = 0;
     LastLocalAutoTargetId = LastLocalAutoTick = 0;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
-    PlayerOverrideUntil = 0;
     SequenceTargetId = SequenceExpireTick = 0;
     PortalTravellerId = PortalTravellerUntil = 0;
     PortalTravellerExit = {};

@@ -20,7 +20,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellEnabled;
@@ -50,14 +49,12 @@ inline int RTargetId = 0;
 inline int RStartTick = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int PassiveCooldownEndTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline bool PassiveShieldActive = false;
 inline bool RChanneling = false;
 inline bool RInterrupted = false;
-inline bool ROwned = false;
 
 inline bool Throttle(int slot, int delay = 55) {
     return ControllerHelpers::CastThrottleReady(LastCastTick, slot, delay);
@@ -92,9 +89,6 @@ inline int RuntimeWCharges() {
     return Ready(1) ? 1 : 0;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    return PreferredEnemyTarget(selected, range);
-}
 
 inline bool OffensiveReady(int slot, Mode mode, bool reactive = false) {
     if (!SpellEnabled(slot, mode) || !Ready(slot, mode) || !Throttle(slot)) return false;
@@ -204,7 +198,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) 
     LastCastTick[3] = RStartTick = Now();
     RTargetId = static_cast<int>(target.NetworkId());
     RChanneling = true;
-    ROwned = true;
     RInterrupted = false;
     return true;
 }
@@ -277,7 +270,6 @@ inline void ReconcileState() {
         if (now - RStartTick < static_cast<int>((kRChannelSeconds - 0.12f) * 1000.0f))
             RInterrupted = true;
         RChanneling = false;
-        ROwned = false;
     }
     if (RChanneling) {
         const auto target = ControllerHelpers::HeroByNetworkId(RTargetId);
@@ -292,7 +284,6 @@ inline void ReconcileState() {
             !ShouldReleaseNetherGrasp(gate, elapsed)) RInterrupted = true;
         if (ShouldReleaseNetherGrasp(gate, elapsed) || RInterrupted) {
             RChanneling = false;
-            ROwned = false;
         }
     }
     ActiveVoidlingCount = 0;
@@ -302,12 +293,11 @@ inline void ReconcileState() {
     WObservedAmmo = RuntimeWCharges();
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const Mode decisionMode = mode == Mode::None ? Mode::Automatic : mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now() || RChanneling) return true;
     if (TrySpreadE(decisionMode, decisionMode == Mode::Automatic)) return true;
-    const auto target = SelectTarget(selected, decisionMode == Mode::Flee ? 900.0f : kRRange + 35.0f);
+    const auto target = Engine::SelectTarget(decisionMode == Mode::Flee ? 900.0f : kRRange + 35.0f);
     if (!Engine::ValidEnemy(target)) return decisionMode == Mode::LaneClear ||
         decisionMode == Mode::Jungle || decisionMode == Mode::LastHit ? Farm(decisionMode) : false;
     switch (decisionMode) {
@@ -343,9 +333,11 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = now;
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
-            if (slot == 3 && !Engine::WasControllerCast(slot)) RInterrupted = true;
+            if (slot == 3 && !RChanneling) {
+                RChanneling = true;
+                RStartTick = now;
+                RInterrupted = false;
+            }
         }
         return;
     }
@@ -460,8 +452,7 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("MalzaharOneTrick", "Malzahar passive, voidlings and suppression"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 600, 180, 1400));
+    TacticsMenu = root->AddSubMenu(new Menu("MalzaharOneTrick", "Passive, voidlings, suppression"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("CallOfTheVoid", "Q silence prediction"));
     QMenu->Add(new MenuBool("RequireHighHitchance", "Require high Q prediction", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("VoidSwarm", "Voidling charge and target policy"));
@@ -469,7 +460,7 @@ inline void BuildMenu(Menu* root) {
     EMenu = TacticsMenu->AddSubMenu(new Menu("MaleficVisions", "E spread and transfer"));
     EMenu->Add(new MenuBool("AllowFarmSpread", "Allow E spread on farm units", true));
     RMenu = TacticsMenu->AddSubMenu(new Menu("NetherGrasp", "Suppression channel safety"));
-    RMenu->Add(new MenuSlider("StartBelowHp", "Start nonlethal R below target HP (%)", 58, 10, 95));
+    RMenu->Add(new MenuSlider("StartBelowHp", "Start nonlethal R below HP (%)", 58, 10, 95));
     RMenu->Add(new MenuSlider("MaxChannelEnemies", "Maximum nearby enemies during R", 2, 0, 5));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("MalzaharFarm", "Distinct lane and jungle policy"));
     FarmMenu->Add(new MenuBool("UseVoidSwarm", "Use W for lane and jungle", true));
@@ -487,10 +478,10 @@ inline void OnLoad() {
     ESpreadPending = false;
     ESpreadOrigin = {};
     ESpreadUntilTick = 0;
-    IncomingThreatUntil = IncomingHardCcUntil = ManualOwnershipUntil = 0;
+    IncomingThreatUntil = IncomingHardCcUntil = 0;
     PassiveCooldownEndTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
-    PassiveShieldActive = RChanneling = RInterrupted = ROwned = false;
+    PassiveShieldActive = RChanneling = RInterrupted = false;
     ReconcileState();
 }
 
@@ -510,9 +501,9 @@ inline constexpr const char* Scenarios[] = {
     "Preserve E spread state and expiry across buff events and polling reconciliation",
     "Start Nether Grasp only on a reachable suppression target with real readiness and damage state",
     "Reject Nether Grasp under turret, excess nearby enemies, mobility lock, incoming hard crowd control or target protection",
-    "Interrupt owned R immediately on hard crowd control, gapcloser pressure, buff removal or lost target reach",
+    "Interrupt active R immediately on hard crowd control, gapcloser pressure, buff removal or lost target reach",
     "Reconcile R completion against the full 2.5-second channel rather than trusting one event",
-    "Preserve auto-attack windup and yield briefly after manually owned spells",
+    "Preserve auto-attack windup while channel safety remains event-driven",
     "Handle Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes distinctly",
     "Use W for lane and jungle clusters and E for lethal last hits without generic ordering",
     "Draw live ranges and channel state without taking movement, item or summoner ownership",

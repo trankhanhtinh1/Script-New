@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Hwei = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "HweiPassive";
@@ -99,7 +98,7 @@ inline constexpr ChampionProfile Hwei = [] {
     p.Flee = Plan("Serenity movement and Turmoil peel",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 800),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 90, 850),
-        Step(SDK::SpellSlot::Q, StepRule::ManualAssistOnly, 170, 1000));
+        Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireSafePosition, 170, 1000));
     return p;
 }();
 

@@ -19,12 +19,10 @@ using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellRank;
 using ControllerHelpers::PlayerMobilityLocked;
-
 inline Menu* TacticsMenu = nullptr;
 inline Menu* QMenu = nullptr;
 inline Menu* WMenu = nullptr;
@@ -43,7 +41,6 @@ inline std::array<HemoplagueMark, 24> Marks = {};
 inline std::array<int, 4> LastCastTick = {};
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCrowdControlUntil = 0;
-inline int ManualOverrideUntil = 0;
 inline int LastTargetId = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
@@ -52,7 +49,6 @@ inline int EExpectedReleaseTick = 0;
 inline int WInvulnerableUntil = 0;
 inline bool QEmpowered = false;
 inline bool ECharging = false;
-inline bool WControllerOwned = false;
 inline Mode LastMode = Mode::None;
 
 inline bool Throttle(int slot, int delay = 45) {
@@ -113,8 +109,8 @@ inline bool HealthCostSafe(float costPercent, bool reactive = false) {
                         reactive ? 8.0f : Slider(TacticsMenu, "MinimumPostCastHP", 12));
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    return PreferredEnemyTarget(selected, range);
+inline AIHeroClient SelectTarget(float range) {
+    return Engine::SelectTarget(range);
 }
 
 inline bool TargetLegal(const AIHeroClient& target, float range) {
@@ -167,7 +163,6 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = true) {
     if (!Engine::ControllerCastSelf(1)) return false;
     LastCastTick[1] = Now();
     WInvulnerableUntil = Now() + static_cast<int>(kWDurationSeconds * 1000.0f);
-    WControllerOwned = true;
     return true;
 }
 
@@ -205,7 +200,7 @@ inline bool ReleaseE(const AIHeroClient& target, Mode mode, bool reactive = fals
     return true;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode) {
     const auto player = GameObjects::Player();
     if (!TargetLegal(target, kRRange + 35.0f) || !player.IsValid() ||
         !Ready(3, mode) || !Throttle(3, 130) || PreserveAttack(false)) return false;
@@ -217,7 +212,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
     const int nearby = Engine::CountEnemiesAt(predicted, 650.0f);
     const float rHeal = RHeal(SpellRank(3), player.AP(), std::max(1, grouped));
     const bool healingWindow = rHeal >= player.MaxHealth() - player.Health();
-    if (!LowHealthSafety(false) && !healingWindow && !manual) return false;
+    if (!LowHealthSafety(false) && !healingWindow) return false;
     const bool lethalWindow = target.HealthPercent() <= 25.0f;
     if (underTurret && !lethalWindow && player.HealthPercent() < 65.0f) return false;
     if (nearby > (Engine::ActiveProfile ? Engine::ActiveProfile->MaximumCommitEnemies : 3) &&
@@ -226,20 +221,19 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool manual = false) {
         RAmplifiedDamage(QDamage(SpellRank(0), player.AP(), true), true) +
         RAmplifiedDamage(EDamage(SpellRank(2), player.AP(), 1.0f), true);
     const bool shieldedKillable = burstRaw >= target.Health() + target.AllShield();
-    if (PlayerMobilityLocked() && player.HealthPercent() < 30.0f && !manual &&
+    if (PlayerMobilityLocked() && player.HealthPercent() < 30.0f &&
         !lethalWindow) return false;
     const bool low = target.HealthPercent() <= Slider(RMenu, "TargetHP", 58) ||
         shieldedKillable;
     const bool multi = grouped >= Slider(RMenu, "MinimumTargets", 2);
     const VladimirUltimateContext context{true, true, true, low, multi,
-        LowHealthSafety(false) || healingWindow, manual};
+        LowHealthSafety(false) || healingWindow};
     if (!ShouldCastHemoplague(context)) return false;
     if (!Engine::ControllerCastPosition(3, predicted)) return false;
     LastCastTick[3] = Now();
     LastTargetId = static_cast<int>(target.NetworkId());
     return true;
 }
-
 inline void ReconcileState() {
     const int now = Now();
     for (auto& mark : Marks) if (mark.ExpireTick < now) mark = {};
@@ -254,7 +248,6 @@ inline void ReconcileState() {
         WInvulnerableUntil = std::max(WInvulnerableUntil,
             now + static_cast<int>(kWDurationSeconds * 1000.0f));
     } else if (WInvulnerableUntil < now) {
-        WControllerOwned = false;
     }
     if (player.HasBuff("VladimirE")) ECharging = true;
     if (ECharging && now > EExpectedReleaseTick + 250) {
@@ -290,13 +283,13 @@ inline void Flee(const AIHeroClient& target) {
     if (ECharging) (void)ReleaseE(target, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = SelectTarget(selected, mode == Mode::Flee ? 900.0f : 700.0f);
+    const AIHeroClient target = SelectTarget(
+        mode == Mode::Flee ? 900.0f : 700.0f);
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return false;
-    if (ManualOverrideUntil > Now()) return true;
     if ((IncomingHardCrowdControlUntil >= Now() || IncomingThreatUntil >= Now()) &&
         mode != Mode::LaneClear && mode != Mode::Jungle && mode != Mode::LastHit &&
         CastW(target, mode, true)) return true;
@@ -325,11 +318,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
-        if (args.Slot >= 0 && args.Slot < 4) {
+        if (args.Slot >= 0 && args.Slot < 4)
             LastCastTick[args.Slot] = now;
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-        }
         if (args.Slot == static_cast<int>(SDK::SpellSlot::E)) ECharging = true;
         return;
     }
@@ -391,7 +381,6 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu = root->AddSubMenu(new Menu("VladimirTactics", "Vladimir health tradeoffs"));
     TacticsMenu->Add(new MenuSlider("MinimumCommitHP", "Minimum commit HP", 30, 8, 80));
     TacticsMenu->Add(new MenuSlider("MinimumPostCastHP", "Minimum post-cast HP", 12, 5, 40));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual ownership (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Transfusion / Frenzy"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Sanguine Pool"));
     WMenu->Add(new MenuSlider("EmergencyHP", "Pool emergency HP", 23, 5, 60));
@@ -408,17 +397,17 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     Marks.fill({}); LastCastTick.fill(0);
-    IncomingThreatUntil = IncomingHardCrowdControlUntil = ManualOverrideUntil = 0;
+    IncomingThreatUntil = IncomingHardCrowdControlUntil = 0;
     LastTargetId = LastAutoTargetId = LastAutoTick = 0;
     EChargeStartTick = EExpectedReleaseTick = WInvulnerableUntil = 0;
-    QEmpowered = ECharging = WControllerOwned = false;
+    QEmpowered = ECharging = false;
     LastMode = Mode::None;
 }
 
 inline void OnUnload() {
     TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr;
     Marks.fill({});
-    QEmpowered = ECharging = WControllerOwned = false;
+    QEmpowered = ECharging = false;
 }
 
 inline constexpr const char* Scenarios[] = {
@@ -432,11 +421,10 @@ inline constexpr const char* Scenarios[] = {
     "Reconcile Pool untargetability from events and live buff polling",
     "Place Hemoplague through predicted circle reach and projectile-wall safety",
     "Track four-second Hemoplague marks and amplification targets from buff events",
-    "Use R for low target health, grouped enemies or manual assist with player-health gate",
+    "Use R for low target health, grouped enemies or player-health safety gate",
     "Reject invulnerable, untargetable and spell-shielded targets",
     "Preserve AA windup except verified Pool defense or reactive escape",
-    "Yield after observed manual Q W E or R ownership and reconcile on polling",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection and reconcile observed spell state",
     "Respect turret and enemy-count commit limits before damage windows",
     "Combo marks with R, charges E, spends empowered Q, and retains W for safety",
     "Harass uses Q sustain and short E only above the health floor",

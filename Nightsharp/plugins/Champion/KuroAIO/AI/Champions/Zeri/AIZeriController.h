@@ -44,7 +44,6 @@ inline int OverchargeExpireTick = 0;
 inline bool ChargedShot = false;
 inline bool RActive = false;
 inline Mode LastMode = Mode::None;
-inline AIHeroClient LastSmartTarget = {};
 
 inline bool HasChargedShotBuff(const AIHeroClient& player) {
     return player.IsValid() &&
@@ -153,13 +152,12 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred, Mode mode) {
-    LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
-        preferred, kWRange + 50.0f,
+inline AIHeroClient SelectSmartTarget(Mode mode) {
+    return ControllerHelpers::SelectReachableEnemy(
+        {}, kWRange + 50.0f,
         [mode](const AIHeroClient& enemy) {
             return TargetFacts(enemy, mode);
         });
-    return LastSmartTarget;
 }
 
 inline bool SafeDashEndpoint(const Vector3& endpoint,
@@ -236,7 +234,6 @@ inline bool CastE(const AIHeroClient& threat,
 
 inline bool CastR(const AIHeroClient& target,
                   Mode mode,
-                  bool manual = false,
                   bool reactive = false) {
     if (!Engine::RuntimeSpells[3] || !CanUse(3, mode, true) ||
         !CastThrottlePassed(LastRCastTick, 100)) return false;
@@ -250,7 +247,7 @@ inline bool CastR(const AIHeroClient& target,
     const bool committed = LastAfterAttackTargetId ==
         static_cast<int>(target.NetworkId()) && Now() - LastAfterAttackTick < 700;
     if (!ShouldCastUltimate(Engine::RuntimeSpells[3]->IsReady(), RActive,
-                            manual || reactive, committed, lethal, safe, nearby,
+                            committed, lethal, safe, nearby,
                             Slider(CrashMenu, "MinimumEnemies", 2))) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastRCastTick = Now();
@@ -262,11 +259,6 @@ inline bool CastR(const AIHeroClient& target,
     return true;
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic);
-    return Engine::ValidEnemy(target, kRRange) && CastR(target, Mode::Automatic, true);
-}
 
 inline bool TryReactive() {
     if (InterruptExpireTick >= Now()) {
@@ -276,15 +268,15 @@ inline bool TryReactive() {
     if (GapcloserExpireTick >= Now()) {
         const auto target = HeroByNetworkId(GapcloserTargetId);
         if (Engine::ValidEnemy(target, kRRange) &&
-            CastR(target, Mode::Automatic, false, true)) return true;
+            CastR(target, Mode::Automatic)) return true;
         if (Engine::ValidEnemy(target, kWRange) && CastW(target, Mode::Automatic)) return true;
     }
     return false;
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic);
+    const auto target = SelectSmartTarget(Mode::Automatic);
     if (!Engine::ValidEnemy(target, kWRange)) return false;
     if (SpellDamage(0, target) >= target.Health() + target.AllShield() &&
         CastQ(target, Mode::Automatic)) return true;
@@ -307,8 +299,8 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto threat = ControllerHelpers::NearestEnemyToPlayer(preferred, kWRange);
+inline bool TryFlee() {
+    const auto threat = ControllerHelpers::NearestEnemyToPlayer({}, kWRange);
     if (!Engine::ValidEnemy(threat)) return false;
     if (CastE(threat, Mode::Flee, true)) return true;
     return CastW(threat, Mode::Flee);
@@ -322,15 +314,14 @@ inline bool TryFarm(Mode mode) {
     return Engine::TryFarmSpell(0, jungle, lastHit);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (TryManualR(preferred)) return true;
     if (TryReactive()) return true;
-    if (TryKillSecure(preferred)) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
+    if (TryKillSecure()) return true;
+    if (mode == Mode::Flee) return TryFlee();
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        const auto target = SelectSmartTarget(preferred, mode);
+        const auto target = SelectSmartTarget(mode);
         return TryCombat(target, mode);
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
@@ -386,7 +377,7 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ZeriMechanics", "Zeri Mechanics"));
     ShotMenu = TacticsMenu->AddSubMenu(new Menu("BurstFire", "Burst Fire"));
-    ShotMenu->Add(new MenuSeparator("ChargedPolicy", "Preserve charged passive shot and AA windup"));
+    ShotMenu->Add(new MenuSeparator("ChargedPolicy", "Keep charged shot + AA windup"));
     SurgeMenu = TacticsMenu->AddSubMenu(new Menu("SparkSurge", "Spark Surge"));
     SurgeMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at dash endpoint", 1, 0, 3));
     CrashMenu = TacticsMenu->AddSubMenu(new Menu("LightningCrash", "Lightning Crash"));
@@ -403,13 +394,11 @@ inline void OnLoad() {
     OverchargeStacks = OverchargeExpireTick = 0;
     ChargedShot = RActive = false;
     LastMode = Mode::None;
-    LastSmartTarget = {};
 }
 
 inline void OnUnload() {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
     TacticsMenu = ShotMenu = SurgeMenu = CrashMenu = nullptr;
-    LastSmartTarget = {};
 }
 
 inline constexpr const char* Scenarios[] = {
@@ -417,12 +406,12 @@ inline constexpr const char* Scenarios[] = {
     "Preserve a charged passive shot and never replace a real AA windup with speculative W",
     "Require Q prediction to hit the first collision body and reject projectile-wall routes",
     "Use W's widened terrain laser path only when a wall is intentionally crossed",
-    "Reject W when a minion or collision body is predicted before the selected hero",
-    "Keep selected-target, orbwalker-target and owned-focus identities aligned",
+    "Reject W when a minion or collision body is predicted before the engine target",
+    "Keep the engine target and owned-focus identities aligned",
     "Build Lightning Crash overcharge from successful R and observed follow-up attacks",
     "Expire overcharge stacks from the live buff window instead of stale local state",
     "Cast R automatically only for a safe committed multi-target or lethal window",
-    "Allow manual R through the same target validity and safety checks",
+    "Use R only through the same target validity and safety checks",
     "Use Spark Surge only toward a walkable endpoint with no point-click or dash hazard",
     "Permit a terrain dash as a deliberate interaction while rejecting turret traps",
     "Use E for flee before W peel and never dash while movement is locked",

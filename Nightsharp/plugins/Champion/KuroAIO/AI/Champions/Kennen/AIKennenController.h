@@ -40,7 +40,6 @@ struct MarkRecord {
 };
 inline std::array<MarkRecord, 16> Marks{};
 inline std::array<int, 4> LastCastTick{};
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -91,11 +90,9 @@ inline bool Marked(const AIHeroClient& target) {
 
 using ControllerHelpers::Protected;
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
+inline AIHeroClient SelectTarget(float range) {
     const auto orb = OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
+    return Engine::ValidEnemy(orb, range) ? orb : Engine::SelectTarget(range);
 }
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
@@ -140,11 +137,9 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool defensive = false,
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(2, mode, reactive) || !Throttle(2, 120) ||
         PlayerMobilityLocked()) return false;
-    Vector3 requested = Game::CursorPos();
-    if (defensive && Engine::ValidEnemy(target)) {
-        const Vector3 away = SharedGeometry::Direction2D(target.Position(), player.Position());
-        if (!away.IsZero()) requested = player.Position() + away * kERange;
-    }
+    Vector3 requested = mode == Mode::Flee
+        ? Game::CursorPos()
+        : (Engine::ValidEnemy(target) ? target.Position() : player.Position());
     const Vector3 endpoint = ClampRush(player.Position(), requested);
     if (endpoint.IsZero() || SDK::NavMesh::IsWall(endpoint)) return false;
     const int enemies = Engine::CountEnemiesAt(endpoint, kERadius);
@@ -162,13 +157,13 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool defensive = false,
 }
 
 inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false,
-                  bool reactive = false, bool manual = false) {
+                  bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode, reactive) || !Throttle(3, 140)) return false;
     const int enemies = Engine::CountEnemiesAt(player.Position(), kRRadius);
     const bool lethal = Engine::ValidEnemy(target) &&
         target.HealthPercent() <= Slider(RMenu, "LethalTargetHp", 22);
-    const UltimateContext context{true, enemies > 0, lethal, defensive, manual,
+    const UltimateContext context{true, enemies > 0, lethal, defensive,
         Orbwalker::IsWindingUp(),
         Engine::UnderEnemyTurret(player.Position()) && !defensive && !lethal,
         enemies, Slider(RMenu, "MinimumTargets", 2)};
@@ -236,11 +231,10 @@ inline void ReconcileState() {
     if (!player.HasBuff("KennenShurikenStorm") && now > StormUntil) StormActive = false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = SelectTarget(selected, mode == Mode::Flee ? 1000.0f : kQRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = SelectTarget(mode == Mode::Flee ? 1000.0f : kQRange);
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastR(target, mode, true, true)) return true;
         if (CastE(target, mode, true, true)) return true;
@@ -272,8 +266,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot))
-                PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -323,7 +315,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KennenOneTrick", "Kennen storm tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("Passive", "Mark of the Storm"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Thundering Shuriken"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Electrical Surge"));
@@ -345,7 +336,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     Marks = {};
     LastCastTick = {};
-    PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = 0;
     LightningRushActive = StormActive = false;
     LightningRushUntil = StormUntil = 0;
@@ -364,22 +355,22 @@ inline constexpr const char* Scenarios[] = {
     "Use W marked-target range and 300-unit safety radius",
     "Only cast W when at least the configured number of marks are observed",
     "Preserve energy for a follow-up Q, W or R rather than draining blindly",
-    "Use E Lightning Rush as a posture with cursor direction and a safe endpoint",
+    "Use E Lightning Rush as a threat-directed posture with a safe endpoint",
     "Reject E endpoints through walls, turrets or excessive enemy density",
-    "Permit defensive E toward a threat when cursor telemetry is unreliable",
+    "Permit defensive E toward a threat when safety evidence is available",
     "Use R 550 radius and require configured multi-target value by default",
-    "Allow single-target R only for explicit lethal, defensive or manual intent",
+    "Allow single-target R only for lethal, defensive or verified interrupt value",
     "Reject R beneath a new turret unless lethal or defensive evidence exists",
     "Preserve attack windup unless a reactive storm or escape is required",
-    "Yield after observed manual Q W E or R ownership",
-    "Preserve selected target before orbwalker and engine selector fallback",
+    "Resume autonomous decisions after observed Q W E or R events",
+    "Use autonomous target selection before orbwalker and engine fallback",
     "Reconcile energy readiness and cooldown timestamps from events and polling",
     "Combo builds marks with Q, converts with W, then enters E or R safely",
     "Harass uses Q and marked W without unsolicited Lightning Rush or ultimate",
     "LaneClear Jungle and LastHit delegate to shared farm policy with energy reserve",
-    "Flee uses cursor-safe Lightning Rush and storm peel only under threat",
+    "Flee uses cursor-directed Lightning Rush only for movement and storm peel under threat",
     "Automatic mode permits only evidenced defense, interrupt or multi-target storm",
-    "Never automate items, summoners, movement clicks or manual channels",
+    "Never automate items, summoners or movement clicks",
     "Keep pure mark, area, rush and ultimate safety rules SDK-independent",
 };
 
@@ -390,7 +381,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIKennen.md";
     controller.ImplementationSummary =
-        "Mark-aware energy reconciliation, cursor-directed Lightning Rush posture and conservative Slicing Maelstrom multi-target safety.";
+        "Mark-aware energy reconciliation, threat-directed Lightning Rush posture and conservative Slicing Maelstrom multi-target safety.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

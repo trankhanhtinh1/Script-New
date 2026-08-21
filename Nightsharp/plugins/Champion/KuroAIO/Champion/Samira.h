@@ -19,7 +19,6 @@ inline Menu* WMenu = nullptr;
 inline Menu* EMenu = nullptr;
 inline Menu* RMenu = nullptr;
 inline Menu* MiscMenu = nullptr;
-inline Menu* KeysMenu = nullptr;
 
 inline Spell Q{ SpellSlot::Q, 900.0f };
 inline Spell W{ SpellSlot::W, 325.0f };
@@ -92,7 +91,7 @@ static bool AllowDashTo(const Vector3& position) {
     if (position.IsZero() || NavMesh::IsWall(position)) {
         return false;
     }
-    return Key(KeysMenu, "AllowTurret") || !UnderTower(position);
+    return Bool(MiscMenu, "AllowTurret", false) || !UnderTower(position);
 }
 
 static bool AllowDashTo(const AIBaseClient& target) {
@@ -257,7 +256,6 @@ static void ApplyDefaultSettings() {
     SetBool(EMenu, "ECombo", true);
     SetBool(EMenu, "EQ", false);
     SetBool(EMenu, "EW", true);
-    SetKey(EMenu, "EMinions", false);
     SetSlider(EMenu, "EHealth", 70);
     SetBool(EMenu, "ER", true);
     SetBool(EMenu, "EKs", true);
@@ -270,6 +268,7 @@ static void ApplyDefaultSettings() {
     SetSlider(MiscMenu, "AATimer", 1500);
     SetBool(MiscMenu, "PacketCast", false);
     SetBool(MiscMenu, "DrawQAARange", false);
+    SetBool(MiscMenu, "AllowTurret", false);
 }
 
 static void BuildMenu() {
@@ -291,7 +290,6 @@ static void BuildMenu() {
     EMenu->Add(new MenuBool("ECombo", "E Combo"));
     EMenu->Add(new MenuBool("EQ", "Cast Q when E", false));
     EMenu->Add(new MenuBool("EW", "EW Combo"));
-    EMenu->Add(new MenuKeyBind("EMinions", "Accept E on Minion", SDK::Keys::A, KeyBindType::Toggle));
     EMenu->Add(new MenuSeparator("Eonly", "But Only When"));
     EMenu->Add(new MenuSlider("EHealth", "Target Health % <= ", 50, 0, 100));
     EMenu->Add(new MenuBool("ER", "R Is In Ready"));
@@ -307,12 +305,7 @@ static void BuildMenu() {
     MiscMenu->Add(new MenuSlider("AATimer", "Max AA wait (ms)", 1500, 0, 2500));
     MiscMenu->Add(new MenuBool("PacketCast", "Packet Cast", false));
     MiscMenu->Add(new MenuBool("DrawQAARange", "Draw AA & Q Range", false));
-
-    KeysMenu = MenuRoot->AddSubMenu(new Menu("Keys Samira Settings", "Keys Settings"));
-    KeysMenu->Add(new MenuKeyBind("QMixed", "Q Harass When Clear", SDK::Keys::H, KeyBindType::Toggle, true));
-    KeysMenu->Add(new MenuKeyBind("QClear", "Q Clear Minions", SDK::Keys::H, KeyBindType::Toggle, true));
-    KeysMenu->Add(new MenuKeyBind("AllowTurret", "Allow Turret Key [Toggle]", SDK::Keys::T, KeyBindType::Toggle));
-    KeysMenu->Add(new MenuKeyBind("TurboFast", "Turbo Fastly", SDK::Keys::Z, KeyBindType::Toggle));
+    MiscMenu->Add(new MenuBool("AllowTurret", "Allow Turret Dash", false));
 
     MenuRoot->Add(new MenuBool("reset", "Reset Samira", false));
     MenuRoot->Attach();
@@ -423,7 +416,7 @@ static void Check() {
 }
 
 static bool TryTurboCombo() {
-    if (!Key(KeysMenu, "TurboFast") || !Q.IsReady() || (!W.IsReady() && !R.IsReady() && !Player().HasBuff("SamiraR")) || !E.IsReady()) {
+    if (!Q.IsReady() || (!W.IsReady() && !R.IsReady() && !Player().HasBuff("SamiraR")) || !E.IsReady()) {
         return false;
     }
 
@@ -503,7 +496,7 @@ static bool TryRCombo() {
 }
 
 static bool TryEMinionGapClose() {
-    if (!E.IsReady() || !Bool(EMenu, "ECombo") || !Key(EMenu, "EMinions")) {
+    if (!E.IsReady() || !Bool(EMenu, "ECombo")) {
         return false;
     }
 
@@ -672,7 +665,7 @@ static void HarassAndClear() {
         return;
     }
 
-    if (IsHarassMode() && Key(KeysMenu, "QMixed")) {
+    if (IsHarassMode()) {
         const auto target = GetPhysicalTarget(Q.Range);
         if (ValidHeroTarget(target, Q.Range)) {
             (void)CastQOnTarget(target, true, true);
@@ -680,7 +673,7 @@ static void HarassAndClear() {
         return;
     }
 
-    if (IsClearMode() && Key(KeysMenu, "QClear")) {
+    if (IsClearMode()) {
         for (const auto& minion : GameObjects::EnemyMinions()) {
             if (ValidTarget(minion, Q.Range) && CastQClear(minion)) {
                 return;
@@ -826,7 +819,6 @@ static void RemoveMenu() {
     EMenu = nullptr;
     RMenu = nullptr;
     MiscMenu = nullptr;
-    KeysMenu = nullptr;
 }
 
 static void OnUnload() {

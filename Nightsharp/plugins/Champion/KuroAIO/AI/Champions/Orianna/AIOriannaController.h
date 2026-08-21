@@ -33,7 +33,6 @@ inline Menu* CoachMenu = nullptr;
 
 inline BallState Ball = {};
 inline int LastCastTick[4]{};
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -134,11 +133,10 @@ inline void ReconcileBall() {
     }
 }
 
-inline AIHeroClient CooperativeTarget(const AIHeroClient& selected) {
-    if (Engine::ValidEnemy(selected, 1500.0f)) return selected;
-    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget();
-    if (Engine::ValidEnemy(orbwalker, 1500.0f)) return orbwalker;
-    return Engine::SelectTarget(1500.0f);
+inline AIHeroClient AutonomousTarget(float range) {
+    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
+    return Engine::SelectTarget(range);
 }
 
 inline int PredictedRHits(const Vector3& ball) {
@@ -245,8 +243,7 @@ inline bool CastSelfE(Mode mode, bool incomingThreat) {
 
 inline bool CastR(const AIHeroClient& target,
                   Mode mode,
-                  bool defensive = false,
-                  bool manual = false) {
+                  bool defensive = false) {
     const Vector3 ball = BallPosition();
     if (!ball.IsValid() || Protected(target)) return false;
     const Vector3 predicted = PredictPosition(target, kRDelaySeconds);
@@ -260,7 +257,6 @@ inline bool CastR(const AIHeroClient& target,
     context.AttackWindingUp = Orbwalker::IsWindingUp();
     context.Lethal = Lethal(target, RDamage(target));
     context.Defensive = defensive;
-    context.Manual = manual;
     context.PredictedHits = PredictedRHits(ball);
     context.MinimumHits = Slider(ShockwaveMenu, "MinimumTargets", 2);
     if (!ShouldCastShockwave(context) || !Engine::ControllerCastSelf(3))
@@ -281,10 +277,6 @@ inline AIHeroClient BestProtectAlly(const AIHeroClient& fallback) {
     return best.IsValid() ? best : fallback;
 }
 
-inline bool TryManualR(const AIHeroClient& target) {
-    return Key(Engine::AutomaticMenu, "ManualR", false) &&
-        Engine::ValidEnemy(target) && CastR(target, LastMode, false, true);
-}
 
 inline bool TryReactive(const AIHeroClient& target, Mode mode) {
     const bool threatened = IncomingThreatUntil > Now();
@@ -333,11 +325,10 @@ inline void Flee(const AIHeroClient& threat) {
     (void)CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileBall();
-    const AIHeroClient target = CooperativeTarget(selected);
-    if (TryManualR(target) || PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = AutonomousTarget(1500.0f);
     if (TryReactive(target, mode) || TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -371,8 +362,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        const bool ours = Engine::WasControllerCast(slot);
-        if (!ours) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         const auto player = GameObjects::Player();
         if (slot == 0 && player.IsValid()) {
@@ -442,7 +431,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("OriannaOneTrick", "Orianna Ball control"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     BallMenu = TacticsMenu->AddSubMenu(new Menu("Ball", "Q/W Ball routing"));
     BallMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 10, 90));
     ProtectMenu = TacticsMenu->AddSubMenu(new Menu("Protect", "E ally protection"));
@@ -460,7 +448,7 @@ inline void OnLoad() {
     Ball = {};
     if (player.IsValid()) AttachBallTo(static_cast<int>(player.NetworkId()), player.Position());
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = {};
     LastAutoTargetId = LastAutoTick = PassiveTargetId = PassiveStacks = PassiveExpireTick = 0;
@@ -493,18 +481,18 @@ inline constexpr const char* Scenarios[] = {
     "Use the live 415 Shockwave radius and current damage",
     "Require the intended target inside Shockwave",
     "Reserve nonlethal Shockwave for configured multi-target value",
-    "Allow lethal defensive interrupt and manual Shockwave",
+    "Allow lethal defensive interrupt Shockwave",
     "Reject Shockwave during AA windup unless commitment is justified",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous orbwalker and engine target policy",
     "Preserve Clockwork Windup target and repeated-attack stacks",
     "Combo uses current Ball contact before repositioning",
     "Harass preserves mana and never spends unsolicited R",
     "LaneClear Jungle and LastHit use shared farm logic",
     "Flee shields Orianna then uses Ball-centered peel",
     "Automatic mode permits only defense interrupt or kill secure",
-    "Yield after every observed manual Q W E or R cast",
-    "Never automate Flash summoner spells items or movement ownership",
-    "Keep profile metadata separate from the owned decision loop",
+    "Reconcile observed Q W E or R events",
+    "Never issue Flash, summoner spells, items or movement",
+    "Keep profile metadata separate from the decision loop",
     "Reject protected invulnerable and spell-shielded targets",
     "Expose Ball W and R zones without changing gameplay state",
 };

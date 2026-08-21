@@ -124,7 +124,7 @@ inline constexpr ChampionProfile Ashe = [] {
     p.ThemeTo = 0xFF4D8DFFu;
     p.ThemeSpeed = 0.76f;
     p.TacticalSummary =
-        "Keep movement and target attacks player-owned; observe four Focus "
+        "Automate movement and target attacks through orbwalker timing; observe four Focus "
         "stacks and reset only after a valuable attack; simulate every live "
         "Volley ray and its first blocker; reserve Hawkshot charges for "
         "multi-camp jungle tracking, objectives and no-facecheck routes; and "

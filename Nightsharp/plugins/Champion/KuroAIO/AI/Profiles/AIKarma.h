@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Karma = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "KarmaPassive";
@@ -80,7 +79,7 @@ inline constexpr ChampionProfile Karma = [] {
     p.Flee = Plan("RE shield-speed peel",
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 0, 850),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::AllowDuringWindup, 90, 900),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireSafePosition, 180, 500));
+        Step(SDK::SpellSlot::R, StepRule::RequirePlayerLow | StepRule::RequireSafePosition, 180, 500));
     return p;
 }();
 

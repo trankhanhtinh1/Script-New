@@ -59,12 +59,10 @@ inline Vector3 GapcloserEnd{};
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
 inline int IncomingThreatUntil = 0;
-inline int ManualOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastCastTick[4]{};
 
-inline constexpr int kManualOwnershipMs = 650;
 inline constexpr float kQRange = kQBaseRange;
 inline constexpr float kQMaxRange = kQMaximumRange;
 inline constexpr float kZoeRRange = Geometry::kRRange;
@@ -314,9 +312,8 @@ inline bool TryHarass(const AIHeroClient& target) {
     return RuntimeWStolen() && CastStolenSpell(target, Mode::Harass);
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
-    AIHeroClient threat = selected;
-    if (!Engine::ValidEnemy(threat, 1000.0f)) threat = Engine::SelectTarget(1000.0f);
+inline bool TryFlee() {
+    AIHeroClient threat = Engine::SelectTarget(1000.0f);
     if (Engine::ValidEnemy(threat) && CastBubble(threat, Mode::Flee, true)) return true;
     return CastPortal(threat, Mode::Flee, true);
 }
@@ -381,17 +378,16 @@ inline void ReconcileState() {
         RActive && now - RCastTick > 1300) RActive = false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kQMaxRange);
-    if (ManualOverrideUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(kQMaxRange);
     if (mode == Mode::Automatic) {
         (void)TryAutomatic(target);
         return true;
     }
     if (TryKillSecure(target, mode)) return true;
     if (mode == Mode::Flee) {
-        (void)TryFlee(selected);
+        (void)TryFlee();
         return true;
     }
     if (mode == Mode::Combo) {
@@ -406,8 +402,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         (void)Engine::TryFarm(mode);
         return true;
     }
-    if (Key(Engine::AutomaticMenu, "ManualR", false) && Engine::ValidEnemy(target))
-        (void)CastPortal(target, Mode::Automatic);
     return true;
 }
 
@@ -417,7 +411,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now + kManualOwnershipMs;
         LastCastTick[slot] = now;
         if (slot == 0) {
             if (QActive) QReturning = true;
@@ -554,7 +547,6 @@ inline void OnLoad() {
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEnd = {};
     InterruptTargetId = InterruptExpireTick = 0;
-    IncomingThreatUntil = ManualOverrideUntil = 0;
     LastAutoTargetId = LastAutoTick = 0;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
 }
@@ -569,7 +561,7 @@ inline constexpr const char* Scenarios[] = {
     "Pin all spell ranges, delays and safety assumptions to Riot 26.15 / CommunityDragon 16.15",
     "Track outbound Paddle Star from process-spell and missile-create events",
     "Recognize Q recast and return missile names without losing outbound state",
-    "Reconcile Q state when a missile callback is missed or a player recasts manually",
+    "Reconcile Q state when a missile callback is missed or the player recasts",
     "Aim first Q to the target's predicted base-range line",
     "Recast Q only toward a reachable extended endpoint and reject projectile walls",
     "Score Q return intersection at predicted target timing rather than current position",
@@ -590,8 +582,8 @@ inline constexpr const char* Scenarios[] = {
     "Automatic mode responds only to incoming threat, interrupt, gapcloser or lethal state",
     "Kill secure prioritizes lethal Bubble, Q and observed stolen spell in that order",
     "Hold casts during an AA windup unless the selected posture is lethal or Bubble peel",
-    "Respect selected target before orbwalker target and generic selector fallback",
-    "Yield to manual Q, W, E or R ownership for the configured reconciliation window",
+    "Select autonomous targets through Engine using range and posture checks",
+    "Keep local spell-event timing gates synchronized with autonomous decisions",
     "Capture enemy process-spell threat and interruptable channel state",
     "Capture gapcloser endpoint for reactive Bubble posture",
     "Keep lane clear, jungle and last-hit behavior on shared conservative farm policy",

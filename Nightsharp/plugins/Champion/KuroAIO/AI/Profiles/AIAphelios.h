@@ -137,11 +137,11 @@ inline constexpr ChampionProfile Aphelios = [] {
     };
 
     p.Trade = Plan(
-        "weapon-aware short trade: exploit off-hand proc, preserve cycle and let the player weave autos",
+        "weapon-aware short trade: exploit off-hand proc, preserve cycle and weave attacks through autonomous release windows",
         Step(SDK::SpellSlot::Q,
              StepRule::RequireTarget | StepRule::RequireSafePosition),
         Step(SDK::SpellSlot::W,
-             StepRule::AllowDuringWindup | StepRule::ManualAssistOnly));
+             StepRule::AllowDuringWindup));
 
     p.AllIn = Plan(
         "score the current pair, low-ammo incoming gun and five R variants rather than fixed Q-W-R",
@@ -185,8 +185,8 @@ inline constexpr ChampionProfile Aphelios = [] {
         "choose standard or green-blue rotation contextually, exploit low-ammo "
         "incoming-weapon chains, preserve Calibrum marks and Crescendum returns, "
         "root only real Gravitum marks, snapshot Sentry off-hand effects and "
-        "select among five Moonlight Vigil variants while yielding movement, "
-        "ordinary attacks, Flash and summoners to the player.";
+        "select among five Moonlight Vigil variants while sequencing movement, "
+        "ordinary attacks, Flash and summoners autonomously.";
     p.ResearchSummary =
         "Pinned to Riot 26.14 with Aphelios changes through 26.13/26.4/26.1 "
         "and CommunityDragon 16.14. Cross-checked The Book of Aphelios, "

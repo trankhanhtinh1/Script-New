@@ -37,7 +37,6 @@ inline int RWindowExpireTick = 0;
 inline int RProjectileTick = 0;
 inline bool RProjectileHit = false;
 inline bool RResetReady = false;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -148,7 +147,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
     return true;
 }
 inline bool ShadowLandingSafe(const Vector3& endpoint, const AIHeroClient& target,
-                              bool defensive, bool lethal, bool manual) {
+                              bool defensive, bool lethal) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target)) return false;
     const ShadowLandingContext context{
@@ -156,20 +155,19 @@ inline bool ShadowLandingSafe(const Vector3& endpoint, const AIHeroClient& targe
         SDK::NavMesh::IsWall(endpoint), Engine::UnderEnemyTurret(endpoint),
         Engine::UnderEnemyTurret(player.Position()),
         HasReadyPointClickThreatAt(endpoint), HasReadyDashHazardAt(endpoint),
-        lethal, defensive, manual, Engine::CountEnemiesAt(endpoint, 650.0f),
+        lethal, defensive, Engine::CountEnemiesAt(endpoint, 650.0f),
         Slider(RMenu, "MaxLandingEnemies", 2)};
     return SafeShadowLanding(context);
 }
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool defensive = false, bool manual = false,
-                  bool lethal = false) {
+                  bool defensive = false, bool lethal = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Engine::ValidEnemy(target)) return false;
     const int targetId = static_cast<int>(target.NetworkId());
     const bool recast = RProjectileHit && (RTargetId == targetId || RResetReady);
     if (recast) {
         const Vector3 endpoint = ClampShadowLanding(player.Position(), target.Position());
-        if (!ShadowLandingSafe(endpoint, target, defensive, lethal, manual) ||
+        if (!ShadowLandingSafe(endpoint, target, defensive, lethal) ||
             !CastPosition(3, endpoint, mode, reactive, lethal)) return false;
         RProjectileHit = false;
         RResetReady = false;
@@ -199,7 +197,7 @@ inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (CastW(target, mode, true, true)) return true;
     if (CastQ(target, mode, true, true)) return true;
     if (CastE(target, mode, true, true)) return true;
-    return CastR(target, mode, true, false, false, true);
+    return CastR(target, mode, true, false, true);
 }
 inline void Combo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return;
@@ -219,7 +217,7 @@ inline void Harass(const AIHeroClient& target) {
 inline void Flee(const AIHeroClient& target) {
     if (Engine::ValidEnemy(target) && CastW(target, Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target) && CastE(target, Mode::Flee, true)) return;
-    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true, true, true);
+    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true, true);
 }
 inline void ReconcileState() {
     ReconcileGloom();
@@ -240,18 +238,18 @@ inline void ReconcileState() {
     if (!player.IsValid()) return;
     if (player.HasBuff("VexR") || player.HasBuff("VexRRecast")) RProjectileHit = true;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1000.0f : kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastW(target, mode, true)) return true;
     if (TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1000.0f)); break;
+    case Mode::Flee: Flee(target); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -273,8 +271,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
         LastCastTick[slot] = now;
-        if (!Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         return;
     }
     const auto analysis = AnalyzeEnemyCast(args);
@@ -328,7 +324,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("VexOneTrick", "Vex gloom tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Mistral Bolt"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Personal Space"));
@@ -346,7 +341,7 @@ inline void OnLoad() {
     LastCastTick = {};
     RTargetId = RHitTick = RWindowExpireTick = RProjectileTick = 0;
     RProjectileHit = RResetReady = false;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = 0;
     LastMode = Mode::None;
 }
@@ -367,9 +362,7 @@ inline constexpr const char* Scenarios[] = {
     "Limit landing enemy count and preserve defensive or manual exceptions",
     "Interrupt committed enemy casts with fear-enabled W when observable",
     "Reconcile cooldown and resource readiness from runtime spell telemetry",
-    "Preserve selected target before orbwalker and selector fallback",
-    "Preserve AA windup except reactive or lethal casts",
-    "Yield to manual Q W E and R ownership before controller decisions",
+    "Use autonomous Engine target selection and preserve AA windup",
     "Combo layers E and Q before marked W fear and safe R recast",
     "Harass uses Q/E with a configurable mana reserve",
     "LaneClear Jungle and LastHit delegate to shared farm policy",

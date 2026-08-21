@@ -90,7 +90,6 @@ inline constexpr ChampionProfile Twitch = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 21;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.MarkBuff = "TwitchDeadlyVenom";
     p.FormBuff = "TwitchHideInShadows";

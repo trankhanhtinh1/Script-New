@@ -15,7 +15,7 @@ inline constexpr ChampionProfile Pantheon = [] {
                   Mechanic::Channel | Mechanic::Execute | Mechanic::Global |
                   Mechanic::Stack | Mechanic::AutoWeave |
                   Mechanic::DirectionalSweet;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::MultiTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Comet Spear", CastKind::ChargedLine,
@@ -107,7 +107,6 @@ inline constexpr ChampionProfile Pantheon = [] {
     p.UltimateTargetHealthPercent = 38.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 28;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "PantheonPassiveReady";
@@ -120,12 +119,12 @@ inline constexpr ChampionProfile Pantheon = [] {
         "Reconcile five Mortal Will actions; reserve empowered E for committed "
         "damage, prefer empowered W only at a safe vault endpoint, tap Q inside "
         "575 for its cooldown refund, throw Q only after the 0.35 second hold, "
-        "and keep Grand Starfall manual with explicit landing safety.";
+        "and cast Grand Starfall autonomously only with explicit landing safety.";
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15: five-action Mortal Will, Q tap/"
         "0.35-second throw split and first-body falloff, targeted W with the "
         "empowered triple attack, source-facing E block/recast, and 5500-range "
-        "manual R landing geometry.";
+        "R landing geometry.";
     return p;
 }();
 

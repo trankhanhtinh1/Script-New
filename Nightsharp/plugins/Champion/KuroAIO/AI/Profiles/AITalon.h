@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Talon = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 62;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "TalonPassiveBleed";
@@ -79,7 +78,7 @@ inline constexpr ChampionProfile Talon = [] {
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 260, 1300));
     p.Flee = Plan("Terrain and blade return escape",
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 0, 800),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 120, 900));
+        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition, 120, 900));
     return p;
 }();
 

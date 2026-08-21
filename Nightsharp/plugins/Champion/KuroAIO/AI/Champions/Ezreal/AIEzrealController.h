@@ -279,7 +279,7 @@ inline bool CastE(const AIHeroClient& target,
     return false;
 }
 
-inline bool CastR(const AIHeroClient& target, bool manual) {
+inline bool CastR(const AIHeroClient& target) {
     if (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !Engine::ValidEnemy(target, 20000.0f) ||
@@ -289,7 +289,6 @@ inline bool CastR(const AIHeroClient& target, bool manual) {
         3, target, SDK::HitChance::VeryHigh, false, &prediction);
     const auto player = GameObjects::Player();
     BarrageContext context{};
-    context.Manual = manual;
     context.Lethal = SpellDamage(3, target) >=
         target.Health() + target.AllShield();
     context.PredictionVeryHigh = hit;
@@ -308,14 +307,6 @@ inline bool CastR(const AIHeroClient& target, bool manual) {
     return false;
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(20000.0f);
-    const auto target = SelectSmartTarget(
-        selected.IsValid() ? selected : preferred,
-        Mode::Automatic, true);
-    return Engine::ValidEnemy(target) && CastR(target, true);
-}
 
 inline bool TryAntiGapcloser() {
     if (GapcloserExpireTick < Now()) return false;
@@ -334,7 +325,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
             CastE(target, Mode::Automatic, false)) return true;
     }
     target = SelectSmartTarget(preferred, Mode::Automatic, true);
-    return Engine::ValidEnemy(target) && CastR(target, false);
+    return Engine::ValidEnemy(target) && CastR(target);
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
@@ -356,7 +347,6 @@ inline bool TryFlee(const AIHeroClient& preferred) {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     RefreshOrbwalkerFocus(mode, preferred);
-    if (TryManualR(preferred)) return true;
     if (TryAntiGapcloser()) return true;
     if (TryKillSecure(preferred)) return true;
     if (mode == Mode::Flee) return TryFlee(preferred);
@@ -410,15 +400,15 @@ inline void BuildMenu(Menu* root) {
     ComboLogicMenu = TacticsMenu->AddSubMenu(new Menu(
         "FluxChains", "W Detonation"));
     ComboLogicMenu->Add(new MenuSeparator(
-        "RequireDetonation", "W always requires a Q/AA detonation route"));
+        "RequireDetonation", "Require Q/AA detonation"));
     ShiftMenu = TacticsMenu->AddSubMenu(new Menu(
         "ShiftLogic", "Arcane Shift"));
     ShiftMenu->Add(new MenuSeparator(
-        "DefensiveFirst", "E is defensive or confirmed-lethal only"));
+        "DefensiveFirst", "Defensive or lethal E only"));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
         "BarrageLogic", "Trueshot Barrage"));
     UltimateMenu->Add(new MenuSeparator(
-        "NoLocalR", "R is blocked while a local fight is active"));
+        "NoLocalR", "Block R during local fights"));
 }
 
 inline void OnLoad() {
@@ -438,8 +428,8 @@ inline void OnUnload() {
 }
 
 inline constexpr const char* Scenarios[] = {
-    "Reject any selected target whose Q is blocked and has no alternate route",
-    "Prefer the player's selected target only while it remains truly reachable",
+    "Reject any target whose Q is blocked and has no alternate route",
+    "Use route scoring only while the target remains truly reachable",
     "Spam Q on the first legal cooldown frame without cancelling an auto",
     "Fire Q immediately in the after-attack window",
     "Treat minion, champion and projectile-wall collision as a failed Q route",
@@ -455,7 +445,7 @@ inline constexpr const char* Scenarios[] = {
     "Prefer local Q over channeling R",
     "Reject automatic R while a local enemy can punish the channel",
     "Require very-high R prediction and a clear projectile-wall path",
-    "Allow manual R after reach, prediction and local-action checks",
+    "Require lethal R after reach, prediction and local-action checks",
     "Use Q for last hit/clear through the shared health prediction path",
 };
 

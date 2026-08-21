@@ -158,9 +158,6 @@ inline bool CanUse(int index,
         index, mode, allowDuringWindup);
 }
 
-inline bool ManualUltimatePressed() {
-    return Key(Engine::AutomaticMenu, "ManualR", false);
-}
 
 // The current marksman controllers below all use projectile basic attacks.
 // Keep route scoring and temporary focus aligned with the orbwalker's own

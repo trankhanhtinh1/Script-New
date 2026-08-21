@@ -182,7 +182,6 @@ inline bool MayActivateGrandmaster(const RContext& context) {
 }
 
 struct AutomaticContext {
-    bool ManualOwnership = false;
     bool Defensive = false;
     bool IncomingBasicAttack = false;
     bool Interrupt = false;
@@ -191,7 +190,7 @@ struct AutomaticContext {
 };
 
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    if (context.ManualOwnership || context.Engage) return false;
+    if (context.Engage) return false;
     return context.Defensive || context.IncomingBasicAttack ||
            context.Interrupt || context.KillSecure;
 }

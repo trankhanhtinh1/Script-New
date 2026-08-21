@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Braum = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 48;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "BraumPassive";
@@ -31,7 +30,7 @@ inline constexpr ChampionProfile Braum = [] {
     p.UltimateBuff = "BraumR";
     p.TacticalSummary =
         "Vanguard support that tracks Concussive Blows per enemy, dashes to safe allies, "
-        "blocks incoming projectiles with Unbreakable and fissures selected threats.";
+        "blocks incoming projectiles with Unbreakable and fissures reachable threats.";
     p.ResearchSummary =
         "Riot 26.15 and CommunityDragon PC 16.15 data model a four-hit per-target passive, "
         "1050 Q projectile, 650 W ally dash/resist, E projectile interception and 1200 R fissure.";
@@ -80,11 +79,11 @@ inline constexpr ChampionProfile Braum = [] {
     p.Spells[3].MaximumEnemiesAtDestination = 3;
     p.Spells[3].PlayerHealthPercent = 68.0f;
 
-    p.Trade = Plan("mark selected target with Q and preserve E for incoming projectiles",
+    p.Trade = Plan("mark the best reachable target with Q and preserve E for incoming projectiles",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 1000),
         Step(SDK::SpellSlot::W, StepRule::RequirePlayerLow | StepRule::RequireSafePosition, 120, 1200),
         Step(SDK::SpellSlot::E, StepRule::RequireNoCrowdControl | StepRule::AllowDuringWindup, 180, 1300));
-    p.AllIn = Plan("stack passive, dash to safe ally, shield the line and fissure the selected threat",
+    p.AllIn = Plan("stack passive, dash to safe ally, shield the line and fissure the reachable threat",
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 1000),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::RequireSafePosition, 100, 1200),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 150, 1250),

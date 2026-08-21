@@ -110,7 +110,6 @@ inline constexpr ChampionProfile JarvanIV = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 45;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = true;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "JarvanIVMartialCadenceCheck";

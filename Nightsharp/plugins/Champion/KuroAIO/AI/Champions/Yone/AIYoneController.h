@@ -41,15 +41,10 @@ inline int RCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline Vector3 SpiritOrigin = {};
 inline Vector3 SpiritEndpoint = {};
 inline Vector3 LastRTarget = {};
 inline bool SpiritActive = false;
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 
 using ControllerHelpers::Now;
 
@@ -133,11 +128,10 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool defensive = false)
         return false;
     }
     const bool lethal = Lethal(target, QDamage(target));
-    const ModeContext context{ true, true, Orbwalker::IsWindingUp(), lethal, false };
+    const ModeContext context{ Orbwalker::IsWindingUp(), lethal };
     if (!MayUseAbility(context) && !defensive) return false;
     if (!Engine::ControllerCastPosition(0, predicted)) return false;
     QCastTick = Now();
-    QWasManual = false;
     if (tornado) QStacks = 0;
     else {
         QStacks = std::min(2, QStacks + 1);
@@ -155,11 +149,10 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool defensive = false)
     if (!predicted.IsValid() || predicted.IsZero() ||
         player.Position().Distance2D(predicted) > kWRange + target.BoundingRadius()) return false;
     const bool lethal = Lethal(target, WDamage(target));
-    const ModeContext context{ true, true, Orbwalker::IsWindingUp(), lethal, false };
+    const ModeContext context{ Orbwalker::IsWindingUp(), lethal };
     if (!MayUseAbility(context) && !defensive) return false;
     if (!Engine::ControllerCastPosition(1, predicted)) return false;
     WCastTick = Now();
-    WWasManual = false;
     return true;
 }
 
@@ -170,7 +163,6 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     if (SpiritActive) {
         if (!Engine::ControllerCastSelf(2)) return false;
         ECastTick = Now();
-        EWasManual = false;
         return true;
     }
     if (!Engine::ValidEnemy(target, kERange + 30.0f) || TargetCannotBeDamaged(target)) return false;
@@ -195,7 +187,6 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     EExpireTick = EStartTick + Slider(SpiritMenu, "SpiritDurationMs", kEDurationMs);
     ETargetId = static_cast<int>(target.NetworkId());
     ECastTick = Now();
-    EWasManual = false;
     return true;
 }
 
@@ -225,7 +216,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false)
     if (!Engine::ControllerCastPosition(3, predicted)) return false;
     RCastTick = Now();
     LastRTarget = predicted;
-    RWasManual = false;
     return true;
 }
 
@@ -280,12 +270,10 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return Engine::ValidEnemy(threat) && CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(kRRange + 60.0f);
-    const AIHeroClient threat = NearestEnemyToPlayer(target, 1000.0f);
+    AIHeroClient target = Engine::SelectTarget(kRRange + 60.0f);
+    const AIHeroClient threat = NearestEnemyToPlayer({}, 1000.0f);
     if (mode == Mode::Flee) {
         (void)TryFlee(threat);
         return true;
@@ -322,22 +310,16 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
     if (slot == 0) {
         QCastTick = now;
-        QWasManual = !owned;
     } else if (slot == 1) {
         WCastTick = now;
-        WWasManual = !owned;
     } else if (slot == 2) {
         ECastTick = now;
-        EWasManual = !owned;
         if (Engine::TextContains(args.SpellName, "Return") ||
             Engine::TextContains(args.SpellName, "YoneE2")) SpiritActive = false;
     } else if (slot == 3) {
         RCastTick = now;
-        RWasManual = !owned;
     }
 }
 
@@ -391,11 +373,10 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("YoneOneTrick", "Yone skirmisher mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     TacticsMenu->Add(new MenuSlider("EmergencyHP", "Defensive threshold", 30, 10, 70));
     SpiritMenu = TacticsMenu->AddSubMenu(new Menu("SpiritForm", "Soul Unbound safety"));
     SpiritMenu->Add(new MenuSlider("SpiritDurationMs", "Spirit duration fallback", kEDurationMs, 2500, 6000));
-    SpiritMenu->Add(new MenuSlider("MaxSpiritEnemies", "Maximum enemies at spirit endpoint", 2, 1, 5));
+    SpiritMenu->Add(new MenuSlider("MaxSpiritEnemies", "Max enemies at spirit endpoint", 2, 1, 5));
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu("FateSealed", "Ultimate policy"));
     UltimateMenu->Add(new MenuSlider("RTargetHP", "R target HP threshold", 55, 15, 100));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("YoneFarm", "Conservative farm"));
@@ -409,10 +390,9 @@ inline void OnLoad() {
     QStackExpireTick = EStartTick = EExpireTick = ETargetId = 0;
     QCastTick = WCastTick = ECastTick = RCastTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
-    IncomingHardCCUntil = PlayerOverrideUntil = 0;
+    IncomingHardCCUntil = 0;
     SpiritOrigin = SpiritEndpoint = LastRTarget = {};
     SpiritActive = false;
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     ReconcileState();
 }
 
@@ -440,7 +420,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject E endpoints through walls or under a new turret dive",
     "Reject offensive spirit endpoints surrounded by excessive enemies",
     "Permit lethal or flee spirit routes with an available return",
-    "Keep selected target while it remains reachable during Spirit Form",
+    "Use the engine-selected target while it remains reachable during Spirit Form",
     "Use return recast only when the player route is unsafe or lethal",
     "Track E mark target and stored damage state conservatively",
     "Use R 1000 range, 120 width and 1500 projectile speed",
@@ -450,8 +430,8 @@ inline constexpr const char* Scenarios[] = {
     "Allow R for multi-target or verified defensive peel",
     "Allow R for lethal target damage",
     "Reject R endpoint under an enemy turret unless lethal",
-    "Preserve manual R and channel ownership through the engine lock",
-    "Respect selected target before orbwalker fallback",
+    "Preserve R channel state through the engine lock",
+    "Use the engine-selected target for continuity",
     "Combo starts Spirit Form only when the entry route is reachable",
     "Combo prioritizes third-Q whirlwind before ordinary Q",
     "Combo weaves Q and W around attack timing",
@@ -466,7 +446,7 @@ inline constexpr const char* Scenarios[] = {
     "Automatic mode may react to hard crowd control",
     "Automatic mode may execute verified lethal damage",
     "Track enemy hard crowd-control threat windows",
-    "Track manual Q/W/E/R casts and re-plan without clearing state",
+    "Track Q/W/E/R casts from events and re-plan without clearing state",
     "Never automate Flash, Ignite, Smite or item actives",
     "Keep profile metadata separate from the owned decision loop",
 };

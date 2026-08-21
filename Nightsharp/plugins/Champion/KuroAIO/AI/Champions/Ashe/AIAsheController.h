@@ -64,7 +64,6 @@ enum class Sequence : std::uint8_t {
     FarmFan,
     JungleFlurry,
     StructureFlurry,
-    PlayerLed,
 };
 
 enum class Posture : std::uint8_t {
@@ -108,7 +107,6 @@ enum class WPurpose : std::uint8_t {
 
 enum class ScoutPurpose : std::uint8_t {
     None,
-    Manual,
     FirstClear,
     LastSeenJungler,
     Objective,
@@ -119,7 +117,6 @@ enum class ScoutPurpose : std::uint8_t {
 
 enum class ArrowPurpose : std::uint8_t {
     None,
-    Manual,
     SelfPeel,
     AllyPeel,
     Interrupt,
@@ -271,8 +268,6 @@ inline float RecentIncomingPressure = 0.0f;
 inline int ProtectedAllyId = 0;
 inline int PeelThreatId = 0;
 inline int LastScoutDecisionTick = 0;
-inline int LastManualScoutTick = 0;
-inline int LastManualArrowTick = 0;
 
 inline std::array<FrostRecord, 24> FrostedTargets = {};
 inline std::array<EnemyTrack, 20> EnemyTracks = {};
@@ -1040,8 +1035,6 @@ inline bool ArrowPlanMeetsPurpose(const ArrowPlan& plan,
             ArrowTargetReliable(target, plan, 0.48f) &&
             (target.IsDashing() || TargetLeavingAutoRange(target) ||
              distance > 760.0f);
-    case ArrowPurpose::Manual:
-        return true;
     default:
         return false;
     }
@@ -1060,8 +1053,7 @@ inline bool CastArrow(const ArrowPlan& plan,
         Bool(Engine::HumanMenu, "PreserveAttacks", true)) {
         return false;
     }
-    if (plan.CrossMap && plan.Purpose != ArrowPurpose::Manual &&
-        plan.Purpose != ArrowPurpose::CrossMap &&
+    if (plan.CrossMap && plan.Purpose != ArrowPurpose::CrossMap &&
         !Bool(ArrowMenu, "AllowLongProactive", false)) {
         return false;
     }
@@ -1153,8 +1145,7 @@ inline std::vector<ScoutLandmark> BuildScoutLandmarks(
     return result;
 }
 
-inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose,
-                                const Vector3& manualDestination = {}) {
+inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose) {
     ScoutPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
@@ -1162,26 +1153,22 @@ inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose,
     const auto landmarks = BuildScoutLandmarks(purpose, jungler);
     std::vector<Vector3> candidates;
     candidates.reserve(SummonersRiftLandmarks.size() * 2 + 5);
-    if (manualDestination.IsValid() && !manualDestination.IsZero()) {
-        candidates.push_back(manualDestination);
-    } else {
-        for (const auto& landmark : SummonersRiftLandmarks) {
-            if (IsEnemyJungleSide(landmark) ||
-                landmark.Kind == ScoutKind::Objective ||
-                landmark.Kind == ScoutKind::River) {
-                candidates.push_back(landmark.Position);
-                const Vector3 direction = SharedGeometry::Direction2D(
-                    player.Position(), landmark.Position);
-                if (!direction.IsZero()) {
-                    candidates.push_back(player.Position() + direction *
-                        std::min(kHawkshotRange, 14500.0f));
-                }
+    for (const auto& landmark : SummonersRiftLandmarks) {
+        if (IsEnemyJungleSide(landmark) ||
+            landmark.Kind == ScoutKind::Objective ||
+            landmark.Kind == ScoutKind::River) {
+            candidates.push_back(landmark.Position);
+            const Vector3 direction = SharedGeometry::Direction2D(
+                player.Position(), landmark.Position);
+            if (!direction.IsZero()) {
+                candidates.push_back(player.Position() + direction *
+                    std::min(kHawkshotRange, 14500.0f));
             }
         }
-        candidates.push_back({ 13500.0f, 0.0f, 13500.0f });
-        candidates.push_back({ 1500.0f, 0.0f, 13500.0f });
-        candidates.push_back({ 13500.0f, 0.0f, 1500.0f });
     }
+    candidates.push_back({ 13500.0f, 0.0f, 13500.0f });
+    candidates.push_back({ 1500.0f, 0.0f, 13500.0f });
+    candidates.push_back({ 13500.0f, 0.0f, 1500.0f });
     for (Vector3 destination : candidates) {
         if (destination.IsZero()) continue;
         destination.y = player.Position().y;
@@ -1193,9 +1180,8 @@ inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose,
         }
         ScoutEvaluation evaluation = EvaluateHawkshot(
             player.Position(), destination, landmarks);
-        if (!evaluation.Valid && purpose != ScoutPurpose::Manual) continue;
-        float score = (evaluation.Valid ? evaluation.Score : 0.0f) * 100.0f;
-        if (purpose == ScoutPurpose::Manual) score += 1000.0f;
+        if (!evaluation.Valid) continue;
+        float score = evaluation.Score * 100.0f;
         if (purpose == ScoutPurpose::LastSeenJungler && jungler) score += 260.0f;
         if (purpose == ScoutPurpose::Objective) score +=
             evaluation.ObjectiveCovered * 300.0f;
@@ -1223,18 +1209,17 @@ inline ScoutPlan BuildScoutPlan(ScoutPurpose purpose,
     return best;
 }
 
-inline bool CastHawkshot(const ScoutPlan& plan,
-                         bool manual = false) {
+inline bool CastHawkshot(const ScoutPlan& plan) {
     if (!plan.Valid || !Ready(2) || !Engine::CanAct(false) ||
         !CastThrottleReady(2) || EAmmo <= 0 ||
-        (!manual && EAmmo <= Slider(HawkshotMenu, "ReserveCharges", 1))) {
+        EAmmo <= Slider(HawkshotMenu, "ReserveCharges", 1)) {
         return false;
     }
     if (Orbwalker::IsWindingUp() &&
         Bool(Engine::HumanMenu, "PreserveAttacks", true)) {
         return false;
     }
-    if (!manual && plan.Score < Slider(HawkshotMenu, "MinimumScore", 620)) {
+    if (plan.Score < Slider(HawkshotMenu, "MinimumScore", 620)) {
         return false;
     }
     const int requestTick = Now();
@@ -1263,46 +1248,13 @@ inline bool CastHawkshot(const ScoutPlan& plan,
         case ScoutPurpose::Objective: ActiveSequence = Sequence::HawkObjective; break;
         case ScoutPurpose::NoFacecheck: ActiveSequence = Sequence::HawkNoFacecheck; break;
         case ScoutPurpose::ChargeCap: ActiveSequence = Sequence::HawkChargeCap; break;
-        default: ActiveSequence = Sequence::PlayerLed; break;
+        default: ActiveSequence = Sequence::None; break;
         }
         return true;
     }
     return false;
 }
 
-inline AIHeroClient ClosestEnemyToCursor(float maximumCursorDistance) {
-    AIHeroClient best{};
-    float bestDistance = maximumCursorDistance;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy)) continue;
-        const float distance = enemy.Position().Distance2D(Game::CursorPos());
-        if (distance < bestDistance) {
-            best = enemy;
-            bestDistance = distance;
-        }
-    }
-    return best;
-}
-
-inline bool TryManualScout() {
-    if (!Key(HawkshotMenu, "ManualE", false) ||
-        Now() - LastManualScoutTick < 260) return false;
-    LastManualScoutTick = Now();
-    return CastHawkshot(
-        BuildScoutPlan(ScoutPurpose::Manual, Game::CursorPos()), true);
-}
-
-inline bool TryManualArrow(const AIHeroClient& selected) {
-    if (!Key(ArrowMenu, "ManualR", false) ||
-        Now() - LastManualArrowTick < 260) return false;
-    LastManualArrowTick = Now();
-    AIHeroClient target = ClosestEnemyToCursor(
-        static_cast<float>(Slider(ArrowMenu, "ManualCursorRadius", 700)));
-    if (!Engine::ValidEnemy(target)) target = selected;
-    if (!Engine::ValidEnemy(target)) return false;
-    ArrowPlan plan = BuildArrowPlan(target, ArrowPurpose::Manual);
-    return CastArrow(plan, target, Mode::Automatic, true);
-}
 
 inline AIHeroClient ProtectedAlly() {
     AIHeroClient ally = SelectProtectionAlly(1200.0f);
@@ -1363,8 +1315,8 @@ inline bool TryAntiGapcloser() {
     return false;
 }
 
-inline bool TrySelfPeel(const AIHeroClient& selected, Mode mode) {
-    const AIHeroClient threat = NearestEnemyToPlayer(selected, 900.0f);
+inline bool TrySelfPeel(Mode mode) {
+    const AIHeroClient threat = NearestEnemyToPlayer({}, 900.0f);
     if (!Engine::ValidEnemy(threat)) return false;
     const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(threat.Position());
@@ -1465,7 +1417,7 @@ inline bool TryComboArrow(const AIHeroClient& target) {
     return CastArrow(plan, target, Mode::Combo, false);
 }
 
-inline bool TryComboFocus(const AIHeroClient& selected) {
+inline bool TryComboFocus(const AIHeroClient& targetInput) {
     if (!Ready(0) || FocusActive) return false;
     if (!Bool(FocusMenu, "Combo", true)) return false;
 
@@ -1476,16 +1428,15 @@ inline bool TryComboFocus(const AIHeroClient& selected) {
     if (Orbwalker::CanAttack()) return false;
 
     // Rule 3: Must have a valid target in AA range
-    AIHeroClient target = selected;
+    AIHeroClient target = targetInput;
     if (!Engine::ValidEnemy(target, ControllerHelpers::AutoAttackRange(target))) {
-        target = NearestEnemyToPlayer(selected, 650.0f);
+        target = NearestEnemyToPlayer({}, 650.0f);
     }
     if (!Engine::ValidEnemy(target, ControllerHelpers::AutoAttackRange(target))) {
         return false;
     }
 
-    const Vector3 cursorPos = Game::CursorPos();
-    if (Engine::ControllerCastPosition(0, cursorPos) || Engine::ControllerCastSelf(0)) {
+    if (Engine::ControllerCastSelf(0)) {
         LastQCastTick = Now();
         FocusStacks = 0;
         FocusReadyConfirmed = false;
@@ -1498,54 +1449,55 @@ inline bool TryComboFocus(const AIHeroClient& selected) {
     return false;
 }
 
-inline bool TryCombo(const AIHeroClient& selected) {
-    if (!Engine::ValidEnemy(selected)) return false;
+inline bool TryCombo(const AIHeroClient& target) {
+    if (!Engine::ValidEnemy(target)) return false;
     const float distance = GameObjects::Player().Position().Distance2D(
-        selected.Position());
-    const bool committed = distance <= 760.0f || IsFrosted(selected) ||
-                           Engine::IsHardCrowdControlled(selected);
-    if (!committed && TryComboArrow(selected)) return true;
+        target.Position());
+    const bool committed = distance <= 760.0f || IsFrosted(target) ||
+                           Engine::IsHardCrowdControlled(target);
+    if (!committed && TryComboArrow(target)) return true;
 
     // Priority Q cast when not winding up, not attack ready, and target in range
-    if (TryComboFocus(selected)) return true;
+    if (TryComboFocus(target)) return true;
 
     if (Ready(1) && Bool(VolleyMenu, "Combo", true)) {
         const WPurpose purpose = LastRCastTick > 0 &&
                 Now() - LastRCastTick <= 4200
             ? WPurpose::FollowArrow
-            : (distance > ControllerHelpers::AutoAttackRange(selected)
+            : (distance > ControllerHelpers::AutoAttackRange(target)
                 ? WPurpose::Chase : WPurpose::Poke);
-        VolleyPlan volley = BuildVolleyPlan(selected, purpose, false);
+        VolleyPlan volley = BuildVolleyPlan(target, purpose, false);
         const bool valuable = volley.Valid &&
             (volley.Evaluation.ChampionHits >= 2 || volley.Threaded ||
              purpose == WPurpose::FollowArrow ||
-             distance > ControllerHelpers::AutoAttackRange(selected, 20.0f) ||
-             Engine::IsHardCrowdControlled(selected));
+             distance > ControllerHelpers::AutoAttackRange(target, 20.0f) ||
+             Engine::IsHardCrowdControlled(target));
         if (valuable && CastVolley(volley, Mode::Combo)) return true;
     }
-    if (TryComboArrow(selected)) return true;
+    if (TryComboArrow(target)) return true;
     return TryFocusReset(Mode::Combo);
 }
 
-inline bool TryHarass(const AIHeroClient& selected) {
-    if (!Engine::ValidEnemy(selected) ||
+inline bool TryHarass(const AIHeroClient& target) {
+    if (!Engine::ValidEnemy(target) ||
         ControllerHelpers::PlayerManaPercent() < Slider(VolleyMenu, "HarassMana", 48)) return false;
     if (Ready(1) && Bool(VolleyMenu, "Harass", true)) {
         VolleyPlan volley = BuildVolleyPlan(
-            selected, WPurpose::ThreadWave, false);
+            target, WPurpose::ThreadWave, false);
         const bool acceptable = volley.Valid &&
             (volley.Threaded || volley.Evaluation.ChampionHits >= 2 ||
-             LastAfterAttackTargetId == static_cast<int>(selected.NetworkId()) ||
-             GameObjects::Player().Position().Distance2D(selected.Position()) >
-                ControllerHelpers::AutoAttackRange(selected));
+             LastAfterAttackTargetId == static_cast<int>(target.NetworkId()) ||
+             GameObjects::Player().Position().Distance2D(target.Position()) >
+                ControllerHelpers::AutoAttackRange(target));
         if (acceptable && CastVolley(volley, Mode::Harass)) return true;
     }
     return TryFocusReset(Mode::Harass);
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
-    if (TrySelfPeel(selected, Mode::Flee)) return true;
-    const AIHeroClient pursuer = NearestEnemyToPlayer(selected, 1150.0f);
+
+inline bool TryFlee() {
+    if (TrySelfPeel(Mode::Flee)) return true;
+    const AIHeroClient pursuer = NearestEnemyToPlayer({}, 1150.0f);
     if (!Engine::ValidEnemy(pursuer)) return false;
     if (Ready(1)) {
         VolleyPlan volley = BuildVolleyPlan(pursuer, WPurpose::Peel, false);
@@ -1607,11 +1559,11 @@ inline bool TryAutomaticScout(Mode mode) {
         purpose = ScoutPurpose::ChargeCap;
     }
     if (purpose == ScoutPurpose::None) return false;
-    return CastHawkshot(BuildScoutPlan(purpose), false);
+    return CastHawkshot(BuildScoutPlan(purpose));
 }
 
 inline Posture ChoosePosture(Mode mode,
-                             const AIHeroClient& selected,
+                             const AIHeroClient& target,
                              const AIHeroClient& ally,
                              const AIHeroClient& peelThreat) {
     if (mode == Mode::Flee) return Posture::Flee;
@@ -1624,16 +1576,16 @@ inline Posture ChoosePosture(Mode mode,
             ? Posture::LanePoke : Posture::Siege;
     }
     if (mode == Mode::Harass) return Posture::LanePoke;
-    if (mode == Mode::Combo && Engine::ValidEnemy(selected)) {
-        const int cluster = Engine::CountEnemiesAt(selected.Position(), 650.0f);
+    if (mode == Mode::Combo && Engine::ValidEnemy(target)) {
+        const int cluster = Engine::CountEnemiesAt(target.Position(), 650.0f);
         if (cluster >= 3) return Posture::Teamfight;
         const float distance = GameObjects::Player().Position().Distance2D(
-            selected.Position());
+            target.Position());
         if (distance > 1200.0f) return Posture::Pick;
-        if (distance > ControllerHelpers::AutoAttackRange(selected)) {
+        if (distance > ControllerHelpers::AutoAttackRange(target)) {
             return Posture::Chase;
         }
-        return IsFrosted(selected) ? Posture::ExtendedTrade : Posture::Kite;
+        return IsFrosted(target) ? Posture::ExtendedTrade : Posture::Kite;
     }
     if (EAmmo >= EMaxAmmo &&
         !ControllerHelpers::HasEnemyChampionNear(1500.0f)) {
@@ -1642,30 +1594,28 @@ inline Posture ChoosePosture(Mode mode,
     return Posture::Neutral;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastKnownMode = mode;
     RefreshState();
+    const AIHeroClient target = Engine::SelectTarget();
     const AIHeroClient ally = ProtectedAlly();
     const AIHeroClient peelThreat = SelectPeelThreat(ally);
-    CurrentPosture = ChoosePosture(mode, selected, ally, peelThreat);
+    CurrentPosture = ChoosePosture(mode, target, ally, peelThreat);
 
-    if (TryManualScout()) return true;
-    if (TryManualArrow(selected)) return true;
-    if (mode == Mode::Combo && TryComboFocus(selected)) return true;
+    if (mode == Mode::Combo && TryComboFocus(target)) return true;
     if (TryFocusReset(mode)) return true;
     if (TryInterrupt()) return true;
     if (TryAntiGapcloser()) return true;
-    if (TrySelfPeel(selected, mode)) return true;
+    if (TrySelfPeel(mode)) return true;
     if (TryAllyPeel(ally, peelThreat, mode)) return true;
     if (TryKillSecure()) return true;
-
     bool action = false;
     if (mode == Mode::Flee) {
-        action = TryFlee(selected);
+        action = TryFlee();
     } else if (mode == Mode::Combo) {
-        action = TryCombo(selected);
+        action = TryCombo(target);
     } else if (mode == Mode::Harass) {
-        action = TryHarass(selected);
+        action = TryHarass(target);
     } else if (mode == Mode::LaneClear) {
         action = TryFarm(HasNearbyJungleTarget(1200.0f)
             ? Mode::Jungle : Mode::LaneClear);
@@ -1704,7 +1654,7 @@ inline void ObserveLocalSpell(
         FocusActiveUntil = now + 4000;
         if (!Engine::WasControllerCast(0)) {
             LastQPurpose = QPurpose::None;
-            ActiveSequence = Sequence::PlayerLed;
+            ActiveSequence = Sequence::None;
         }
         return;
     }
@@ -1713,13 +1663,7 @@ inline void ObserveLocalSpell(
         if (!Engine::WasControllerCast(1)) {
             LastWPurpose = WPurpose::None;
             LastVolleyPlan = {};
-            LastVolleyPlan.Aim = args.EndPosition.IsValid() &&
-                    !args.EndPosition.IsZero()
-                ? args.EndPosition : args.CastPosition;
-            LastVolleyPlan.Purpose = WPurpose::None;
-            LastVolleyPlan.Valid = LastVolleyPlan.Aim.IsValid() &&
-                                   !LastVolleyPlan.Aim.IsZero();
-            ActiveSequence = Sequence::PlayerLed;
+            ActiveSequence = Sequence::None;
         }
         return;
     }
@@ -1727,30 +1671,18 @@ inline void ObserveLocalSpell(
         LastECastTick = now;
         EAmmo = std::max(0, EAmmo - 1);
         if (!Engine::WasControllerCast(2)) {
-            LastScoutPurpose = ScoutPurpose::Manual;
+            LastScoutPurpose = ScoutPurpose::None;
             LastScoutPlan = {};
-            LastScoutPlan.Destination = args.EndPosition.IsValid() &&
-                    !args.EndPosition.IsZero()
-                ? args.EndPosition : args.CastPosition;
-            LastScoutPlan.Purpose = ScoutPurpose::Manual;
-            LastScoutPlan.Valid = LastScoutPlan.Destination.IsValid() &&
-                                  !LastScoutPlan.Destination.IsZero();
-            ActiveSequence = Sequence::PlayerLed;
+            ActiveSequence = Sequence::None;
         }
         return;
     }
     if (IsArrowEvent(args)) {
         LastRCastTick = now;
         if (!Engine::WasControllerCast(3)) {
-            LastArrowPurpose = ArrowPurpose::Manual;
+            LastArrowPurpose = ArrowPurpose::None;
             LastArrowPlan = {};
-            LastArrowPlan.Aim = args.EndPosition.IsValid() &&
-                    !args.EndPosition.IsZero()
-                ? args.EndPosition : args.CastPosition;
-            LastArrowPlan.Purpose = ArrowPurpose::Manual;
-            LastArrowPlan.Valid = LastArrowPlan.Aim.IsValid() &&
-                                  !LastArrowPlan.Aim.IsZero();
-            ActiveSequence = Sequence::PlayerLed;
+            ActiveSequence = Sequence::None;
         }
     }
 }
@@ -1872,7 +1804,6 @@ inline const char* SequenceName(Sequence sequence) {
     case Sequence::FarmFan: return "farm fan";
     case Sequence::JungleFlurry: return "camp flurry";
     case Sequence::StructureFlurry: return "structure flurry";
-    case Sequence::PlayerLed: return "player-led";
     default: return "none";
     }
 }
@@ -1909,7 +1840,6 @@ inline const char* QPurposeName(QPurpose purpose) {
 
 inline const char* ScoutPurposeName(ScoutPurpose purpose) {
     switch (purpose) {
-    case ScoutPurpose::Manual: return "manual";
     case ScoutPurpose::FirstClear: return "first clear";
     case ScoutPurpose::LastSeenJungler: return "jungler";
     case ScoutPurpose::Objective: return "objective";
@@ -1922,7 +1852,6 @@ inline const char* ScoutPurposeName(ScoutPurpose purpose) {
 
 inline const char* ArrowPurposeName(ArrowPurpose purpose) {
     switch (purpose) {
-    case ArrowPurpose::Manual: return "manual";
     case ArrowPurpose::SelfPeel: return "self peel";
     case ArrowPurpose::AllyPeel: return "ally peel";
     case ArrowPurpose::Interrupt: return "interrupt";
@@ -1939,13 +1868,13 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kAttackRange,
                             0x337BD9FFu, 1.0f, 72);
         Drawing::DrawCircle(player.Position(), kVolleyRange,
                             0x3359B8FFu, 1.0f, 80);
     }
-    if (Bool(CoachMenu, "DrawVolley", true) && LastVolleyPlan.Valid &&
+    if (Bool(CoachMenu, "DrawVolley", false) && LastVolleyPlan.Valid &&
         Now() - LastWCastTick <= 1800) {
         const Vector3 direction = SharedGeometry::Direction2D(
             player.Position(), LastVolleyPlan.Aim);
@@ -1964,7 +1893,7 @@ inline void OnDraw() {
                                 0xDDB7F5FFu, 1.8f, 40);
         }
     }
-    if (Bool(CoachMenu, "DrawHawkshot", true) && LastScoutPlan.Valid &&
+    if (Bool(CoachMenu, "DrawHawkshot", false) && LastScoutPlan.Valid &&
         Now() - LastECastTick <= 6000) {
         Drawing::DrawLine(player.Position(), LastScoutPlan.Destination,
                           0xAA7FE8D8u, 1.7f);
@@ -1972,7 +1901,7 @@ inline void OnDraw() {
                             kHawkshotDestinationVisionRadius,
                             0x557FE8D8u, 1.2f, 72);
     }
-    if (Bool(CoachMenu, "DrawArrow", true) && LastArrowPlan.Valid &&
+    if (Bool(CoachMenu, "DrawArrow", false) && LastArrowPlan.Valid &&
         Now() - LastRCastTick <= 5200) {
         const Vector3 origin = RMissilePosition.IsValid() &&
                 !RMissilePosition.IsZero()
@@ -1983,7 +1912,7 @@ inline void OnDraw() {
                             kArrowExplosionRadius,
                             0x66A4C8FFu, 1.5f, 72);
     }
-    if (Bool(CoachMenu, "DrawPeel", true)) {
+    if (Bool(CoachMenu, "DrawPeel", false)) {
         const AIHeroClient ally = ProtectedAllyId != 0
             ? AIHeroClient(UnitByNetworkId(ProtectedAllyId).Handle())
             : AIHeroClient{};
@@ -1997,7 +1926,7 @@ inline void OnDraw() {
                               0xFFFF6A6Au, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[520]{};
@@ -2029,7 +1958,7 @@ inline void BuildMenu(Menu* root) {
         "Movement, attack-move,"));
 
     FocusMenu = TacticsMenu->AddSubMenu(new Menu(
-        "RangersFocus", "Q four-stack reset and flurry discipline"));
+        "RangersFocus", "Q stacks and flurry timing"));
     FocusMenu->Add(new MenuBool(
         "Combo", "AA-Q-AA sustained combo", true));
     FocusMenu->Add(new MenuBool(
@@ -2049,7 +1978,7 @@ inline void BuildMenu(Menu* root) {
         "Q is never pre-cast: the"));
 
     VolleyMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Volley", "W live 7-11 ray fan and first-blocker solver"));
+        "Volley", "W ray fan and blocker solver"));
     VolleyMenu->Add(new MenuBool(
         "Combo", "clear ray for chase, setup", true));
     VolleyMenu->Add(new MenuBool(
@@ -2067,9 +1996,7 @@ inline void BuildMenu(Menu* root) {
         "Every rank-dependent"));
 
     HawkshotMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Hawkshot", "E charge economy and information routes"));
-    HawkshotMenu->Add(new MenuKeyBind(
-        "ManualE", "Scout through cursor", Keys::G, KeyBindType::Press));
+        "Hawkshot", "E charge and scouting routes"));
     HawkshotMenu->Add(new MenuBool(
         "Automatic", "Allow conservative", true));
     HawkshotMenu->Add(new MenuBool(
@@ -2093,12 +2020,7 @@ inline void BuildMenu(Menu* root) {
         "Automatic landmarks run on"));
 
     ArrowMenu = TacticsMenu->AddSubMenu(new Menu(
-        "CrystalArrow", "R first-champion collision and follow-up commitment"));
-    ArrowMenu->Add(new MenuKeyBind(
-        "ManualR", "Fire scored R at the enemy nearest cursor", Keys::T,
-        KeyBindType::Press));
-    ArrowMenu->Add(new MenuSlider(
-        "ManualCursorRadius", "Manual cursor radius", 700, 150, 1600));
+        "CrystalArrow", "R collision and follow-up"));
     ArrowMenu->Add(new MenuBool(
         "Combo", "R for verified pick or", true));
     ArrowMenu->Add(new MenuBool(
@@ -2132,7 +2054,7 @@ inline void BuildMenu(Menu* root) {
         "R ignores minions, stops on"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Player-led flurry and exact Volley farming"));
+        "Farm", "Player flurry and Volley farm"));
     FarmMenu->Add(new MenuBool(
         "UseW", "fan on a valuable wave or camp", true));
     FarmMenu->Add(new MenuBool(
@@ -2151,7 +2073,7 @@ inline void BuildMenu(Menu* root) {
         "QJungleMana", "Minimum mana for jungle Q (%)", 24, 0, 100));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "One-trick geometry and state visualization"));
+        "Coach", "State and geometry overlay"));
     CoachMenu->Add(new MenuBool(
         "DrawRanges", "Draw attack and Volley ranges", false));
     CoachMenu->Add(new MenuBool(
@@ -2196,7 +2118,7 @@ inline void OnLoad() {
     IncomingHardCrowdControl = false;
     RecentIncomingPressure = 0.0f;
     ProtectedAllyId = PeelThreatId = 0;
-    LastScoutDecisionTick = LastManualScoutTick = LastManualArrowTick = 0;
+    LastScoutDecisionTick = 0;
     FrostedTargets.fill({});
     EnemyTracks.fill({});
     ScoutHistory.fill({});
@@ -2227,7 +2149,7 @@ inline constexpr const char* Scenarios[] = {
     "Center even-rank fans between the two middle rays",
     "Resolve the first hostile blocker independently on every Volley ray",
     "Let a side ray pass around a minion that blocks the center ray",
-    "Reject W when no ray reaches the selected champion",
+    "Reject W when no ray reaches the autonomous Engine target",
     "Count a unit hit by several rays only once for damage and AoE value",
     "Keep minions in the geometry even during champion-only casts",
     "Keep jungle monsters in the geometry even during champion-only casts",
@@ -2272,15 +2194,13 @@ inline constexpr const char* Scenarios[] = {
     "Never issue an attack merely to make Q available",
     "Track Frost from confirmed passive buff events",
     "Track short predicted Frost after a local auto",
-    "Track short predicted Frost after the selected Volley ray lands",
+    "Track short predicted Frost after the autonomous target's Volley ray lands",
     "Expire predicted Frost after the live two-second duration",
     "Use live passive state rather than assuming every target stays slowed",
     "Read Hawkshot Ammo and MaxAmmo when the spell instance exposes them",
     "Accept only a one-or-two-charge Hawkshot signature",
-    "Preserve one automatic Hawkshot charge by default",
-    "Allow the manual Hawkshot key to spend the reserved charge",
+    "Preserve one automatic Hawkshot charge and require a strong information line",
     "Keep automatic map landmarks disabled outside Summoner's Rift",
-    "Let manual cursor Hawkshot work on nonstandard maps",
     "Identify the enemy jungler from either Smite summoner slot",
     "Remember the last visible position of every enemy champion",
     "Remember the last path end of the Smite holder",
@@ -2329,21 +2249,21 @@ inline constexpr const char* Scenarios[] = {
     "Keep automatic R execute disabled by default",
     "Keep automatic cross-map R disabled by default",
     "Require path alignment, full stun and allied follow-up for cross-map R",
-    "Let the manual R key select the enemy nearest the player's cursor",
-    "Let manual R override automatic long-range restrictions",
-    "Still reject manual R when no enemy champion is first on the line",
+    "Use autonomous Engine target selection for proactive R",
+    "Apply automatic long-range restrictions to every proactive R",
+    "Reject R when no enemy champion is first on the line",
     "Use W-R when a Frosted target is leaving the local fight",
     "Use R-W-AA-Q after a successful long-range catch",
     "Do not cast Q during the R-W part before the player's attack",
     "Prioritize interrupt and anti-gapcloser reactions before damage",
     "Prioritize self peel before kill secure",
     "Prioritize protected-ally peel before ordinary combo damage",
-    "Choose front-to-back W against the player-selected target",
+    "Choose front-to-back W against the autonomous Engine target",
     "Retain player movement ownership while kiting",
     "Retain player attack-move ownership while chasing",
-    "Retain player target-selection ownership",
+    "Use autonomous Engine target selection for every combat route",
     "Retain player summoner-spell ownership",
-    "Yield briefly after observed manual spell casts through engine arbitration",
+    "Reconcile observed spell casts without overriding autonomous policy",
     "Never use Flash to extend a Volley or Arrow plan",
     "Never move Ashe toward a speculative Hawkshot reveal",
     "Never facecheck merely because Hawkshot is on cooldown",
@@ -2351,7 +2271,7 @@ inline constexpr const char* Scenarios[] = {
     "Expose observed Hawkshot charges instead of inventing infinite scouting",
     "Expose the chosen Volley primary ray",
     "Expose Arrow first-hit point, stun duration and explosion count",
-    "Expose the protected ally and selected diver",
+    "Expose the protected ally and prioritized diver",
     "Own the full decision loop and never fall back to generic Q-W-E-R priority",
 };
 

@@ -60,7 +60,7 @@ inline constexpr ChampionProfile Draven = [] {
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::AllowDuringWindup));
     p.AllIn = Plan(
-        "Maintain two axes, secure the selected target with E, then use a return-capable Whirling Death only for execute or multi-target value",
+        "Maintain two axes, secure a reachable target with E, then use a return-capable Whirling Death only for execute or multi-target value",
         Step(SDK::SpellSlot::Q, StepRule::RequireFirstCast),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget),
@@ -77,7 +77,6 @@ inline constexpr ChampionProfile Draven = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 24;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "DravenPassiveStacks";
@@ -86,9 +85,9 @@ inline constexpr ChampionProfile Draven = [] {
     p.ThemeTo = 0xFFE3312Au;
     p.ThemeSpeed = 0.90f;
     p.TacticalSummary =
-        "Treat every axe as an owned landing object: preserve a safe catch route, keep the selected/orbwalker target stable through the AA windup, and spend W only when it buys a catch, spacing or escape. E is a high-confidence peel/interrupt tool; R is a return-aware global execute and must not be fired merely because it is ready.";
+        "Treat every axe as an owned landing object: preserve a safe catch route, keep the best reachable target stable through the AA windup, and spend W only when it buys a catch, spacing or escape. E is a high-confidence peel/interrupt tool; R is a return-aware global execute and must not be fired merely because it is ready.";
     p.ResearchSummary =
-        "Riot 26.15 / CommunityDragon 16.15 Draven kit review: Q spinning-axe buff and dropped-object lifecycle, W Blood Rush speed reset, E Stand Aside displacement and R two-pass Whirling Death. Controller policy follows conservative catch safety and manual-return precedence when telemetry is incomplete.";
+        "Riot 26.15 / CommunityDragon 16.15 Draven kit review: Q spinning-axe buff and dropped-object lifecycle, W Blood Rush speed reset, E Stand Aside displacement and R two-pass Whirling Death. Controller policy follows conservative catch safety and return handling when telemetry is incomplete.";
     return p;
 }();
 

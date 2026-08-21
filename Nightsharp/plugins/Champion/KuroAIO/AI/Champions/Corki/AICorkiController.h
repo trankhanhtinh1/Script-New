@@ -38,7 +38,6 @@ inline int LastAfterAttackTargetId = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserExpireTick = 0;
 inline Vector3 GapcloserEndpoint = {};
-inline int PlayerOverrideUntil = 0;
 inline Mode LastMode = Mode::None;
 inline AIHeroClient LastSmartTarget = {};
 
@@ -318,11 +317,8 @@ inline MarksmanTargeting::TargetContext TargetFacts(const AIHeroClient& target,
 }
 
 inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred, Mode mode) {
-    AIHeroClient cooperation = preferred;
-    if (!Engine::ValidEnemy(cooperation))
-        cooperation = ControllerHelpers::PlayerSelectedEnemy(kRBigRange + 80.0f);
-    if (!Engine::ValidEnemy(cooperation))
-        cooperation = ControllerHelpers::OrbwalkerHeroTarget(kRBigRange + 80.0f);
+    (void)preferred;
+    const AIHeroClient cooperation = Engine::SelectTarget(kRBigRange + 80.0f);
     LastSmartTarget = ControllerHelpers::SelectReachableEnemy(
         cooperation, kRBigRange + 80.0f,
         [mode](const AIHeroClient& enemy) { return TargetFacts(enemy, mode); });
@@ -346,14 +342,6 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
     return mode == Mode::Combo && CastWOffensive(target, mode);
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(BarrageReach(RState) + 50.0f);
-    const auto target = SelectSmartTarget(selected.IsValid() ? selected : preferred,
-                                          Mode::Automatic);
-    return Engine::ValidEnemy(target) && CastR(target, Mode::Automatic, false, true);
-}
-
 inline bool TryGapcloser() {
     if (GapcloserExpireTick < Now()) return false;
     const auto threat = ControllerHelpers::HeroByNetworkId(GapcloserTargetId);
@@ -362,18 +350,20 @@ inline bool TryGapcloser() {
         Slider(ValkyrieMenu, "EmergencyHP", 34));
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     LastMode = mode;
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    if (TryManualR(preferred) || TryGapcloser() || TryKillSecure(preferred)) return true;
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 950.0f : kRBigRange + 80.0f);
+    if (TryGapcloser() || TryKillSecure(target)) return true;
     if (mode == Mode::Flee) {
-        const auto threat = ControllerHelpers::NearestEnemyToPlayer(preferred, 950.0f);
+        const auto threat = ControllerHelpers::NearestEnemyToPlayer({}, 950.0f);
         return CastWFlee(threat, GameObjects::Player().HealthPercent() <=
             Slider(ValkyrieMenu, "EmergencyHP", 34));
     }
     if (mode == Mode::Combo || mode == Mode::Harass)
-        return TryCombat(SelectSmartTarget(preferred, mode), mode);
+        return TryCombat(SelectSmartTarget(target, mode), mode);
     if (mode == Mode::LaneClear || mode == Mode::Jungle || mode == Mode::LastHit) {
         if (!ModeManaAllowed(mode, mode == Mode::LastHit ? 34.0f : 48.0f)) return false;
         return Engine::TryFarm(mode);
@@ -431,24 +421,21 @@ inline void ObserveSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         slot = 3; LastRCastTick = now;
         if (!Engine::WasControllerCast(3)) ConsumeBarrage(RState);
     }
-    if (slot >= 0 && !Engine::WasControllerCast(slot))
-        PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
     RefreshRuntimeRange();
 }
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("CorkiOneTrick", "Corki missile and package mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     MissileMenu = TacticsMenu->AddSubMenu(new Menu("MissileBarrage", "Missile Barrage ammo"));
     MissileMenu->Add(new MenuSlider("ReserveAmmo", "Reserve R charges", 1, 0, 3));
     MissileMenu->Add(new MenuBool("PreserveBigOne", "Preserve Big One unless lethal", true));
     ValkyrieMenu = TacticsMenu->AddSubMenu(new Menu("ValkyrieSafety", "Valkyrie endpoint safety"));
-    ValkyrieMenu->Add(new MenuBool("PreservePackage", "Preserve Package except emergency/lethal", true));
+    ValkyrieMenu->Add(new MenuBool("PreservePackage", "Save Package except emergencies", true));
     ValkyrieMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at W endpoint", 1, 0, 3));
     ValkyrieMenu->Add(new MenuSlider("EmergencyHP", "Emergency W health (%)", 34, 10, 70));
     ResourceMenu = TacticsMenu->AddSubMenu(new Menu("ResourceModes", "Resource and mode policy"));
-    ResourceMenu->Add(new MenuSeparator("FarmPolicy", "Farm uses Q/E profile gates; R and W stay reserved"));
+    ResourceMenu->Add(new MenuSeparator("FarmPolicy", "Farm Q/E gates; reserve R/W"));
 }
 
 inline void OnLoad() {
@@ -459,7 +446,6 @@ inline void OnLoad() {
     LastAfterAttackTick = LastAfterAttackTargetId = 0;
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEndpoint = {};
-    PlayerOverrideUntil = 0;
     LastMode = Mode::None;
     LastSmartTarget = {};
     ReconcileState();
@@ -468,7 +454,6 @@ inline void OnUnload() {
     TacticsMenu = MissileMenu = ValkyrieMenu = ResourceMenu = nullptr;
     RState = {};
     PackageLoaded = PackageObserved = false;
-    PlayerOverrideUntil = 0;
     LastMode = Mode::None;
     LastSmartTarget = {};
 }

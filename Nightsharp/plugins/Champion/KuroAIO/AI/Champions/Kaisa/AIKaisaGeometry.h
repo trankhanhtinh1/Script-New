@@ -146,10 +146,10 @@ inline bool SafeREndpoint(const REndpointContext& context) {
            context.NearbyEnemies <= std::max(0, context.MaximumEnemies);
 }
 
-inline bool ShouldCastR(bool manual, bool lethal, bool peel,
+inline bool ShouldCastR(bool lethal, bool peel,
                         bool alliedFollowup, bool endpointSafe) {
     if (!endpointSafe) return false;
-    return manual || lethal || peel || (alliedFollowup && !lethal);
+    return lethal || peel || (alliedFollowup && !lethal);
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Kaisa::Geometry

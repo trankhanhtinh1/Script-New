@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Zilean = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 62;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "HeightenedLearning";
@@ -29,7 +28,7 @@ inline constexpr ChampionProfile Zilean = [] {
     p.TacticalSummary =
         "Attach a predicted Time Bomb, Rewind only to complete a verified double-bomb stun, use Time Warp for ally speed or enemy slow, and reserve Chronoshift for a scored lethal window.";
     p.ResearchSummary =
-        "Riot 26.15 with CommunityDragon 16.15 ZileanQ/ZileanW/TimeWarp/ChronoShift values; bomb, buff, cast and manual ownership state are reconciled by polling and events.";
+        "Riot 26.15 with CommunityDragon 16.15 ZileanQ/ZileanW/TimeWarp/ChronoShift values; bomb, buff, cast and runtime state are reconciled by polling and events.";
 
     p.Spells[0] = Spell(SDK::SpellSlot::Q, "Time Bomb", CastKind::Position,
         Intent::Damage | Intent::CrowdControl | Intent::Setup | Intent::Waveclear |

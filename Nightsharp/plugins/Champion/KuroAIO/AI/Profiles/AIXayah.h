@@ -94,7 +94,6 @@ inline constexpr ChampionProfile Xayah = [] {
     p.UltimateTargetHealthPercent = 48.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "XayahPassive";

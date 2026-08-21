@@ -22,7 +22,6 @@ using ControllerHelpers::CaptureLocalAutoAttack;
 using ControllerHelpers::CastThrottleReady;
 using ControllerHelpers::CountAlliedFollowup;
 using ControllerHelpers::CurrentResource;
-using ControllerHelpers::CursorDirectionAgrees;
 using ControllerHelpers::EnemyFlashReady;
 using ControllerHelpers::HeroByNetworkId;
 using ControllerHelpers::HasNearbyJungleTarget;
@@ -114,7 +113,6 @@ enum class StormPurpose : int {
     Waveclear,
     Jungle,
     Objective,
-    Manual,
 };
 
 struct FlashFrostPlan {
@@ -156,7 +154,6 @@ struct StormPlan {
     int PriorityHits = 0;
     StormPurpose Purpose = StormPurpose::None;
     float Score = -FLT_MAX;
-    bool IncludesSelected = false;
     bool IncludesProtectedThreat = false;
     bool Valid = false;
 };
@@ -213,7 +210,6 @@ inline int ESequenceTargetId = 0;
 
 inline bool RActive = false;
 inline bool RObjectObserved = false;
-inline bool RWasManual = false;
 inline int RObjectNetworkId = 0;
 inline int RCastTick = 0;
 inline int RLastSeenTick = 0;
@@ -236,7 +232,6 @@ struct StormPlanCacheEntry {
     Vector3 Origin = {};
     Vector3 TargetPosition = {};
     Vector3 ForcedCenter = {};
-    Vector3 CursorPosition = {};
     StormPlan Plan = {};
 };
 
@@ -600,11 +595,6 @@ inline FlashFrostPlan BuildQPlan(const AIHeroClient& target,
             Slider(FlashFrostMenu, "HoldBeyond", 720));
         if (distance >= holdRange || EnemyFlashReady(target)) return plan;
     }
-    if (!reactive && !CursorDirectionAgrees(aim) &&
-        purpose != QPurpose::Peel && purpose != QPurpose::Interrupt &&
-        Orbwalker::ActiveMode() != OrbwalkingMode::Combo) {
-        return plan;
-    }
     if (shield && !Bool(FlashFrostMenu, "BreakSpellShield", true) &&
         purpose != QPurpose::Peel && purpose != QPurpose::Interrupt) {
         return plan;
@@ -810,7 +800,6 @@ inline bool StormFullyFormed() {
 inline void ClearStormState(bool preserveRelocation = false) {
     RActive = false;
     RObjectObserved = false;
-    RWasManual = false;
     RObjectNetworkId = 0;
     RLastSeenTick = 0;
     RLastContactTick = 0;
@@ -881,28 +870,26 @@ inline void AddUniqueStormCandidate(std::vector<Vector3>& candidates,
     candidates.push_back(candidate);
 }
 
-inline StormPlan BuildStormPlan(const AIHeroClient& selected,
+inline StormPlan BuildStormPlan(const AIHeroClient& target,
                                 StormPurpose purpose,
                                 const Vector3& forcedCenter = {}) {
     StormPlan best{};
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return best;
     const Vector3 origin = player.Position();
-    const bool selectedValid = Engine::ValidEnemy(selected);
-    const int selectedId = selectedValid
-        ? static_cast<int>(selected.NetworkId()) : 0;
-    const Vector3 selectedPosition = selectedValid
-        ? selected.Position() : Vector3{};
-    const Vector3 cursor = Game::CursorPos();
+    const bool targetValid = Engine::ValidEnemy(target);
+    const int targetId = targetValid
+        ? static_cast<int>(target.NetworkId()) : 0;
+    const Vector3 targetPosition = targetValid
+        ? target.Position() : Vector3{};
     const int now = Now();
     for (const StormPlanCacheEntry& entry : StormPlanCaches) {
         if (entry.Tick <= 0 || now < entry.Tick || now - entry.Tick > 72 ||
-            entry.TargetId != selectedId || entry.Purpose != purpose ||
+            entry.TargetId != targetId || entry.Purpose != purpose ||
             entry.StormActive != RActive ||
             entry.Origin.Distance2D(origin) > 24.0f ||
-            entry.TargetPosition.Distance2D(selectedPosition) > 24.0f ||
-            entry.ForcedCenter.Distance2D(forcedCenter) > 24.0f ||
-            entry.CursorPosition.Distance2D(cursor) > 24.0f) {
+            entry.TargetPosition.Distance2D(targetPosition) > 24.0f ||
+            entry.ForcedCenter.Distance2D(forcedCenter) > 24.0f) {
             continue;
         }
         return entry.Plan;
@@ -912,17 +899,17 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
     if (forcedCenter.IsValid() && !forcedCenter.IsZero()) {
         AddUniqueStormCandidate(candidates, forcedCenter);
     }
-    if (selectedValid) {
-        const Vector3 velocity = TargetVelocity(selected, 0.35f);
-        AddUniqueStormCandidate(candidates, selectedPosition);
-        AddUniqueStormCandidate(candidates, PredictPosition(selected, 0.25f));
+    if (targetValid) {
+        const Vector3 velocity = TargetVelocity(target, 0.35f);
+        AddUniqueStormCandidate(candidates, targetPosition);
+        AddUniqueStormCandidate(candidates, PredictPosition(target, 0.25f));
         AddUniqueStormCandidate(candidates, LeadStormCenter(
-            selectedPosition, velocity, 0.48f,
+            targetPosition, velocity, 0.48f,
             static_cast<float>(Slider(StormMenu, "MaximumLead", 190))));
-        if (selected.PathEnd().IsValid() && !selected.PathEnd().IsZero()) {
+        if (target.PathEnd().IsValid() && !target.PathEnd().IsZero()) {
             AddUniqueStormCandidate(
                 candidates,
-                selectedPosition.Extend(selected.PathEnd(), 150.0f));
+                targetPosition.Extend(target.PathEnd(), 150.0f));
         }
     }
     if (GapcloserTargetId != 0 && GapcloserExpireTick >= Now()) {
@@ -956,7 +943,7 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
         float score = immediate * 150.0f + full * 210.0f;
         StormPlan plan{};
         plan.Center = candidate;
-        plan.TargetId = selectedId;
+        plan.TargetId = targetId;
         plan.Purpose = purpose;
         for (const auto& enemy : enemies) {
             if (!Engine::ValidEnemy(enemy)) continue;
@@ -971,20 +958,14 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
             }
             ++plan.HitCount;
             if (TargetPriority(enemy) >= 1.75f) ++plan.PriorityHits;
-            if (selectedValid && enemy.NetworkId() == selectedId) {
-                plan.IncludesSelected = true;
-            }
             if (static_cast<int>(enemy.NetworkId()) == PeelThreatId) {
                 plan.IncludesProtectedThreat = true;
             }
         }
         score += static_cast<float>(plan.HitCount) * 95.0f;
         score += static_cast<float>(plan.PriorityHits) * 115.0f;
-        score += plan.IncludesSelected ? 145.0f : 0.0f;
         score += plan.IncludesProtectedThreat ? 210.0f : 0.0f;
         score += CountAlliedFollowup(candidate, 850.0f) * 45.0f;
-        score -= candidate.Distance2D(cursor) *
-                 (purpose == StormPurpose::Disengage ? 0.02f : 0.055f);
         if (Engine::UnderEnemyTurret(candidate) &&
             purpose != StormPurpose::Peel &&
             purpose != StormPurpose::Disengage) {
@@ -1004,13 +985,12 @@ inline StormPlan BuildStormPlan(const AIHeroClient& selected,
     StormPlanCacheCursor =
         (StormPlanCacheCursor + 1) % StormPlanCaches.size();
     cache.Tick = now;
-    cache.TargetId = selectedId;
+    cache.TargetId = targetId;
     cache.Purpose = purpose;
     cache.StormActive = RActive;
     cache.Origin = origin;
-    cache.TargetPosition = selectedPosition;
+    cache.TargetPosition = targetPosition;
     cache.ForcedCenter = forcedCenter;
-    cache.CursorPosition = cursor;
     cache.Plan = best;
     return best;
 }
@@ -1041,7 +1021,6 @@ inline bool CastStorm(const StormPlan& plan,
     if (!Engine::ControllerCastPosition(3, plan.Center)) return false;
     RActive = true;
     RObjectObserved = false;
-    RWasManual = false;
     RCastTick = Now();
     RLastSeenTick = RCastTick;
     RLastContactTick = RCastTick;
@@ -1104,7 +1083,7 @@ inline bool CancelStorm(bool forRelocation = false) {
     return true;
 }
 
-inline bool TryRelocateStorm(const AIHeroClient& selected, Mode mode) {
+inline bool TryRelocateStorm(Mode mode) {
     if (RActive || RRelocateCenter.IsZero() ||
         RRelocateTargetId == 0 || !Ready(3)) {
         return false;
@@ -1207,8 +1186,8 @@ inline bool CastFrostbite(const AIBaseClient& target,
     return true;
 }
 
-inline bool TryManageStorm(const AIHeroClient& selected, Mode mode) {
-    if (!RActive) return TryRelocateStorm(selected, mode);
+inline bool TryManageStorm(const AIHeroClient& target, Mode mode) {
+    if (!RActive) return TryRelocateStorm(mode);
 
     const int contacts = StormChampionContacts(0.12f);
     if (contacts > 0) {
@@ -1244,27 +1223,23 @@ inline bool TryManageStorm(const AIHeroClient& selected, Mode mode) {
         LastStormPurpose != StormPurpose::Waveclear &&
         LastStormPurpose != StormPurpose::Jungle &&
         LastStormPurpose != StormPurpose::Objective) {
-        if (Engine::ValidEnemy(selected) &&
+        if (Engine::ValidEnemy(target) &&
             Bool(StormMenu, "Relocate", true) &&
             Now() - RCastTick >= kStormFullMs) {
             const StormPlan replacement = BuildStormPlan(
-                selected, StormPurpose::DoubleFrostbite);
+                target, StormPurpose::DoubleFrostbite);
             const float improvement = replacement.Valid
                 ? replacement.Score - LastStormPlan.Score : -FLT_MAX;
             if (replacement.Valid &&
                 improvement >= Slider(StormMenu, "RelocateGain", 180)) {
                 RRelocateCenter = replacement.Center;
-                RRelocateTargetId = static_cast<int>(selected.NetworkId());
+                RRelocateTargetId = static_cast<int>(target.NetworkId());
                 return CancelStorm(true);
             }
         }
         return CancelStorm(false);
     }
 
-    if (RWasManual && Bool(StormMenu, "RespectManualStorm", true) &&
-        Now() - RCastTick < 2200) {
-        return false;
-    }
     return false;
 }
 
@@ -1498,11 +1473,11 @@ inline AIHeroClient ProtectedAlly() {
     const auto player = GameObjects::Player();
     AIHeroClient remembered = HeroByNetworkId(ProtectedAllyId);
     if (Engine::ValidAlly(remembered, 1350.0f)) return remembered;
-    AIHeroClient selected = SelectProtectionAlly(
+    AIHeroClient candidate = SelectProtectionAlly(
         1350.0f, true, TargetedAllyThreatId, 0.88f);
-    if (Engine::ValidAlly(selected)) {
-        ProtectedAllyId = static_cast<int>(selected.NetworkId());
-        return selected;
+    if (Engine::ValidAlly(candidate)) {
+        ProtectedAllyId = static_cast<int>(candidate.NetworkId());
+        return candidate;
     }
     return player;
 }
@@ -1707,12 +1682,8 @@ inline bool TryStormSequence(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool TryCombo(const AIHeroClient& selected) {
+inline bool TryCombo(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target, 1175.0f)) {
-        target = ControllerHelpers::NearestEnemyToPlayer(selected, 1175.0f);
-    }
     if (!Engine::ValidEnemy(target)) return false;
 
     if (RActive && TryStormSequence(target, Mode::Combo)) return true;
@@ -1748,7 +1719,7 @@ inline bool TryCombo(const AIHeroClient& selected) {
         const StormPlan storm = BuildStormPlan(target, purpose);
         const float minimum = static_cast<float>(
             Slider(StormMenu, "MinimumScore", 360));
-        if (storm.Valid && storm.IncludesSelected &&
+        if (storm.Valid &&
             storm.Score >= minimum &&
             CastStorm(storm, Mode::Combo, false)) {
             return true;
@@ -1782,45 +1753,47 @@ inline bool TryCombo(const AIHeroClient& selected) {
     return false;
 }
 
-inline bool TryHarass(const AIHeroClient& selected) {
-    if (!Engine::ValidEnemy(selected, 1125.0f)) return false;
-    if (ControllerHelpers::PlayerManaPercent() < Slider(FlashFrostMenu, "HarassMana", 52)) {
+inline bool TryHarass(const AIHeroClient& target) {
+    if (!Engine::ValidEnemy(target, 1125.0f)) return false;
+    if (ControllerHelpers::PlayerManaPercent() <
+        Slider(FlashFrostMenu, "HarassMana", 52)) {
         return false;
     }
     if (RActive) {
-        if (CastFrostbite(selected, Mode::Harass, false, false)) return true;
-        if (TryStormSequence(selected, Mode::Harass)) return true;
+        if (CastFrostbite(target, Mode::Harass, false, false)) return true;
+        if (TryStormSequence(target, Mode::Harass)) return true;
     }
     if (QActive) {
-        if (TryWallForFlyingQ(selected, Mode::Harass) &&
-            ConservativeComboDamage(selected, false) >=
-                selected.Health() + selected.AllShield()) {
+        if (TryWallForFlyingQ(target, Mode::Harass) &&
+            ConservativeComboDamage(target, false) >=
+                target.Health() + target.AllShield()) {
             return true;
         }
-        return CastFrostbite(selected, Mode::Harass, false, false);
+        return CastFrostbite(target, Mode::Harass, false, false);
     }
-    if (HasLiveChill(selected) && Ready(2) &&
-        CastFrostbite(selected, Mode::Harass, false, false)) {
+    if (HasLiveChill(target) && Ready(2) &&
+        CastFrostbite(target, Mode::Harass, false, false)) {
         return true;
     }
     if (Ready(0) && Bool(FlashFrostMenu, "Harass", true)) {
         const FlashFrostPlan q = BuildQPlan(
-            selected, QPurpose::DoubleHit, false);
+            target, QPurpose::DoubleHit, false);
         if (q.Valid && (q.TargetCommitted || q.Guaranteed) &&
             CastFlashFrost(q, Mode::Harass, false)) {
             return true;
         }
     }
     if (!RActive && Ready(3) && Bool(StormMenu, "Harass", false) &&
-        ControllerHelpers::PlayerManaPercent() >= Slider(StormMenu, "HarassMana", 82)) {
+        ControllerHelpers::PlayerManaPercent() >=
+            Slider(StormMenu, "HarassMana", 82)) {
         const StormPlan storm = BuildStormPlan(
-            selected, StormPurpose::Catch);
-        if (storm.Valid && storm.IncludesSelected &&
+            target, StormPurpose::Catch);
+        if (storm.Valid &&
             CastStorm(storm, Mode::Harass, false)) {
             return true;
         }
     }
-    return CastFrostbite(selected, Mode::Harass, false, false);
+    return CastFrostbite(target, Mode::Harass, false, false);
 }
 
 inline AIHeroClient NearestPursuer() {
@@ -1838,9 +1811,9 @@ inline AIHeroClient NearestPursuer() {
     return best;
 }
 
-inline bool TryFlee(const AIHeroClient& selected) {
-    AIHeroClient pursuer = Engine::ValidEnemy(selected)
-        ? selected : NearestPursuer();
+inline bool TryFlee(const AIHeroClient& fallback) {
+    AIHeroClient pursuer = Engine::ValidEnemy(fallback)
+        ? fallback : NearestPursuer();
     if (!Engine::ValidEnemy(pursuer)) return false;
     const auto player = GameObjects::Player();
 
@@ -2131,7 +2104,7 @@ inline bool TryAutomaticKillSecure() {
 }
 
 inline Posture ChoosePosture(Mode mode,
-                             const AIHeroClient& selected,
+                             const AIHeroClient& target,
                              const AIHeroClient& ally,
                              const AIHeroClient& threat) {
     if (EggActive) return Posture::Egg;
@@ -2152,8 +2125,8 @@ inline Posture ChoosePosture(Mode mode,
         }
         return Posture::LaneControl;
     }
-    if (mode == Mode::Combo && Engine::ValidEnemy(selected)) {
-        return Engine::UnderEnemyTurret(selected.Position())
+    if (mode == Mode::Combo && Engine::ValidEnemy(target)) {
+        return Engine::UnderEnemyTurret(target.Position())
             ? Posture::Siege : Posture::Catch;
     }
     if (mode == Mode::Harass) return Posture::LaneControl;
@@ -2215,14 +2188,17 @@ inline void RefreshState() {
     if (EggActive) ActiveSequence = Sequence::Egg;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& sdkTarget) {
     RefreshState();
     if (EggActive) return false;
 
+    const AIHeroClient target = mode == Mode::Flee
+        ? sdkTarget
+        : Engine::SelectTarget(kFlashFrostRange + 100.0f);
     const AIHeroClient ally = ProtectedAlly();
     const AIHeroClient threat = Engine::ValidAlly(ally)
         ? SelectPeelThreat(ally) : AIHeroClient{};
-    CurrentPosture = ChoosePosture(mode, selected, ally, threat);
+    CurrentPosture = ChoosePosture(mode, target, ally, threat);
 
     if (QActive && TryDetonateFlashFrost()) return true;
     if (TryInterrupt()) return true;
@@ -2233,15 +2209,15 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
             ? Mode::Automatic : mode)) {
         return true;
     }
-    if (TryManageStorm(selected, mode == Mode::None
+    if (TryManageStorm(target, mode == Mode::None
             ? Mode::Automatic : mode)) {
         return true;
     }
     if (TryAutomaticKillSecure()) return true;
 
-    if (mode == Mode::Flee) return TryFlee(selected);
-    if (mode == Mode::Combo) return TryCombo(selected);
-    if (mode == Mode::Harass) return TryHarass(selected);
+    if (mode == Mode::Flee) return TryFlee(sdkTarget);
+    if (mode == Mode::Combo) return TryCombo(target);
+    if (mode == Mode::Harass) return TryHarass(target);
     if (mode == Mode::LaneClear) {
         if (HasNearbyJungleTarget(850.0f) &&
             TryFarm(Mode::Jungle)) return true;
@@ -2277,9 +2253,8 @@ inline void ObserveQDetonation() {
     }
 }
 
-inline void ObserveManualQ(
-    const SDK::Events::ProcessSpellEventArgs& args,
-    bool controllerOwned) {
+inline void ObserveQSpell(
+    const SDK::Events::ProcessSpellEventArgs& args) {
     if (QActive || IsQDetonateName(args.SpellName) ||
         ControllerHelpers::SpellEventNameContainsAny(
             args, { "FlashFrostSpell2", "Detonate" })) {
@@ -2313,7 +2288,6 @@ inline void ObserveManualQ(
                    kFlashFrostRange / kFlashFrostSpeed) * 1000.0f));
     LastQPurpose = QPurpose::None;
     ActiveSequence = Sequence::QDoubleHit;
-    if (!controllerOwned) LastQPlan = {};
 }
 
 inline void ObserveLocalSpell(
@@ -2321,7 +2295,7 @@ inline void ObserveLocalSpell(
     const bool ours = args.Slot >= 0 && args.Slot < 4 &&
                       Engine::WasControllerCast(args.Slot);
     if (args.Slot == 0 || SpellEventNameContains(args, "FlashFrost")) {
-        ObserveManualQ(args, ours);
+        ObserveQSpell(args);
         return;
     }
     if (args.Slot == 1 || SpellEventNameContains(args, "Crystallize")) {
@@ -2356,7 +2330,6 @@ inline void ObserveLocalSpell(
         }
         RActive = true;
         RObjectObserved = false;
-        RWasManual = !ours;
         RCastTick = Now();
         RLastSeenTick = RCastTick;
         RLastContactTick = RCastTick;
@@ -2365,7 +2338,7 @@ inline void ObserveLocalSpell(
             ? static_cast<int>(args.TargetNetworkId)
             : static_cast<int>(args.Target.NetworkId);
         RCenter = EventCastPosition(args, GameObjects::Player().Position());
-        LastStormPurpose = ours ? LastStormPurpose : StormPurpose::Manual;
+        LastStormPurpose = ours ? LastStormPurpose : StormPurpose::None;
         ActiveSequence = Sequence::StormGrow;
     }
 }
@@ -2616,7 +2589,6 @@ inline const char* StormPurposeName(StormPurpose purpose) {
     case StormPurpose::Waveclear: return "wave";
     case StormPurpose::Jungle: return "jungle";
     case StormPurpose::Objective: return "objective";
-    case StormPurpose::Manual: return "manual";
     default: return "hold";
     }
 }
@@ -2626,7 +2598,7 @@ inline void OnDraw() {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
 
-    if (Bool(CoachMenu, "DrawQ", true)) {
+    if (Bool(CoachMenu, "DrawQ", false)) {
         Drawing::DrawCircle(player.Position(), kFlashFrostRange,
                             0x5578DDF5u, 1.2f, 80);
         if (QActive) {
@@ -2642,7 +2614,7 @@ inline void OnDraw() {
                               0x9978DDF5u, 1.6f);
         }
     }
-    if (Bool(CoachMenu, "DrawWall", true) &&
+    if (Bool(CoachMenu, "DrawWall", false) &&
         LastWallPlan.Segment.Valid &&
         Now() - WCastTick <= kWallDurationMs) {
         Drawing::DrawLine(LastWallPlan.Segment.Start,
@@ -2653,7 +2625,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(LastWallPlan.Center, 35.0f,
                             0xFF83E9FFu, 2.0f, 30);
     }
-    if (Bool(CoachMenu, "DrawStorm", true)) {
+    if (Bool(CoachMenu, "DrawStorm", false)) {
         Drawing::DrawCircle(player.Position(), kStormCastRange,
                             0x445F8DE8u, 1.0f, 72);
         if (RActive && RCenter.IsValid() && !RCenter.IsZero()) {
@@ -2682,7 +2654,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawPeel", true)) {
+    if (Bool(CoachMenu, "DrawPeel", false)) {
         const AIHeroClient ally = ProtectedAlly();
         const AIHeroClient threat = HeroByNetworkId(PeelThreatId);
         if (Engine::ValidAlly(ally)) {
@@ -2694,7 +2666,7 @@ inline void OnDraw() {
                               0xFFFF657Bu, 2.2f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[420]{};
@@ -2730,7 +2702,7 @@ inline void BuildMenu(Menu* root) {
         "Ownership", "Movement, attack-move, Flash"));
 
     FlashFrostMenu = TacticsMenu->AddSubMenu(new Menu(
-        "FlashFrost", "Q pressure, pass-through and detonation"));
+        "Q pressure and detonation"));
     FlashFrostMenu->Add(new MenuBool(
         "HoldPressure", "Hold Q until the target", true));
     FlashFrostMenu->Add(new MenuSlider(
@@ -2759,7 +2731,7 @@ inline void BuildMenu(Menu* root) {
         "Flee", "Q stun pursuer flee", true));
 
     WallMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Crystallize", "W displacement, path forcing and ally safety"));
+        "W displacement and ally safety"));
     WallMenu->Add(new MenuBool(
         "KeepInStorm", "Wall an exit when it keeps", true));
     WallMenu->Add(new MenuBool(
@@ -2778,7 +2750,7 @@ inline void BuildMenu(Menu* root) {
         "Safety", "Every W candidate rejects"));
 
     FrostbiteMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Frostbite", "E impact-time Chill and double-E sequencing"));
+        "E Chill and double-E sequence"));
     FrostbiteMenu->Add(new MenuBool(
         "KillSecure", "Automatically use", true));
     FrostbiteMenu->Add(new MenuBool(
@@ -2789,7 +2761,7 @@ inline void BuildMenu(Menu* root) {
         "ImpactRule", "E is empowered when Chill"));
 
     StormMenu = TacticsMenu->AddSubMenu(new Menu(
-        "GlacialStorm", "R growth, placement, mana and relocation"));
+        "R growth, placement and mana"));
     StormMenu->Add(new MenuBool(
         "Combo", "Open combo with R", true));
     StormMenu->Add(new MenuSlider(
@@ -2805,8 +2777,6 @@ inline void BuildMenu(Menu* root) {
     StormMenu->Add(new MenuSlider(
         "RelocateGain", "Score gain to move R", 180, 50, 600));
     StormMenu->Add(new MenuBool(
-        "RespectManualStorm", "Preserve a player R through", true));
-    StormMenu->Add(new MenuBool(
         "Peel", "Use R for critical ally peel", true));
     StormMenu->Add(new MenuSlider(
         "PeelAllyHp", "Ally HP peel R (%)", 48, 10, 90));
@@ -2820,14 +2790,14 @@ inline void BuildMenu(Menu* root) {
         "Flee", "R between Anivia/pursuer", true));
 
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Rebirth", "Passive awareness and player cooperation"));
+        "Passive state and player control"));
     PassiveMenu->Add(new MenuSeparator(
         "Egg", "All casts stop during the"));
     PassiveMenu->Add(new MenuSeparator(
         "Priority", "Chronoshift and Guardian"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Mana-aware lane, jungle and objective control"));
+        "Mana-aware farm and objectives"));
     FarmMenu->Add(new MenuBool(
         "UseQ", "Q multi-unit farm", true));
     FarmMenu->Add(new MenuSlider(
@@ -2908,14 +2878,10 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Route decisions through lane-control, catch, zone, peel, disengage, siege, objective or egg posture",
     "Preserve player ownership of movement, attack-move, Hold, Stop, Flash and positioning",
-    "Prefer the player's selected target without inventing movement toward it",
     "Protect a pressured carry before starting a fresh damage sequence",
-    "Continue a player-cast Q and R instead of replacing the player's setup",
-    "Yield to the shared manual-input arbitration window",
     "Track Flash Frost through dedicated missile create and delete events",
     "Recover Flash Frost from the live missile collection after a missed lifecycle event",
     "Use the allied cryo Flash Frost particle only as a fallback",
-    "Reconstruct Q origin, direction and maximum endpoint from a manual cast",
     "Extrapolate Q at 950 speed only until its real missile is observed",
     "Use current 1075 effective Q range and 0.25-second cast time",
     "Use current 220 full Q line width plus each target gameplay radius",
@@ -2943,8 +2909,6 @@ inline constexpr const char* Scenarios[] = {
     "Treat dashes, hard CC, close commitment and movement toward Anivia as real Q commitment",
     "Hold Q at long range instead of repeatedly donating a slow projectile",
     "Hold Q against a Flash-ready target unless the line is forced",
-    "Reject proactive Q opposite the player's cursor",
-    "Ignore cursor agreement only for peel and interrupt emergencies",
     "Hold Q after the first empowered E while the target remains safely in R",
     "Spend held Q when the target approaches the R exit",
     "Spend held Q when it creates the next empowered E window",
@@ -3016,7 +2980,6 @@ inline constexpr const char* Scenarios[] = {
     "Evaluate current, cast-delay and 1.5-second target positions",
     "Evaluate pair midpoints for multi-target R placement",
     "Score R by target priority, control state, dash and allied follow-up",
-    "Require the selected target inside an ordinary proactive combo R",
     "Use a separate immediate center for peel and disengage R",
     "Use current initial R radius of 200",
     "Grow R linearly to current full radius 400 over 1.5 seconds",
@@ -3029,8 +2992,6 @@ inline constexpr const char* Scenarios[] = {
     "Keep R through a pending E whose empowerment depends on full storm",
     "Apply a no-contact grace instead of flickering R on one prediction miss",
     "End an empty R after its grace when no farm or objective purpose remains",
-    "Preserve a player-cast R through its first setup window",
-    "End a manual R later only for real no-contact or mana pressure",
     "Relocate R only after maturity and a substantial scored improvement",
     "Carry the original target across an R relocation sequence",
     "Respect R cooldown before placing the replacement storm",
@@ -3056,8 +3017,6 @@ inline constexpr const char* Scenarios[] = {
     "Peel with W when it creates actual ally-threat separation",
     "Use R peel only for a critical ally, committed dash or point-blank threat",
     "Use E on a peeled threat only when full R or Q supplies impact-time Chill",
-    "Continue manual Q detonation logic even outside an orbwalker combat mode",
-    "Continue manual R mana and contact management outside combat mode",
     "Kill-secure with E only from conservative impact-time damage",
     "Kill-secure with Q only through a predicted real line",
     "Do not spend R merely because one low target exists",

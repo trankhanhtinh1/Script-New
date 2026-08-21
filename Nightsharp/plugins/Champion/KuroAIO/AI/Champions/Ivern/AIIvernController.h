@@ -21,7 +21,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::SelectJungleTarget;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::Slider;
@@ -32,7 +31,6 @@ inline Menu* TacticsMenu = nullptr;
 inline Menu* FarmMenu = nullptr;
 inline Menu* DaisyMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
-inline int ManualOwnershipUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int IncomingThreatUntil = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -259,10 +257,9 @@ inline void Automatic(const AIHeroClient& target) {
         (void)CastR(Mode::Automatic);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected, kQRange);
+    const AIHeroClient target = Engine::SelectTarget(kQRange);
     if (mode == Mode::Flee) Flee(target);
     else if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -276,7 +273,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
 
 inline void OnLoad() {
     TacticsMenu = nullptr; FarmMenu = nullptr; DaisyMenu = nullptr;
-    LastCastTick = {}; ManualOwnershipUntil = LastAutoTargetId = 0;
+    LastCastTick = {}; LastAutoTargetId = 0;
     IncomingThreatUntil = IncomingThreatTargetId = 0; IncomingThreatEndpoint = {};
     MarkedCampId = MarkExpireTick = 0;
     GroveMark = {}; ActiveBrush = {}; ActiveShield = {}; Daisy = {};
@@ -289,7 +286,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = Now();
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = Now() + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         }
         return;
     }
@@ -344,15 +340,14 @@ inline void OnDraw() {}
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("IvernTactics", "Grove, rootcaller and protection policy"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 150, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("IvernTactics", "Grove, rootcaller and protection"));
     TacticsMenu->Add(new MenuSlider("ManaReserve", "Mana reserve", 20, 0, 80));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 0, 100));
     TacticsMenu->Add(new MenuSlider("MaxDashEnemies", "Maximum enemies at Q dash endpoint", 2, 1, 5));
     TacticsMenu->Add(new MenuSlider("ShieldAllyHP", "Shield ally below HP percent", 65, 1, 100));
     TacticsMenu->Add(new MenuSlider("SelfShieldHP", "Prefer self shield below HP percent", 35, 1, 100));
     TacticsMenu->Add(new MenuSlider("BrushDurationMs", "Brush state duration (ms)", kBrushDurationMs, 5000, 30000));
-    FarmMenu = root->AddSubMenu(new Menu("IvernFarm", "Grove marking, lane and objective policy"));
+    FarmMenu = root->AddSubMenu(new Menu("IvernFarm", "Grove, lane and objectives"));
     FarmMenu->Add(new MenuBool("TrackGroveMarks", "Track marked jungle camps", true));
     FarmMenu->Add(new MenuBool("ObjectiveDaisy", "Summon Daisy for epic objectives", true));
     FarmMenu->Add(new MenuBool("ObjectiveShield", "Shield Daisy at objectives", true));
@@ -368,11 +363,11 @@ inline void BuildMenu(Menu* root) {
 inline constexpr const char* Scenarios[] = {
     "Passive Friend of the Forest grove marks with camp identity, expiry and polling reconciliation",
     "Q Rootcaller prediction, projectile-wall and first-collision checks with safe root dash gating",
-    "W Brushmaker placement, brush empowerment state and attack-windup ownership",
+    "W Brushmaker placement, brush empowerment state and attack-windup protection",
     "E Triggerseed ally selection, shield duration, detonation expiry and threat-aware peel",
     "R Daisy summon object lifecycle, teamfight safety gate and epic-objective policy",
-    "Selected-target then orbwalker fallback, resource/cooldown checks and turret/enemy-count gates",
-    "Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic routes with manual handoff",
+    "Autonomous target selection, resource/cooldown checks and turret/enemy-count gates",
+    "Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic routes",
 };
 
 inline constexpr ChampionController Controller = [] {

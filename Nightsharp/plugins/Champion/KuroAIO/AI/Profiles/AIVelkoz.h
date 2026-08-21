@@ -11,7 +11,8 @@ inline constexpr ChampionProfile Velkoz = [] {
     p.InternalId = "champion.kuroaio.ai.velkoz";
     p.PrimaryArchetype = Archetype::Specialist;
     p.Mechanics = Mechanic::Stack | Mechanic::Mark | Mechanic::Channel |
-                  Mechanic::WallInteraction | Mechanic::AutoWeave;
+                  Mechanic::WallInteraction | Mechanic::AutoWeave |
+                  Mechanic::Recast;
     p.Ultimate = UltimatePolicy::AllIn;
     p.PreferredCombatDistance = 900.0f;
     p.EngageHealthPercent = 42.0f;
@@ -20,7 +21,6 @@ inline constexpr ChampionProfile Velkoz = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "VelkozPassive";
@@ -40,6 +40,7 @@ inline constexpr ChampionProfile Velkoz = [] {
     p.Spells[0].Aim = AimPolicy::Prediction;
     p.Spells[0].Priority = 92;
     p.Spells[0].Hitchance = SDK::HitChance::High;
+    p.Spells[0].RecastSpellName = "VelkozQSplit";
 
     p.Spells[1] = Spell(SDK::SpellSlot::W, "Void Rift", CastKind::Line,
         Intent::Damage | Intent::Setup | Intent::Waveclear | Intent::Jungle |

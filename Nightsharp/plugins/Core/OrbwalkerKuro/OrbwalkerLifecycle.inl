@@ -69,6 +69,7 @@ inline void OrbwalkerBase::ClearPendingAttackState() {
 inline void OrbwalkerBase::LastAutoAttackTick(int value) {
     context_.lastAutoAttackTick = value;
     ClearPendingAttackState();
+    context_.attackReleaseSafeTick = 0;
     context_.attackCastComplete = value > 0;
 }
 
@@ -137,6 +138,7 @@ inline void OrbwalkerBase::ResetAutoAttackTimerWithReason(
     context_.lastAttackOrderNetworkId = 0;
     context_.lastAttackConfirmTick = 0;
     context_.lastAfterAttackStartTick = 0;
+    context_.attackReleaseSafeTick = 0;
     context_.lastAutoAttackResetTick = now;
     context_.attackPauseTick = 0;
     ClearPendingAttackState();

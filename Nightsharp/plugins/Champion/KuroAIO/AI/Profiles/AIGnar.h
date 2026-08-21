@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Gnar = [] {
     profile.UltimateMinimumTargets = 2;
     profile.MaximumCommitEnemies = 2;
     profile.BaseHumanizerMs = 55;
-    profile.PreferSelectedTarget = true;
     profile.AllowTurretDiveIfKillable = false;
     profile.ProtectManualChannels = true;
     profile.TrackedObjectToken = "GnarQMissile";

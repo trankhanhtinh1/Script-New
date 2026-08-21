@@ -71,7 +71,6 @@ inline bool ShouldPlaceTrap(const TrapContext& context) {
 }
 
 struct UltimateContext {
-    bool Manual = false;
     bool Lethal = false;
     bool InRange = false;
     bool ChannelSafe = false;
@@ -83,7 +82,7 @@ struct UltimateContext {
 inline bool ShouldCastUltimate(const UltimateContext& context) {
     return context.InRange && context.ChannelSafe &&
            context.TargetCanBeDamaged && !context.BetterLocalAction &&
-           !context.ProjectileWall && (context.Manual || context.Lethal);
+           !context.ProjectileWall && context.Lethal;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Caitlyn::Geometry

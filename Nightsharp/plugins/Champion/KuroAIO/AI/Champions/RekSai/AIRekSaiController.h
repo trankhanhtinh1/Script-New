@@ -36,7 +36,6 @@ inline int MarkExpireTick = 0;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int PendingTunnelTick = 0;
@@ -215,9 +214,9 @@ inline void ReconcileState() {
     }
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+    (void)selected;
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (ManualOverrideUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kRRange);
     if (PassiveHealing && mode != Mode::Flee && Engine::CountEnemiesAt(
             GameObjects::Player().Position(), 500.0f) == 0) return true;
     if (TryKillSecure(target, mode)) return true;
@@ -247,8 +246,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot >= 4) return;
-        if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 2 && Burrowed && args.CastPosition.IsValid()) {
             PendingTunnelTick = now;
@@ -305,17 +302,16 @@ inline void OnDraw() {
     if (!player.IsValid()) return;
     Drawing::DrawCircle(player.Position(), Burrowed ? kQBurrowedRange : kERange,
                         Burrowed ? 0xFF55CCFFu : 0xFFFF8844u, 1.5f, 40);
-    if (Bool(CoachMenu, "DrawTunnels", true)) for (const auto& tunnel : Tunnels)
+    if (Bool(CoachMenu, "DrawTunnels", false)) for (const auto& tunnel : Tunnels)
         if (TunnelActive(tunnel, Now())) Drawing::DrawLine(tunnel.Start, tunnel.End, 0xFF66DD88u, 2.0f);
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("RekSaiOneTrick", "Rek'Sai posture and tunnel tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Queen's Wrath / Prey Seeker"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Burrow and unburrow"));
     WMenu->Add(new MenuSlider("UnburrowHP", "Unburrow pressure HP", 65, 10, 100));
-    WMenu->Add(new MenuSlider("PassiveHealHP", "Hold burrow for passive heal below HP", 72, 10, 95));
+    WMenu->Add(new MenuSlider("PassiveHealHP", "Hold burrow below HP to heal", 72, 10, 95));
     EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Furious Bite / Tunnel"));
     EMenu->Add(new MenuSlider("MinimumFury", "Minimum fury for bite", 45, 0, 100));
     EMenu->Add(new MenuSlider("HarassFury", "Harass fury", 70, 0, 100));
@@ -327,11 +323,11 @@ inline void BuildMenu(Menu* root) {
     FarmMenu->Add(new MenuSlider("FuryForBite", "Fury for farm bite", 55, 0, 100));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("RekSaiCoach", "Posture and tunnel coaching"));
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw posture range", false));
-    CoachMenu->Add(new MenuBool("DrawTunnels", "Draw active tunnels", true));
+    CoachMenu->Add(new MenuBool("DrawTunnels", "Draw active tunnels", false));
 }
 inline void OnLoad() {
     Burrowed = PassiveHealing = false; Tunnels = {};
-    MarkedTargetId = MarkExpireTick = ManualOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    MarkedTargetId = MarkExpireTick = IncomingThreatUntil = IncomingHardCCUntil = 0;
     PendingTunnelTick = LastAutoTargetId = LastAutoTick = 0;
     PendingTunnelStart = PendingTunnelEnd = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
@@ -348,7 +344,6 @@ inline constexpr const char* Scenarios[] = {
     "Use W knock-up only when the target is inside the observed radius",
     "Track allied tunnel objects with creation, deletion and expiry reconciliation",
     "Reject tunnel endpoints in walls, turrets, short self loops or outnumbered landings",
-    "Preserve selected target before orbwalker and selector fallbacks",
     "Preserve AA windup unless reactive or lethal",
     "Hold burrowed passive healing when fury and low-health safety justify it",
     "Require fury threshold before ordinary Furious Bite",
@@ -364,7 +359,6 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear and Jungle preserve farm policy while LastHit avoids reckless tunnels",
     "Flee burrows under threat and tunnels only toward a safe cursor endpoint",
     "Automatic mode defends against observed threat or secures lethal marked prey",
-    "Yield after manually observed Q, W, E or R casts",
     "Never automate items, summoners or movement outside the tunnel spell",
     "Keep profile metadata, geometry and controller responsibilities separated",
 };

@@ -49,7 +49,6 @@ inline int GapcloserExpireTick = 0;
 inline Vector3 GapcloserEnd{};
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline Mode LastMode = Mode::None;
 
 using ControllerHelpers::Now;
@@ -110,8 +109,8 @@ inline bool CastW(Mode mode, bool reactive = false, bool recast = false) {
         if (!WActive || !Engine::ControllerCastSelf(1)) return false;
         WActive = false; WExpireTick = 0; return true;
     }
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget({}, kWRadius + 120.0f);
-    const WContext context{true, WActive, false, GapcloserTargetId != 0,
+    const AIHeroClient target = Engine::SelectTarget(kWRadius + 120.0f);
+    const WContext context{true, WActive, GapcloserTargetId != 0,
         player.HealthPercent() > Slider(WMenu, "MinimumHealth", 32),
         player.ManaPercent() > Slider(WMenu, "MinimumMana", 20),
         Engine::ValidEnemy(target, kWRadius + 120.0f)};
@@ -135,7 +134,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool defensive = false,
     ETargetId = Engine::ValidEnemy(target) ? static_cast<int>(target.NetworkId()) : 0;
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(3, mode) || !Throttle(3, reactive) || PreserveAttack(reactive)) return false;
     const Vector3 aim = Aim(target, kRDelay, 3);
@@ -144,7 +143,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, 
     const bool execute = ExecuteEligible(target.HealthPercent() / 100.0f, SealedChampions);
     const RContext context{true, target.IsTargetable(), false,
         target.Health() + target.AllShield() <= RBaseDamage(SpellRank(3), player.AP()), execute,
-        manual, Engine::UnderEnemyTurret(aim), Engine::CountEnemiesAt(aim, kRRadius)};
+        reactive, Engine::UnderEnemyTurret(aim), Engine::CountEnemiesAt(aim, kRRadius)};
     if (!ShouldCastPurgatory(context, Slider(RMenu, "MinimumTargets", 1))) return false;
     if (!Engine::ControllerCastPosition(3, aim)) return false;
     RCastTick = Now(); RMarkTargetId = static_cast<int>(target.NetworkId()); RMarkExpireTick = Now() + 5000;
@@ -183,7 +182,7 @@ inline bool TryFlee() {
     }
     return false;
 }
-inline bool TryAutomatic(const AIHeroClient& selected) {
+inline bool TryAutomatic() {
     const auto player = GameObjects::Player();
     if (GapcloserTargetId != 0 && GapcloserExpireTick >= Now()) {
         const auto threat = Engine::EnemyByNetworkId(GapcloserTargetId);
@@ -191,13 +190,12 @@ inline bool TryAutomatic(const AIHeroClient& selected) {
     }
     if (InterruptTargetId != 0 && InterruptExpireTick >= Now()) {
         const auto threat = Engine::EnemyByNetworkId(InterruptTargetId);
-        if (Engine::ValidEnemy(threat, kRRange)) return CastR(threat, Mode::Automatic, true, true);
+        if (Engine::ValidEnemy(threat, kRRange)) return CastR(threat, Mode::Automatic, true);
     }
     if (player.IsValid() && player.HealthPercent() < Slider(WMenu, "EmergencyHealth", 24)) return CastW(Mode::Automatic, true);
-    if (Bool(RMenu, "ManualR", false) && Engine::ValidEnemy(selected, kRRange)) return CastR(selected, Mode::Automatic, true, true);
     return false;
 }
-inline void ReconcileObservedState(const AIHeroClient& selected) {
+inline void ReconcileObservedState() {
     const auto player = GameObjects::Player();
     const int now = Now();
     if (player.IsValid() && player.HasBuff("LockeW")) {
@@ -206,30 +204,28 @@ inline void ReconcileObservedState(const AIHeroClient& selected) {
     } else if (WActive && WExpireTick > 0 && now >= WExpireTick) {
         WActive = false;
     }
-    if (Engine::ValidEnemy(selected)) {
-        if (selected.HasBuff("LockeQMark") || selected.HasBuff("LockeSoulNails")) {
-            QMarkTargetId = static_cast<int>(selected.NetworkId());
+    for (const auto& enemy : GameObjects::EnemyHeroes()) {
+        if (!Engine::ValidEnemy(enemy)) continue;
+        if (enemy.HasBuff("LockeQMark") || enemy.HasBuff("LockeSoulNails")) {
+            QMarkTargetId = static_cast<int>(enemy.NetworkId());
             QMarkExpireTick = now + 3500;
         }
-        if (selected.HasBuff("LockeRMark") || selected.HasBuff("LockePurgatoryMark")) {
-            RMarkTargetId = static_cast<int>(selected.NetworkId());
+        if (enemy.HasBuff("LockeRMark") || enemy.HasBuff("LockePurgatoryMark")) {
+            RMarkTargetId = static_cast<int>(enemy.NetworkId());
             RMarkExpireTick = now + 5000;
         }
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     const int now = Now(); LastMode = mode;
-    ReconcileObservedState(selected);
-    if (now < ManualOwnershipUntil && mode != Mode::Automatic && mode != Mode::Flee) {
-        return false;
-    }
+    ReconcileObservedState();
     if (now > QMarkExpireTick) { QMarkTargetId = 0; QMarkStacks = 0; }
     if (now > RMarkExpireTick) RMarkTargetId = 0;
     if (WActive && now >= WExpireTick) WActive = false;
     if (mode == Mode::Flee) return TryFlee() || CastW(mode, true);
-    if (mode == Mode::Automatic) return TryAutomatic(selected);
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Harass ? 850.0f : kRRange);
+    if (mode == Mode::Automatic) return TryAutomatic();
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Harass ? 850.0f : kRRange);
     if (!Engine::ValidEnemy(target)) {
         if (mode == Mode::LaneClear) return TryFarm(false, false);
         if (mode == Mode::LastHit) return TryFarm(true, false);
@@ -252,9 +248,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const auto threat = ControllerHelpers::AnalyzeEnemyCast(args, 250.0f, 105.0f, 260, 250, 240, 1400, 380);
         if (threat.Valid && threat.Committed) { GapcloserTargetId = static_cast<int>(threat.Enemy.NetworkId()); GapcloserExpireTick = threat.CommitmentUntilTick; }
         return;
-    }
-    if (!(args.Slot >= 0 && args.Slot < 4 && Engine::WasControllerCast(args.Slot))) {
-        ManualOwnershipUntil = now + 560;
     }
     if (args.Slot == 0) { QMarkExpireTick = now + 3500; }
     else if (args.Slot == 1) { WCastTick = now; WActive = !WActive; WExpireTick = WActive ? now + 4000 : 0; }
@@ -304,14 +297,14 @@ inline void BuildMenu(Menu* root) {
     WMenu = TacticsMenu->AddSubMenu(new Menu("SoulIgnition", "W self-drain and recast"));
     WMenu->Add(new MenuSlider("MinimumHealth", "Minimum health (%)", 32, 10, 80)); WMenu->Add(new MenuSlider("EmergencyHealth", "Emergency W health (%)", 24, 8, 60)); WMenu->Add(new MenuSlider("MinimumMana", "Minimum mana (%)", 20, 0, 80));
     EMenu = TacticsMenu->AddSubMenu(new Menu("AshenPursuit", "Blink endpoint safety")); EMenu->Add(new MenuSlider("MaxEnemiesAtBlink", "Max enemies at blink", 2, 0, 5));
-    RMenu = TacticsMenu->AddSubMenu(new Menu("Purgatory", "Execute and seal policy")); RMenu->Add(new MenuSlider("MinimumTargets", "Minimum R targets", 1, 1, 5)); RMenu->Add(new MenuBool("ManualR", "Manual R assist", false));
+    RMenu = TacticsMenu->AddSubMenu(new Menu("Purgatory", "Execute and seal policy")); RMenu->Add(new MenuSlider("MinimumTargets", "Minimum R targets", 1, 1, 5));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("LockeFarm", "Lane, jungle, and last hit")); FarmMenu->Add(new MenuBool("UseQ", "Use Q to farm", true));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("LockeCoach", "Visual state coaching")); CoachMenu->Add(new MenuBool("DrawRanges", "Draw Q/E ranges", false)); CoachMenu->Add(new MenuBool("DrawState", "Draw state", false));
 }
 inline void OnLoad() {
     QMarkTargetId = QMarkStacks = QMarkExpireTick = WCastTick = WExpireTick = 0; WActive = false;
     ECastTick = ETargetId = RMarkTargetId = RMarkExpireTick = SealedChampions = RCastTick = 0;
-    LastAutoTargetId = LastAutoTick = GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     EAnchor = GapcloserEnd = {}; LastMode = Mode::None;
 }
 inline void OnUnload() { TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr; WActive = false; }
@@ -319,7 +312,7 @@ inline constexpr const char* Scenarios[] = {
     "Pin Locke to Riot 26.15 and CommunityDragon 16.15 champion id 805",
     "Use Q's 950 range and first-body collision before releasing Soul Nails",
     "Reconcile Q marks from cast events, buff events, and expiry polling",
-    "Never replace a selected target with an unreachable target during a nail sequence",
+    "Keep reachable targets stable while validating the nail sequence",
     "Preserve an AA windup unless a nearly expired Q mark has a legal follow-up",
     "Ignite W only with sufficient health and mana for its current-health drain",
     "Recast W early when health becomes unsafe or the nearby target leaves range",
@@ -331,7 +324,7 @@ inline constexpr const char* Scenarios[] = {
     "Track R marks and sealed-champion stacks through buff lifecycle callbacks",
     "Use gapcloser and interrupt callbacks for automatic defensive responses",
     "Support Combo, Harass, LaneClear, Jungle, LastHit, Flee, and Automatic modes",
-    "Reconcile manual casts without clearing controller-owned target intent",
+    "Reconcile local casts without clearing autonomous target state",
     "Never turret dive through an unverified lethal calculation",
     "Keep tooltip placeholder values conservative until numeric payloads are published",
 };

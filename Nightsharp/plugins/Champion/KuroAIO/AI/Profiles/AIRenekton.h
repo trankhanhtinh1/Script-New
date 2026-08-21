@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Renekton = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.TacticalSummary =
@@ -96,7 +95,7 @@ inline constexpr ChampionProfile Renekton = [] {
         "Dice disengage and defensive Dominus",
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 0, 700),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget, 70, 700),
-        Step(SDK::SpellSlot::R, StepRule::RequirePlayerLow | StepRule::ManualAssistOnly, 120, 700));
+        Step(SDK::SpellSlot::R, StepRule::RequirePlayerLow | StepRule::RequireSafePosition, 120, 700));
     return p;
 }();
 

@@ -129,7 +129,6 @@ struct BlinkSafetyContext {
     bool OriginTurret = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     int EnemiesAtEndpoint = 0;
     int MaximumEnemies = 2;
     int RiftwalkStacks = 0;
@@ -138,12 +137,12 @@ struct BlinkSafetyContext {
 inline bool SafeBlinkEndpoint(const BlinkSafetyContext& context) {
     if (!context.EndpointValid || context.EndpointWall) return false;
     if (context.EndpointTurret && !context.OriginTurret &&
-        !context.Lethal && !context.Defensive && !context.Manual) return false;
-    if (!context.Lethal && !context.Defensive && !context.Manual &&
+        !context.Lethal && !context.Defensive) return false;
+    if (!context.Lethal && !context.Defensive &&
         context.ReserveStacks > 0 &&
         context.RiftwalkStacks >= kRiftwalkMaxStacks - context.ReserveStacks + 1)
         return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    return context.Lethal || context.Defensive ||
         context.EnemiesAtEndpoint <= std::max(0, context.MaximumEnemies);
 }
 inline constexpr bool SafeRiftwalkResource(float currentMana, float maximumMana, int stacks,

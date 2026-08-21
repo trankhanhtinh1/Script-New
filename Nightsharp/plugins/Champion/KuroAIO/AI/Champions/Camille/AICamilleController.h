@@ -47,7 +47,7 @@ inline int ArenaTargetId = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline std::array<int, 4> CastTicks = {};
 inline bool PassiveReady = true;
 inline bool QFullyPrimed = false;
@@ -416,8 +416,7 @@ inline bool TryFlee(const AIHeroClient& threat) {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastKnownMode = mode;
-    ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
+    ReconcileState();
     AIHeroClient target = selected;
     if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(1550.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1100.0f);
@@ -453,8 +452,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     const int slot = args.Slot;
     if (slot < 0 || slot >= 4) return;
-    const bool owned = Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
+    const bool owned = Engine::WasControllerCast(slot);
     CastTicks[slot] = now;
     if (slot == 0) {
         const bool second = CurrentQStage == QStage::SecondWindow ||
@@ -514,7 +512,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     }
 }
 inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (args.Target.IsValid() && PlayerOverrideUntil > Now()) args.Process = true;
 }
 inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
     if (!CaptureAfterAttack(args, LastAutoTargetId, LastAutoTick)) return;
@@ -546,8 +543,7 @@ inline void OnDraw() {
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("CamilleOneTrick", "Camille precision diver"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("CamilleOneTrick", "Camille precision diver"));
     QMenu = TacticsMenu->AddSubMenu(new Menu("CamilleQ", "Precision Protocol resets"));
     QMenu->Add(new MenuBool("WaitEmpoweredQ2", "Wait for empowered second Q", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("CamilleW", "Tactical Sweep outer cone"));
@@ -570,7 +566,7 @@ inline void OnLoad() {
     LastKnownMode = Mode::None;
     PassiveReadyAtTick = PassiveShieldExpireTick = QPrimeTick = QRecastExpireTick = 0;
     WallHangExpireTick = ArenaExpireTick = ArenaTargetId = 0;
-    LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = 0;
     CastTicks.fill(0);
     PassiveReady = true;
     QFullyPrimed = WallAttached = ArenaActive = false;
@@ -611,7 +607,7 @@ inline constexpr const char* Scenarios[] = {
     "Cover Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Reconcile passive, Q, E and R state through buff polling and events",
     "Respect cooperative selected targeting before fallback selection",
-    "Preserve cooldown, mana reserve, prediction, collision and manual ownership",
+    "Preserve cooldown, mana reserve, prediction, collision and autonomous state",
     "Never automate summoners or item actives",
 };
 inline constexpr ChampionController Controller = [] {

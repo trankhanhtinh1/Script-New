@@ -34,7 +34,6 @@ inline Vector3 RamPosition{};
 inline Vector3 LastQAim{};
 inline Vector3 LastEAim{};
 inline int LastCastTick[4]{};
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -101,6 +100,12 @@ inline Vector3 AimFor(const AIHeroClient& target, float delay) {
     }
     return aim;
 }
+inline AIHeroClient AutonomousTarget(float range) {
+    const auto orbwalker = ControllerHelpers::OrbwalkerHeroTarget(range);
+    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
+    return Engine::SelectTarget(range);
+}
+
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(0, mode) || !Throttle(0) || Protected(target) ||
@@ -167,8 +172,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
     LastCastTick[2] = Now();
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(3, mode) || !Throttle(3, 120) ||
         PreserveAttack(reactive)) return false;
@@ -185,11 +189,11 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
             PredictPosition(enemy, 0.55f), kRWidth, enemy.BoundingRadius())) ++hitCount;
     }
     const UltimateContext context{true, Engine::ValidEnemy(target), true, false,
-        Orbwalker::IsWindingUp(), Lethal(target, RDamage(target)), reactive, manual,
+        Orbwalker::IsWindingUp(), Lethal(target, RDamage(target)), reactive,
         hitCount, Slider(RMenu, "MinimumTargets", 2)};
     if (RStage == UltimateStage::RecastReady) {
         if (!ShouldHeadbuttRam(context, true,
-            !SharedGeometry::Direction2D(player.Position(), Game::CursorPos()).IsZero())) return false;
+            !SharedGeometry::Direction2D(player.Position(), aim).IsZero())) return false;
         if (!Engine::ControllerCastPosition(3, aim)) return false;
         LastCastTick[3] = Now();
         RStage = UltimateStage::Idle;
@@ -240,11 +244,11 @@ inline void ReconcileState() {
         !player.HasBuff("OrnnRCharge") && !player.HasBuff("OrnnR2") &&
         now - LastCastTick[3] > 2500) RStage = UltimateStage::Idle;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = AutonomousTarget(
+        mode == Mode::Flee ? 1000.0f : kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastW(target, mode, true)) return true;
     if (TryKillSecure(target, mode)) return true;
@@ -261,7 +265,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::Automatic:
         if (AutomaticAllowed({IncomingThreatUntil > Now(),
             IncomingHardCCUntil > Now(), Engine::ValidEnemy(target) &&
-            Lethal(target, RDamage(target)), false, PlayerOverrideUntil > Now()}))
+            Lethal(target, RDamage(target)), false}))
             (void)CastR(target, mode, true);
         break;
     default: break;
@@ -274,8 +278,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 3) {
             if (RStage == UltimateStage::Calling) RStage = UltimateStage::RecastReady;
@@ -314,7 +316,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("OrnnOneTrick", "Ornn forge tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Rupture"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Brittle breath"));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 10, 90));
@@ -332,7 +333,7 @@ inline void OnLoad() {
     RStage = UltimateStage::Idle;
     RamPosition = LastQAim = LastEAim = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = BrittleTargetId = BrittleExpireTick = 0;
     LastMode = Mode::None;
 }
@@ -355,16 +356,16 @@ inline constexpr const char* Scenarios[] = {
     "Reserve nonlethal Ram for configured multi-target value",
     "Allow lethal, defensive and interrupt Ram casts",
     "Preserve AA windup unless brittle or reactive commitment justifies a cast",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous orbwalker and engine target policy",
     "Combo builds Q/Brittle before safe E impact and Ram follow-up",
     "Harass preserves mana and never starts an unsolicited ultimate engage",
     "LaneClear Jungle and LastHit delegate to shared farm policy",
-    "Flee uses W peel, safe E impact and manual-assist Ram",
+    "Flee uses W peel, safe E impact and Ram",
     "Automatic mode permits defense, interrupt or kill secure only",
-    "Yield after observed manual Q W E or R ownership",
+    "Reconcile observed Q W E or R events",
     "Reject protected, invulnerable and spell-shielded targets",
-    "Never automate items, summoner spells or movement ownership",
-    "Keep profile metadata separate from the owned decision loop",
+    "Never issue items, summoner spells or movement",
+    "Keep profile metadata separate from the decision loop",
     "Draw ranges and pillar state without changing gameplay decisions",
 };
 inline constexpr ChampionController Controller = [] {

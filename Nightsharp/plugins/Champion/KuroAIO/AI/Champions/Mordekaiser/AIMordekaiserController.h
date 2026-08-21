@@ -19,7 +19,6 @@ using ControllerHelpers::Lethal;
 using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::PreserveAttack;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::RuntimeNameContains;
@@ -49,7 +48,6 @@ inline int RTargetId = 0;
 inline int RCastTick = 0;
 inline int RExpireTick = 0;
 inline bool RActive = false;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 
@@ -195,7 +193,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return true;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !InRange(target, kRRange) ||
         !Ready(3, mode) || !Throttle(3, 120) || PlayerMobilityLocked() ||
@@ -205,7 +203,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false, 
     const bool lethal = Lethal(target, RealmThreat(target));
     const bool defensive = reactive || player.HealthPercent() <= Slider(RMenu, "DefensiveHP", 34);
     RealmCommitContext context{true, true, false, false,
-        Engine::UnderEnemyTurret(player.Position()), lethal, defensive, manual, low, false,
+        Engine::UnderEnemyTurret(player.Position()), lethal, defensive, low, false,
         Engine::CountEnemiesAt(player.Position(), 650.0f), Slider(RMenu, "MaxCommitEnemies", 2)};
     if (!SafeRealmCommit(context)) return false;
     if (PreserveWindup(reactive, lethal)) return false;
@@ -257,10 +255,9 @@ inline void ReconcileState() {
     if (PassiveActive && PassivePulseTick <= now) PassivePulseTick = now + static_cast<int>(kPassivePulseSeconds * 1000.0f);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const auto target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange + 60.0f);
-    if (ManualOwnershipUntil > Now()) return true;
+    const auto target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kRRange + 60.0f);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastW(target, mode, true)) return true;
         if (CastE(target, mode, true)) return true;
@@ -294,7 +291,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[slot] = now;
             if (slot == 0 || slot == 2) PassiveStacks = std::min(3, PassiveStacks + 1);
             if (slot == 1 && IsWRecast()) { WShieldActive = false; WShield = 0.0f; WStored = 0.0f; }
@@ -364,7 +360,6 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("MordekaiserTactics", "Mordekaiser darkness tactics"));
     TacticsMenu->Add(new MenuBool("PreserveAA", "Preserve attack windup", true));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 200, 1400));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Obliterate"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Indestructible"));
     WMenu->Add(new MenuSlider("MinimumStored", "Minimum stored damage", 40, 0, 300));
@@ -386,7 +381,7 @@ inline void OnLoad() {
     LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = 0; PassiveStacks = 0;
     PassiveActive = false; PassiveExpireTick = PassivePulseTick = 0; WStored = WShield = 0.0f;
     WShieldActive = false; WCastTick = 0; RTargetId = RCastTick = RExpireTick = 0; RActive = false;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
 }
 inline void OnUnload() { TacticsMenu = QMenu = WMenu = EMenu = RMenu = FarmMenu = CoachMenu = nullptr; OnLoad(); }
 
@@ -399,8 +394,8 @@ inline constexpr const char* Scenarios[] = {
     "Use W recast only with a real shield or emergency health gate and clear stale shield state from events and polling",
     "Aim Death's Grasp through the live cone, 700 reach, projectile travel and wall test before recording a pull commitment",
     "Reject E while mobility-locked, under unsafe turret pressure, or over the configured nearby-enemy limit",
-    "Prefer the selected enemy, then orbwalker target, then the controller selector fallback",
-    "Commit Realm of Death only for a low-health, lethal, defensive or explicitly manual target with range and protection gates",
+    "Use autonomous Engine target selection for combat decisions",
+    "Commit Realm of Death only for a low-health, lethal, defensive or low-health target with range and protection gates",
     "Track Realm of Death target id and seven-second duration from cast, buff add/remove and polling reconciliation",
     "Never recast Realm of Death onto an already tracked target or while the player is mobility-locked",
     "React to incoming hard crowd control with Indestructible and Death's Grasp before ordinary combo work",

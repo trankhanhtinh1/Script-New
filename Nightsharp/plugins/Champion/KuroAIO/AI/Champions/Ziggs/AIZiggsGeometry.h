@@ -136,15 +136,14 @@ struct UltimateContext {
     bool ProjectileBlocked = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     bool AttackWindingUp = false;
     int PredictedTargets = 0;
     int MinimumTargets = 2;
 };
 inline bool ShouldCastMega(const UltimateContext& c) {
     if (!c.Ready || !c.TargetValid || !c.PredictionHits || c.ProjectileBlocked) return false;
-    if (c.AttackWindingUp && !c.Lethal && !c.Defensive && !c.Manual) return false;
-    return c.Lethal || c.Defensive || c.Manual ||
+    if (c.AttackWindingUp && !c.Lethal && !c.Defensive) return false;
+    return c.Lethal || c.Defensive ||
            c.PredictedTargets >= std::max(1, c.MinimumTargets);
 }
 inline bool RCenterHit(const Vec3& center, const Vec3& target, float radius = 0.0f) {
@@ -158,10 +157,9 @@ struct AutomaticContext {
     bool Defensive = false;
     bool Interrupt = false;
     bool KillSecure = false;
-    bool ManualOwnership = false;
 };
 inline bool AutomaticAllowed(const AutomaticContext& c) {
-    return !c.ManualOwnership && (c.Defensive || c.Interrupt || c.KillSecure);
+    return c.Defensive || c.Interrupt || c.KillSecure;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Ziggs::Geometry

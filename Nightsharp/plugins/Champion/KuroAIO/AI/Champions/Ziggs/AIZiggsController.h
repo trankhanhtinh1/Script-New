@@ -34,7 +34,6 @@ inline Vector3 LastRAim{};
 inline int LastCastTick[4]{};
 inline int EExpireTick = 0;
 inline int WExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -133,7 +132,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false,
 }
 
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false, bool defensive = false) {
+                  bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || !Ready(3, mode) ||
         !Throttle(3, reactive ? 50 : 140) || PreserveAttack(reactive)) return false;
@@ -149,7 +148,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const UltimateContext context{
         true, true, true,
         ControllerHelpers::ProjectileWallBlocksFromPlayer(aim, 0.0f),
-        lethal, defensive, manual, Orbwalker::IsWindingUp(), predictedTargets,
+        lethal, defensive, Orbwalker::IsWindingUp(), predictedTargets,
         Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldCastMega(context) || !Engine::ControllerCastPosition(3, aim)) return false;
     LastRAim = aim;
@@ -188,17 +187,16 @@ inline void ReconcileState() {
     const auto player = GameObjects::Player();
     if (player.IsValid() && player.HasBuff("ZiggsW")) WExpireTick = std::max(WExpireTick, now + 400);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kRRange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) &&
         CastW(target, mode, true, true, false)) return true;
     if (TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1100.0f)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, 1100.0f)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -207,9 +205,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         break;
     case Mode::Automatic:
         if (AutomaticAllowed({IncomingThreatUntil > Now(), IncomingHardCCUntil > Now(),
-            Engine::ValidEnemy(target) && Lethal(target, RRawDamage(SpellRank(3), AP())),
-            PlayerOverrideUntil > Now()}))
-            (void)CastR(target, mode, true, false, IncomingThreatUntil > Now());
+            Engine::ValidEnemy(target) && Lethal(target, RRawDamage(SpellRank(3), AP()))}))
+            (void)CastR(target, mode, true, IncomingThreatUntil > Now());
         break;
     default: break;
     }
@@ -221,8 +218,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot))
-            PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         return;
     }
@@ -263,7 +258,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ZiggsTactics", "Ziggs artillery tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Bouncing Bomb"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Satchel Charge"));
     WMenu->Add(new MenuSlider("MaxEndpointEnemies", "Maximum endpoint enemies", 1, 0, 4));
@@ -280,7 +274,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     LastQAim = LastWAim = LastEAim = LastRAim = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    EExpireTick = WExpireTick = PlayerOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    EExpireTick = WExpireTick = IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = 0;
 }
 inline void OnUnload() {
@@ -292,23 +286,23 @@ inline constexpr const char* Scenarios[] = {
     "Use Q prediction, initial range, bounce explosion radius and projectile wall checks",
     "Reject Q casts when collision or low-confidence prediction makes contact uncertain",
     "Use W Satchel only at a valid, non-wall endpoint with bounded enemy exposure",
-    "Allow defensive Satchel displacement while preserving cursor and movement ownership",
+    "Allow defensive Satchel displacement while preserving cursor-guided flee movement",
     "Reject Satchel endpoint turrets unless defensive or lethal policy allows it",
     "Use E Minefield to layer slow zones, deny routes and control objective approaches",
     "Reject E through walls and require predicted target count outside turret danger",
     "Use R center and outer radius with prediction, collision and wall safety checks",
     "Reserve nonlethal R for configured multi-target value; permit lethal execute",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use the engine-selected target for autonomous combat",
     "Preserve AA windup unless casts are reactive or lethal",
     "Reconcile Satchel and Minefield state from spell, buff and polling observations",
-    "Yield after observed manual Q W E or R ownership",
+    "Reconcile player Q W E and R events with live state",
     "Combo layers E then Q, uses safe W displacement and reserves R for value",
     "Harass uses Q and E with a mana reserve and no unsolicited artillery engage",
     "LaneClear, Jungle and LastHit use shared farm policy with Ziggs waveclear intents",
     "Jungle mode may use E and R only through observed objective-safe target policy",
     "Flee uses defensive Satchel first, Minefield peel and Q only as a safe follow-up",
     "Automatic mode permits defense, interrupt or kill secure only",
-    "Never automate items, summoner spells or movement ownership",
+    "Never automate items or summoner spells",
     "Draw artillery ranges and active minefield state without changing decisions",
 };
 inline constexpr ChampionController Controller = [] {
@@ -318,7 +312,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIZiggs.md";
     controller.ImplementationSummary =
-        "Prediction- and zone-aware artillery loop with safe Satchel displacement, Minefield route denial, execute-gated Mega Inferno Bomb and reconciled manual ownership.";
+        "Prediction- and zone-aware artillery loop with safe Satchel displacement, Minefield route denial and execute-gated Mega Inferno Bomb.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

@@ -85,7 +85,6 @@ inline bool ShouldEmpowerQ(bool wReady,
 }
 
 struct ChainContext {
-    bool Manual = false;
     bool PredictionVeryHigh = false;
     bool InRange = false;
     bool ProjectileWall = false;
@@ -98,7 +97,7 @@ struct ChainContext {
 inline bool ShouldCastChain(const ChainContext& context) {
     return context.InRange && context.PredictionVeryHigh &&
            !context.ProjectileWall &&
-           (context.Manual || context.Interrupt || context.SelfPeel ||
+           (context.Interrupt || context.SelfPeel ||
             (context.AlliedFollowup && context.TargetLethal));
 }
 

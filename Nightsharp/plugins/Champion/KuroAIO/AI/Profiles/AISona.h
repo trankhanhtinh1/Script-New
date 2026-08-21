@@ -77,7 +77,6 @@ inline constexpr ChampionProfile Sona = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 44;
-    p.PreferSelectedTarget = true;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "SonaPassive";
     p.MarkBuff = "SonaPassiveAccelerandoCount";

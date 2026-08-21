@@ -20,7 +20,6 @@ inline constexpr ChampionProfile Jax = [] {
     p.UltimateTargetHealthPercent = 70.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 52;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "JaxPassiveHaste";

@@ -254,7 +254,6 @@ inline int LastWCastTick = 0;
 inline int LastECastTick = 0;
 inline int LastRCastTick = 0;
 inline int EDashUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int PendingAnchorId = 0;
 inline int PendingAnchorUntil = 0;
 inline Vector3 PendingWPosition = {};
@@ -1513,21 +1512,6 @@ inline bool TryAdvanceSequence(Mode mode) {
     return false;
 }
 
-inline AIHeroClient CursorEnemy(float range = 1550.0f) {
-    const auto player = GameObjects::Player();
-    if (!player.IsValid()) return {};
-    AIHeroClient best{};
-    float bestCursorDistance = FLT_MAX;
-    for (const auto& enemy : GameObjects::EnemyHeroes()) {
-        if (!Engine::ValidEnemy(enemy, range)) continue;
-        const float distance = enemy.Position().Distance2D(Game::CursorPos());
-        if (distance < bestCursorDistance) {
-            bestCursorDistance = distance;
-            best = enemy;
-        }
-    }
-    return bestCursorDistance <= 650.0f ? best : AIHeroClient{};
-}
 
 inline bool TryStartShuffle(const AIHeroClient& target,
                             bool revenant,
@@ -1602,14 +1586,6 @@ inline bool TryStartShuffle(const AIHeroClient& target,
     return true;
 }
 
-inline bool TryManualShuffle() {
-    const bool normal = Key(RMenu, "ManualShuffle", false);
-    const bool revenant = Key(RMenu, "ManualRevenant", false);
-    if (!normal && !revenant) return false;
-    const AIHeroClient target = CursorEnemy();
-    return Engine::ValidEnemy(target) &&
-        TryStartShuffle(target, revenant, true);
-}
 
 inline bool TryAutomaticShuffle(const AIHeroClient& target) {
     if (!Bool(RMenu, "AutomaticShuffle", false) ||
@@ -2000,20 +1976,16 @@ inline void RefreshRuntimeState() {
     if (player.IsValid()) LastKnownPlayerPosition = player.Position();
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     LastKnownMode = mode;
     RefreshRuntimeState();
-    AIHeroClient target = Engine::ValidEnemy(selected)
-        ? selected : Engine::SelectTarget(1250.0f);
+    AIHeroClient target = Engine::SelectTarget(1250.0f);
     if (!Engine::ValidEnemy(target)) {
         target = NearestEnemyToPlayer({}, 1550.0f);
     }
     CurrentPosture = DeterminePosture(mode, target);
 
-    if (TryManualShuffle()) return true;
-    // A manual spell means the player owns the immediate continuation. Do
-    // not auto-complete their E-Q or E-Q-R input behind their back.
-    if (PlayerOverrideUntil >= Now()) return false;
     if (TryReactiveDefense(mode)) return true;
     if (ActiveSequence.Kind != Sequence::None) {
         (void)TryAdvanceSequence(mode);
@@ -2077,12 +2049,10 @@ inline void ObserveLocalSpell(
 
     if (!controllerOwned) {
         ClearSequence();
-        PlayerOverrideUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 520);
         StartSequence(Sequence::PlayerLed,
                       SequencePhase::RecoverDps,
                       static_cast<int>(args.TargetNetworkId), 0,
-                      std::max(560, PlayerOverrideUntil - now + 80), false);
+                      640, false);
     }
 }
 
@@ -2333,7 +2303,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), kWSpawnRange,
                             0x3374D9FFu, 1.0f, 72);
         Drawing::DrawCircle(player.Position(),
@@ -2342,7 +2312,7 @@ inline void OnDraw() {
         Drawing::DrawCircle(player.Position(), kQCastRange,
                             0x335E8BFFu, 1.0f, 72);
     }
-    if (Bool(CoachMenu, "DrawSoldiers", true)) {
+    if (Bool(CoachMenu, "DrawSoldiers", false)) {
         for (const auto& soldier : BuildSoldiers(false)) {
             const bool commandable = Commandable(
                 player.Position(), soldier);
@@ -2356,7 +2326,7 @@ inline void OnDraw() {
                 commandable ? 0x8877E2C4u : 0x55777777u, 1.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawQFormation", true) && LastQPlan.Valid) {
+    if (Bool(CoachMenu, "DrawQFormation", false) && LastQPlan.Valid) {
         for (const auto& endpoint : LastQPlan.Evaluation.Endpoints) {
             Drawing::DrawLine(player.Position(), endpoint,
                               0xCC65A9FFu, 1.7f);
@@ -2364,7 +2334,7 @@ inline void OnDraw() {
                                 0xAA65A9FFu, 1.3f, 28);
         }
     }
-    if (Bool(CoachMenu, "DrawDrift", true) && LastEPlan.Valid) {
+    if (Bool(CoachMenu, "DrawDrift", false) && LastEPlan.Valid) {
         Drawing::DrawLine(player.Position(), LastEPlan.AnchorPosition,
                           0xCCE8C44Fu, 2.0f);
         if (LastEPlan.NeedsQ) {
@@ -2375,7 +2345,7 @@ inline void OnDraw() {
                                 0xAAFF9E62u, 1.5f, 32);
         }
     }
-    if (Bool(CoachMenu, "DrawR", true) && LastRPlan.Valid) {
+    if (Bool(CoachMenu, "DrawR", false) && LastRPlan.Valid) {
         const auto& evaluation = LastRPlan.Evaluation;
         Drawing::DrawLine(player.Position(), evaluation.PrimaryLanding,
                           LastRPlan.Defensive
@@ -2393,7 +2363,7 @@ inline void OnDraw() {
         }
     }
     Vector3 disc{};
-    if (Bool(PassiveMenu, "SuggestSunDisc", true) &&
+    if (Bool(PassiveMenu, "SuggestSunDisc", false) &&
         SunDiscSuggestion(disc)) {
         Drawing::DrawCircle(disc, 125.0f,
                             0xDDE6C65Au, 2.2f, 48);
@@ -2405,7 +2375,7 @@ inline void OnDraw() {
                               "Sun Disc window (player click)");
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char text[620]{};
@@ -2418,7 +2388,7 @@ inline void OnDraw() {
                 ActiveSequence.TargetId != 0
                     ? CurrentSoldierAttackers(
                         HeroByNetworkId(ActiveSequence.TargetId)) : 0,
-                PlayerOverrideUntil >= Now() ? "player" : "controller");
+                "controller");
             Drawing::DrawText(screen.x - 300.0f, screen.y - 116.0f,
                               0xFFE6C65Au, text);
         }
@@ -2433,15 +2403,9 @@ inline void BuildMenu(Menu* root) {
         "KillSecure", "Exact Q/E/R kills", true));
     TacticsMenu->Add(new MenuSlider(
         "DefensiveHealth", "Peel R health threshold (%)", 42, 10, 90));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield after player spell (ms)",
-        520, 180, 1100));
-    TacticsMenu->Add(new MenuSeparator(
-        "Ownership",
-        "Movement, attack commands,"));
 
     SoldierMenu = TacticsMenu->AddSubMenu(new Menu(
-        "SandSoldiers", "Sand Soldier command and reserve policy"));
+        "SandSoldiers", "Soldier reserve policy"));
     SoldierMenu->Add(new MenuBool(
         "ReserveForE", "Keep W charge for E", true));
     SoldierMenu->Add(new MenuBool(
@@ -2451,7 +2415,7 @@ inline void BuildMenu(Menu* root) {
         "OrbwalkerKuro now attacks,"));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
-        "ConqueringSands", "Late Q, formation and retreat tracking"));
+        "ConqueringSands", "Late Q and retreat tracking"));
     QMenu->Add(new MenuSlider(
         "HarassMana", "Minimum mana for W-AA-Q-AA (%)", 52, 0, 100));
     QMenu->Add(new MenuSeparator(
@@ -2480,7 +2444,7 @@ inline void BuildMenu(Menu* root) {
         "E is rejected across live"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
-        "EmperorsDivide", "Peel-first R and gated shuffle policy"));
+        "EmperorsDivide", "Peel R and gated shuffle"));
     RMenu->Add(new MenuBool(
         "ReactivePeel", "R committed divers and", true));
     RMenu->Add(new MenuBool(
@@ -2498,12 +2462,6 @@ inline void BuildMenu(Menu* root) {
     RMenu->Add(new MenuSlider(
         "ShuffleMinimumEnemies", "Min enemies for shuffle",
         3, 2, 5));
-    RMenu->Add(new MenuKeyBind(
-        "ManualShuffle", "Manual Shurima shuffle toward cursor [T]",
-        SDK::Keys::T, KeyBindType::Press));
-    RMenu->Add(new MenuKeyBind(
-        "ManualRevenant", "Manual revenant shuffle toward cursor [G]",
-        SDK::Keys::G, KeyBindType::Press));
     RMenu->Add(new MenuSeparator(
         "NoFlash",
         "Flash extensions are coached"));
@@ -2511,13 +2469,13 @@ inline void BuildMenu(Menu* root) {
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
         "ShurimasLegacy", "Sun Disc macro advisory"));
     PassiveMenu->Add(new MenuBool(
-        "SuggestSunDisc", "Draw a safe", true));
+        "SuggestSunDisc", "Draw a safe", false));
     PassiveMenu->Add(new MenuSeparator(
         "AdvisoryOnly",
         "The passive requires a"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Soldier formation without wasting mobility"));
+        "Farm", "Soldier formation farming"));
     FarmMenu->Add(new MenuBool(
         "HoldForChampion", "Hold spells vs contest", true));
     FarmMenu->Add(new MenuSlider(
@@ -2543,7 +2501,7 @@ inline void BuildMenu(Menu* root) {
         "Last-hit is delegated to"));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "One-trick state and geometry visualization"));
+        "Coach", "State and geometry overlay"));
     CoachMenu->Add(new MenuBool(
         "DrawRanges", "Draw W/soldier/Q ranges", false));
     CoachMenu->Add(new MenuBool(
@@ -2578,7 +2536,6 @@ inline void OnLoad() {
     LastSoldierAttackTargetId = LastSoldierAttackTick = 0;
     LastLocalSpellTick = LastQCastTick = LastWCastTick = 0;
     LastECastTick = LastRCastTick = EDashUntil = 0;
-    PlayerOverrideUntil = 0;
     PendingAnchorId = PendingAnchorUntil = 0;
     PendingWPosition = PendingQPosition = SequenceOrigin = {};
     SequenceManualIntent = false;

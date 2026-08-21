@@ -2,6 +2,7 @@
 
 #include "AzirSoldierSupport.h"
 #include "OrbwalkerContext.h"
+#include "OrbwalkerTiming.h"
 #include "OrbwalkerEventBus.h"
 #include "OrbwalkerMenu.h"
 #include "../../../Core/KuroCombatCoordinator.h"
@@ -165,6 +166,9 @@ private:
         std::uint32_t senderNetworkId = 0,
         std::uint32_t sourceNetworkId = 0);
     void ExpirePendingAttack();
+    void SetAttackReleaseSafeTick(int releaseTick);
+    void ObserveSettAttack(const char* eventName, int now);
+    void ExpireSettPunchState(int now);
     void CheckAttackCastedBefore();
     int PendingAttackTimeoutMs();
     int DoCastMoveGateTimeoutMs();

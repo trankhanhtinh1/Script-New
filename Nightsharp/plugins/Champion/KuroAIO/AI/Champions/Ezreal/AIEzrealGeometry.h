@@ -63,7 +63,6 @@ inline bool ShouldBlink(const BlinkContext& context) {
 }
 
 struct BarrageContext {
-    bool Manual = false;
     bool Lethal = false;
     bool PredictionVeryHigh = false;
     bool ProjectileWall = false;
@@ -77,7 +76,6 @@ inline bool ShouldCastBarrage(const BarrageContext& context) {
         context.BetterLocalAction) {
         return false;
     }
-    if (context.Manual) return true;
     return context.Lethal && !context.LocalEnemyNearby &&
            context.Distance >= 850.0f;
 }

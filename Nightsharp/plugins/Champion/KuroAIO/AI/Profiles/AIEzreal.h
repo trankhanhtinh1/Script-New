@@ -13,7 +13,7 @@ inline constexpr ChampionProfile Ezreal = [] {
     p.Resource = ResourceModel::Mana;
     p.Mechanics = Mechanic::Mark | Mechanic::Blink |
                   Mechanic::AutoWeave | Mechanic::Global;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::Execute;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Mystic Shot", CastKind::Line,
@@ -84,7 +84,6 @@ inline constexpr ChampionProfile Ezreal = [] {
     p.UltimateTargetHealthPercent = 18.0f;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 20;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "ezrealwattach";
@@ -94,7 +93,7 @@ inline constexpr ChampionProfile Ezreal = [] {
     p.TacticalSummary =
         "Continuously reselect a target with an unblocked Q/W line; preserve "
         "autos, chain W only into a real detonation, blink defensively or for a "
-        "single confirmed execute, and reserve R for manual or isolated lethal shots.";
+        "single confirmed execute, and reserve R for isolated lethal shots.";
     p.ResearchSummary =
         "Ported from TestOrbwalker AllChampions/Ezreal.cs: dual prediction/collision "
         "Q spam, W-Q/AA detonation, AA-windup preservation, farm last-hit checks, "

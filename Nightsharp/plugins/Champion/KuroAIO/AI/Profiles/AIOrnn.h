@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Ornn = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.TrackedObjectToken = "OrnnQSpawn";
@@ -79,7 +78,7 @@ inline constexpr ChampionProfile Ornn = [] {
     p.Flee = Plan("Brittle peel",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 700),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 80, 700),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly, 150, 2500));
+        Step(SDK::SpellSlot::R, StepRule::RequireMultiTarget | StepRule::RequireSafePosition, 150, 2500));
     return p;
 }();
 

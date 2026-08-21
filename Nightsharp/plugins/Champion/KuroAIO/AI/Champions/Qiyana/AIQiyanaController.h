@@ -50,15 +50,10 @@ inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline Vector3 LastQDirection = {};
 inline Vector3 LastWEndpoint = {};
 inline Vector3 LastEEndpoint = {};
 inline Vector3 LastREndpoint = {};
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 
 // Terrain queries are backed by the shared NavGrid and are comparatively
 // expensive. Qiyana's decision loop can ask the same segment/terrain set
@@ -98,7 +93,6 @@ inline std::vector<TerrainCandidate> TerrainCandidates(
     const AIHeroClient& target, bool fleeing);
 
 inline constexpr int kElementDurationMs = 5000;
-inline constexpr int kManualOwnershipMs = 520;
 inline constexpr int kQPostCastMs = 48;
 inline constexpr int kWPostCastMs = 70;
 inline constexpr int kEPostCastMs = 80;
@@ -156,7 +150,7 @@ inline const std::vector<TerrainCandidate>& CachedTerrainCandidates(
     const AIHeroClient& target, bool fleeing) {
     const auto player = GameObjects::Player();
     const Vector3 playerPosition = player.IsValid() ? player.Position() : Vector3{};
-    const Vector3 cursorPosition = Game::CursorPos();
+    const Vector3 cursorPosition = fleeing ? Game::CursorPos() : Vector3{};
     const int targetId = target.IsValid() ? static_cast<int>(target.NetworkId()) : 0;
     const int now = Now();
     const bool reusable = WTerrainCache.Tick > 0 && now >= WTerrainCache.Tick &&
@@ -279,12 +273,6 @@ inline float RawR(const AIHeroClient& target) {
 
 using ControllerHelpers::Lethal;
 
-inline bool CursorAgrees(const Vector3& endpoint, const Vector3& origin) {
-    const Vec3 cursorDirection = Direction2D(origin, Game::CursorPos());
-    const Vec3 castDirection = Direction2D(origin, endpoint);
-    return cursorDirection.IsZero() || castDirection.IsZero() ||
-           cursorDirection.Dot(castDirection) >= 0.05f;
-}
 
 inline std::vector<TerrainCandidate> TerrainCandidates(const AIHeroClient& target,
                                                        bool fleeing) {
@@ -293,12 +281,16 @@ inline std::vector<TerrainCandidate> TerrainCandidates(const AIHeroClient& targe
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return result;
     const Vector3 playerPosition = player.Position();
-    const Vector3 cursorPosition = Game::CursorPos();
+    const Vector3 cursorPosition = fleeing ? Game::CursorPos() : Vector3{};
     const Vector3 targetPosition = target.Position();
     std::array<Vec3, 12> directions{};
     std::size_t count = 0;
+    if (fleeing) {
+        const Vec3 cursorDirection = Direction2D(playerPosition, cursorPosition);
+        if (!cursorDirection.IsZero() && count < directions.size())
+            directions[count++] = cursorDirection;
+    }
     for (const Vec3 direction : {
-        Direction2D(playerPosition, cursorPosition),
         Direction2D(playerPosition, targetPosition),
         Vec3{ 1.0f, 0.0f, 0.0f }, Vec3{ -1.0f, 0.0f, 0.0f },
         Vec3{ 0.0f, 0.0f, 1.0f }, Vec3{ 0.0f, 0.0f, -1.0f },
@@ -363,14 +355,13 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool defensive = false)
                           Orbwalker::IsWindingUp(), lethal, player.IsDashing(),
                           HasGrassStealth() && !lethal, defensive };
     if (!MayCastQ(context)) return false;
-    const Vector3 direction = Direction2D(player.Position(), predicted);
-    if (direction.IsZero() || !CursorAgrees(predicted, player.Position())) return false;
+    const Vec3 direction = Direction2D(player.Position(), predicted);
+    if (direction.IsZero()) return false;
     const Vector3 endpoint = player.Position() + direction * reach;
     if (!Engine::ControllerCastPosition(0, endpoint)) return false;
     QTargetId = static_cast<int>(target.NetworkId());
     QCastTick = Now();
     LastQDirection = direction;
-    QWasManual = false;
     return true;
 }
 
@@ -382,15 +373,14 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool defensive, bool ne
     const float hp = Engine::ValidEnemy(target) ? target.HealthPercent() : 100.0f;
     const Element desired = DesiredElement(hp, defensive, needsCatch,
                                            PassiveState.Confirmed, CurrentElement);
+    const bool fleeing = mode == Mode::Flee;
     const TerrainCandidate chosen = SelectTerrainCandidate(
-        CachedTerrainCandidates(target, defensive), desired, defensive);
-    if (chosen.Position.IsZero() || chosen.Kind == Element::None ||
-        !CursorAgrees(chosen.Position, player.Position())) return false;
+        CachedTerrainCandidates(target, fleeing), desired, fleeing);
+    if (chosen.Position.IsZero() || chosen.Kind == Element::None) return false;
     if (!Engine::ControllerCastPosition(1, chosen.Position)) return false;
     SetElement(chosen.Kind);
     LastWEndpoint = chosen.Position;
     WCastTick = Now();
-    WWasManual = false;
     return true;
 }
 
@@ -412,7 +402,6 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     if (!Engine::ControllerCastUnit(2, target)) return false;
     ECastTick = Now();
     LastEEndpoint = endpoint;
-    EWasManual = false;
     return true;
 }
 
@@ -462,7 +451,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive) {
     if (!player.IsValid()) return false;
     const Vector3 predicted = PredictPosition(target, 0.10f);
     const Vec3 direction = Direction2D(player.Position(), predicted);
-    if (direction.IsZero() || !CursorAgrees(predicted, player.Position())) return false;
+    if (direction.IsZero()) return false;
     const Vector3 endpoint = player.Position() + direction * kRRange;
     const Body body{ predicted, target.BoundingRadius(), static_cast<int>(target.NetworkId()), true, true };
     const REvaluation evaluation = EvaluateRPath(player.Position(), endpoint, body,
@@ -478,7 +467,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive) {
     if (!Engine::ControllerCastPosition(3, endpoint)) return false;
     RCastTick = Now();
     LastREndpoint = endpoint;
-    RWasManual = false;
     return true;
 }
 
@@ -534,11 +522,9 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return Engine::ValidEnemy(threat) && CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    AIHeroClient target = selected;
-    if (!Engine::ValidEnemy(target)) target = Engine::SelectTarget(kQMissileRange + 80.0f);
+    const AIHeroClient target = Engine::SelectTarget(kQMissileRange + 80.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1200.0f);
     if (mode == Mode::Flee) {
         (void)TryFlee(threat);
@@ -579,16 +565,12 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool controllerOwned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!controllerOwned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
     if (slot == 0) {
         QCastTick = now;
-        QWasManual = !controllerOwned;
         const auto target = Engine::SelectTarget(kQMissileRange + 30.0f);
         if (Engine::ValidEnemy(target)) QTargetId = static_cast<int>(target.NetworkId());
     } else if (slot == 1) {
         WCastTick = now;
-        WWasManual = !controllerOwned;
         const Element fromName = ElementFromRuntimeName(args.SpellName);
         if (fromName != Element::None) SetElement(fromName);
         const Element fromPosition = ElementFromRuntimeName(
@@ -598,10 +580,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         if (fromPosition != Element::None) SetElement(fromPosition);
     } else if (slot == 2) {
         ECastTick = now;
-        EWasManual = !controllerOwned;
     } else if (slot == 3) {
         RCastTick = now;
-        RWasManual = !controllerOwned;
     }
 }
 
@@ -683,8 +663,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("QiyanaOneTrick", "Qiyana one-trick mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
-    ElementMenu = TacticsMenu->AddSubMenu(new Menu("Elements", "Grass safety, Ice catch and Rock execute"));
+    ElementMenu = TacticsMenu->AddSubMenu(new Menu("Elements", "Element safety and executes"));
     ElementMenu->Add(new MenuBool("PreserveGrass", "Preserve valuable Grass stealth", true));
     ElementMenu->Add(new MenuBool("UseRockExecute", "Use Rock below half health", true));
     MobilityMenu = TacticsMenu->AddSubMenu(new Menu("Mobility", "Safe W/E endpoint policy"));
@@ -706,9 +685,8 @@ inline void OnLoad() {
     ElementExpireTick = GrassStealthUntil = 0;
     QTargetId = QCastTick = WCastTick = ECastTick = RCastTick = 0;
     LastAutoTargetId = LastAutoTick = 0;
-    IncomingThreatUntil = IncomingHardCCUntil = PlayerOverrideUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastQDirection = LastWEndpoint = LastEEndpoint = LastREndpoint = {};
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     ProjectileWallCache = {};
     WTerrainCache = {};
     RZoneCache = {};
@@ -759,8 +737,8 @@ inline constexpr const char* Scenarios[] = {
     "Use R missing-health damage and monster cap from game-bin values",
     "Use R for multi-target objective fights or verified defensive peel",
     "Reject ordinary nonlethal single-target R without terrain outcome",
-    "Preserve selected target while it remains reachable",
-    "Fall back to orbwalker target and then policy-scored target",
+    "Use the autonomous engine-selected enemy while preserving reachability",
+    "Keep target-driven Q/E/R combat routes independent of cursor position",
     "Harass with safe Q and preserve health and mana",
     "LaneClear and LastHit delegate ordinary farm only through the shared engine",
     "Jungle mode preserves attacks and uses Q/W only when mana allows",
@@ -768,8 +746,7 @@ inline constexpr const char* Scenarios[] = {
     "Flee E requires a safe real enemy bridge and valid endpoint",
     "Automatic mode never starts an unsolicited engage",
     "Automatic mode may react to hard CC, kill-secure or defensive pressure",
-    "Yield after a player-owned Q/W/E/R cast through shared engine ownership",
-    "Re-plan after a manual cast without clearing observed element state",
+    "Re-plan after observed Q/W/E/R casts without clearing element state",
     "Track Qiyana grass objects and reconcile stale stealth events",
     "Track enemy cast lines and hard crowd-control threat windows",
     "Never automate Flash, Ignite, Smite or item actives",
@@ -784,8 +761,8 @@ inline constexpr ChampionController Controller = [] {
     controller.ResearchArtifact = "AI/Research/AIQiyana.md";
     controller.ImplementationSummary =
         "Terrain-classified W element selection, collision-aware Q, safe E "
-        "endpoint checks, wall/river/brush R detonation planning, passive and "
-        "manual ownership reconciliation across every orbwalker mode.";
+        "endpoint checks, wall/river/brush R detonation planning, passive "
+        "state reconciliation across every orbwalker mode.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

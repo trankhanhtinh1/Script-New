@@ -225,7 +225,6 @@ struct UltimateContext {
     bool AreaValid = false;
     bool Lethal = false;
     bool Defensive = false;
-    bool Manual = false;
     bool AttackWindingUp = false;
     bool UnderEnemyTurret = false;
     int NearbyEnemies = 0;
@@ -234,15 +233,15 @@ struct UltimateContext {
 
 inline constexpr bool ShouldCastDemon(const UltimateContext& context) {
     if (!context.Ready || context.Active || context.UnderEnemyTurret || !context.AreaValid) return false;
-    if (context.AttackWindingUp && !context.Lethal && !context.Defensive && !context.Manual) return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    if (context.AttackWindingUp && !context.Lethal && !context.Defensive) return false;
+    return context.Lethal || context.Defensive ||
         context.NearbyEnemies >= std::max(1, context.MinimumEnemies);
 }
 
 inline constexpr bool ShouldDemonflare(const UltimateContext& context) {
     if (!context.Active || !context.RecastReady || !context.AreaValid) return false;
     if (context.UnderEnemyTurret) return false;
-    return context.Lethal || context.Defensive || context.Manual ||
+    return context.Lethal || context.Defensive ||
         context.NearbyEnemies >= std::max(1, context.MinimumEnemies);
 }
 

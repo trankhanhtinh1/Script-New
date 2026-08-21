@@ -16,7 +16,6 @@ using namespace Geometry;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::Ready;
 using ControllerHelpers::SpellEnabled;
 
@@ -43,9 +42,6 @@ inline std::array<BombState, 16> Bombs{};
 inline std::array<int, 4> LastCastTick{};
 inline int PendingQTargetId = 0;
 inline int DoubleBombTargetId = 0;
-inline int ManualOwnershipUntil = 0;
-inline int ManualRTargetId = 0;
-inline int ManualRUntil = 0;
 inline int ProtectedTargetId = 0;
 inline int ProtectedUntil = 0;
 inline int IncomingThreatUntil = 0;
@@ -108,14 +104,8 @@ inline void ReconcileState() {
         ProtectedUntil = 0;
         ProtectedTargetId = 0;
     }
-    if (ManualOwnershipUntil < now) ManualOwnershipUntil = 0;
-    if (ManualRUntil < now) {
-        ManualRUntil = 0;
-        ManualRTargetId = 0;
-    }
 }
 
-inline bool ManualOwned() { return ManualOwnershipUntil > Now(); }
 
 inline bool PreserveAttack(bool reactive) {
     return ControllerHelpers::PreserveAttack(reactive);
@@ -282,9 +272,7 @@ inline AIHeroClient SelectChronoTarget(bool urgentOnly) {
         if (urgentOnly && !urgent) return;
         candidates[count] = {static_cast<int>(ally.NetworkId()), ally.HealthPercent(),
             incoming, ally.TotalAttackDamage() * 0.85f + ally.AP() * 0.72f,
-            enemies, self, protectedByBuff,
-            static_cast<int>(ally.NetworkId()) == ManualRTargetId && ManualRUntil > Now(),
-            true};
+            enemies, self, protectedByBuff, true};
         heroes[count++] = ally;
     };
     consider(player, true);
@@ -299,9 +287,7 @@ inline AIHeroClient SelectChronoTarget(bool urgentOnly) {
 inline bool CastChronoshift(const AIHeroClient& target, Mode mode, bool reactive = false) {
     if (!target.IsValid() || !Ready(3, mode) || !SpellEnabled(3, mode) ||
         LastCastTick[3] + (reactive ? 30 : 85) > Now() ||
-        target.HasBuff("ChronoShift") || target.HasBuff("ChronoRevive") ||
-        (!reactive && ManualRTargetId == static_cast<int>(target.NetworkId()) &&
-         ManualRUntil > Now())) return false;
+        target.HasBuff("ChronoShift") || target.HasBuff("ChronoRevive")) return false;
     if (!Engine::ControllerCastUnit(3, target)) return false;
     LastCastTick[3] = Now();
     ProtectedTargetId = static_cast<int>(target.NetworkId());
@@ -353,29 +339,27 @@ inline void Farm(Mode mode) {
     (void)Engine::TryFarm(mode);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const AIHeroClient target = PreferredEnemyTarget(selected, kQRange);
-    if (!ManualOwned()) {
-        const AIHeroClient save = SelectChronoTarget(true);
-        if (save.IsValid() && (mode == Mode::Automatic || mode == Mode::Combo) &&
-            CastChronoshift(save, mode, true)) return true;
-        if (TryKillSecure(target, mode)) return true;
-        switch (mode) {
-        case Mode::Combo: Combo(target); break;
-        case Mode::Harass: Harass(target); break;
-        case Mode::Flee: Flee(); break;
-        case Mode::LaneClear:
-        case Mode::Jungle:
-        case Mode::LastHit: Farm(mode); break;
-        case Mode::Automatic:
-            if (IncomingThreatUntil > Now()) {
-                const auto ally = SelectSpeedAlly(true);
-                if (ally.IsValid()) (void)CastE(ally, mode, true);
-            }
-            break;
-        default: break;
+    const AIHeroClient target = Engine::SelectTarget(kQRange);
+    const AIHeroClient save = SelectChronoTarget(true);
+    if (save.IsValid() && (mode == Mode::Automatic || mode == Mode::Combo) &&
+        CastChronoshift(save, mode, true)) return true;
+    if (TryKillSecure(target, mode)) return true;
+    switch (mode) {
+    case Mode::Combo: Combo(target); break;
+    case Mode::Harass: Harass(target); break;
+    case Mode::Flee: Flee(); break;
+    case Mode::LaneClear:
+    case Mode::Jungle:
+    case Mode::LastHit: Farm(mode); break;
+    case Mode::Automatic:
+        if (IncomingThreatUntil > Now()) {
+            const auto ally = SelectSpeedAlly(true);
+            if (ally.IsValid()) (void)CastE(ally, mode, true);
         }
+        break;
+    default: break;
     }
     return true;
 }
@@ -385,14 +369,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) LastCastTick[args.Slot] = now;
-        if (args.Slot == 0 && !Engine::WasControllerCast(0)) {
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
+        if (args.Slot == 0 && args.TargetNetworkId != 0)
             PendingQTargetId = static_cast<int>(args.TargetNetworkId);
-        }
-        if (args.Slot == 3 && !Engine::WasControllerCast(3)) {
-            ManualRTargetId = static_cast<int>(args.TargetNetworkId);
-            ManualRUntil = now + Slider(ChronoMenu, "ManualSaveMs", 900);
-        }
         if (args.Slot == 0 && PendingQTargetId > 0) {
             BombState* bomb = FindBomb(PendingQTargetId, true);
             if (bomb) {
@@ -499,14 +477,12 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ZileanTactics", "Zilean timing and safety"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 560, 180, 1200));
     BombMenu = TacticsMenu->AddSubMenu(new Menu("QW", "Double-bomb timing"));
     BombMenu->Add(new MenuBool("UseDoubleBomb", "Use Rewind for verified stun", true));
     WarpMenu = TacticsMenu->AddSubMenu(new Menu("E", "Time Warp"));
     WarpMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 15, 90));
     ChronoMenu = TacticsMenu->AddSubMenu(new Menu("R", "Chronoshift"));
     ChronoMenu->Add(new MenuSlider("HealthThreshold", "Save below health percent", 36, 10, 70));
-    ChronoMenu->Add(new MenuSlider("ManualSaveMs", "Protect manual save (ms)", 900, 250, 1800));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Farm", "Bomb farm policy"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 42, 0, 90));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("Coach", "Zilean geometry"));
@@ -517,7 +493,6 @@ inline void OnLoad() {
     Bombs = {};
     LastCastTick = {};
     PendingQTargetId = DoubleBombTargetId = 0;
-    ManualOwnershipUntil = ManualRTargetId = ManualRUntil = 0;
     ProtectedTargetId = ProtectedUntil = IncomingThreatUntil = 0;
     LastAutoTargetId = LastAutoTick = LastEAllyId = 0;
     LastQAim = LastEPosition = {};
@@ -539,11 +514,11 @@ inline constexpr const char* Scenarios[] = {
     "Use E on allies for rank-scaled speed and on enemies for rank-scaled slow",
     "Prefer E peel or escape speed when a gapcloser or unsafe mobility window is observed",
     "Score Chronoshift candidates by health, incoming threat, carry value and enemies",
-    "Never overwrite an existing Chronoshift or a recent manually selected save",
+    "Never overwrite an existing Chronoshift or already protected ally",
     "Reject Chronoshift outside 900 range or without a lethal/urgent health gate",
-    "Preserve orbwalker selected target before fallback target selection",
+    "Select autonomous enemy targets through Engine range selection",
     "Preserve AA windup unless a reactive stun, peel or resurrection is urgent",
-    "Yield after manual Q W E or R and reconcile manual ownership from spell events",
+    "Reconcile local spell events while preserving controller timing gates",
     "Combo completes double bomb before Time Warp utility and reserves R for saves",
     "Harass uses mana-gated bomb poke and enemy slow without unsolicited R",
     "LaneClear, Jungle and LastHit use mana-gated bomb farm policy",
@@ -560,7 +535,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIZilean.md";
     controller.ImplementationSummary =
-        "Champion-owned bomb-fuse and Rewind state machine with E movement utility, scored Chronoshift saves, prediction, collision, wall and manual-ownership guards.";
+        "Champion-owned bomb-fuse and Rewind state machine with E movement utility, scored Chronoshift saves, prediction, collision, wall and safety guards.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

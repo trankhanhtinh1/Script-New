@@ -83,7 +83,6 @@ inline constexpr ChampionProfile Teemo = [] {
         Step(SDK::SpellSlot::W, StepRule::AllowDuringWindup, 0, 600),
         Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 100, 900));
 
-    p.PreferSelectedTarget = true;
     p.ProtectManualChannels = true;
     p.ThemeFrom = 0xFF6EBD55u;
     p.ThemeTo = 0xFFE3D14Cu;

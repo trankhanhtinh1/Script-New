@@ -23,7 +23,6 @@ using ControllerHelpers::IsEpicMonster;
 using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::MissileEventIsLocal;
 using ControllerHelpers::Now;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::SelectProtectionAlly;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellEventNameContains;
@@ -266,7 +265,7 @@ inline void Flee(const AIHeroClient& target) {
     (void)CastR(ally, Mode::Flee, true);
 }
 
-inline void Automatic(const AIHeroClient& selected) {
+inline void Automatic(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
     if (InterruptTargetId != 0 && InterruptUntil >= Now()) {
@@ -279,12 +278,13 @@ inline void Automatic(const AIHeroClient& selected) {
     }
     const auto ally = ProtectedAlly();
     if (Engine::ValidAlly(ally) && AllyNeedsStandUnited(ally) && CastR(ally, Mode::Automatic, true)) return;
-    if (Engine::ValidEnemy(selected, kQRange)) (void)CastW(selected, Mode::Automatic, true);
+    if (Engine::ValidEnemy(target, kQRange)) (void)CastW(target, Mode::Automatic, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     ReconcileState();
-    const auto target = PreferredEnemyTarget(selected, kERange + 50.0f);
+    const auto target = Engine::SelectTarget(kERange + 50.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -297,6 +297,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     }
     return true;
 }
+
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
@@ -438,14 +439,14 @@ inline void OnDraw() {}
 
 inline constexpr const char* Scenarios[] = {
     "Passive shield amount, buff lifecycle and cooldown reconciliation",
-    "Q Spirit Blade target tracking, pull position and empowered AA ownership",
+    "Q Spirit Blade target tracking, pull position and empowered AA timing",
     "W Spirit's Refuge dodge-zone coverage for allies, autos and objectives",
     "E Shadow Dash prediction, collision, projectile-wall and safe endpoint policy",
     "R Stand United ally selection, shield value, channel and interrupt policy",
     "turret, enemy-count, reach, resource, damage and shield gates",
     "combo, harass, lane clear, jungle objective, last-hit and flee modes",
-    "selected target precedence with orbwalker fallback and automatic reactions",
-    "manual casts, AA windup ownership, event callbacks and polling reconciliation",
+    "autonomous Engine target selection with automatic reactions",
+    "AA windup, event callbacks and polling reconciliation",
 };
 
 inline constexpr ChampionController Controller = [] {

@@ -42,7 +42,6 @@ inline int WStartTick = 0;
 inline int WTetherExpireTick = 0;
 inline int MantraArmedUntil = 0;
 inline int MantraCooldownUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline int LastQImpactTick = 0;
@@ -297,11 +296,10 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(
-        selected, mode == Mode::Flee ? 1000.0f : kQRange);
-    if (ManualOwnershipUntil > Now()) return true;
+    const auto target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1000.0f : kQRange);
     if (mode == Mode::Automatic && AutomaticPeel(target)) return true;
     if (mode == Mode::Combo) Combo(target);
     else if (mode == Mode::Harass) Harass(target);
@@ -320,10 +318,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot)) {
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
-        }
-        if (slot == 1 && !Engine::WasControllerCast(1)) {
+        if (slot >= 0 && slot <= 3) LastCastTick[slot] = now;
+        if (slot == 1) {
             const auto target = HeroByNetworkId(static_cast<int>(args.TargetNetworkId));
             if (target.IsValid()) {
                 WTargetId = static_cast<int>(target.NetworkId());
@@ -332,7 +328,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
                 TetherActive = true;
             }
         }
-        if (slot == 3 && !Engine::WasControllerCast(3)) {
+        if (slot == 3) {
             PendingMantra = false;
             MantraReadyState = false;
             MantraCooldownUntil = now + 1200;
@@ -395,7 +391,6 @@ inline void OnMissileDelete(const SDK::Events::ObjectEventArgs&) {}
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("KarmaOneTrick", "Karma Mantra tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 600, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Inner Flame"));
     QMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 52, 10, 90));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Focused Resolve"));
@@ -412,7 +407,6 @@ inline void ResetState() {
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = LastAllyId = WTargetId = 0;
     WStartTick = WTetherExpireTick = MantraArmedUntil = MantraCooldownUntil = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCcUntil = 0;
     LastQImpactTick = LastShieldTick = 0;
     TetherActive = PendingMantra = MantraReadyState = false;
     PendingPosture = MantraPosture::RE;
@@ -426,16 +420,16 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin Karma spell values and Mantra variants to Riot 26.15 / CommunityDragon 16.15",
-    "Track Mantra readiness and cooldown from R ownership, buffs and polling reconciliation",
+    "Track Mantra readiness and cooldown from R events, buffs and polling reconciliation",
     "Predict Inner Flame with 950 range, 902 speed, 90 width and projectile-wall rejection",
     "Use the empowered Q impact and 275 radius detonation only when the chosen posture reaches",
     "Track Spirit Bind target, 825 leash, two-second tether and root-window hold behavior",
     "Break tether state on target loss, leash break, expiry or observed buff removal",
     "Choose RQ for lethal/grouped Q, RW for held lethal tether and RE for threatened allies",
-    "Shield the selected or protection-priority ally with real 600 range and 400 area safety",
+    "Shield the autonomous protection-priority ally with real 600 range and 400 area safety",
     "Use RE ally shield speed for peel and reject wall, turret and over-committed destinations",
     "Preserve AA windup except reactive peel, root timing or verified lethal response",
-    "Reconcile selected target before orbwalker fallback and honor manual ownership windows",
+    "Resume autonomous decisions after each observed spell event",
     "Automatic mode permits defensive RE/RW, hard-CC tether and verified Q kill secure only",
     "Combo prioritizes posture, Q poke, W tether and ally shield-speed follow-up",
     "Harass spends reserved mana on Q then W and avoids wasteful shield casts",
@@ -444,7 +438,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject invulnerable, untargetable and spell-shielded enemy targets",
     "Record enemy process-spell and gapcloser threat windows for automatic peel",
     "Draw Q/W/E ranges without changing gameplay decisions",
-    "Never automate items, summoners, flash or movement ownership",
+    "Never automate items, summoners, flash or movement orders",
 };
 
 inline constexpr ChampionController Controller = [] {

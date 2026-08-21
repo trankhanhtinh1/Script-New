@@ -71,7 +71,6 @@ inline int RExpireTick = 0;
 inline int RUntargetableUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int IncomingTargetedUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int FocusTargetId = 0;
@@ -81,10 +80,6 @@ inline bool WRecastActive = false;
 inline bool WChannelActive = false;
 inline bool RActive = false;
 inline bool VisionActive = false;
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 inline Vector3 LastQAim = {};
 inline Vector3 LastWPathEnd = {};
 inline Vector3 LastEEndpoint = {};
@@ -341,7 +336,6 @@ inline bool CastQ(const AIHeroClient& target,
     if (!Engine::ControllerCastPosition(0, aim)) return false;
     QCastTick = Now();
     LastQAim = aim;
-    QWasManual = false;
     FocusTargetId = static_cast<int>(target.NetworkId());
     FocusUntil = Now() + 4300;
     if (recast) {
@@ -412,7 +406,6 @@ inline bool CastW(const AIHeroClient& target,
     WChannelActive = true;
     WChannelUntil = Now() + static_cast<int>(arrival * 1000.0f) + 180;
     LastWPathEnd = predicted;
-    WWasManual = false;
     FocusTargetId = WTargetId;
     FocusUntil = WChannelUntil + 1800;
     if (WRecastActive) {
@@ -460,7 +453,6 @@ inline bool CastE(const AIHeroClient& target,
     ECastTick = Now();
     LastEEndpoint = endpoint;
     PackResetUntil = Now() + 650;
-    EWasManual = false;
     return true;
 }
 
@@ -493,12 +485,10 @@ inline bool CastR(Mode mode,
     RExpireTick = Now() + kRDurationMs;
     RUntargetableUntil = Now() + kRUntargetableMs;
     ObservedPackmates = PackmatesAfterR(ObservedPackmates, player.Level());
-    RWasManual = false;
     return true;
 }
 
-inline AIHeroClient CooperatingTarget(const AIHeroClient& selected) {
-    if (Engine::ValidEnemy(selected)) return selected;
+inline AIHeroClient CooperatingTarget() {
     if (WChannelActive && WTargetId != 0) {
         const AIHeroClient target = HeroByNetworkId(WTargetId);
         if (Engine::ValidEnemy(target, kWRange + 350.0f)) return target;
@@ -583,10 +573,9 @@ inline bool TryFarm(Mode mode) {
     return Engine::TryFarm(mode);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now() || WChannelActive) return true;
-    const AIHeroClient target = CooperatingTarget(selected);
+    const AIHeroClient target = CooperatingTarget();
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1100.0f);
     if (mode == Mode::Flee) {
         (void)TryFlee(threat);
@@ -628,13 +617,8 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         return;
     }
     const int slot = args.Slot;
-    const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned && slot >= 0 && slot < 4) {
-        PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
-    }
     if (slot == 0) {
         QCastTick = now;
-        QWasManual = !owned;
         const bool recast = QRecastActive ||
             Engine::TextContains(args.SpellName, "Recast");
         if (recast) {
@@ -646,7 +630,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         }
     } else if (slot == 1) {
         WCastTick = now;
-        WWasManual = !owned;
         WTargetId = static_cast<int>(args.TargetNetworkId != 0
             ? args.TargetNetworkId : args.Target.NetworkId);
         WChannelActive = true;
@@ -655,12 +638,10 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         FocusUntil = now + 3000;
     } else if (slot == 2) {
         ECastTick = now;
-        EWasManual = !owned;
         PackResetUntil = now + 650;
         PackSpawnDueTick = 0;
     } else if (slot == 3) {
         RCastTick = now;
-        RWasManual = !owned;
         RActive = true;
         RExpireTick = now + kRDurationMs;
         RUntargetableUntil = now + kRUntargetableMs;
@@ -778,8 +759,6 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu(
         "NaafiriOneTrick", "Naafiri pack mechanics"));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     PackMenu = TacticsMenu->AddSubMenu(new Menu("Pack", "Packmate state"));
     PackMenu->Add(new MenuBool("TrackPack", "Track live packmate objects", true));
     DaggerMenu = TacticsMenu->AddSubMenu(new Menu("Daggers", "Bleed and recast"));
@@ -809,11 +788,10 @@ inline void OnLoad() {
     WCastTick = ECastTick = RCastTick = 0;
     WTargetId = WChannelUntil = WTakedownUntil = WRecastExpireTick = 0;
     WShieldUntil = VisionUntil = RExpireTick = RUntargetableUntil = 0;
-    IncomingHardCCUntil = IncomingTargetedUntil = PlayerOverrideUntil = 0;
+    IncomingHardCCUntil = IncomingTargetedUntil = 0;
     LastAutoTargetId = LastAutoTick = FocusTargetId = FocusUntil = 0;
     QRecastActive = WRecastActive = WChannelActive = false;
     RActive = VisionActive = false;
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     LastQAim = LastWPathEnd = LastEEndpoint = {};
     ReconcileState();
 }
@@ -850,7 +828,7 @@ inline constexpr const char* Scenarios[] = {
     "Reject Q through a projectile wall",
     "Require high prediction unless the target is committed or controlled",
     "Preserve an attack windup for a nonlethal dagger",
-    "Cooperate with the selected target before bleed and pursuit focus",
+    "Select autonomous Engine target before bleed and pursuit focus",
     "Keep a bleeding focus target through the Q recast window",
     "Use Hounds' Pursuit as a champion-targeted 900-range channel dash",
     "Forecast W landing after channel time plus 1800-speed travel",
@@ -897,8 +875,6 @@ inline constexpr const char* Scenarios[] = {
     "Automatic mode never opens an unsolicited W engage",
     "Automatic mode may answer hard crowd control with a dagger",
     "Automatic mode may execute verified lethal spell damage",
-    "Track local manual Q, W, E and R casts without duplicating them",
-    "Yield the complete decision loop after manual spell ownership",
     "Never automate Flash, Smite, Ignite, items, movement or basic attacks",
 };
 

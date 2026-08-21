@@ -14,7 +14,7 @@ inline constexpr ChampionProfile Varus = [] {
     p.Mechanics = Mechanic::Charge | Mechanic::Stack |
                   Mechanic::Mark | Mechanic::AutoWeave |
                   Mechanic::MissingHealth;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::MultiTarget;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Piercing Arrow", CastKind::ChargedLine,
@@ -97,7 +97,6 @@ inline constexpr ChampionProfile Varus = [] {
     p.UltimateTargetHealthPercent = 52.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 21;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "varuswdebuff";
@@ -109,10 +108,10 @@ inline constexpr ChampionProfile Varus = [] {
         "Do not detonate Blight early when another auto is safe; charge Q only "
         "for a reachable predicted target, release as soon as required range and "
         "hit confidence are met, empower only a committed Q, and reserve R for "
-        "manual catch, interrupt or immediate peel.";
+        "immediate catch or peel.";
     p.ResearchSummary =
         "Ported from TestOrbwalker AllChampions/Varus.cs: two/three-stack wait, "
-        "charged-Q range logic, W-before-Q execute, E fallback and semi-manual R; "
+        "charged-Q range logic, W-before-Q execute, E fallback and R catch/peel state; "
         "upgraded with charge-state reconciliation and reachable-target scoring.";
     return p;
 }();

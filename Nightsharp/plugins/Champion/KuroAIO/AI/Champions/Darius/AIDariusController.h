@@ -39,7 +39,7 @@ inline std::array<int, 32> HemoExpiry{};
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int GapcloserTargetId = 0;
 inline int GapcloserUntil = 0;
 inline Vector3 GapcloserEndpoint{};
@@ -300,8 +300,7 @@ inline void ReconcileState() {
     if (InterruptUntil < now) InterruptTargetId = 0;
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
-    ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
+    ReconcileState();
     const AIHeroClient target = StackAwareTarget(selected, mode == Mode::Flee ? 900.0f : kERange + 40.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -326,7 +325,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     HemoIds.fill(0); HemoStacks.fill(0); HemoExpiry.fill(0); LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     GapcloserTargetId = GapcloserUntil = InterruptTargetId = InterruptUntil = 0;
     GapcloserEndpoint = {}; NoxianMight = false; NoxianMightUntil = 0;
     RInFlight = RControllerOwned = RResetReady = false;
@@ -338,8 +337,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + 650;
+        if (slot < 0 || slot > 3) return;
         LastCastTick[static_cast<std::size_t>(slot)] = now;
         if (slot == 3) { RInFlight = true; RControllerOwned = Engine::WasControllerCast(3); RTargetId = static_cast<int>(args.TargetNetworkId); RResetUntil = now + 1800; }
         return;
@@ -417,7 +415,7 @@ inline constexpr const char* Scenarios[] = {
     "Noxian Guillotine true-damage execute with stack multiplier",
     "R kill reset and Noxian Might state reconciled by events and polling",
     "selected target then orbwalker precedence with stack-aware fallback",
-    "attack-windup preservation and manual spell ownership protection",
+    "attack-windup preservation and cast safety/",
     "turret, wall, enemy-count and low-health commit boundaries",
     "combo, harass, lane clear, jungle, last-hit, flee and automatic routes",
 };

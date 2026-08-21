@@ -36,7 +36,6 @@ inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastModeTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline float LastObservedMana = 0.0f;
@@ -169,8 +168,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     LastCastTick[2] = Now();
     return true;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Protected(target) || RStage != ImpaleState::Idle ||
         !Ready(3, mode) || !Throttle(3, 120) || PreserveAttack(reactive)) return false;
@@ -180,7 +178,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const int hits = PredictedRHits(player.Position(), endpoint);
     const bool lethal = Lethal(target, RDamage(target));
     const RContext context{true, true, aim.IsValid(), true, Orbwalker::IsWindingUp(),
-        lethal, reactive, manual, hits, Slider(RMenu, "MinimumTargets", 2)};
+        lethal, reactive, hits, Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldImpale(context) || !Engine::ControllerCastPosition(3, endpoint)) return false;
     int index = 0;
     for (const auto& enemy : GameObjects::EnemyHeroes()) {
@@ -216,7 +214,7 @@ inline void Harass(const AIHeroClient& target) {
 inline void Flee(const AIHeroClient& target) {
     if (CastW(target, Mode::Flee, true)) return;
     if (Engine::ValidEnemy(target) && CastE(target, Mode::Flee, true)) return;
-    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true, true);
+    if (Engine::ValidEnemy(target)) (void)CastR(target, Mode::Flee, true);
 }
 inline void ReconcileState() {
     const int now = Now();
@@ -247,8 +245,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
     LastModeTick = Now();
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kERange + 100.0f);
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1000.0f : kERange + 100.0f);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastW(target, mode, true)) return true;
         if (CastE(target, mode, true)) return true;
@@ -266,8 +264,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         break;
     case Mode::Automatic:
         if (AutomaticAllowed({IncomingThreatUntil > Now(), IncomingHardCCUntil > Now(),
-            Engine::ValidEnemy(target) && Lethal(target, RDamage(target)), false,
-            ManualOwnershipUntil > Now()})) {
+            Engine::ValidEnemy(target) && Lethal(target, RDamage(target)), false})) {
             if (IncomingThreatUntil > Now() && CastW(target, mode, true)) return true;
             (void)CastR(target, mode, true);
         }
@@ -282,7 +279,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 0) QStage = QStateAfterCast();
         if (slot == 3) RStage = ImpaleState::CastPending;
@@ -328,7 +324,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SkarnerOneTrick", "Skarner crystal tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve AA windup", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Shattered Earth"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Seismic Bastion"));
@@ -344,7 +339,7 @@ inline void BuildMenu(Menu* root) {
 }
 inline void OnLoad() {
     QStage = QState::Ready; RStage = ImpaleState::Idle; ImpaleTargetIds.fill(0);
-    EStunTargetId = EStunExpireTick = ManualOwnershipUntil = 0;
+    EStunTargetId = EStunExpireTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = LastAutoTargetId = LastAutoTick = 0;
     LastModeTick = 0; LastObservedMana = 0.0f; LastMode = Mode::None;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
@@ -363,20 +358,20 @@ inline constexpr const char* Scenarios[] = {
     "Reject E through sampled terrain and reject endpoint walls or unsafe turrets",
     "Require E collision ownership by the first predicted enemy on the line",
     "Track E stun target and expiry from events plus enemy buff polling",
-    "Preserve selected target before orbwalker target and selector fallback",
+    "Use the autonomous engine-selected target before every combat branch",
     "Predict R line contact and cap impale target set at three champions",
     "Reserve nonlethal R for configured multi-target value",
-    "Allow lethal, defensive, interrupt and explicit manual-assist R exceptions",
+    "Allow lethal, defensive, interrupt and configured multi-target R value",
     "Reconcile R cast-pending, active suppression and released states",
     "Track each impaled target by network id and clear stale entries",
-    "Apply AA windup preservation except reactive, lethal or manual ownership paths",
+    "Apply AA windup preservation except reactive or lethal paths",
     "Reject invulnerable, untargetable, spell-shielded or uncertain targets",
     "Reconcile mana observations and runtime cooldown readiness before every cast",
     "Combo orders Q, W, collision-safe E, then multi-target R",
     "Harass preserves a configurable mana reserve and never starts a fresh R engage",
     "LaneClear and Jungle delegate to the shared farm policy after mana reserve checks",
     "LastHit delegates only to shared farm policy and never spends R",
-    "Flee uses W peel, safe E collision and manual-assist R only",
+    "Flee uses W peel, safe E collision and defensive R only",
     "Automatic mode performs defense, interrupt or kill secure without fresh engage",
     "Never automate movement ownership, items or summoner spells",
     "Draw E and R safety ranges without modifying decisions",

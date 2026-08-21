@@ -294,10 +294,11 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(
-        selected, kShivRange + 70.0f);
+    const AIHeroClient target = Engine::SelectTarget(
+        kShivRange + 70.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -317,7 +318,7 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 42, 0, 100));
     TacticsMenu->Add(new MenuSlider("ClearMana", "Clear mana percent", 35, 0, 100));
     TacticsMenu->Add(new MenuSlider("MaxQEnemies", "Maximum enemies at Deceive endpoint", 2, 0, 5));
-    TacticsMenu->Add(new MenuSlider("RHealth", "Allow Hallucinate below health percent", 65, 1, 100));
+    TacticsMenu->Add(new MenuSlider("RHealth", "Hallucinate health threshold", 65, 1, 100));
 }
 
 inline void OnLoad() {
@@ -455,7 +456,7 @@ inline constexpr const char* Scenarios[] = {
     "Jack-in-the-Box arm timer, fear trigger and object reconciliation",
     "Two-Shiv prediction, collision and below-30-percent execute gate",
     "Hallucinate clone identity, lifetime and explosion payoff",
-    "selected target policy and post-Deceive backstab windup protection",
+    "autonomous Engine target selection and post-Deceive backstab windup protection",
     "lane clear, jungle low-health box setup and last-hit shiv",
     "flee Deceive cursor endpoint and unsafe mobility rejection",
     "automatic gapcloser/interrupt reaction and polling state expiry",

@@ -15,7 +15,6 @@ using namespace Geometry;
 using ControllerHelpers::CaptureAfterAttack;
 using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::IsLocalPlayer;
-using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SpellEnabled;
 using ControllerHelpers::SpellRank;
@@ -31,7 +30,6 @@ inline Menu* CoachMenu = nullptr;
 inline ZoneState Domain{};
 inline Vec3 LastPillarPosition{};
 inline int LastCastTick[4]{};
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastAutoTargetId = 0;
@@ -130,7 +128,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return true;
 }
 inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool defensive = false, bool manual = false) {
+                  bool defensive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, kRRange) ||
         !Ready(3, mode) || !Throttle(3, 120) || Protected(target) ||
@@ -138,7 +136,6 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const RTargetPolicy policy{
         true, true, false, Lethal(target, RDamage(target)),
         target.HealthPercent() <= Slider(RMenu, "TargetHP", 65),
-        static_cast<int>(target.NetworkId()) == Engine::LockedTargetNetworkId || manual,
         Engine::UnderEnemyTurret(player.Position()), defensive,
         Engine::CountEnemiesAt(player.Position(), 550.0f), Slider(RMenu, "MaxNearby", 3)};
     if (!ShouldCastR(policy)) return false;
@@ -183,18 +180,18 @@ inline void ReconcileState() {
         RExpireTick = now + 3500;
     }
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
     const auto player = GameObjects::Player();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kRRange);
-    if (ManualOwnershipUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(
+        mode == Mode::Flee ? 1000.0f : kRRange);
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target) && CastE(target, mode, true)) return true;
     if (TryKillSecure(target, mode)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1000.0f)); break;
+    case Mode::Flee: Flee(target); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit:
@@ -203,8 +200,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         break;
     case Mode::Automatic:
         if (AutomaticAllowed({IncomingThreatUntil > Now(), Lethal(target, RDamage(target)),
-            player.IsValid() && player.HealthPercent() <= Slider(RMenu, "DefensiveHP", 38),
-            ManualOwnershipUntil > Now()}))
+            player.IsValid() && player.HealthPercent() <= Slider(RMenu, "DefensiveHP", 38)}))
             (void)CastR(target, mode, true, true);
         break;
     default: break;
@@ -217,8 +213,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now +
-            Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 1 && args.EndPosition.IsValid() && !args.EndPosition.IsZero())
             RecordZone(Domain, args.EndPosition, now);
@@ -271,7 +265,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("TrundleOneTrick", "Trundle tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Chomp"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Frozen Domain"));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 48, 10, 90));
@@ -290,7 +283,7 @@ inline void OnLoad() {
     Domain = {};
     LastPillarPosition = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastAutoTargetId = LastAutoTick = QStealTargetId = QStealExpireTick = 0;
     RTargetId = RExpireTick = 0;
     LastMode = Mode::None;
@@ -302,7 +295,7 @@ inline void OnUnload() {
 }
 inline constexpr const char* Scenarios[] = {
     "Pin Trundle values to Riot 26.15 and CommunityDragon 16.15",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use the autonomous Engine target before orbwalker fallback scoring",
     "Use Q as an attack reset and steal attack damage from the bitten target",
     "Do not cancel a normal attack unless Q reset or reactive safety justifies it",
     "Cast W on a predicted target point and reconcile domain expiry from events and polling",
@@ -310,7 +303,7 @@ inline constexpr const char* Scenarios[] = {
     "Place E only at a reachable, non-wall, low-risk terrain point",
     "Use E pillar radius for displacement, path blocking and anti-gapclose peel",
     "Reject pillar placements under a new enemy turret or excessive enemy count",
-    "Use R Subjugate only on a protected-valid, reachable primary or defensive target",
+    "Use R Subjugate only on a protected-valid, reachable target or defensive turn",
     "Prefer low-health, lethal and high-value target stat-drain turns",
     "Never spend R on an unreachable, invulnerable, spell-shielded or turret-risk target",
     "Track Q steal, W domain, E pillar and R drain through events plus reconciliation",
@@ -320,7 +313,7 @@ inline constexpr const char* Scenarios[] = {
     "LaneClear, Jungle and LastHit use shared farm policy after mana guard",
     "Flee prioritizes pillar peel and defensive domain rather than target chase",
     "Automatic mode is limited to threat, defensive or kill-secure R decisions",
-    "Yield after observed manual Q, W, E or R ownership",
+    "Keep observed Q, W, E and R state without claiming input ownership",
     "Keep controller loop and profile spell metadata independently auditable",
     "Draw ranges and state without changing gameplay decisions",
 };

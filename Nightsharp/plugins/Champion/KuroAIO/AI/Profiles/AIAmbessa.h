@@ -109,7 +109,7 @@ inline constexpr ChampionProfile Ambessa = [] {
     p.VariantCount = 2;
 
     p.Trade = Plan(
-        "Q1 edge, player-owned spacing, passive AA, E slow, Q2 exit",
+        "Q1 edge, autonomous spacing, passive AA, E slow, Q2 exit",
         Step(SDK::SpellSlot::Q,
              StepRule::RequireTarget | StepRule::RequireFirstCast),
         Step(SDK::SpellSlot::E,

@@ -107,11 +107,10 @@ inline float WShieldAmount(int spellRank, float abilityPower, bool returned) {
 
 inline bool WReturnShieldWorthwhile(bool allyValid, bool returnPredicted,
                                     bool allyLowHealth, bool incomingThreat,
-                                    bool manual) {
+                                    bool defensive) {
     if (!allyValid || !returnPredicted) return false;
-    return manual || incomingThreat || allyLowHealth;
+    return defensive || incomingThreat || allyLowHealth;
 }
-
 inline bool ZoneContains(const Vec3& center, const Vec3& target,
                          float targetRadius = 0.0f) {
     return center.Distance2D(target) <= kERadius + std::max(0.0f, targetRadius);
@@ -160,7 +159,6 @@ struct RLineContext {
     bool ProjectileWall = false;
     bool LineSafe = false;
     bool Lethal = false;
-    bool Manual = false;
     bool ChannelActive = false;
     bool UnderTurret = false;
     int NearbyEnemies = 0;
@@ -177,14 +175,8 @@ inline bool ShouldCastR(const RLineContext& context) {
     if (!RLineInRange(context) || !context.PredictionVeryHigh ||
         context.ProjectileWall || !context.LineSafe || context.ChannelActive ||
         context.UnderTurret) return false;
-    if (context.Manual) return true;
     if (!context.Lethal || context.NearbyEnemies > 0) return false;
     return context.MinimumTargets <= 1;
-}
-
-inline bool PreserveManualChannel(bool channelActive, bool localThreat,
-                                  bool manualStarted) {
-    return channelActive && (manualStarted || !localThreat);
 }
 
 inline bool SafeBeamLine(bool projectileWall, bool underTurret,

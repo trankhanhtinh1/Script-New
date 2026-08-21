@@ -54,7 +54,6 @@ inline int QCastTick = 0;
 inline int WCastTick = 0;
 inline int ECastTick = 0;
 inline int RCastTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int GapcloserTargetId = 0;
 inline int GapcloserExpireTick = 0;
 inline int InterruptTargetId = 0;
@@ -182,29 +181,30 @@ inline void ReconcileState() {
         if (WChargeStartTick == 0) {
             WChargeStartTick = now;
             WChargeOwned = false;
-            PlayerOverrideUntil = std::max(PlayerOverrideUntil, now + 500);
         }
-    } else if (WChargeStartTick > 0 && now - WChargeStartTick > 180) ClearWCharge();
+    } else if (WChargeStartTick > 0 && now - WChargeStartTick > 180) {
+        ClearWCharge();
+    }
 }
-
-inline AIHeroClient CooperatingTarget(const AIHeroClient& selected, float range = 1250.0f) {
-    if (Engine::ValidEnemy(selected, range) && TargetDamageable(selected)) return selected;
+ 
+inline AIHeroClient CooperatingTarget(float range = 1250.0f) {
     const auto orb = OrbwalkerHeroTarget(range);
     if (Engine::ValidEnemy(orb, range) && TargetDamageable(orb)) return orb;
     if (QMarkTargetId != 0) {
         const auto marked = HeroByNetworkId(QMarkTargetId);
-        if (Engine::ValidEnemy(marked, range) && TargetDamageable(marked)) return marked;
+        if (Engine::ValidEnemy(marked, range) && TargetDamageable(marked)) {
+            return marked;
+        }
     }
     return Engine::SelectTarget(range);
 }
 
-inline void CooperateWithMarkedAuto(const AIHeroClient& preferred) {
+inline void CooperateWithMarkedAuto() {
     AIHeroClient marked = HeroByNetworkId(QMarkTargetId);
-    if (!Engine::ValidEnemy(marked, 650.0f) || !marked.HasBuff("ViegoQMark") ||
-        !TargetDamageable(marked)) {
-        if (Engine::ValidEnemy(preferred, 650.0f) && preferred.HasBuff("ViegoQMark"))
-            marked = preferred;
-        else { ClearForcedTarget(); return; }
+    if (!Engine::ValidEnemy(marked, 650.0f) ||
+        !marked.HasBuff("ViegoQMark") || !TargetDamageable(marked)) {
+        ClearForcedTarget();
+        return;
     }
     Orbwalker::ForceTarget(AttackableUnit(marked.Handle()));
     ForcedOrbwalkerTarget = true;
@@ -421,7 +421,7 @@ inline bool TryCombo(const AIHeroClient& target) {
     if (!TargetDamageable(target)) return false;
     if (WCharging()) return ReleaseW(target);
     if (target.HasBuff("ViegoQMark") && Orbwalker::CanAttack()) {
-        CooperateWithMarkedAuto(target);
+        CooperateWithMarkedAuto();
         return false;
     }
     if (CastE(target, Mode::Combo)) return true;
@@ -435,7 +435,7 @@ inline bool TryHarass(const AIHeroClient& target) {
     if (!TargetDamageable(target) || Possessed) return false;
     if (WCharging()) return ReleaseW(target);
     if (target.HasBuff("ViegoQMark") && Orbwalker::CanAttack()) {
-        CooperateWithMarkedAuto(target);
+        CooperateWithMarkedAuto();
         return false;
     }
     if (CastQ(target, Mode::Harass)) return true;
@@ -450,15 +450,14 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return TargetDamageable(threat) && CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const AIHeroClient target = CooperatingTarget(selected);
+    const AIHeroClient target = CooperatingTarget();
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1000.0f);
     if (PossessionCasting || Untargetable) return true;
     if (WCharging() && !WChargeOwned) return true;
     if (TrySoul()) return true;
-    if (PlayerOverrideUntil > Now()) return true;
-    CooperateWithMarkedAuto(target);
+    CooperateWithMarkedAuto();
     if (TryReactive(threat)) return true;
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
     if (Possessed) { (void)CastR(target, mode, false); return true; }
@@ -497,7 +496,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int slot = args.Slot;
     if (slot < 0 || slot >= 4) return;
     const bool owned = Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
     if (slot == 0) QCastTick = now;
     else if (slot == 1) {
         WCastTick = now;
@@ -598,7 +596,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("ViegoOneTrick", "Viego possession mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("ViegoPassive", "Soul and possession"));
     PassiveMenu->Add(new MenuSlider("TakeSoulHP", "Take safe soul below HP", 72, 10, 100));
     PassiveMenu->Add(new MenuSlider("MaxSoulEnemies", "Maximum enemies at soul", 2, 1, 5));
@@ -621,7 +618,7 @@ inline void OnLoad() {
     PossessionStartTick = PossessionExpireTick = UntargetableUntil = 0;
     WChargeStartTick = WTargetId = QMarkTargetId = QMarkExpireTick = 0;
     SoulNetworkId = SoulExpireTick = LastAutoTargetId = LastAutoTick = 0;
-    QCastTick = WCastTick = ECastTick = RCastTick = PlayerOverrideUntil = 0;
+    QCastTick = WCastTick = ECastTick = RCastTick = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = SoulPosition = MistCastPosition = LastRLanding = {};
     ReconcileState();
@@ -650,15 +647,15 @@ inline constexpr const char* Scenarios[] = {
     "Start W only when its 300-unit dash path and endpoint are safe",
     "Interpolate W projectile reach from 500 to 900 over one second",
     "Require high prediction and an empty first-hit collision list before W release",
-    "Release an owned W before expiry but never release a manual W",
+    "Release a controller-owned W before expiry but never release an external W",
     "Use W reactively against gapclosers and interruptible channels",
     "Cast E only toward terrain and avoid refreshing active mist",
     "Clamp R landing to 500 and model its 300-radius victim set",
     "Require the intended target to be Heartbreaker's lowest-health primary victim",
     "Allow R for execute, defensive displacement, multi-target value or possession exit",
-    "Respect selected, orbwalker and marked target cooperation",
+    "Respect orbwalker and marked target cooperation",
     "Cover Combo, Harass, farm, Flee and conservative Automatic modes",
-    "Track runtime cooldowns, resource-free casting and manual ownership",
+    "Track runtime cooldowns, resource-free casting and channel ownership",
 };
 
 inline constexpr ChampionController Controller = [] {

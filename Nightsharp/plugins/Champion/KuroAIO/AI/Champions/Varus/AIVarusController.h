@@ -118,8 +118,7 @@ inline bool RPrediction(const AIHeroClient& target,
     return hit;
 }
 
-inline void RefreshOrbwalkerFocus(Mode mode,
-                                  const AIHeroClient& preferred) {
+inline void RefreshOrbwalkerFocus(Mode mode) {
     const bool combat = mode == Mode::Combo || mode == Mode::Harass;
     auto owned = OwnedOrbwalkerFocus(
         OwnedFocusTargetId, OwnedFocusUntil, 850.0f);
@@ -142,8 +141,6 @@ inline void RefreshOrbwalkerFocus(Mode mode,
             !InAutoAttackRange(enemy) || stacks <= 0) continue;
         float score = static_cast<float>(stacks) * 120.0f +
                       (100.0f - enemy.HealthPercent());
-        if (preferred.IsValid() &&
-            preferred.NetworkId() == enemy.NetworkId()) score += 150.0f;
         if (score > bestScore) {
             best = enemy;
             bestScore = score;
@@ -155,11 +152,9 @@ inline void RefreshOrbwalkerFocus(Mode mode,
             OwnedFocusTargetId, OwnedFocusUntil);
     }
 }
-
 inline MarksmanTargeting::TargetContext TargetFacts(
     const AIHeroClient& target,
-    Mode mode,
-    bool allowR) {
+    Mode mode) {
     const auto player = GameObjects::Player();
     const float distance = player.Position().Distance2D(target.Position());
     const bool attack = OrbwalkerAttackRoute(target);
@@ -201,44 +196,28 @@ inline MarksmanTargeting::TargetContext TargetFacts(
         (ShouldDetonateBlight(stacks, safeAuto, IsEscaping(target),
              SpellDamage(2, target) >= target.Health() + target.AllShield()) ||
          !Engine::RuntimeSpells[0] || !Engine::RuntimeSpells[0]->IsReady());
-    const bool r = allowR && !QCharging() && Engine::RuntimeSpells[3] &&
-        Engine::RuntimeSpells[3]->IsReady() && distance <= 1220.0f &&
-        RPrediction(target);
 
-    const std::array<bool, 4> reachable = {q, false, e, r};
+    const std::array<bool, 4> reachable = {q, false, e, false};
     auto context = BaseTargetContext(
         target, EstimatedDamage(target, reachable, attack ? 2 : 0));
     context.AutoReachable = attack;
     context.DirectSpellReachable = q || e;
-    context.SetupReachable = r;
+    context.SetupReachable = false;
     context.ExecuteReachable = q && context.Killable;
-    context.ProjectileBlocked = !attack && !q && !e && !r;
+    context.ProjectileBlocked = !attack && !q && !e;
     return context;
 }
 
-inline AIHeroClient SelectSmartTarget(const AIHeroClient& preferred,
-                                      Mode mode,
-                                      bool allowR = false) {
+inline AIHeroClient SelectSmartTarget(Mode mode) {
     const auto target = ControllerHelpers::SelectReachableEnemy(
-        preferred, 1700.0f,
-        [mode, allowR](const AIHeroClient& enemy) {
-            return TargetFacts(enemy, mode, allowR);
+        {}, 1700.0f,
+        [mode](const AIHeroClient& enemy) {
+            return TargetFacts(enemy, mode);
         });
     LastSmartTarget = target;
     return target;
 }
 
-inline AIHeroClient SelectRTarget(const AIHeroClient& preferred) {
-    return ControllerHelpers::SelectReachableEnemy(
-        preferred, 1220.0f,
-        [](const AIHeroClient& enemy) {
-            const bool r = RPrediction(enemy);
-            auto context = BaseTargetContext(
-                enemy, r ? SpellDamage(3, enemy) : 0.0f);
-            context.DirectSpellReachable = r;
-            return context;
-        });
-}
 
 inline bool CastWForQ(const AIHeroClient& target, Mode mode) {
     if (!CanUse(1, mode) || QCharging() ||
@@ -299,12 +278,13 @@ inline bool StartQ(const AIHeroClient& target, Mode mode) {
     return false;
 }
 
-inline bool ReleaseQ(const AIHeroClient& fallback) {
+inline bool ReleaseQ() {
     RefreshChargeState();
     if (!QCharging() || !Engine::RuntimeSpells[0] ||
         !CastThrottlePassed(LastQCastTick, 20)) return false;
     auto target = ControllerHelpers::HeroByNetworkId(QTargetId);
-    if (!Engine::ValidEnemy(target, 1700.0f)) target = fallback;
+    if (!Engine::ValidEnemy(target, 1700.0f))
+        target = Engine::SelectTarget(1700.0f);
     if (!Engine::ValidEnemy(target, 1700.0f)) return false;
 
     const float range = CurrentQRange();
@@ -401,7 +381,6 @@ inline bool CastE(const AIHeroClient& target,
 }
 
 inline bool CastR(const AIHeroClient& target,
-                  bool manual,
                   bool interrupt,
                   bool selfPeel) {
     if (QCharging() || !Engine::RuntimeSpells[3] ||
@@ -410,7 +389,6 @@ inline bool CastR(const AIHeroClient& target,
         !CastThrottlePassed(LastRCastTick, 80)) return false;
     SDK::PredictionOutput prediction{};
     ChainContext context{};
-    context.Manual = manual;
     context.PredictionVeryHigh = RPrediction(target, &prediction);
     context.InRange = true;
     context.ProjectileWall =
@@ -430,34 +408,28 @@ inline bool CastR(const AIHeroClient& target,
     return false;
 }
 
-inline bool TryManualR(const AIHeroClient& preferred) {
-    if (!ManualUltimatePressed()) return false;
-    const auto target = SelectRTarget(preferred);
-    return Engine::ValidEnemy(target) && CastR(target, true, false, false);
-}
 
 inline bool TryInterrupt() {
     if (!Bool(Engine::AutomaticMenu, "Interrupt", true) ||
         InterruptExpireTick < Now()) return false;
     const auto target = ControllerHelpers::HeroByNetworkId(InterruptTargetId);
     return Engine::ValidEnemy(target, 1220.0f) &&
-           CastR(target, false, true, false);
+           CastR(target, true, false);
 }
 
 inline bool TryAntiGapcloser() {
     if (GapcloserExpireTick < Now()) return false;
     const auto target = ControllerHelpers::HeroByNetworkId(GapcloserTargetId);
     if (!Engine::ValidEnemy(target, 950.0f)) return false;
-    if (CastR(target, false, false, true)) return true;
+    if (CastR(target, false, true)) return true;
     return CastE(target, Mode::Automatic, true);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
-    if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectSmartTarget(preferred, Mode::Automatic, false);
+inline bool TryKillSecure() {
+    const auto target = SelectSmartTarget(Mode::Automatic);
     if (!Engine::ValidEnemy(target)) return false;
     if (SpellDamage(0, target) >= target.Health() + target.AllShield()) {
-        if (QCharging()) return ReleaseQ(target);
+        if (QCharging()) return ReleaseQ();
         if (StartQ(target, Mode::Automatic)) return true;
     }
     return SpellDamage(2, target) >= target.Health() + target.AllShield() &&
@@ -465,7 +437,7 @@ inline bool TryKillSecure(const AIHeroClient& preferred) {
 }
 
 inline bool TryCombat(const AIHeroClient& target, Mode mode) {
-    if (QCharging()) return ReleaseQ(target);
+    if (QCharging()) return ReleaseQ();
     AIHeroClient resolved = target;
     if (PendingQTargetId != 0 && Now() <= PendingQUntil) {
         const auto pending = ControllerHelpers::HeroByNetworkId(
@@ -483,7 +455,7 @@ inline bool TryCombat(const AIHeroClient& target, Mode mode) {
 inline bool TryFlee(const AIHeroClient& preferred) {
     const auto target = ControllerHelpers::NearestEnemyToPlayer(preferred, 950.0f);
     if (!Engine::ValidEnemy(target)) return false;
-    if (CastR(target, false, false, true)) return true;
+    if (CastR(target, false, true)) return true;
     return CastE(target, Mode::Flee, true);
 }
 
@@ -497,7 +469,7 @@ inline bool TryFarm(Mode mode) {
 inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
     LastMode = mode;
     RefreshChargeState();
-    RefreshOrbwalkerFocus(mode, preferred);
+    RefreshOrbwalkerFocus(mode);
     if (QCharging()) {
         if (InterruptExpireTick >= Now()) {
             const auto interrupt = ControllerHelpers::HeroByNetworkId(
@@ -511,19 +483,14 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
             if (Engine::ValidEnemy(gapcloser, 1700.0f) &&
                 ReleaseQForReactive(gapcloser)) return true;
         }
-        auto target = ControllerHelpers::HeroByNetworkId(QTargetId);
-        if (!Engine::ValidEnemy(target)) {
-            target = SelectSmartTarget(preferred, mode, false);
-        }
-        return ReleaseQ(target);
+        return ReleaseQ();
     }
-    if (TryManualR(preferred)) return true;
     if (TryInterrupt()) return true;
     if (TryAntiGapcloser()) return true;
-    if (TryKillSecure(preferred)) return true;
+    if (TryKillSecure()) return true;
     if (mode == Mode::Flee) return TryFlee(preferred);
     if (mode == Mode::Combo || mode == Mode::Harass) {
-        const auto target = SelectSmartTarget(preferred, mode, false);
+        const auto target = SelectSmartTarget(mode);
         return TryCombat(target, mode);
     }
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
@@ -602,7 +569,7 @@ inline void BuildMenu(Menu* root) {
     BlightMenu = TacticsMenu->AddSubMenu(new Menu(
         "BlightLogic", "Blight/Orbwalker"));
     BlightMenu->Add(new MenuSeparator(
-        "WaitThird", "Wait for stack three when another AA is safe"));
+        "WaitThird", "Wait for 3 stacks if AA is safe"));
     BlightMenu->Add(new MenuBool(
         "UseWExecute", "Use W before committed low-health Q", true));
     BlightMenu->Add(new MenuSlider(
@@ -610,11 +577,11 @@ inline void BuildMenu(Menu* root) {
     ChargeMenu = TacticsMenu->AddSubMenu(new Menu(
         "PiercingLogic", "Piercing Arrow"));
     ChargeMenu->Add(new MenuSeparator(
-        "FastRelease", "Q releases at first valid range/prediction frame"));
+        "FastRelease", "Release Q on range/prediction"));
     ChainMenu = TacticsMenu->AddSubMenu(new Menu(
         "CorruptionLogic", "Chain of Corruption"));
     ChainMenu->Add(new MenuSeparator(
-        "ReactiveOnly", "Automatic R is interrupt/self-peel only"));
+        "ReactiveOnly", "Automatic R: interrupt/self-peel"));
 }
 
 inline void OnLoad() {
@@ -654,7 +621,7 @@ inline constexpr const char* Scenarios[] = {
     "Clear forced Blight focus as soon as Q/E consumes the stack state",
     "Use R automatically only for interrupt or immediate self peel",
     "Require very-high R prediction and a clear projectile-wall path",
-    "Keep manual R under the same targetability and real-range rules",
+    "Use R only under the same reactive targetability and range policy",
 };
 
 inline constexpr ChampionController Controller = [] {
@@ -666,7 +633,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Orbwalker-owned Blight focus with BeforeAttack redirection; safe-third-"
         "stack hold; current-range charged Q start/release state; committed W-Q "
-        "execute; E fallback detonation; reactive/manual R and reach rescoring.";
+        "execute; E fallback detonation; reactive R and reach rescoring.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Graves = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "GravesBasicAttackAmmo";
@@ -102,7 +101,7 @@ inline constexpr ChampionProfile Graves = [] {
     p.Flee = Plan("Smoke peel and recoil escape",
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 900),
         Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 70, 900),
-        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 150, 1600));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 150, 1600));
     return p;
 }();
 

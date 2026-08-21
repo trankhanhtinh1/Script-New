@@ -14,7 +14,7 @@ inline constexpr ChampionProfile Caitlyn = [] {
     p.Mechanics = Mechanic::Trap | Mechanic::Mark |
                   Mechanic::AutoWeave | Mechanic::Dash |
                   Mechanic::Channel;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::Execute;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Piltover Peacemaker", CastKind::Line,
@@ -89,7 +89,6 @@ inline constexpr ChampionProfile Caitlyn = [] {
     p.UltimateTargetHealthPercent = 20.0f;
     p.MaximumCommitEnemies = 1;
     p.BaseHumanizerMs = 22;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "caitlynyordletrapinternal";
@@ -101,7 +100,7 @@ inline constexpr ChampionProfile Caitlyn = [] {
         "Prefer attack and trapped-headshot reach; Q only outside an available "
         "attack or for lethal; trap immobile/committed paths; cast E only when "
         "its recoil landing is safe and still creates damage; R only on a clean "
-        "isolated execute or explicit manual request.";
+        "isolated execute.";
     p.ResearchSummary =
         "Ported from TestOrbwalker AllChampions/Caitlyn.cs: W target spacing, "
         "E recoil reach check, Q downtime/execute gate and trap/headshot state; "

@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Vex = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 52;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.MarkBuff = "VexGloom";
@@ -97,7 +96,7 @@ inline constexpr ChampionProfile Vex = [] {
     p.Flee = Plan("Fear and safe Shadow exit",
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::AllowDuringWindup),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget),
-        Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition));
     return p;
 }();
 

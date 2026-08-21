@@ -74,17 +74,14 @@ inline bool ETetherConfirmed = false;
 inline bool EFearConfirmed = false;
 
 inline bool RActive = false;
-inline bool RControllerOwned = false;
 inline bool RDashIssued = false;
 inline int RFirstCastTick = 0;
 inline int RExpireTick = 0;
 inline int RTargetId = 0;
 inline int RCastTick = 0;
-inline bool PendingControllerR = false;
 
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int GapcloserTargetId = 0;
 inline Vector3 GapcloserEnd = {};
 inline int GapcloserExpireTick = 0;
@@ -163,12 +160,10 @@ inline void ClearTether() {
 
 inline void ClearR() {
     RActive = false;
-    RControllerOwned = false;
     RDashIssued = false;
     RFirstCastTick = 0;
     RExpireTick = 0;
     RTargetId = 0;
-    PendingControllerR = false;
 }
 
 inline void RefreshState() {
@@ -237,7 +232,7 @@ inline bool Lethal(const AIHeroClient& target, float damage) {
     return target.IsValid() && damage >= target.Health() + target.AllShield();
 }
 
-inline bool RLandingSafe(const AIHeroClient& target, bool manual) {
+inline bool RLandingSafe(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target) ||
         IsCommonUntargetableOrImmune(target)) return false;
@@ -255,7 +250,6 @@ inline bool RLandingSafe(const AIHeroClient& target, bool manual) {
     context.PointClickLockdown = HasReadyPointClickThreatAt(landing);
     context.DashHazard = HasReadyDashHazardAt(landing);
     context.Lethal = lethal;
-    context.Manual = manual;
     context.EnemiesAtLanding = Engine::CountEnemiesAt(landing, 650.0f);
     context.AlliesAtLanding = Engine::CountAlliesAt(landing, 700.0f);
     context.MaximumEnemies = Slider(RMenu, "MaxEnemies", 2);
@@ -264,9 +258,7 @@ inline bool RLandingSafe(const AIHeroClient& target, bool manual) {
                landing, target, Engine::ResolvedSpecs[3]) > -10000.0f;
 }
 
-inline AIHeroClient SelectCombatTarget(const AIHeroClient& preferred,
-                                       float range) {
-    if (Engine::ValidEnemy(preferred, range)) return preferred;
+inline AIHeroClient SelectCombatTarget(float range) {
     const auto tether = TetherTarget();
     if (Engine::ValidEnemy(tether, range)) return tether;
     return Engine::SelectTarget(range);
@@ -368,23 +360,18 @@ inline bool CastE(const AIHeroClient& target,
     return true;
 }
 
-inline bool CastRFirst(const AIHeroClient& target, bool manual) {
+inline bool CastRFirst(const AIHeroClient& target) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || RActive || !Ready(3) || !CastThrottleReady(3) ||
         !Engine::ValidEnemy(target, ParanoiaRange(SpellRank(3))) ||
         !HasMana(static_cast<float>(Slider(RMenu, "ReserveMana", 20))) ||
-        !RLandingSafe(target, manual)) return false;
+        !RLandingSafe(target)) return false;
     const float distance = player.Position().Distance2D(target.Position());
     const bool lethal = Lethal(target, ExpectedFollowupDamage(target));
-    if (!manual && distance < Slider(RMenu, "MinimumDistance", 700)) return false;
-    if (!manual && !lethal &&
-        target.HealthPercent() > Slider(RMenu, "TargetHp", 48)) return false;
-    PendingControllerR = true;
-    RControllerOwned = true;
+    if (distance < Slider(RMenu, "MinimumDistance", 700) && !lethal) return false;
+    if (!lethal && target.HealthPercent() > Slider(RMenu, "TargetHp", 48)) return false;
     RTargetId = static_cast<int>(target.NetworkId());
     if (!Engine::ControllerCastSelf(3)) {
-        PendingControllerR = false;
-        RControllerOwned = false;
         RTargetId = 0;
         return false;
     }
@@ -392,26 +379,20 @@ inline bool CastRFirst(const AIHeroClient& target, bool manual) {
     RActive = true;
     RDashIssued = false;
     RExpireTick = RFirstCastTick + 6000;
-    PendingControllerR = false;
     return true;
 }
 
-inline bool CastRDash(const AIHeroClient& target, bool manual) {
-    if (!RActive || RDashIssued || !RControllerOwned ||
-        Now() < RFirstCastTick + 140 || !Ready(3) ||
-        !CastThrottleReady(3, true) || !RLandingSafe(target, manual)) {
+inline bool CastRDash(const AIHeroClient& target) {
+    if (!RActive || RDashIssued || Now() < RFirstCastTick + 140 ||
+        !Ready(3) || !CastThrottleReady(3, true) || !RLandingSafe(target)) {
         return false;
     }
-    PendingControllerR = true;
-    if (!Engine::ControllerCastUnit(3, target)) {
-        PendingControllerR = false;
-        return false;
-    }
+    if (!Engine::ControllerCastUnit(3, target)) return false;
     RCastTick = Now();
     RDashIssued = true;
-    PendingControllerR = false;
     return true;
 }
+
 
 inline int NearbyPassiveUnits(bool jungle) {
     const auto player = GameObjects::Player();
@@ -483,85 +464,66 @@ inline bool TryReactiveE() {
            CastE(target, Mode::Automatic, true);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectCombatTarget(preferred, kQRange + 35.0f);
+    const auto target = SelectCombatTarget(kQRange + 35.0f);
     if (!Engine::ValidEnemy(target)) return false;
     if (Lethal(target, SpellDamage(2, target)) &&
         CastE(target, Mode::Automatic, true)) return true;
     if (Lethal(target, SpellDamage(0, target)) &&
         CastQ(target, Mode::Automatic, true)) return true;
     if (Bool(RMenu, "AutoExecute", true) && Ready(3)) {
-        const auto globalTarget = Engine::ValidEnemy(preferred,
-            ParanoiaRange(SpellRank(3)))
-            ? preferred : Engine::SelectTarget(ParanoiaRange(SpellRank(3)));
+        const auto globalTarget = Engine::SelectTarget(ParanoiaRange(SpellRank(3)));
         if (Engine::ValidEnemy(globalTarget) &&
             Lethal(globalTarget, ExpectedFollowupDamage(globalTarget))) {
-            return CastRFirst(globalTarget, false);
+            return CastRFirst(globalTarget);
         }
     }
     return false;
 }
 
-inline bool TryFlee(const AIHeroClient& preferred) {
-    const auto pursuer = ControllerHelpers::NearestEnemyToPlayer(preferred, 850.0f);
+inline bool TryFlee(const AIHeroClient& target) {
+    const auto pursuer = ControllerHelpers::NearestEnemyToPlayer(target, 850.0f);
     if (Engine::ValidEnemy(pursuer, kETargetRange + 50.0f) &&
         CastE(pursuer, Mode::Flee, true)) return true;
     return CastFleeQ();
 }
-
-inline bool TryCombat(const AIHeroClient& preferred, Mode mode) {
+inline bool TryCombat(const AIHeroClient&, Mode mode) {
     if (mode == Mode::Combo && !RActive && Ready(3) &&
         Bool(RMenu, "Combo", true)) {
         const float range = ParanoiaRange(SpellRank(3));
-        const auto globalTarget = Engine::ValidEnemy(preferred, range)
-            ? preferred : Engine::SelectTarget(range);
+        const auto globalTarget = Engine::SelectTarget(range);
         if (Engine::ValidEnemy(globalTarget) &&
-            CastRFirst(globalTarget, false)) return true;
+            CastRFirst(globalTarget)) return true;
     }
     const auto tether = TetherTarget();
     const auto target = Engine::ValidEnemy(tether, kQRange + 35.0f)
-        ? tether : SelectCombatTarget(preferred, kQRange + 35.0f);
+        ? tether : SelectCombatTarget(kQRange + 35.0f);
     if (!Engine::ValidEnemy(target)) return false;
     if (CastQ(target, mode, ETetherConfirmed || EFearConfirmed)) return true;
     if (CastE(target, mode, false)) return true;
     return false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     RefreshState();
     if (CastWReactive()) return true;
-
-    const bool manualR = Key(RMenu, "ManualR", false);
     if (RActive) {
-        if (!RControllerOwned) return false;
         auto target = HeroByNetworkId(RTargetId);
-        if (!Engine::ValidEnemy(target, ParanoiaRange(SpellRank(3)))) {
-            target = Engine::ValidEnemy(preferred, ParanoiaRange(SpellRank(3)))
-                ? preferred : AIHeroClient{};
-        }
-        return Engine::ValidEnemy(target) && CastRDash(target, manualR);
+        if (!Engine::ValidEnemy(target, ParanoiaRange(SpellRank(3))))
+            target = Engine::SelectTarget(ParanoiaRange(SpellRank(3)));
+        return Engine::ValidEnemy(target) && CastRDash(target);
     }
-    if (manualR) {
-        const auto target = Engine::ValidEnemy(preferred,
-            ParanoiaRange(SpellRank(3)))
-            ? preferred : Engine::SelectTarget(ParanoiaRange(SpellRank(3)));
-        if (Engine::ValidEnemy(target) && CastRFirst(target, true)) return true;
-    }
-    if (Now() < PlayerOverrideUntil) return false;
+    const auto target = Engine::SelectTarget(ParanoiaRange(SpellRank(3)));
     if (TryReactiveE()) return true;
-    if (TryKillSecure(preferred)) return true;
-    if (mode == Mode::Flee) return TryFlee(preferred);
-    if (mode == Mode::Combo || mode == Mode::Harass) {
-        return TryCombat(preferred, mode);
-    }
+    if (TryKillSecure()) return true;
+    if (mode == Mode::Flee) return TryFlee(target);
+    if (mode == Mode::Combo || mode == Mode::Harass)
+        return TryCombat(target, mode);
     if (mode == Mode::LaneClear || mode == Mode::Jungle ||
-        mode == Mode::LastHit) {
-        return TryFarmQ(mode);
-    }
+        mode == Mode::LastHit) return TryFarmQ(mode);
     return false;
 }
-
 inline void RecordEnemySpell(
     const SDK::Events::ProcessSpellEventArgs& args) {
     if (args.IsAutoAttack) return;
@@ -587,9 +549,6 @@ inline void ObserveLocalSpell(
     if (!IsLocalPlayer(args.Sender)) return;
     const int now = Now();
     if (args.IsAutoAttack) return;
-    const bool controllerOwned = PendingControllerR ||
-        (args.Slot >= 0 && args.Slot < 4 && Engine::WasControllerCast(args.Slot));
-    if (!controllerOwned) PlayerOverrideUntil = now + 360;
 
     if (args.Slot == 0 || SpellEventNameContainsAny(
             args, { "nocturneduskbringer", "nocturneq" })) {
@@ -626,7 +585,6 @@ inline void ObserveLocalSpell(
             RFirstCastTick = RCastTick = now;
             RExpireTick = now + 6000;
             RTargetId = static_cast<int>(args.TargetNetworkId);
-            RControllerOwned = controllerOwned;
         }
     }
 }
@@ -741,8 +699,8 @@ inline void UpdateBuffState(const SDK::Events::BuffEventArgs& args,
 
 inline void OnDraw() {
     const auto player = GameObjects::Player();
-    if (!player.IsValid() || !Bool(CoachMenu, "Draw", true)) return;
-    if (Bool(CoachMenu, "QRange", true)) {
+    if (!player.IsValid() || !Bool(CoachMenu, "Draw", false)) return;
+    if (Bool(CoachMenu, "QRange", false)) {
         Drawing::DrawCircle(player.Position(), kQRange, 0xFF7150A8u, 1.5f, 48);
     }
     if (QTrailExpireTick > Now() && !QTrailStart.IsZero() &&
@@ -767,9 +725,9 @@ inline void BuildMenu(Menu* root) {
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu(
         "UmbraBlades", "Umbra Blades cleave/heal"));
     PassiveMenu->Add(new MenuBool(
-        "PreserveAttack", "Preserve ready passive AA over ordinary Q", true));
+        "PreserveAttack", "Preserve passive AA over Q", true));
     PassiveMenu->Add(new MenuSlider(
-        "HealPriorityHp", "Let passive cleave heal before farm Q below HP (%)",
+        "HealPriorityHp", "Passive heal before farm Q (%)",
         72, 20, 100));
 
     QMenu = TacticsMenu->AddSubMenu(new Menu(
@@ -782,7 +740,7 @@ inline void BuildMenu(Menu* root) {
     WMenu = TacticsMenu->AddSubMenu(new Menu(
         "Shroud", "Shroud of Darkness spell shield"));
     WMenu->Add(new MenuBool(
-        "Automatic", "Shield targeted/crossing hostile abilities", true));
+        "Automatic", "Shield targeted hostile casts", true));
     WMenu->Add(new MenuSlider(
         "DamageShieldHp", "Shield non-CC damage below HP (%)", 48, 5, 100));
     WMenu->Add(new MenuSlider(
@@ -793,20 +751,17 @@ inline void BuildMenu(Menu* root) {
     EMenu->Add(new MenuSlider(
         "MinimumMana", "Minimum mana for E (%)", 14, 0, 80));
     EMenu->Add(new MenuSeparator(
-        "TetherOwnership", "Active tether target owns Q/E follow-up until fear"));
+        "TetherOwnership", "Tether owns Q/E until fear"));
 
     RMenu = TacticsMenu->AddSubMenu(new Menu(
         "Paranoia", "Paranoia darkness/dash safety"));
-    RMenu->Add(new MenuKeyBind(
-        "ManualR", "Safe Paranoia engage [T]", SDK::Keys::T,
-        KeyBindType::Press));
     RMenu->Add(new MenuBool("Combo", "Allow scored Combo R", true));
     RMenu->Add(new MenuBool(
         "AutoExecute", "Allow lethal automatic R", true));
     RMenu->Add(new MenuSlider(
         "TargetHp", "Combo R target max HP (%)", 48, 5, 100));
     RMenu->Add(new MenuSlider(
-        "MinimumDistance", "Do not R when local actions already reach", 700,
+        "MinimumDistance", "Skip R if local actions reach", 700,
         350, 1400));
     RMenu->Add(new MenuSlider(
         "MaxEnemies", "Maximum enemies at R landing", 2, 1, 5));
@@ -826,8 +781,8 @@ inline void BuildMenu(Menu* root) {
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "Nocturne coach overlays"));
-    CoachMenu->Add(new MenuBool("Draw", "Draw mechanics", true));
-    CoachMenu->Add(new MenuBool("QRange", "Draw Q range", true));
+    CoachMenu->Add(new MenuBool("Draw", "Draw mechanics", false));
+    CoachMenu->Add(new MenuBool("QRange", "Draw Q range", false));
 }
 
 inline void OnLoad() {
@@ -844,7 +799,7 @@ inline void OnLoad() {
     ECastTick = 0;
     ClearR();
     RCastTick = 0;
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     GapcloserTargetId = GapcloserExpireTick = 0;
     GapcloserEnd = {};
     InterruptTargetId = InterruptExpireTick = 0;
@@ -864,7 +819,7 @@ inline constexpr const char* Scenarios[] = {
     "Model the 360-radius cleave and level/AP heal including reduced secondary-minion value",
     "Preserve a ready healing cleave before ordinary combat or farm Q",
     "Cast Q with prediction and projectile-wall rejection but no unit collision",
-    "Track the five-second Q trail from both controller and manual casts",
+    "Track the five-second Q trail from controller and process-spell events",
     "Use Q trail direction toward the active fear-tether target",
     "Use W only for a targeted or player-crossing hostile spell",
     "Prioritize hard crowd control and low-health damage windows for W",
@@ -877,13 +832,12 @@ inline constexpr const char* Scenarios[] = {
     "Reject R landing into wall, turret, excess enemies or ready lockdown",
     "Require ally parity or lethal follow-up at the R landing",
     "Recheck landing safety immediately before the R dash recast",
-    "Never auto-recast a player-started Paranoia darkness window",
-    "Allow the manual R key through the same range and safety gates",
-    "Prefer the selected target while it has a currently reachable route",
-    "Honor Combo, Harass, LaneClear, Jungle, LastHit and Flee mode ownership",
+    "Recast active Paranoia only after a fresh landing-safety check",
+    "Use autonomous Engine target selection while preserving the active tether",
+    "Honor Combo, Harass, LaneClear, Jungle, LastHit and Flee mode policies",
     "Use passive-aware Q line scoring for lane and jungle clear",
     "Respect spell readiness, mana floors, attack windup and cast throttles",
-    "Observe manual Q/W/E/R and pause controller decisions rather than overwrite them",
+    "Observe Q/W/E/R events and preserve channel safety without overwriting state",
 };
 
 inline constexpr ChampionController Controller = [] {
@@ -895,7 +849,7 @@ inline constexpr ChampionController Controller = [] {
     controller.ImplementationSummary =
         "Passive cleave/heal clock and AA preservation; prediction-backed Q "
         "trail; event-timed W shield; polled 465 tether; rank-scaled two-stage "
-        "Paranoia with landing danger, ally parity and manual ownership.";
+        "Paranoia with landing danger, ally parity and event-driven channel safety.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

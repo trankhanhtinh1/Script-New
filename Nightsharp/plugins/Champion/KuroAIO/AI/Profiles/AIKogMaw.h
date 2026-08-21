@@ -87,7 +87,6 @@ inline constexpr ChampionProfile KogMaw = [] {
     p.UltimateTargetHealthPercent = 40.0f;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 21;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.PassiveBuff = "KogMawBioArcaneBarrage";
     p.MarkBuff = "kogmawlivingartillerycost";

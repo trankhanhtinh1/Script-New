@@ -84,7 +84,6 @@ enum class UltimatePolicy : std::uint8_t {
     SaveAlly,
     GlobalExecute,
     RecastControl,
-    ManualAssist,
 };
 
 enum class Intent : std::uint32_t {
@@ -178,7 +177,6 @@ enum class StepRule : std::uint32_t {
     SkipIfKillableWithout = 1u << 14,
     HoldForExecute        = 1u << 15,
     AllowDuringWindup     = 1u << 16,
-    ManualAssistOnly      = 1u << 17,
 };
 
 enum class Mode : std::uint8_t {
@@ -302,7 +300,6 @@ struct ChampionProfile {
     int UltimateMinimumTargets = 2;
     int MaximumCommitEnemies = 2;
     int BaseHumanizerMs = 65;
-    bool PreferSelectedTarget = true;
     bool AllowTurretDiveIfKillable = false;
     bool ProtectManualChannels = true;
 

@@ -246,7 +246,6 @@ struct QStartContext {
     bool PlayerAttackWindup = false;
     bool IncomingHardCrowdControl = false;
     bool UnsafeMelee = false;
-    bool PlayerRecentlyCast = false;
     bool Flying = false;
     bool TargetControlled = false;
     float ExpectedContactSeconds = 0.0f;
@@ -258,7 +257,6 @@ inline bool ShouldStartQ(const QStartContext& context) {
     if (!context.TargetValid || !context.RequestedTargetFirst ||
         !context.CursorAgrees || context.PlayerAttackWindup ||
         context.IncomingHardCrowdControl || context.UnsafeMelee ||
-        context.PlayerRecentlyCast ||
         context.AvailableMana + 0.5f < context.RequiredMana) {
         return false;
     }
@@ -267,7 +265,6 @@ inline bool ShouldStartQ(const QStartContext& context) {
 }
 
 struct QStopContext {
-    bool ControllerOwned = false;
     bool TapPurpose = false;
     bool IncomingHardCrowdControl = false;
     bool UnsafeMelee = false;
@@ -281,7 +278,6 @@ struct QStopContext {
 };
 
 inline bool ShouldStopQ(const QStopContext& context) {
-    if (!context.ControllerOwned) return false;
     if (context.IncomingHardCrowdControl || context.UnsafeMelee ||
         !context.TargetAlive || context.ManaReserveBroken ||
         context.PlayerSteeringAway) {
@@ -296,6 +292,7 @@ inline bool ShouldStopQ(const QStopContext& context) {
     }
     return false;
 }
+
 
 inline float WRange(int stardust) {
     return kWBaseRange + kWRangePerStardust *
@@ -334,7 +331,6 @@ struct FlightContext {
     float CursorDot = 1.0f;
     float PlayerHealthPercent = 100.0f;
     bool GroundedOrImmobilized = false;
-    bool PlayerRecentlyCast = false;
     bool TargetValid = true;
     bool TakedownReset = false;
     bool EscapeRoute = false;
@@ -344,7 +340,7 @@ struct FlightContext {
 
 inline float FlightRouteScore(const FlightContext& context) {
     if (!context.TargetValid || context.GroundedOrImmobilized ||
-        context.PlayerRecentlyCast || context.Origin.Distance2D(
+        context.Origin.Distance2D(
             context.Destination) < 125.0f ||
         context.CursorDot < -0.15f || context.Samples.empty()) {
         return -100000.0f;

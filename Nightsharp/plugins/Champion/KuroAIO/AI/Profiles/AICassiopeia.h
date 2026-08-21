@@ -18,7 +18,6 @@ inline constexpr ChampionProfile Cassiopeia = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "CassiopeiaPassive";
@@ -52,7 +51,7 @@ inline constexpr ChampionProfile Cassiopeia = [] {
     p.Spells[3].Aim = AimPolicy::BestAoe; p.Spells[3].Priority = 98; p.Spells[3].MinimumAoeTargets = 2;
     p.Trade = Plan("Poison Twin Fang trade", Step(SDK::SpellSlot::Q, StepRule::RequireSafePosition, 0, 800), Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireAfterAttack, 100, 1000));
     p.AllIn = Plan("Miasma poison all-in", Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 800), Step(SDK::SpellSlot::Q, StepRule::RequireTarget, 80, 950), Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireAfterAttack, 150, 1200), Step(SDK::SpellSlot::R, StepRule::RequireMultiTarget, 300, 1500));
-    p.Flee = Plan("Miasma peel", Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 800), Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 150, 1100));
+    p.Flee = Plan("Miasma peel", Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 800), Step(SDK::SpellSlot::R, StepRule::RequireSafePosition | StepRule::RequireMultiTarget, 150, 1100));
     return p;
 }();
 }

@@ -117,11 +117,9 @@ struct RDecisionContext {
     bool HealNeeded = false;
     bool UnderEnemyTurret = false;
     bool CommitSafe = false;
-    bool Manual = false;
 };
 
 inline bool ShouldCastR(const RDecisionContext& context) {
-    if (context.Manual) return context.MultiTarget || context.Lethal || context.HealNeeded;
     if (context.UnderEnemyTurret && !context.Lethal) return false;
     return context.CommitSafe && (context.Lethal || context.MultiTarget || context.HealNeeded);
 }

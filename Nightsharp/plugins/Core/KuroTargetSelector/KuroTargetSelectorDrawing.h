@@ -62,7 +62,7 @@ private:
         drawingMenu_ = native->AddSubMenu(
             new ::SDK::Menu("Drawing", "Drawing"));
         drawingMenu_->Add(new ::SDK::MenuBool(
-            "Selected", "Draw Selected Target", true));
+            "Selected", "Draw Selected Target", false));
         drawingMenu_->Add(new ::SDK::MenuBool(
             "LegalTargets", "Draw Legal Targets", false));
         drawingMenu_->Add(new ::SDK::MenuBool(
@@ -86,7 +86,7 @@ private:
     void Render() {
         if (!menu_ || !::SDK::Drawing::IsEnabled()) return;
 
-        if (Enabled("Selected", true)) {
+        if (Enabled("Selected", false)) {
             ::SDK::AIHeroClient targetToDraw = state_.Selected;
             if (!targetToDraw.IsValid() || targetToDraw.IsDead() || !targetToDraw.IsVisible()) {
                 for (const auto& decision : decisions_) {

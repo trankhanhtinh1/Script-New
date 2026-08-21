@@ -21,7 +21,6 @@ inline constexpr ChampionProfile Poppy = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "PoppyPassive";
@@ -80,7 +79,7 @@ inline constexpr ChampionProfile Poppy = [] {
         Step(SDK::SpellSlot::R, StepRule::RequireMultiTarget | StepRule::RequireRecast, 220, 1800));
     p.Flee = Plan("Defensive knockback",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 0, 700),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireTarget, 100, 1200));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 100, 1200));
     return p;
 }();
 

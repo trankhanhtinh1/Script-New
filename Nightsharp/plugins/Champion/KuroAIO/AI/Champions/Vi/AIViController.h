@@ -48,7 +48,6 @@ enum class Sequence : int {
   Peel,
   Escape,
   Jungle,
-  PlayerLed
 };
 enum class Posture : int {
   Neutral,
@@ -61,7 +60,6 @@ enum class Posture : int {
 };
 enum class UltimateReason : int {
   None,
-  Manual,
   Execute,
   Interrupt,
   Peel,
@@ -120,12 +118,10 @@ inline int IncomingThreatUntil = 0, IncomingHardCcUntil = 0;
 inline float IncomingDamage = 0.0f;
 inline int GapcloserTargetId = 0, GapcloserExpireTick = 0;
 inline Vector3 GapcloserEnd = {};
-inline int InterruptTargetId = 0, InterruptExpireTick = 0,
-           PlayerOverrideUntil = 0;
+inline int InterruptTargetId = 0, InterruptExpireTick = 0;
 inline constexpr int kDentingDurationMs = 4000;
 inline constexpr int kShieldDurationMs = 3000;
 inline constexpr int kEArmDurationMs = 6000;
-inline constexpr int kManualOwnershipMs = 520;
 
 inline bool TargetProtected(const AIHeroClient &target) {
   return !Engine::ValidEnemy(target) || target.IsInvulnerable() ||
@@ -417,8 +413,7 @@ inline bool CastE(Mode mode, const AIBaseClient &attacked, bool reset,
   ActiveSequence = farm ? Sequence::Jungle : Sequence::AttackReset;
   return true;
 }
-inline RPlan BuildRPlan(const AIHeroClient &target, bool manual,
-                        bool defensive) {
+inline RPlan BuildRPlan(const AIHeroClient &target, bool defensive) {
   RPlan plan{};
   const auto p = GameObjects::Player();
   if (!p.IsValid() || !Engine::ValidEnemy(target, kRRange) ||
@@ -451,17 +446,16 @@ inline RPlan BuildRPlan(const AIHeroClient &target, bool manual,
   c.MaximumEnemies = Slider(UltimateMenu, "MaxLandingEnemies", 2);
   c.TargetLethal = Lethal(target, RDamage(target));
   c.Defensive = defensive;
-  c.ManualConsent = manual;
   plan.Safe = plan.Valid = RLockOnPathSafe(c);
   return plan;
 }
 inline bool CastR(const AIHeroClient &target, UltimateReason reason,
-                  bool manual = false, bool defensive = false) {
+                  bool defensive = false) {
   const Mode mode = defensive ? Mode::Flee : Mode::Combo;
   if (!Ready(3) || !SpellEnabled(3, mode) || RuntimeQCharging() ||
-      !CastThrottleReady(3, 36, manual ? 0 : -1))
+      !CastThrottleReady(3, 36))
     return false;
-  LastRPlan = BuildRPlan(target, manual, defensive);
+  LastRPlan = BuildRPlan(target, defensive);
   if (!LastRPlan.Valid || !Engine::ControllerCastUnit(3, target))
     return false;
   RCastTick = Now();
@@ -555,7 +549,7 @@ inline Posture ChoosePosture(Mode mode, const AIHeroClient &target) {
     return Posture::FinishDenting;
   return mode == Mode::Combo ? Posture::AllIn : Posture::ShortTrade;
 }
-inline void RefreshDentingFocus(Mode mode, const AIHeroClient &preferred) {
+inline void RefreshDentingFocus(Mode mode) {
   if (mode != Mode::Combo && mode != Mode::Harass) {
     ClearTemporaryOrbwalkerFocus(OwnedFocusTargetId, OwnedFocusUntil);
     return;
@@ -571,8 +565,7 @@ inline void RefreshDentingFocus(Mode mode, const AIHeroClient &preferred) {
     if (Engine::ValidEnemy(e, 500.0f) &&
         InAutoAttackRange(e, kEExtraAttackRange)) {
       const int s = DentingStacks(e);
-      if (s > stacks || (s == stacks && preferred.IsValid() &&
-                         preferred.NetworkId() == e.NetworkId())) {
+      if (s > stacks) {
         best = e;
         stacks = s;
       }
@@ -584,7 +577,7 @@ inline void RefreshDentingFocus(Mode mode, const AIHeroClient &preferred) {
     ActiveSequence = Sequence::DentingFinish;
   }
 }
-inline bool TryReactive(const AIHeroClient &selected) {
+inline bool TryReactive(const AIHeroClient &target) {
   auto interrupt = HeroByNetworkId(InterruptTargetId);
   if (InterruptExpireTick >= Now() && Engine::ValidEnemy(interrupt, 850.0f) &&
       Bool(ChargeMenu, "InterruptQ", true))
@@ -596,18 +589,10 @@ inline bool TryReactive(const AIHeroClient &selected) {
     return RuntimeQCharging() ? ReleaseQ(gap, false, true)
                               : StartQ(gap, Mode::Automatic, true);
   if (IncomingHardCcUntil >= Now() && PassiveReady &&
-      Engine::ValidEnemy(selected, 300.0f) &&
+      Engine::ValidEnemy(target, 300.0f) &&
       Bool(ShieldMenu, "PrimeVsHardCC", true))
-    return CastE(Mode::Automatic, selected, false);
+    return CastE(Mode::Automatic, target, false);
   return false;
-}
-inline bool TryManualR(const AIHeroClient &selected) {
-  if (!Key(Engine::AutomaticMenu, "ManualR", false))
-    return false;
-  const auto target = Engine::ValidEnemy(selected, kRRange)
-                          ? selected
-                          : Engine::SelectTarget(kRRange);
-  return target.IsValid() && CastR(target, UltimateReason::Manual, true);
 }
 inline bool TryKillSecure(AIHeroClient target) {
   if (!Engine::ValidEnemy(target, 825.0f))
@@ -653,8 +638,8 @@ inline bool TryHarass(const AIHeroClient &target) {
     return false;
   return Bool(ChargeMenu, "UseHarassQ", false) && StartQ(target, Mode::Harass);
 }
-inline bool TryFlee(const AIHeroClient &selected) {
-  const auto pursuer = NearestEnemyToPlayer(selected, 850.0f);
+inline bool TryFlee(const AIHeroClient &fallback) {
+  const auto pursuer = NearestEnemyToPlayer(fallback, 850.0f);
   return RuntimeQCharging() ? ReleaseQ(pursuer, true)
                             : (Bool(ChargeMenu, "UseFleeQ", true) &&
                                StartQ(pursuer, Mode::Flee, false, true));
@@ -693,16 +678,13 @@ inline bool TryJungleQ() {
   ActiveSequence = Sequence::Jungle;
   return true;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient &selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
   LastMode = mode;
   RefreshState();
-  AIHeroClient target = selected;
-  if (!Engine::ValidEnemy(target, 950.0f))
-    target = Engine::SelectTarget(950.0f);
+  const AIHeroClient target = Engine::SelectTarget(950.0f);
   CurrentPosture = ChoosePosture(mode, target);
-  RefreshDentingFocus(mode, target);
-  if (TryManualR(target) || QPlayerOwned || PlayerOverrideUntil >= Now() ||
-      RActive)
+  RefreshDentingFocus(mode);
+  if (QPlayerOwned || RActive)
     return true;
   if (TryReactive(target) || TryKillSecure(target))
     return true;
@@ -776,11 +758,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &args) {
   }
   const int slot = args.Slot;
   const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-  if (!owned && slot >= 0 && slot < 4) {
-    PlayerOverrideUntil =
-        now + Slider(TacticsMenu, "ManualOwnershipMs", kManualOwnershipMs);
-    ActiveSequence = Sequence::PlayerLed;
-  }
   int attackTarget = 0, attackTick = 0;
   if (CaptureLocalAutoAttack(args, attackTarget, attackTick)) {
     LastAutoTargetId = attackTarget;
@@ -986,15 +963,14 @@ inline void OnDraw() {
       char text[256]{};
       _snprintf_s(
           text, sizeof(text), _TRUNCATE,
-          "Vi one-trick | %s | Q %s %.0f | P %s | E %d/%d | R %d/%d | %s",
+          "Vi one-trick | %s | Q %s %.0f | P %s | E %d/%d | R %d/%d",
           PostureName(CurrentPosture),
           QPlayerOwned ? "player" : (RuntimeQCharging() ? "charge" : "ready"),
           QChargeFraction(QElapsedSeconds()) * 100.0f,
           PassiveShieldActive ? "shield"
                               : (PassiveReady ? "ready" : "cooldown"),
           EAmmo, EMaximumAmmo, LastRPlan.PathEnemies,
-          LastRPlan.EnemiesAtEndpoint,
-          PlayerOverrideUntil >= Now() ? "player" : "controller");
+          LastRPlan.EnemiesAtEndpoint);
       Drawing::DrawText(screen.x - 245.0f, screen.y - 112.0f, 0xFFFFB4D2u,
                         text);
     }
@@ -1006,14 +982,8 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu =
       root->AddSubMenu(new Menu("ViOneTrick", "Vi one-trick mechanics"));
-  TacticsMenu->Add(new MenuSlider("ManualOwnershipMs",
-                                  "Yield after player spell (ms)",
-                                  kManualOwnershipMs, 180, 1200));
-  TacticsMenu->Add(new MenuSeparator(
-      "Ownership",
-      "Player owns movement, Flash, manual Q release and R intent."));
   ChargeMenu = TacticsMenu->AddSubMenu(
-      new Menu("VaultBreaker", "Charge, first collision and endpoint safety"));
+      new Menu("VaultBreaker", "Charge and endpoint safety"));
   ChargeMenu->Add(new MenuBool("UseComboQ", "Use Q in combo", true));
   ChargeMenu->Add(new MenuBool("UseHarassQ", "Use Q in harass", false));
   ChargeMenu->Add(
@@ -1034,29 +1004,29 @@ inline void BuildMenu(Menu *root) {
   ChargeMenu->Add(
       new MenuBool("RespectDashHazards", "Avoid anti-dash endpoints", true));
   DentingMenu = TacticsMenu->AddSubMenu(
-      new Menu("DentingBlows", "Third-hit target and armor-shred discipline"));
+      new Menu("DentingBlows", "Third-hit and armor-shred rules"));
   DentingMenu->Add(
       new MenuBool("PreserveTarget", "Keep target through third hit", true));
   DentingMenu->Add(new MenuBool("FinishThirdHitBeforeQ",
                                 "Do not Q away from third hit", true));
   DentingMenu->Add(new MenuSeparator(
-      "Armor", "Track four-second 20% armor shred and attack-speed window."));
+      "Armor", "Armor shred and attack speed"));
   ShieldMenu =
       TacticsMenu->AddSubMenu(new Menu("BlastShield", "Passive shield timing"));
   ShieldMenu->Add(new MenuBool("PrimeVsHardCC",
                                "Prime E attack into incoming hard CC", true));
   ShieldMenu->Add(new MenuSeparator(
       "Cooldown",
-      "Every Denting Blows proc refunds four seconds of shield cooldown."));
+      "Denting Blows refunds shield CD"));
   ForceMenu = TacticsMenu->AddSubMenu(
       new Menu("RelentlessForce", "Attack reset and charge economy"));
   ForceMenu->Add(
       new MenuBool("ReserveLastCharge", "Reserve last E outside all-in", true));
   ForceMenu->Add(new MenuSeparator(
       "Reset",
-      "E is cast only after an observed attack or a real defensive prime."));
+      "E follows attack or defense"));
   UltimateMenu = TacticsMenu->AddSubMenu(
-      new Menu("CeaseAndDesist", "Manual lock-on path and landing safety"));
+      new Menu("CeaseAndDesist", "Lock-on and safe landing"));
   UltimateMenu->Add(
       new MenuBool("AutomaticCombo", "Allow automatic combo R", false));
   UltimateMenu->Add(
@@ -1067,9 +1037,6 @@ inline void BuildMenu(Menu *root) {
       new MenuSlider("MaxLandingEnemies", "Max enemies at R landing", 2, 1, 5));
   UltimateMenu->Add(new MenuBool("RespectDashHazards",
                                  "Avoid anti-dash landing zones", true));
-  UltimateMenu->Add(new MenuSeparator(
-      "ManualR",
-      "Use shared Manual R key; consent relaxes path economy, not immunity."));
   FarmMenu = TacticsMenu->AddSubMenu(
       new Menu("Farm", "E reset and jungle Q ownership"));
   FarmMenu->Add(new MenuBool("LaneE", "Use E reset in lane clear", true));
@@ -1087,7 +1054,7 @@ inline void BuildMenu(Menu *root) {
       new MenuBool("DrawQEndpoint", "Draw Q endpoint safety", false));
   CoachMenu->Add(new MenuBool("DrawRPath", "Draw R path and landing", false));
   CoachMenu->Add(new MenuBool("DrawDenting", "Mark Denting stacks", false));
-  CoachMenu->Add(new MenuBool("DrawState", "Draw state and ownership", false));
+  CoachMenu->Add(new MenuBool("DrawState", "Draw state", false));
 }
 inline void OnLoad() {
   ActiveSequence = Sequence::None;
@@ -1115,7 +1082,7 @@ inline void OnLoad() {
   IncomingDamage = 0.0f;
   GapcloserTargetId = GapcloserExpireTick = 0;
   GapcloserEnd = {};
-  InterruptTargetId = InterruptExpireTick = PlayerOverrideUntil = 0;
+  InterruptTargetId = InterruptExpireTick = 0;
   RefreshState();
 }
 inline void OnUnload() {
@@ -1160,10 +1127,7 @@ inline constexpr const char *Scenarios[] = {
     "Count landing enemies and allied follow-up",
     "Reject turret hazard over-numbered and unsupported R paths",
     "Keep automatic R disabled by default",
-    "Use Manual R as explicit consent without bypassing immunity",
     "Stop attacks during Q and R movement",
-    "Yield after player-owned spells",
-    "Prefer selected target and cooperate with orbwalker",
     "Own Combo Harass LaneClear Jungle LastHit Flee Automatic",
     "Never issue movement or Flash input"};
 inline constexpr ChampionController Controller = [] {
@@ -1175,7 +1139,7 @@ inline constexpr ChampionController Controller = [] {
   c.ImplementationSummary =
       "Event/poll Denting Blows and Blast Shield economy, first-collision "
       "charged-Q endpoint planning, post-attack two-charge E resets, and "
-      "manual-first R path/landing safety across every mode.";
+      "autonomous R path/landing safety across every mode.";
   c.Scenarios = Scenarios;
   c.ScenarioCount = std::size(Scenarios);
   c.OwnsDecisionLoop = true;

@@ -42,7 +42,7 @@ inline int SpiderlingCount = 0;
 inline int LastCastTick[4]{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int GapcloserTargetId = 0;
@@ -165,7 +165,7 @@ inline bool CastCocoon(const AIHeroClient& target, Mode mode, bool reactive = fa
 inline bool CastTransform(Mode mode, bool escape = false, bool reactive = false) {
     if (!Ready(3, mode) || !Throttle(3, 100) || PreserveAttack(reactive)) return false;
     const Form desired = CurrentForm == Form::Human ? Form::Spider : Form::Human;
-    if (!ShouldTransform(CurrentForm, desired, true, escape, PlayerOverrideUntil > Now())) return false;
+    if (!ShouldTransform(CurrentForm, desired, true, escape, false)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
     CurrentForm = desired;
@@ -279,7 +279,7 @@ inline void ReconcileState() {
 }
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
+    if (false) return true;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
     const AIHeroClient target = PreferredEnemyTarget(selected,
@@ -326,8 +326,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot)) PlayerOverrideUntil = now +
-                Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[slot] = now;
         }
         if (SpellEventNameContainsAny(args, {"VenomousBite", "SkitteringFrenzy", "Rappel", "SpiderForm"})) {
@@ -416,8 +414,7 @@ inline void OnDraw() {
 }
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("EliseOneTrick", "Elise form tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
+    TacticsMenu = root->AddSubMenu(new Menu("EliseOneTrick", "Elise form tactics"));
     CocoonMenu = TacticsMenu->AddSubMenu(new Menu("Cocoon", "Cocoon collision and prediction"));
     CocoonMenu->Add(new MenuBool("RequireHighHitchance", "Require high hitchance", true));
     RappelMenu = TacticsMenu->AddSubMenu(new Menu("Rappel", "Rappel landing safety"));
@@ -432,7 +429,7 @@ inline void OnLoad() {
     CurrentForm = Form::Unknown; CurrentRappel = RappelPhase::Ready;
     RappelTargetId = RappelExpireTick = CocoonTargetId = CocoonExpireTick = 0;
     SpiderlingCount = 0; std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
-    LastAutoTargetId = LastAutoTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = GapcloserTargetId = GapcloserExpireTick = 0;
     InterruptTargetId = InterruptExpireTick = 0; LastRappelLanding = {};
     ReconcileState();
@@ -453,7 +450,7 @@ inline constexpr const char* Scenarios[] = {
     "Track Rappel rising and descending phases with explicit target and landing endpoint",
     "Reject Rappel landings through walls, enemy turrets or excessive endpoint enemies",
     "Use Skittering Frenzy and spider Q for fast jungle clears without blind lane casts",
-    "Preserve auto-attack windup and yield manual form or Rappel ownership",
+    "Preserve auto-attack windup and reconcile form or Rappel state/",
     "Track Cocoon target expiry, Spiderling objects, enemy threat and interrupt windows",
     "Handle Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Automatic mode is limited to Cocoon peel, lethal Bite and emergency Rappel",

@@ -43,8 +43,6 @@ inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int InterruptTargetId = 0;
 inline int InterruptExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
-inline bool RManual = false;
 inline Vector3 LastDashEndpoint{};
 
 using ControllerHelpers::Now;
@@ -139,7 +137,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false,
 }
 
 inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false,
-                  bool manual = false, bool interrupt = false) {
+                  bool interrupt = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Engine::ValidEnemy(target, kRRadius + 70.0f) ||
         Protected(target) || RPosture != SpinPosture::Idle ||
@@ -152,7 +150,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false,
     }
     const SpinContext context{ true, true,
         SpinHits(player.Position(), PredictPosition(target, 0.20f), target.BoundingRadius()),
-        interrupt, defensive, lethal, manual, Orbwalker::IsWindingUp(),
+        interrupt, defensive, lethal, Orbwalker::IsWindingUp(),
         UnderTurret(player.Position(), lethal || defensive), targets,
         Slider(RMenu, "MinimumTargets", 2) };
     if (!ShouldStartSpin(context)) return false;
@@ -160,13 +158,12 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false,
     RCastTick = RChannelStartTick = Now();
     RPosture = SpinPosture::Channeling;
     RTargetId = static_cast<int>(target.NetworkId());
-    RManual = manual;
     return true;
 }
 
 inline bool RecastR(const AIHeroClient& target, bool interrupt = false,
                     bool defensive = false) {
-    if (RPosture != SpinPosture::Channeling || RManual) return false;
+    if (RPosture != SpinPosture::Channeling) return false;
     const auto player = GameObjects::Player();
     const bool valid = player.IsValid() && Engine::ValidEnemy(target, kRRadius + 100.0f);
     const bool lethal = valid && Lethal(target, RDamage(target));
@@ -174,7 +171,7 @@ inline bool RecastR(const AIHeroClient& target, bool interrupt = false,
     const bool lost = !valid || !SpinHits(player.Position(),
         PredictPosition(target, 0.20f), target.BoundingRadius());
     const SpinContext context{ true, valid, !lost, interrupt, defensive, lethal,
-        false, false, false, 0, 2 };
+        false, false, 0, 2 };
     if (!ShouldContinueSpin(context, RPosture, elapsed) &&
         !ShouldRecastSpin(RPosture, elapsed, lost, interrupt, lethal)) return false;
     if (!ShouldRecastSpin(RPosture, elapsed, lost, interrupt, lethal)) return false;
@@ -188,19 +185,19 @@ inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
     if (Lethal(target, QDamage(target)) && CastQ(target, mode, true)) return true;
     if (Lethal(target, EDamage(target)) && CastE(target, mode, false, true, true)) return true;
-    return Lethal(target, RDamage(target)) && CastR(target, mode, false, false, false);
+    return Lethal(target, RDamage(target)) && CastR(target, mode);
 }
 inline bool TryInterrupt(const AIHeroClient& fallback) {
     const AIHeroClient interrupt = InterruptActive() ? InterruptTarget() : fallback;
     return Engine::ValidEnemy(interrupt, kRRadius + 75.0f) &&
-        CastR(interrupt, Mode::Automatic, true, false, true);
+        CastR(interrupt, Mode::Automatic, true, true);
 }
 inline bool TryCombo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return false;
     if (CastE(target, Mode::Combo)) return true;
     if (CastQ(target, Mode::Combo)) return true;
     if (CastW(Mode::Combo)) return true;
-    return CastR(target, Mode::Combo, false, false, false);
+    return CastR(target, Mode::Combo);
 }
 inline bool TryHarass(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target) || GameObjects::Player().ManaPercent() <
@@ -234,7 +231,6 @@ inline void ReconcileState() {
         RPosture = SpinPosture::Channeling;
     } else if (RPosture != SpinPosture::Idle && now - RCastTick > 2500) {
         RPosture = SpinPosture::Idle;
-        RManual = false;
         RTargetId = 0;
     }
     if (player.HasBuff("MonkeyKingDecoy") || player.HasBuff("MonkeyKingW")) {
@@ -243,15 +239,15 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     if (RPosture == SpinPosture::Channeling && mode != Mode::Flee) {
-        const AIHeroClient spinTarget = ControllerHelpers::PreferredEnemyTarget(selected, kRRadius + 100.0f);
+        const AIHeroClient spinTarget = InterruptActive()
+            ? InterruptTarget() : Engine::SelectTarget(kRRadius + 100.0f);
         if (RecastR(spinTarget, InterruptActive(), false)) return true;
         return true;
     }
-    if (PlayerOverrideUntil > Now()) return true;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, kERange + 80.0f);
+    const AIHeroClient target = Engine::SelectTarget(kERange + 80.0f);
     if (TryInterrupt(target)) return true;
     if (TryKillSecure(target, mode)) return true;
     switch (mode) {
@@ -263,8 +259,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::LastHit: (void)TryFarm(mode); break;
     case Mode::Automatic:
         if (AutomaticAllowed({ false, InterruptActive(),
-            Engine::ValidEnemy(target) && Lethal(target, QDamage(target)), false,
-            PlayerOverrideUntil > Now()})) (void)TryInterrupt(target);
+            Engine::ValidEnemy(target) && Lethal(target, QDamage(target)), false}))
+            (void)TryInterrupt(target);
         break;
     default: break;
     }
@@ -277,8 +273,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!IsLocalPlayer(args.Sender)) return;
     const int slot = static_cast<int>(args.Slot);
     if (slot < 0 || slot > 3) return;
-    const bool owned = Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
     if (slot == 0) QCastTick = now;
     else if (slot == 1) {
         WCastTick = now;
@@ -287,7 +281,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     } else if (slot == 2) ECastTick = now;
     else {
         RCastTick = now;
-        RManual = !owned;
         if (RPosture == SpinPosture::Channeling) RPosture = SpinPosture::RecastReady;
         else RPosture = SpinPosture::Channeling;
         if (RPosture == SpinPosture::Channeling) RChannelStartTick = now;
@@ -331,7 +324,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
     if (Engine::TextContains(args.BuffName, "MonkeyKingSpinToWin") ||
         Engine::TextContains(args.BuffName, "MonkeyKingR")) {
         RPosture = SpinPosture::Idle;
-        RManual = false;
         RTargetId = 0;
     }
 }
@@ -367,7 +359,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("MonkeyKingOneTrick", "Wukong diver tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Crushing Blow"));
     QMenu->Add(new MenuBool("PreserveWindup", "Preserve nonlethal attack windup", true));
@@ -389,8 +380,7 @@ inline void OnLoad() {
     QCastTick = WCastTick = ECastTick = RCastTick = RChannelStartTick = 0;
     QArmorUntilTick = 0;
     QTargetId = RTargetId = LastAutoTargetId = LastAutoTick = 0;
-    InterruptTargetId = InterruptExpireTick = PlayerOverrideUntil = 0;
-    RManual = false;
+    InterruptTargetId = InterruptExpireTick = 0;
     LastDashEndpoint = {};
     ReconcileState();
 }
@@ -403,9 +393,9 @@ inline void OnUnload() {
 inline constexpr const char* Scenarios[] = {
     "Pin every numeric decision to Riot 26.15 and CommunityDragon 16.15",
     "Track Decoy stealth and clone lifetime through buff, object and polling reconciliation",
-    "Never treat an unconfirmed clone as a real enemy or selected target",
+    "Never treat an unconfirmed clone as an enemy in autonomous selection",
     "Use Q's empowered attack reset only inside the observed attack range",
-    "Record Q armor reduction target ownership for the next attack window",
+    "Record Q armor reduction target state for the next attack window",
     "Preserve a nonlethal AA windup unless a reactive or lethal cast is justified",
     "Use Nimbus Strike only on a reachable target and a valid dash endpoint",
     "Reject E through walls, under a new enemy turret, or into excessive enemies",
@@ -414,12 +404,11 @@ inline constexpr const char* Scenarios[] = {
     "Model Cyclone as a two-second channel with half-second tick posture",
     "Track first Cyclone cast and recast from process-spell and buff events",
     "Reconcile Cyclone state by polling when an event is missed",
-    "Hold attacks during an owned Cyclone channel to preserve spin ticks",
+    "Hold attacks during an active Cyclone channel to preserve spin ticks",
     "Recast Cyclone after a tick when target loss, interrupt, lethal or expiry demands it",
     "Reject ordinary single-target nonlethal Cyclone casts",
     "Permit Cyclone for multi-target, lethal, defensive and interrupt behavior",
-    "Preserve manually started Cyclone channels and do not automate their recast",
-    "Keep selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Use interrupt event capture to select a committed channel target",
     "Automatic mode reacts only to interrupt, defense or verified kill-secure state",
     "Combo uses E entry, Q armor reduction, Decoy posture and Cyclone follow-up",
@@ -430,7 +419,6 @@ inline constexpr const char* Scenarios[] = {
     "Flee uses Decoy first, then defensive Nimbus Strike",
     "Never automate Flash, Ignite, Smite, items or movement ownership",
     "Reject invulnerable, protected and spell-shielded targets",
-    "Yield after a manually observed Q, W, E or R cast",
     "Draw clone, dash and spin geometry without changing gameplay decisions",
     "Keep profile metadata separate from the owned decision loop",
 };
@@ -441,7 +429,7 @@ inline constexpr ChampionController Controller = [] {
     controller.KitRevision = "Riot 26.15 / CommunityDragon 16.15";
     controller.ResearchArtifact = "AI/Research/AIMonkeyKing.md";
     controller.ImplementationSummary =
-        "Clone/object reconciliation, Q armor-shred attack reset, endpoint-safe Nimbus Strike and owned Cyclone channel/recast posture.";
+        "Clone/object reconciliation, Q armor-shred attack reset, endpoint-safe Nimbus Strike and Cyclone channel/recast posture.";
     controller.Scenarios = Scenarios;
     controller.ScenarioCount = std::size(Scenarios);
     controller.OwnsDecisionLoop = true;

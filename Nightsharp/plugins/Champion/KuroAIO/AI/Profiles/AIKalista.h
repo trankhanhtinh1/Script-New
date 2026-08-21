@@ -90,7 +90,6 @@ inline constexpr ChampionProfile Kalista = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 24;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "KalistaPassive";
@@ -100,11 +99,11 @@ inline constexpr ChampionProfile Kalista = [] {
     p.ThemeTo = 0xFF5846D8u;
     p.ThemeSpeed = 1.08f;
     p.TacticalSummary =
-        "Own the reachable spear target, preserve the current attack/windup, hop "
+        "Track the reachable spear target, preserve the current attack/windup, hop "
         "toward safe cursor space after confirmed attacks, and Rend only when "
         "the live stack damage is lethal, expiring, escaping or an objective is "
         "conservatively secured. Fate's Call is an Oathsworn save first and a "
-        "manual/verified engage second.";
+        "autonomous verified engage second.";
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15 Kalista: Martial Poise movement "
         "intent, Pierce line prediction/collision, Sentinel mark vocabulary, "

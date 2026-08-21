@@ -22,7 +22,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
 using ControllerHelpers::SelectJungleTarget;
 using ControllerHelpers::Slider;
@@ -44,7 +43,10 @@ inline int MarkTick = 0;
 inline int MarkTargetId = 0;
 inline int FlightTargetId = 0;
 inline Vector3 FlightEndpoint{};
-inline int ManualOwnershipUntil = 0;
+inline int GapcloserTargetId = 0;
+inline int GapcloserUntil = 0;
+inline int InterruptTargetId = 0;
+inline int InterruptUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline std::array<int, 4> LastCastTick{};
@@ -255,10 +257,9 @@ inline void ReconcileState() {
         CurrentForm = FormState::Human;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected, mode == Mode::Flee ? kRRange : kERange);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? kRRange : kERange);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
@@ -278,10 +279,9 @@ inline void BuildMenu(Menu* root) {
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Shyvana fury farming"));
     TacticsMenu->Add(new MenuSlider("MaxCommitEnemies", "Maximum enemies at dragon endpoint", 2, 0, 5));
     TacticsMenu->Add(new MenuSlider("MinimumRTargets", "Minimum dragon impact targets", 2, 1, 5));
-    TacticsMenu->Add(new MenuSlider("DefensiveHealth", "Emergency dragon-flight health percent", 35, 0, 100));
+    TacticsMenu->Add(new MenuSlider("DefensiveHealth", "Dragon-flight health threshold", 35, 0, 100));
     TacticsMenu->Add(new MenuSlider("HarassFuryReserve", "Fury reserve for harass", 15, 0, 100));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     FarmMenu->Add(new MenuSlider("LaneFuryReserve", "Fury reserve for lane clear", 8, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleFuryReserve", "Fury reserve for jungle", 5, 0, 100));
 }
@@ -291,8 +291,8 @@ inline void OnLoad() {
     CurrentFlight = FlightState::Ready;
     CurrentQ = QResetState::Ready;
     Fury = 0.0f;
-    LastFuryTick = QCastTick = WCastTick = ECastTick = RCastTick = MarkTick = 0;
-    MarkTargetId = FlightTargetId = ManualOwnershipUntil = LastAutoTargetId = LastAutoTick = 0;
+    MarkTargetId = FlightTargetId = GapcloserTargetId = GapcloserUntil = 0;
+    InterruptTargetId = InterruptUntil = LastAutoTargetId = LastAutoTick = 0;
     FlightEndpoint = {};
     LastCastTick.fill(0);
 }
@@ -308,8 +308,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         if (args.Slot >= 0 && args.Slot < 4) {
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
             if (args.Slot == 0) { CurrentQ = QResetState::Armed; QCastTick = now; }
             else if (args.Slot == 1) WCastTick = now;
@@ -318,8 +316,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         }
         return;
     }
-    const auto analysis = AnalyzeEnemyCast(args);
-    if (analysis.Valid && (analysis.TargetsPlayer || analysis.CrossesPlayer)) ManualOwnershipUntil = 0;
 }
 
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -368,11 +364,11 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
 
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
     Vector3 endpoint = args.End;
-    (void)CaptureGapcloser(args, MarkTargetId, endpoint, ManualOwnershipUntil, kRRange, 1000);
+    (void)CaptureGapcloser(args, GapcloserTargetId, endpoint, GapcloserUntil, kRRange, 1000);
 }
 
 inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(args, MarkTargetId, ManualOwnershipUntil, 900, 250, 5000);
+    CaptureInterruptable(args, InterruptTargetId, InterruptUntil, 900, 250, 5000);
 }
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -400,13 +396,13 @@ inline void OnDraw() {}
 
 inline constexpr const char* Scenarios[] = {
     "Fury of the Dragonborn resource reconciliation and human/dragon form state",
-    "Twin Bite attack reset after windup with manual ownership and reset-window expiry",
+    "Twin Bite attack reset after windup and reset-window expiry",
     "Burnout movement speed, persistent burn radius and dragon-form enhancement",
     "Flame Breath prediction, projectile collision, wall rejection and mark lifetime",
     "Dragon's Descent fury threshold, flight endpoint and dragon-form commit",
     "Dragon endpoint wall, turret and enemy-count safety with lethal/defensive exceptions",
     "Fury gain from attacks and passive ticks with dragon-form fury drain",
-    "Selected target precedence followed by orbwalker target fallback",
+    "Use the autonomous engine-selected enemy for combat and farm decisions",
     "Combo, harass, lane clear, jungle objective, last-hit, flee and automatic policies",
     "Polling reconciliation across spell, buff, object and missile callbacks",
 };

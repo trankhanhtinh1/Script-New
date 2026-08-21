@@ -49,7 +49,6 @@ inline int ELastCastTick = 0;
 inline int EEmpoweredUntil = 0;
 inline int RLastCastTick = 0;
 inline int RTargetId = 0;
-inline int PlayerOverrideUntil = 0;
 inline int AttackWindupUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
@@ -316,7 +315,8 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return false;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
     const int now = Now();
@@ -324,10 +324,9 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     PositionTicks[static_cast<std::size_t>(PositionHistoryIndex)] = now;
     PositionHistoryIndex = (PositionHistoryIndex + 1) % static_cast<int>(PositionHistory.size());
     ReconcileState();
-    if (PlayerOverrideUntil > now) return true;
-    const bool selectedTarget = Engine::ValidEnemy(selected);
-    const AIHeroClient target = selectedTarget ? selected : Engine::SelectTarget(kQRange + 80.0f);
-    const bool orbwalkerTarget = !selectedTarget && Engine::ValidEnemy(target);
+    const AIHeroClient target = Engine::SelectTarget(kQRange + 80.0f);
+    const bool selectedTarget = false;
+    const bool orbwalkerTarget = true;
     const AIHeroClient threat = ControllerHelpers::NearestEnemyToPlayer(target, 900.0f);
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
     if (TryKillSecure(target, mode, selectedTarget, orbwalkerTarget)) return true;
@@ -366,7 +365,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     }
     const int slot = args.Slot;
     const bool owned = slot >= 0 && slot < 4 && Engine::WasControllerCast(slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
     const Vector3 eventEnd = args.EndPosition.IsValid() && !args.EndPosition.IsZero()
         ? args.EndPosition : args.CastPosition;
     const int spellTargetId = static_cast<int>(args.TargetNetworkId != 0
@@ -467,7 +465,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("EkkoMechanics", "Ekko passive and Chronobreak safety"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     PassiveMenu = TacticsMenu->AddSubMenu(new Menu("ZDrive", "Three-hit passive tracking"));
     PassiveMenu->Add(new MenuBool("TrackAutoAttacks", "Track spell and auto hits", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Timewinder", "Outbound and return prediction"));
@@ -491,7 +488,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     PassiveRecords = {}; PositionHistory = {}; PositionTicks = {}; PositionHistoryIndex = 0;
     QLastCastTick = QReturnExpireTick = QTargetId = WLastCastTick = WExpireTick = 0;
-    ELastCastTick = EEmpoweredUntil = RLastCastTick = RTargetId = PlayerOverrideUntil = 0;
+    ELastCastTick = EEmpoweredUntil = RLastCastTick = RTargetId = 0;
     AttackWindupUntil = LastAutoTargetId = LastAutoTick = IncomingHardCCUntil = 0;
     QOrigin = QOutboundEndpoint = WCenter = RRewindPosition = {};
     QOutboundActive = QReturning = WArmed = EAttackArmed = false;

@@ -20,9 +20,7 @@ using ControllerHelpers::PredictPosition;
 using ControllerHelpers::Slider;
 using ControllerHelpers::SpellEnabled;
 inline Menu *TacticsMenu = nullptr;
-inline Menu *QMenu = nullptr;
 inline Menu *WMenu = nullptr;
-inline Menu *EMenu = nullptr;
 inline Menu *RMenu = nullptr;
 inline Menu *FarmMenu = nullptr;
 inline Menu *CoachMenu = nullptr;
@@ -33,12 +31,10 @@ inline RState CurrentRState = RState::Ready;
 inline FrenzyState CurrentFrenzy = FrenzyState::Calm;
 inline std::array<int, 4> LastCastTick{};
 inline int QCastTick = 0, WCastTick = 0, ECastTick = 0, RCastTick = 0,
-           QTargetId = 0, WTargetId = 0, RTargetId = 0, LastAutoTargetId = 0,
-           LastAutoTick = 0, ManualOwnershipUntil = 0, IncomingThreatUntil = 0,
+           LastAutoTargetId = 0, LastAutoTick = 0, IncomingThreatUntil = 0,
            IncomingThreatTargetId = 0, InterruptTargetId = 0,
            InterruptExpireTick = 0, RMissileId = 0;
 inline Vector3 IncomingThreatEndpoint{};
-inline Mode LastMode = Mode::None;
 inline bool Ready(int slot, Mode mode, bool reactive = false) {
   return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
          Engine::RuntimeSpells[slot]->IsReady() && SpellEnabled(slot, mode) &&
@@ -96,13 +92,12 @@ inline bool CastQ(const AIHeroClient &t, Mode m, bool reactive = false) {
   if (!p.IsValid() || !Engine::ValidEnemy(t, kQRange + 70) ||
       !InRange(p.Position(), t.Position(), kQRange, t.BoundingRadius()) ||
       !QCastAllowed(CurrentQState, CurrentFrenzy, true, Protected(t),
-                    ManualOwnershipUntil > Now(), Orbwalker::IsWindingUp()) ||
+                    Orbwalker::IsWindingUp()) ||
       !Ready(0, m, reactive) || !Throttle(0) || PreserveAttack(reactive))
     return false;
   if (!Engine::ControllerCastUnit(0, t))
     return false;
   CurrentQState = QState::LeapPending;
-  QTargetId = static_cast<int>(t.NetworkId());
   QCastTick = LastCastTick[0] = Now();
   return true;
 }
@@ -124,7 +119,6 @@ inline bool StartW(const AIHeroClient &t, Mode m, bool reactive = false) {
     return false;
   CurrentWState = WState::Frenzy;
   CurrentFrenzy = FrenzyState::Frenzy;
-  WTargetId = static_cast<int>(t.NetworkId());
   WCastTick = LastCastTick[1] = Now();
   return true;
 }
@@ -152,7 +146,7 @@ inline bool CastE(const AIHeroClient &t, Mode m, bool reactive = false,
     return false;
   if (CurrentEState == EState::Charging) {
     const int e = Now() - ECastTick;
-    if (!EChargeAllowed(CurrentEState, e, ManualOwnershipUntil > Now(),
+    if (!EChargeAllowed(CurrentEState, e,
                         reactive || IncomingThreatUntil > Now(),
                         Engine::ValidEnemy(t, kERange + 100)) ||
         !EReleaseSafe(CurrentEState, e, false,
@@ -214,7 +208,6 @@ inline bool CastR(const AIHeroClient &t, Mode m, bool reactive = false,
   if (!Engine::ControllerCastPosition(3, a))
     return false;
   CurrentRState = RState::Traveling;
-  RTargetId = static_cast<int>(t.NetworkId());
   RCastTick = LastCastTick[3] = Now();
   return true;
 }
@@ -308,13 +301,10 @@ inline void ReconcileState() {
   if (InterruptExpireTick <= n)
     InterruptTargetId = 0;
 }
-inline bool OnUpdate(Mode m, const AIHeroClient &selected) {
-  LastMode = m;
+inline bool OnUpdate(Mode m, const AIHeroClient &) {
   ReconcileState();
-  if (ManualOwnershipUntil > Now())
-    return true;
-  const auto t = ControllerHelpers::PreferredEnemyTarget(
-      selected, m == Mode::Flee ? kRGlobalRange : kWRange + 80);
+  const auto t = Engine::SelectTarget(
+      m == Mode::Flee ? kRGlobalRange : kWRange + 80);
   if (InterruptTargetId && InterruptExpireTick > Now() &&
       Engine::ValidEnemy(t) && CastQ(t, m, true))
     return true;
@@ -346,14 +336,10 @@ inline void BuildMenu(Menu *root) {
     return;
   TacticsMenu =
       root->AddSubMenu(new Menu("BriarFrenzy", "Briar frenzy and safety"));
-  QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Head Rush"));
   WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Blood Frenzy / Snack Attack"));
-  EMenu = TacticsMenu->AddSubMenu(new Menu("E", "Chilling Scream"));
   RMenu = TacticsMenu->AddSubMenu(new Menu("R", "Certain Death"));
   FarmMenu = TacticsMenu->AddSubMenu(new Menu("Farm", "Health-safe farming"));
   CoachMenu = TacticsMenu->AddSubMenu(new Menu("Coach", "Visual coaching"));
-  TacticsMenu->Add(new MenuSlider("ManualOwnershipMs",
-                                  "Manual cast protection (ms)", 650, 0, 2000));
   TacticsMenu->Add(new MenuSlider("MaximumFrenzyEnemies",
                                   "Maximum enemies for W frenzy", 2, 0, 5));
   TacticsMenu->Add(new MenuSlider("MaximumReleaseEnemies",
@@ -373,13 +359,11 @@ inline void OnLoad() {
   CurrentRState = RState::Ready;
   CurrentFrenzy = FrenzyState::Calm;
   QCastTick = WCastTick = ECastTick = RCastTick = 0;
-  QTargetId = WTargetId = RTargetId = 0;
-  LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+  LastAutoTargetId = LastAutoTick = 0;
   IncomingThreatUntil = IncomingThreatTargetId = InterruptTargetId =
       InterruptExpireTick = 0;
   IncomingThreatEndpoint = {};
   RMissileId = 0;
-  LastMode = Mode::None;
   LastCastTick.fill(0);
 }
 inline void OnUnload() { OnLoad(); }
@@ -390,9 +374,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs &a) {
   if (IsLocalPlayer(a.Sender)) {
     if (a.Slot < 0 || a.Slot > 3)
       return;
-    if (!Engine::WasControllerCast(a.Slot))
-      ManualOwnershipUntil =
-          n + static_cast<int>(Slider(TacticsMenu, "ManualOwnershipMs", 650));
     LastCastTick[static_cast<std::size_t>(a.Slot)] = n;
     if (a.Slot == 0) {
       CurrentQState = QState::LeapPending;
@@ -501,7 +482,7 @@ inline void OnDraw() {
   Drawing::DrawCircle(p.Position(), kERange, 0xFF55AADDu, 1.2f, 40);
 }
 inline constexpr const char *Scenarios[] = {
-    "Reconcile Crimson Curse health model and manual spell ownership",
+    "Reconcile Crimson Curse health model and autonomous spell state",
     "Track Blood Frenzy, taunt target lock and Snack Attack recast healing",
     "Use Head Rush leap reach, attack reset and stun timing",
     "Preserve ordinary attack windup unless reactive stun is justified",

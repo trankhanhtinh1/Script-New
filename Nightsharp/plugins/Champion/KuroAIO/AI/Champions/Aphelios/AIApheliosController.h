@@ -2551,7 +2551,7 @@ inline void OnDraw() {
     if (!CoachMenu) return;
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return;
-    if (Bool(CoachMenu, "DrawRanges", true)) {
+    if (Bool(CoachMenu, "DrawRanges", false)) {
         Drawing::DrawCircle(player.Position(), MainWeaponRange(),
                             WeaponColor(State.Main) & 0x66FFFFFFu,
                             1.2f, 84);
@@ -2560,7 +2560,7 @@ inline void OnDraw() {
                                 ? kCalibrumAttackRange : player.AttackRange(),
                             WeaponColor(State.Main), 1.6f, 72);
     }
-    if (Bool(CoachMenu, "DrawMarks", true)) {
+    if (Bool(CoachMenu, "DrawMarks", false)) {
         for (const auto& mark : Marks) {
             if (mark.NetworkId == 0 ||
                 (!mark.Calibrum && !mark.Gravitum)) continue;
@@ -2581,7 +2581,7 @@ inline void OnDraw() {
             }
         }
     }
-    if (Bool(CoachMenu, "DrawSentries", true)) {
+    if (Bool(CoachMenu, "DrawSentries", false)) {
         for (const auto& sentry : Sentries) {
             if (sentry.NetworkId == 0 || !sentry.Position.IsValid()) continue;
             Drawing::DrawCircle(sentry.Position,
@@ -2592,7 +2592,7 @@ inline void OnDraw() {
                 WeaponColor(sentry.Offhand), 2.2f, 30);
         }
     }
-    if (Bool(CoachMenu, "DrawUltimate", true) &&
+    if (Bool(CoachMenu, "DrawUltimate", false) &&
         LastRPlan.Valid && Now() - LastRCastTick <= 1400) {
         Drawing::DrawLine(player.Position(), LastRPlan.Aim,
                           WeaponColor(LastRPlan.WeaponUsed), 2.0f);
@@ -2602,7 +2602,7 @@ inline void OnDraw() {
                 WeaponColor(LastRPlan.WeaponUsed), 2.4f, 64);
         }
     }
-    if (Bool(CoachMenu, "DrawReturn", true) &&
+    if (Bool(CoachMenu, "DrawReturn", false) &&
         CrescendumReturnUntil > Now() && LastAutoTargetId != 0) {
         const AIBaseClient target = ControllerHelpers::UnitByNetworkId(
             LastAutoTargetId);
@@ -2611,7 +2611,7 @@ inline void OnDraw() {
                               0xAAF4E6A2u, 1.6f);
         }
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen{};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char text[620]{};
@@ -2645,7 +2645,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu(
-        "ApheliosOneTrick", "Aphelios five-weapon one-trick mechanics"));
+        "ApheliosOneTrick", "Five-weapon mechanics"));
     TacticsMenu->Add(new MenuBool(
         "KillSecure", "conservatively lethal", true));
     TacticsMenu->Add(new MenuSlider(
@@ -2671,7 +2671,7 @@ inline void BuildMenu(Menu* root) {
         "Cycle maintenance never"));
 
     AmmoMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Ammo", "Per-gun moonlight and incoming-weapon sequences"));
+        "Ammo", "Ammo and incoming weapons"));
     AmmoMenu->Add(new MenuBool(
         "LiveReconcile", "Trust live Q ammo when", true));
     AmmoMenu->Add(new MenuBool(
@@ -2685,7 +2685,7 @@ inline void BuildMenu(Menu* root) {
         "Runtime Q/off-hand buffs are"));
 
     CalibrumMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Calibrum", "Moonshot, mark reset and off-hand delivery"));
+        "Calibrum", "Moonshot and mark reset"));
     CalibrumMenu->Add(new MenuBool(
         "QBeforeR", "Q before R marks", true));
     CalibrumMenu->Add(new MenuBool(
@@ -2698,7 +2698,7 @@ inline void BuildMenu(Menu* root) {
         "Walls", "Moonshot and mark plans"));
 
     SeverumMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Severum", "Onslaught sustain, movement and off-hand setup"));
+        "Severum", "Onslaught sustain and off-hand"));
     SeverumMenu->Add(new MenuSlider(
         "SurvivalHp", "Onslaught survival HP (%)", 48, 10, 85));
     SeverumMenu->Add(new MenuBool(
@@ -2726,7 +2726,7 @@ inline void BuildMenu(Menu* root) {
         "Truth", "Binding Eclipse is never"));
 
     InfernumMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Infernum", "Duskwave cone and grouped-fight damage"));
+        "Infernum", "Duskwave cone damage"));
     InfernumMenu->Add(new MenuSlider(
         "ComboTargets", "Min Duskwave targets in a", 2, 1, 5));
     InfernumMenu->Add(new MenuBool(
@@ -2737,7 +2737,7 @@ inline void BuildMenu(Menu* root) {
         "Geometry", "Every cone candidate must"));
 
     CrescendumMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Crescendum", "Sentry snapshot and close-range chakram DPS"));
+        "Crescendum", "Sentry and close-range DPS"));
     CrescendumMenu->Add(new MenuBool(
         "SentryBeforeR", "Place Sentry before", true));
     CrescendumMenu->Add(new MenuBool(
@@ -2752,7 +2752,7 @@ inline void BuildMenu(Menu* root) {
         "DashTargets", "Never flee-place a turret"));
 
     UltimateMenu = TacticsMenu->AddSubMenu(new Menu(
-        "MoonlightVigil", "First-hit trajectory and five weapon variants"));
+        "MoonlightVigil", "R trajectory and weapon variants"));
     UltimateMenu->Add(new MenuBool(
         "Combo", "Best current/off-hand R only", true));
     UltimateMenu->Add(new MenuSlider(
@@ -2771,7 +2771,7 @@ inline void BuildMenu(Menu* root) {
         "NoFlash", "The controller never casts"));
 
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Farm", "Ammo-aware lane and objective preparation"));
+        "Farm", "Ammo-aware lane preparation"));
     FarmMenu->Add(new MenuSlider(
         "LaneMana", "Minimum lane-clear mana (%)", 58, 0, 100));
     FarmMenu->Add(new MenuSlider(
@@ -2792,7 +2792,7 @@ inline void BuildMenu(Menu* root) {
         "CrescendumObjective", "Sentry on epic obj", true));
 
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
-        "Coach", "Five-gun state and one-trick timing visualization"));
+        "Coach", "Five-gun state overlay"));
     CoachMenu->Add(new MenuBool(
         "DrawRanges", "Draw Q/attack ranges", false));
     CoachMenu->Add(new MenuBool(

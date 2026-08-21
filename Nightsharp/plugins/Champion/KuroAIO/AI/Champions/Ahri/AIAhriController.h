@@ -183,13 +183,6 @@ inline bool SafeRushDestination(const Vector3& destination,
     if (aggressive && !allowLockdown && HasPointClickLockdownAt(destination)) {
         return false;
     }
-    if (aggressive && Bool(RushMenu, "RespectCursor", true)) {
-        const float currentCursor = player.Position().Distance2D(Game::CursorPos());
-        const float newCursor = destination.Distance2D(Game::CursorPos());
-        if (newCursor > currentCursor + 360.0f && player.HealthPercent() < 70.0f) {
-            return false;
-        }
-    }
     return true;
 }
 
@@ -1212,13 +1205,6 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
         (void)TryFarm(true);
         return true;
     }
-    if (Key(Engine::AutomaticMenu, "ManualR", false) &&
-        Engine::ValidEnemy(selected)) {
-        Vector3 destination = Engine::Extend(
-            GameObjects::Player().Position(), Game::CursorPos(), kRDashRange);
-        (void)CastRush(destination, selected, RushPurpose::None,
-                       false, true, Mode::Automatic, true);
-    }
     (void)TryExpiringWindowExit(selected, mode);
     return true;
 }
@@ -1394,7 +1380,7 @@ inline const char* PostureName(Posture posture) {
 inline void OnDraw() {
     if (!CoachMenu || !GameObjects::Player().IsValid()) return;
     const auto player = GameObjects::Player();
-    if (Bool(CoachMenu, "DrawOrbPath", true) && QActive &&
+    if (Bool(CoachMenu, "DrawOrbPath", false) && QActive &&
         QMissilePosition.IsValid() && !QMissilePosition.IsZero()) {
         Drawing::DrawCircle(QMissilePosition, 38.0f,
                             QReturning ? 0xFFFF77DDu : 0xFF77CCFFu, 2.0f, 40);
@@ -1403,19 +1389,19 @@ inline void OnDraw() {
                               0xAAFF77DDu, 2.0f);
         }
     }
-    if (Bool(CoachMenu, "DrawRedirect", true) &&
+    if (Bool(CoachMenu, "DrawRedirect", false) &&
         LastReturnCandidate.IsValid() && !LastReturnCandidate.IsZero() &&
         QReturning) {
         Drawing::DrawCircle(LastReturnCandidate, 52.0f, 0xFF77FF99u, 2.0f, 48);
         Drawing::DrawLine(QMissilePosition, LastReturnCandidate,
                           0xFF77FF99u, 2.0f);
     }
-    if (Bool(CoachMenu, "DrawRush", true) &&
+    if (Bool(CoachMenu, "DrawRush", false) &&
         LastRushDestination.IsValid() && !LastRushDestination.IsZero() &&
         SDK::Variables::TickCount() - RLastCastTick <= 1300) {
         Drawing::DrawCircle(LastRushDestination, 48.0f, 0xFFAA88FFu, 2.0f, 40);
     }
-    if (Bool(CoachMenu, "DrawState", true)) {
+    if (Bool(CoachMenu, "DrawState", false)) {
         Vec2 screen = {};
         if (Drawing::WorldToScreen(player.Position(), screen)) {
             char state[220] = {};
@@ -1473,7 +1459,6 @@ inline void BuildMenu(Menu* root) {
     RushMenu->Add(new MenuSlider("MaxRushEnemies", "Max enemies at R dest", 2, 1, 5));
     RushMenu->Add(new MenuSlider("ExitBeforeExpiryMs", "Use reserved exit R this", 1350, 500, 2500));
     RushMenu->Add(new MenuBool("RespectLockdown", "Wait for nearby lockdown", true));
-    RushMenu->Add(new MenuBool("RespectCursor", "Reject aggressive R far vs", true));
     RushMenu->Add(new MenuBool("OverrideLockdownForLethal", "Allow lethal R through ready", false));
     RushMenu->Add(new MenuBool("Execute", "Spend a charge when R damage", true));
     RushMenu->Add(new MenuBool("RushFlee", "Use any available R charge", true));
@@ -1585,7 +1570,7 @@ inline constexpr const char* Scenarios[] = {
     "Use the reserved charge to exit before the recast window expires under threat",
     "Use any safe R charge during explicit player flee mode",
     "Reject an aggressive R opposite the player's cursor at low health",
-    "Re-plan after manual Q/E/R while preserving observed projectile and ammo state",
+    "Re-plan after observed Q E R state/",
     "Compute Q1 magic plus Q2 true damage separately for lethal decisions",
     "Use conservative multi-flame W damage in all-in estimates",
     "Choose a line that crosses lane minions on both Q passes",

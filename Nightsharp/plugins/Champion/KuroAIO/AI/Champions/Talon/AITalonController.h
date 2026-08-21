@@ -43,7 +43,6 @@ inline int RCastTick = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int IncomingHardCCUntil = 0;
-inline int PlayerOverrideUntil = 0;
 inline int WTargetId = 0;
 inline int RTargetId = 0;
 inline bool WReturning = false;
@@ -51,10 +50,6 @@ inline Vector3 LastWOutbound = {};
 inline Vector3 LastWReturn = {};
 inline Vector3 LastEEndpoint = {};
 inline Vector3 LastREndpoint = {};
-inline bool QWasManual = false;
-inline bool WWasManual = false;
-inline bool EWasManual = false;
-inline bool RWasManual = false;
 
 inline bool Throttle(int slot, int delay) {
     const int tick = slot == 0 ? QCastTick : slot == 1 ? WCastTick : slot == 2 ? ECastTick : RCastTick;
@@ -129,10 +124,6 @@ inline void ReconcileState() {
     }
 }
 
-inline AIHeroClient ChooseTarget(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    return Engine::SelectTarget(range);
-}
 
 inline bool SafeEndpoint(const Vector3& endpoint, const AIHeroClient& target, bool lethal, bool fleeing) {
     const auto player = GameObjects::Player();
@@ -155,11 +146,10 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool defensive = false)
         (PassiveReady(Passive, static_cast<int>(target.NetworkId()), Now()) ?
          PassiveRawDamage(player.Level(), TotalAttackDamage()) : 0.0f));
     if (Orbwalker::IsWindingUp() && Bool(TacticsMenu, "PreserveAttacks", true) && !lethal && !defensive) return false;
-    const ModeContext context{ true, true, Orbwalker::IsWindingUp(), lethal, false };
+    const ModeContext context{ Orbwalker::IsWindingUp(), lethal };
     if (!MayUseAbility(context) && !defensive) return false;
     if (!Engine::ControllerCastUnit(0, target)) return false;
     QCastTick = Now();
-    QWasManual = false;
     Passive = AddPassiveStack(Passive, static_cast<int>(target.NetworkId()), Now());
     return true;
 }
@@ -176,14 +166,13 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool defensive = false)
         ControllerHelpers::ProjectileWallBlocksFromPlayer(endpoint, kWWidth * 0.5f)) return false;
     const bool lethal = Lethal(target, WDamage(target, false) + WDamage(target, true));
     if (Orbwalker::IsWindingUp() && Bool(TacticsMenu, "PreserveAttacks", true) && !lethal && !defensive) return false;
-    if (!MayUseAbility({ true, true, Orbwalker::IsWindingUp(), lethal, false }) && !defensive) return false;
+    if (!MayUseAbility({ Orbwalker::IsWindingUp(), lethal }) && !defensive) return false;
     if (!Engine::ControllerCastPosition(1, endpoint)) return false;
     WCastTick = Now();
     WTargetId = static_cast<int>(target.NetworkId());
     LastWOutbound = endpoint;
     WReturning = false;
     LastWReturn = WReturnEndpoint(player.Position(), endpoint, player.Position());
-    WWasManual = false;
     Passive = AddPassiveStack(Passive, WTargetId, Now());
     return true;
 }
@@ -217,7 +206,6 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool fleeing = false) {
     Terrain = { true, false, player.Position(), endpoint, Now(), Now() + 1200 };
     ECastTick = Now();
     LastEEndpoint = endpoint;
-    EWasManual = false;
     return true;
 }
 
@@ -234,19 +222,17 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool defensive = false)
         ShadowAssault.Returning = true;
         ShadowAssault.Active = false;
         RCastTick = Now();
-        RWasManual = false;
         LastREndpoint = endpoint;
         return true;
     }
     if (!Engine::ValidEnemy(target, kRRange + 80.0f) || TargetCannotBeDamaged(target)) return false;
     const bool lethal = Lethal(target, RDamage(target) + WDamage(target, true));
     if (Engine::CountEnemiesAt(player.Position(), 625.0f) > Slider(UltimateMenu, "MaxCommitEnemies", 2) && !lethal && !defensive) return false;
-    if (!MayUseAbility({ true, true, Orbwalker::IsWindingUp(), lethal, false }) && !defensive) return false;
+    if (!MayUseAbility({ Orbwalker::IsWindingUp(), lethal }) && !defensive) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     RCastTick = Now();
     RTargetId = static_cast<int>(target.NetworkId());
     ShadowAssault = { true, true, false, player.Position(), {}, Now(), Now() + kRStealthMs + kRReturnWindowMs };
-    RWasManual = false;
     Passive = AddPassiveStack(Passive, RTargetId, Now());
     return true;
 }
@@ -285,10 +271,9 @@ inline bool TryFlee(const AIHeroClient& threat) {
     return Engine::ValidEnemy(threat) && CastR(threat, Mode::Flee, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (PlayerOverrideUntil > Now()) return true;
-    const AIHeroClient target = ChooseTarget(selected, kWOutboundRange + 80.0f);
+    const AIHeroClient target = Engine::SelectTarget(kWOutboundRange + 80.0f);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 1000.0f);
     if (mode == Mode::Flee) { (void)TryFlee(threat); return true; }
     if (Engine::ValidEnemy(target) && TryKillSecure(target, mode)) return true;
@@ -300,7 +285,8 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     case Mode::LastHit: (void)TryFarm(mode); break;
     case Mode::Automatic:
         if (Engine::ValidEnemy(target) && (IncomingHardCCUntil > Now() ||
-            Lethal(target, QDamage(target) + WDamage(target, true)))) (void)TryKillSecure(target, Mode::Automatic);
+            Lethal(target, QDamage(target) + WDamage(target, true))))
+            (void)TryKillSecure(target, Mode::Automatic);
         break;
     default: break;
     }
@@ -313,26 +299,34 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (!IsLocalPlayer(args.Sender)) {
         const auto threat = ControllerHelpers::AnalyzeEnemyCast(args, 220.0f, 110.0f, 250, 280, 260, 1500, 450);
-        if (threat.Valid && threat.CrossesPlayer && threat.LikelyHardCrowdControl) IncomingHardCCUntil = now + 650;
+        if (threat.Valid && threat.CrossesPlayer && threat.LikelyHardCrowdControl)
+            IncomingHardCCUntil = now + 650;
         return;
     }
-    const bool owned = args.Slot >= 0 && args.Slot < 4 && Engine::WasControllerCast(args.Slot);
-    if (!owned) PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
-    if (args.Slot == 0) { QCastTick = now; QWasManual = !owned; }
-    else if (args.Slot == 1) {
-        WCastTick = now; WWasManual = !owned;
+    if (args.Slot == 0) {
+        QCastTick = now;
+    } else if (args.Slot == 1) {
+        WCastTick = now;
         WReturning = Engine::TextContains(args.SpellName, "Return") ||
                      Engine::TextContains(args.SpellName, "TalonW2");
-    }
-    else if (args.Slot == 2) {
-        ECastTick = now; EWasManual = !owned;
-        Terrain.Traversing = true; Terrain.StartTick = now; Terrain.ExpireTick = now + 1200;
-        Terrain.Start = player.Position(); Terrain.End = args.EndPosition;
+    } else if (args.Slot == 2) {
+        ECastTick = now;
+        Terrain.Traversing = true;
+        Terrain.StartTick = now;
+        Terrain.ExpireTick = now + 1200;
+        Terrain.Start = player.Position();
+        Terrain.End = args.EndPosition;
     } else if (args.Slot == 3) {
-        RCastTick = now; RWasManual = !owned;
-        const bool returnCast = Engine::TextContains(args.SpellName, "Return") || ShadowAssault.Active;
-        if (returnCast) { ShadowAssault.Returning = true; ShadowAssault.Active = false; }
-        else ShadowAssault = { true, true, false, player.Position(), {}, now, now + kRStealthMs + kRReturnWindowMs };
+        RCastTick = now;
+        const bool returnCast = Engine::TextContains(args.SpellName, "Return") ||
+            ShadowAssault.Active;
+        if (returnCast) {
+            ShadowAssault.Returning = true;
+            ShadowAssault.Active = false;
+        } else {
+            ShadowAssault = { true, true, false, player.Position(), {},
+                              now, now + kRStealthMs + kRReturnWindowMs };
+        }
     }
 }
 inline void OnBuffAdd(const SDK::Events::BuffEventArgs& args) {
@@ -388,7 +382,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("TalonOneTrick", "Talon blade mechanics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 520, 180, 1100));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve AA windup unless lethal", true));
     BladeMenu = TacticsMenu->AddSubMenu(new Menu("BladeReturn", "W/R blade tracking"));
     BladeMenu->Add(new MenuBool("ReturnForLethal", "Return blades for lethal damage", true));
@@ -406,9 +399,8 @@ inline void OnLoad() {
     Passive = {}; Terrain = {}; ShadowAssault = {};
     WCastTick = QCastTick = ECastTick = RCastTick = 0;
     LastAutoTargetId = LastAutoTick = WTargetId = RTargetId = 0;
-    IncomingHardCCUntil = PlayerOverrideUntil = 0;
+    IncomingHardCCUntil = 0;
     LastWOutbound = LastWReturn = LastEEndpoint = LastREndpoint = {};
-    QWasManual = WWasManual = EWasManual = RWasManual = false;
     WReturning = false;
     ReconcileState();
 }
@@ -437,14 +429,13 @@ inline constexpr const char* Scenarios[] = {
     "Return R blades only when lethal, fleeing, or the current endpoint is unsafe",
     "Reject R commit under excessive enemy count unless lethal or defensive",
     "Reject target damage through invulnerability, spell shields and stasis buffs",
-    "Respect selected target before orbwalker target fallback",
+    "Use autonomous Engine target selection before orbwalker fallback",
     "Use hard crowd-control threat windows for Automatic defensive decisions",
-    "Manual Q/W/E/R casts suspend automation briefly without clearing state",
-    "Combo sequences W, Q, safe E traversal and R only with real target safety",
+    "Reconcile observed Q/W/E/R spell state without suspending automation",
     "Harass uses W and Q without unsolicited terrain commit",
-    "LaneClear, Jungle and LastHit delegate only through shared farm path",
-    "Flee returns active R before choosing a safe terrain traversal",
-    "Automatic mode executes only verified lethal or hard-CC reactions",
+    "Use autonomous Engine target selection and hard crowd-control reactions",
+    "Reconcile observed Q/W/E/R spell state without suspending automation",
+    "Combo sequences W, Q, safe E traversal and R only with real target safety",
     "Do not automate Flash, Ignite, Smite or item actives",
     "Keep profile metadata separate from the owned decision loop",
 };

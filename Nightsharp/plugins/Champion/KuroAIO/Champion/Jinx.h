@@ -289,15 +289,6 @@ static void Game_OnUpdate(const GameUpdateEventArgs&) {
 
     UpdateTarget();
 
-    // Semi-Manual R
-    if (Key(RSettingsMenu, "SemiR", false) && R.IsReady()) {
-        auto rTarget = GetPhysicalTarget(R.Range);
-        if (ValidHeroTarget(rTarget)) {
-            if (CastRAt(rTarget, HitChance::High)) {
-                return;
-            }
-        }
-    }
 
     // Auto Q back to Minigun when no orbwalking mode active or no enemy heroes in range to save mana
     if (IsQActive() && Bool(ComboMenu, "AutoQ", true)) {
@@ -370,20 +361,20 @@ static void OnDraw() {
 
     const Vector3 pos = player.Position();
 
-    if (Bool(DrawMenu, "DrawQ", true)) {
+    if (Bool(DrawMenu, "DrawQ", false)) {
         const float qRange = player.AttackRange() + player.BoundingRadius() + (IsQActive() ? 0.0f : BonusQRange[std::clamp(Q.Level(), 1, 5)]);
         Drawing::DrawCircle(pos, qRange, 0xFF00E5FFu, 2.0f, 64);
     }
 
-    if (Bool(DrawMenu, "DrawW", true) && W.IsReady()) {
+    if (Bool(DrawMenu, "DrawW", false) && W.IsReady()) {
         Drawing::DrawCircle(pos, W.Range, 0xFFFFAA00u, 1.5f, 64);
     }
 
-    if (Bool(DrawMenu, "DrawE", true) && E.IsReady()) {
+    if (Bool(DrawMenu, "DrawE", false) && E.IsReady()) {
         Drawing::DrawCircle(pos, E.Range, 0xFFFF2A70u, 1.5f, 64);
     }
 
-    if (Bool(DrawMenu, "DrawTarget", true) && ValidHeroTarget(CurrentTarget)) {
+    if (Bool(DrawMenu, "DrawTarget", false) && ValidHeroTarget(CurrentTarget)) {
         Vec2 playerScreen{}, targetScreen{};
         if (Drawing::WorldToScreen(pos, playerScreen) && Drawing::WorldToScreen(CurrentTarget.Position(), targetScreen)) {
             Drawing::DrawLine(playerScreen, targetScreen, 0xFFFF2A70u, 2.0f);
@@ -397,7 +388,7 @@ static void BuildMenu() {
 
     ComboMenu = MenuRoot->AddSubMenu(new Menu("Combo", "Combo Settings"));
     ComboMenu->Add(new MenuBool("UseQ", "Use Q Switcheroo!", true));
-    ComboMenu->Add(new MenuBool("AutoQ", "Auto Switch Minigun when out of combat", true));
+    ComboMenu->Add(new MenuBool("AutoQ", "Auto Minigun Out of Combat", true));
 
     WSettingsMenu = MenuRoot->AddSubMenu(new Menu("WSettings", "W Zap! Settings"));
     WSettingsMenu->Add(new MenuBool("UseW", "Use W Zap!", true));
@@ -406,12 +397,11 @@ static void BuildMenu() {
     ESettingsMenu = MenuRoot->AddSubMenu(new Menu("ESettings", "E Flame Chompers! Settings"));
     ESettingsMenu->Add(new MenuBool("UseE", "Use E Flame Chompers!", true));
     ESettingsMenu->Add(new MenuBool("AutoE", "Auto E on Dashing / CC Enemies", true));
-    ESettingsMenu->Add(new MenuBool("UseLogicE", "Use Logic E (VeryHigh hitchance close)", false));
+    ESettingsMenu->Add(new MenuBool("UseLogicE", "Use Logic E (VeryHigh Close)", false));
 
     RSettingsMenu = MenuRoot->AddSubMenu(new Menu("RSettings", "R Super Mega Death Rocket! Settings"));
     RSettingsMenu->Add(new MenuBool("UseR", "Use R in Combo (Killable)", true));
     RSettingsMenu->Add(new MenuList("RCalDmg", "R Damage Calculation", { "x1.5 Dmg", "Base Dmg", "Combo Dmg" }, 2));
-    RSettingsMenu->Add(new MenuKeyBind("SemiR", "Semi-Manual R", SDK::Keys::A, KeyBindType::Press))->Permashow();
 
     HarassMenu = MenuRoot->AddSubMenu(new Menu("Harass", "Harass Settings"));
     HarassMenu->Add(new MenuBool("UseQ", "Use Q Harass", true));
@@ -419,19 +409,16 @@ static void BuildMenu() {
     HarassMenu->Add(new MenuSlider("Mana", "Minimum Mana %", 40, 0, 100));
 
     DrawMenu = MenuRoot->AddSubMenu(new Menu("Draw", "Drawings"));
-    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", true));
-    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", true));
-    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", true));
-    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Current Target Line", true));
+    DrawMenu->Add(new MenuBool("DrawQ", "Draw Q Range", false));
+    DrawMenu->Add(new MenuBool("DrawW", "Draw W Range", false));
+    DrawMenu->Add(new MenuBool("DrawE", "Draw E Range", false));
+    DrawMenu->Add(new MenuBool("DrawTarget", "Draw Current Target Line", false));
 
     MenuRoot->Attach();
 }
 
 static void RemoveMenu() {
     if (!MenuRoot) return;
-    if (auto* item = RSettingsMenu ? RSettingsMenu->Get<MenuKeyBind>("SemiR") : nullptr) {
-        item->RemovePermashow();
-    }
     MenuManager::Instance().Remove(MenuRoot);
     MenuRoot = nullptr;
     ComboMenu = nullptr;

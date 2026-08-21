@@ -22,7 +22,6 @@ using ControllerHelpers::IsLocalPlayer;
 using ControllerHelpers::Lethal;
 using ControllerHelpers::Now;
 using ControllerHelpers::PredictPosition;
-using ControllerHelpers::PreferredEnemyTarget;
 using ControllerHelpers::SelectJungleTarget;
 using ControllerHelpers::Slider;
 using ControllerHelpers::ProjectileWallBlocksFromPlayer;
@@ -47,12 +46,16 @@ inline int ECastTick = 0;
 inline int RCastTick = 0;
 inline int RTargetId = 0;
 inline int RDisableUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline Vector3 ECenter{};
 inline Vector3 REndpoint{};
 inline std::array<int, 4> LastCastTick{};
+inline int GapcloserTargetId = 0;
+inline int GapcloserExpireTick = 0;
+inline Vector3 GapcloserEndpoint{};
+inline int InterruptTargetId = 0;
+inline int InterruptExpireTick = 0;
 
 inline bool Ready(int slot, Mode mode, bool reactive = false) {
     return slot >= 0 && slot < 4 && Engine::RuntimeSpells[slot] &&
@@ -278,10 +281,9 @@ inline void ReconcileState() {
     if (RDisableUntil != 0 && !RDisableActive(now - RCastTick)) RDisableUntil = 0;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = PreferredEnemyTarget(selected,
+    const AIHeroClient target = Engine::SelectTarget(
         mode == Mode::Flee ? kRRange + 100.0f : kERange + 100.0f);
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -305,7 +307,6 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu->Add(new MenuSlider("DefensiveHealth", "Emergency R health percent", 35, 0, 100));
     TacticsMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 0, 100));
     TacticsMenu->Add(new MenuSlider("WFirstHealth", "Harass W first-hit target health", 95, 0, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("LaneMana", "Lane clear mana percent", 35, 0, 100));
     FarmMenu->Add(new MenuSlider("JungleMana", "Jungle mana percent", 25, 0, 100));
@@ -319,7 +320,9 @@ inline void OnLoad() {
     CurrentR = RState::Ready;
     PassiveStacks = 0;
     PassiveTick = QCastTick = WCastTick = WMarkTick = ECastTick = RCastTick = 0;
-    WMarkTargetId = RTargetId = RDisableUntil = ManualOwnershipUntil = 0;
+    WMarkTargetId = RTargetId = RDisableUntil = 0;
+    GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
+    GapcloserEndpoint = {};
     LastAutoTargetId = LastAutoTick = 0;
     ECenter = {};
     REndpoint = {};
@@ -335,20 +338,14 @@ inline void OnUnload() {
 inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (!args.Sender.IsValid()) return;
     const int now = Now();
-    if (IsLocalPlayer(args.Sender)) {
-        if (args.Slot >= 0 && args.Slot < 4) {
-            if (!Engine::WasControllerCast(args.Slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
-            LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
-            if (args.Slot == 0) { CurrentQ = QState::Charging; QCastTick = now; }
-            else if (args.Slot == 1) { WCastTick = now; }
-            else if (args.Slot == 2) { CurrentE = EState::LightningPending; ECastTick = now; }
-            else { CurrentR = RState::Leaping; RCastTick = now; }
-        }
-        return;
+    if (!IsLocalPlayer(args.Sender)) return;
+    if (args.Slot >= 0 && args.Slot < 4) {
+        LastCastTick[static_cast<std::size_t>(args.Slot)] = now;
+        if (args.Slot == 0) { CurrentQ = QState::Charging; QCastTick = now; }
+        else if (args.Slot == 1) { WCastTick = now; }
+        else if (args.Slot == 2) { CurrentE = EState::LightningPending; ECastTick = now; }
+        else { CurrentR = RState::Leaping; RCastTick = now; }
     }
-    const auto analysis = AnalyzeEnemyCast(args);
-    if (analysis.Valid && (analysis.TargetsPlayer || analysis.CrossesPlayer)) ManualOwnershipUntil = 0;
 }
 
 inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
@@ -420,12 +417,12 @@ inline void OnAfterAttack(SDK::OrbwalkingActionArgs& args) {
 }
 
 inline void OnGapcloser(const SDK::Events::Gapcloser::GapCloserEventArgs& args) {
-    Vector3 endpoint = args.End;
-    (void)CaptureGapcloser(args, WMarkTargetId, endpoint, ManualOwnershipUntil, kRRange, 1000);
+    (void)CaptureGapcloser(args, GapcloserTargetId, GapcloserEndpoint,
+                           GapcloserExpireTick, kRRange, 1000);
 }
 
 inline void OnInterruptable(const SDK::Events::InterruptableSpell::InterruptableTargetEventArgs& args) {
-    CaptureInterruptable(args, WMarkTargetId, ManualOwnershipUntil, 900, 250, 5000);
+    CaptureInterruptable(args, InterruptTargetId, InterruptExpireTick, 900, 250, 5000);
 }
 
 inline void OnObjectCreate(const SDK::Events::ObjectEventArgs& args) {
@@ -452,13 +449,13 @@ inline void OnDraw() {}
 
 inline constexpr const char* Scenarios[] = {
     "Relentless Storm five-stack lightning and stack expiry reconciliation",
-    "Thundering Smash movement chase, attack windup ownership and stun contact",
+    "Thundering Smash movement chase, attack windup and stun contact",
     "Frenzied Maul first bite mark, wounded recast damage and heal window",
     "Sky Splitter prediction, lightning delay, shield radius and damage gating",
     "Stormbringer leap range, landing coverage and turret disable duration",
     "Stormbringer endpoint wall, turret and enemy-count safety with lethal/defensive exceptions",
     "Mana, cooldown, damage and shield-aware cast policy across modes",
-    "Selected target precedence followed by orbwalker target fallback",
+    "Autonomous Engine target selection across combat modes",
     "Combo, harass, lane clear, jungle, last-hit, flee and automatic policies",
     "Polling reconciliation across spell, buff, object and missile callbacks",
 };

@@ -163,10 +163,45 @@ struct OrbProbe {
 };
 
 inline bool OrbwalkerBase::CanAttack() { return CanAttack(0.0f); }
+inline void OrbwalkerBase::SetAttackReleaseSafeTick(int releaseTick) {
+    context_.attackReleaseSafeTick = std::max(
+        context_.attackReleaseSafeTick,
+        Timing::ReleaseSafeTick(releaseTick, Game::Ping()));
+}
+
+inline void OrbwalkerBase::ExpireSettPunchState(int now) {
+    if (context_.settNextPunchIsRight &&
+        context_.settLastPunchTick > 0 &&
+        now - context_.settLastPunchTick >
+            Timing::kSettPunchStateTimeoutMs) {
+        context_.settNextPunchIsRight = false;
+    }
+}
+
+inline void OrbwalkerBase::ObserveSettAttack(const char* eventName, int now) {
+    if (SDK::GameObjects::PlayerChampionId() != SDK::ChampionId::Sett ||
+        !eventName || !eventName[0]) {
+        return;
+    }
+    std::string name(eventName);
+    std::transform(name.begin(), name.end(), name.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (name.find("attack") == std::string::npos) {
+        return;
+    }
+    const bool rightPunch =
+        name.find("passive") != std::string::npos ||
+        name.find("attack2") != std::string::npos ||
+        name.find("attack4") != std::string::npos;
+    context_.settNextPunchIsRight = !rightPunch;
+    context_.settLastPunchTick = now;
+}
+
 
 inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     ExpirePendingAttack();
     const int now = Tick();
+    ExpireSettPunchState(now);
     if (EvadeBlocksAttack(now) || !context_.attackEnabled ||
         now < context_.allPauseTick || now < context_.attackPauseTick) {
         return false;
@@ -198,8 +233,15 @@ inline bool OrbwalkerBase::CanAttack(float extraWindup) {
     }
 
     ReadAttackTimingsFromMemory(player);
+    float attackCycleMs = context_.attackDelayMs;
+    if (SDK::GameObjects::PlayerChampionId() == SDK::ChampionId::Sett) {
+        attackCycleMs = Timing::SettPunchCooldownMs(
+            context_.settNextPunchIsRight,
+            context_.attackWindupMs,
+            context_.attackDelayMs);
+    }
     const float readyAt = static_cast<float>(context_.lastAutoAttackTick) +
-                          context_.attackDelayMs +
+                          attackCycleMs +
                           ChampionExtraAttackDelayMs(player) +
                           AttackSafetyMs();
 
@@ -304,6 +346,9 @@ inline bool OrbwalkerBase::CanMove(float extraWindup, bool disableMissileCheck) 
     }
 
     ReadAttackTimingsFromMemory(player);
+    if (now < context_.attackReleaseSafeTick) {
+        return false;
+    }
     if (menu_.UseTreTrauLogic()) {
         // TreTrau: do not let OnDoCast/attackCastComplete unlock movement by itself.
         const float safetyBuffer = std::clamp(context_.attackWindupMs * 0.08f, 20.0f, 45.0f);
@@ -482,6 +527,8 @@ inline bool OrbwalkerBase::Attack(const AttackableUnit& target) {
     context_.lastAttackDoCastComplete = false;
     context_.lastAttackDoCastWaitTick = context_.lastAttackRequiresDoCastBeforeMove ? now : 0;
     ReadAttackTimingsFromMemory(GameObjects::Player());
+    SetAttackReleaseSafeTick(
+        now + static_cast<int>(std::ceil(context_.attackWindupMs)));
     TryShowFakeClick(Hud::ClickType::Attack, attackTarget.Position(), now, context_.lastFakeAttackClickTick);
 
     return true;
@@ -731,8 +778,10 @@ inline int OrbwalkerBase::AttackCastDoneTick(const AIHeroClient& player) {
     const int animGap = (!pending && context_.lastAttackOrderToAnimGapMs > 0)
         ? context_.lastAttackOrderToAnimGapMs
         : 0;
-    return static_cast<int>(std::ceil(
-        static_cast<float>(attackTick + animGap) + context_.attackWindupMs + MoveSafetyMs()));
+    const int estimated = static_cast<int>(std::ceil(
+        static_cast<float>(attackTick + animGap) +
+        context_.attackWindupMs + MoveSafetyMs()));
+    return std::max(estimated, context_.attackReleaseSafeTick);
 }
 
 inline int OrbwalkerBase::AttackReadyTick(const AIHeroClient& player) {

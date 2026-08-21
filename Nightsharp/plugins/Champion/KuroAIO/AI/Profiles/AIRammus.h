@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Rammus = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 65;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "RammusPassive";
@@ -94,7 +93,7 @@ inline constexpr ChampionProfile Rammus = [] {
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition | StepRule::AllowDuringWindup, 0, 700),
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::AllowDuringWindup, 60, 950),
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireCrowdControl, 100, 1100),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireTarget, 120, 1500));
+        Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition, 120, 1500));
     return p;
 }();
 

@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Xerath = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 64;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "XerathAscended2OnHit";
@@ -102,7 +101,7 @@ inline constexpr ChampionProfile Xerath = [] {
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireSafePosition |
              StepRule::HoldForExecute, 600, 2800));
     p.Flee = Plan(
-        "Shocking Orb peel while preserving a manual artillery channel",
+        "Shocking Orb peel while preserving a safe artillery channel",
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireSafePosition |
              StepRule::AllowDuringWindup, 0, 850),
         Step(SDK::SpellSlot::Q, StepRule::RequireTarget | StepRule::AllowDuringWindup, 120, 1100));

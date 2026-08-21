@@ -1123,7 +1123,7 @@ static void BuildMenu() {
     ComboMenu->Add(new MenuSlider("RTicks", "Extra R damage ticks", 3, 1, 6));
     ComboMenu->Add(new MenuSlider("RHits", "R minimum enemies", 3, 1, 5));
     ComboMenu->Add(new MenuBool("FollowR", "Auto follow with R", true));
-    ComboMenu->Add(new MenuBool("ConserveR", "Conserve R when another spell can kill", true));
+    ComboMenu->Add(new MenuBool("ConserveR", "Save R if another spell kills", true));
 
     RBlacklistMenu = ComboMenu->AddSubMenu(new Menu("RBlacklist", "R Blacklist"));
     for (const auto& enemy : GameObjects::EnemyHeroes()) {

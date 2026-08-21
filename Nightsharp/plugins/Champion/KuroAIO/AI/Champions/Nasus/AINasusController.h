@@ -31,7 +31,6 @@ inline int WitherExpireTick = 0;
 inline int SpiritFireTargetId = 0;
 inline int SpiritFireExpireTick = 0;
 inline int FuryExpireTick = 0;
-inline int ManualOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int LastCastTick[4]{};
@@ -55,12 +54,6 @@ inline bool TargetBlocked(const AIHeroClient& target) {
            HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& selected, float range) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
-    return Engine::SelectTarget(range);
-}
 
 inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
@@ -150,15 +143,13 @@ inline void ReconcileState() {
     if (now >= WitherExpireTick) WitherTargetId = 0;
     if (now >= SpiritFireExpireTick) SpiritFireTargetId = 0;
     if (now >= FuryExpireTick) FuryExpireTick = 0;
-    if (now >= ManualOverrideUntil) ManualOverrideUntil = 0;
     QEmpowered = QEmpowered || player.HasBuff("NasusQ") || player.HasBuff("NasusQAttack");
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOverrideUntil > Now()) return true;
-    const AIHeroClient target = SelectTarget(selected, mode == Mode::Flee ? 850.0f : kWRange);
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 850.0f : kWRange);
     const AIHeroClient threat = NearestEnemyToPlayer(target, 850.0f);
     if (mode == Mode::Flee) {
         if (Engine::ValidEnemy(threat)) (void)CastW(threat, mode, true);
@@ -204,7 +195,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot)) ManualOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             if (slot == 0) QEmpowered = true;
         }
         return;
@@ -260,7 +250,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("NasusOneTrick", "Nasus scaling juggernaut"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("NasusQ", "Siphoning Strike"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("NasusW", "Wither"));
     WMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 35, 10, 90));
@@ -278,7 +267,7 @@ inline void BuildMenu(Menu* root) {
 inline void OnLoad() {
     SiphonStacks = 0.0f;
     WitherTargetId = WitherExpireTick = SpiritFireTargetId = SpiritFireExpireTick = 0;
-    FuryExpireTick = ManualOverrideUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    FuryExpireTick = IncomingThreatUntil = IncomingHardCCUntil = 0;
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = 0;
     QEmpowered = false;
@@ -294,14 +283,13 @@ inline constexpr const char* Scenarios[] = {
     "Use Riot 26.15 and CommunityDragon 16.15 Summoner's Rift values",
     "Track Siphoning Strike stacks from observed events and polling reconciliation",
     "Preserve an empowered Q for a reachable attack reset or configured last-hit",
-    "Keep selected target precedence before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Use Wither only on a valid reachable champion and track its five-second state",
     "Predict Spirit Fire placement and reject walls, enemy turrets and overcrowded endpoints",
     "Track Spirit Fire zone ownership, duration and armor reduction by buff events",
     "Reserve Fury of the Sands for low-health defense, hard crowd control or multi-target commit",
     "Reject invulnerable, untargetable, spell-shielded and uncertain targets",
     "Preserve attack windup unless the Q or reactive cast is explicitly justified",
-    "Yield after observed manual Q, W, E or R ownership",
     "Respect mana thresholds and do not spend the ultimate during ordinary farming",
     "Cover Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Automatic mode is restricted to threat response and defensive Wither",

@@ -123,7 +123,6 @@ struct RTargetPolicy {
     bool TargetProtected = false;
     bool Lethal = false;
     bool TargetLow = false;
-    bool IsPrimaryTarget = false;
     bool UnderEnemyTurret = false;
     bool Defensive = false;
     int NearbyEnemies = 0;
@@ -133,21 +132,17 @@ struct RTargetPolicy {
 inline bool ShouldCastR(const RTargetPolicy& policy) {
     if (!policy.Ready || !policy.TargetValid || policy.TargetProtected ||
         policy.UnderEnemyTurret) return false;
-    if (policy.Lethal || policy.TargetLow || policy.Defensive) return true;
-    return policy.IsPrimaryTarget &&
-        policy.NearbyEnemies <= std::max(0, policy.MaximumNearbyEnemies);
+    return policy.Lethal || policy.TargetLow || policy.Defensive;
 }
 
 struct AutomaticContext {
     bool IncomingThreat = false;
     bool KillSecure = false;
     bool DefensiveR = false;
-    bool ManualOwnership = false;
 };
 
 inline bool AutomaticAllowed(const AutomaticContext& context) {
-    return !context.ManualOwnership &&
-        (context.IncomingThreat || context.KillSecure || context.DefensiveR);
+    return context.IncomingThreat || context.KillSecure || context.DefensiveR;
 }
 
 } // namespace Plugins::KuroAIO::AI::Controllers::Trundle::Geometry

@@ -34,7 +34,6 @@ inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastInterruptTargetId = 0;
 inline int LastInterruptExpireTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline Vector3 LastQAim{};
@@ -98,8 +97,7 @@ inline bool SafeCommit(const Vector3& position, bool defensive, bool lethal) {
 }
 
 inline AIHeroClient Target(float range) {
-    const auto selected = ControllerHelpers::PlayerSelectedEnemy(range);
-    return ControllerHelpers::PreferredEnemyTarget(selected, range);
+    return Engine::SelectTarget(range);
 }
 
 inline bool CastERecast(const AIHeroClient& target, Mode mode, bool reactive = false,
@@ -185,8 +183,7 @@ inline bool CastW(const AIHeroClient& target, Mode mode, bool reactive = false,
     return true;
 }
 
-inline bool CastDemonflare(const AIHeroClient& target, Mode mode, bool reactive = false,
-                           bool manual = false) {
+inline bool CastDemonflare(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Demon.Active || !Demon.RecastReady ||
         !RRecastRuntime() || !Ready(3, mode) || !Throttle(3, 25, true)) return false;
@@ -197,7 +194,7 @@ inline bool CastDemonflare(const AIHeroClient& target, Mode mode, bool reactive 
     const UltimateContext context{true, true, Demon.RecastReady,
         Engine::ValidEnemy(target) && CircleHits(player.Position(),
             PredictPosition(target, 0.10f), kRRadius, target.BoundingRadius()),
-        lethal, defensive, manual, Orbwalker::IsWindingUp(),
+        lethal, defensive, Orbwalker::IsWindingUp(),
         Engine::UnderEnemyTurret(player.Position()), enemies,
         Slider(RMenu, "MinimumDetonationEnemies", 2)};
     if (!ShouldDemonflare(context)) return false;
@@ -209,7 +206,7 @@ inline bool CastDemonflare(const AIHeroClient& target, Mode mode, bool reactive 
     return true;
 }
 
-inline bool CastDemon(Mode mode, bool reactive = false, bool manual = false) {
+inline bool CastDemon(Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || Demon.Active || !Ready(3, mode) || !Throttle(3) ||
         PreserveAttack(reactive, true)) return false;
@@ -222,7 +219,7 @@ inline bool CastDemon(Mode mode, bool reactive = false, bool manual = false) {
     const bool lethal = Engine::ValidEnemy(target) &&
         Lethal(target, QDamage(target) + EDamage(target) + WDamage(target));
     const UltimateContext context{true, false, false,
-        enemies > 0 || defensive, lethal, defensive, manual,
+        enemies > 0 || defensive, lethal, defensive,
         Orbwalker::IsWindingUp(), Engine::UnderEnemyTurret(player.Position()), enemies,
         Slider(RMenu, "MinimumStartEnemies", 2)};
     if (!ShouldCastDemon(context) || !SafeCommit(player.Position(), defensive, lethal)) return false;
@@ -284,10 +281,9 @@ inline void ReconcileState() {
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
     const auto player = GameObjects::Player();
     const float range = mode == Mode::Flee ? 1300.0f : kWRange;
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, range);
+    const AIHeroClient target = Engine::SelectTarget(range);
     if (Engine::ValidEnemy(target) && TryKillSecure(target, mode)) return true;
     if (Demon.Active && Engine::ValidEnemy(target) && CastDemonflare(target, mode)) return true;
     if (IncomingHardCCUntil > Now() && Engine::ValidEnemy(target) && CastW(target, mode, true)) return true;
@@ -317,8 +313,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     const int now = Now();
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
-        if (slot >= 0 && slot <= 3 && !Engine::WasControllerCast(slot))
-            ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 580);
+        if (slot >= 0 && slot <= 3) LastCastTick[slot] = now;
         if (ControllerHelpers::SpellEventNameContains(args, "SwainE")) {
             if (ControllerHelpers::SpellEventNameContains(args, "SwainE2")) {
                 Tether = ArmPull(Tether, now, Tether.TargetId);
@@ -404,7 +399,6 @@ inline void OnDoCast(const SDK::Events::ProcessSpellEventArgs& args) {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("SwainOneTrick", "Swain battlemage tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 580, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Death's Hand"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Vision of Empire"));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 55, 20, 90));
@@ -427,7 +421,7 @@ inline void OnUnload() {
     Demon = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = LastInterruptTargetId = LastInterruptExpireTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastQAim = LastWAim = LastEAim = {};
     LastMode = Mode::None;
 }
@@ -438,7 +432,7 @@ inline void OnLoad() {
     Demon = {};
     std::fill(std::begin(LastCastTick), std::end(LastCastTick), 0);
     LastAutoTargetId = LastAutoTick = LastInterruptTargetId = LastInterruptExpireTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingHardCCUntil = 0;
+    IncomingThreatUntil = IncomingHardCCUntil = 0;
     LastQAim = LastWAim = LastEAim = {};
     LastMode = Mode::None;
 }
@@ -453,10 +447,10 @@ inline constexpr const char* Scenarios[] = {
     "Use Q's twenty-degree cone, 750 range, prediction and target-radius edge handling",
     "Start Demonic Ascension only with nearby pressure, defensive need, lethal setup or a multi-target commitment",
     "Advance Demon Power with ten-per-second drain and twenty-per-second enemy-contact regeneration",
-    "Protect R's movement channel, reconcile SwainR buff polling, and yield after manual ownership",
-    "Detonate Demonflare after the two-second arming window only on lethal, defensive, manual or multi-target value",
+    "Protect R movement channel and reconcile SwainR buff polling",
+    "Detonate Demonflare after the two-second arming window on lethal, defensive or multi-target value",
     "Reject fresh nonlethal R commits under enemy turrets, excessive enemy count or unsafe mobility lock",
-    "Preserve selected target first, then orbwalker and selector fallback while requiring reachable kit geometry",
+    "Use the autonomous engine-selected target while requiring reachable kit geometry",
     "Preserve AA windup for ordinary casts while allowing reactive, lethal and recast exceptions",
     "Run distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic policies",
     "Use W peel on incoming hard crowd control and E pull as a verified tethered kill secure",

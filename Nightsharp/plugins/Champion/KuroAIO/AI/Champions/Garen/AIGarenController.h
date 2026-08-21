@@ -39,7 +39,7 @@ inline int QArmTick = 0;
 inline int QSilenceUntil = 0;
 inline int QTargetId = 0;
 inline int WStartTick = 0;
-inline int ManualOwnershipUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingThreatTargetId = 0;
 inline Vector3 IncomingThreatEndpoint{};
@@ -184,8 +184,7 @@ inline void Flee(const AIHeroClient& target) {
     (void)CastQ(target, Mode::Flee, true);
 }
 
-inline void Automatic(const AIHeroClient& target) {
-    if (ManualOwnershipUntil > Now()) return;
+inline void Automatic(const AIHeroClient& target) {
     if (IncomingThreatUntil >= Now() && Engine::ValidEnemy(target) && CastW(target, Mode::Automatic, true)) return;
     if (Engine::ValidEnemy(target) && CastR(target, Mode::Automatic, true)) return;
     if (Engine::ValidEnemy(target) && GameObjects::Player().HealthPercent() <= 28.0f)
@@ -231,8 +230,7 @@ inline void ReconcileState() {
 }
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
-    ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
+    ReconcileState();
     const AIHeroClient target = PreferredEnemyTarget(selected, mode == Mode::Flee ? 850.0f : 700.0f);
     if (CurrentSpin == SpinState::Spinning) {
         if (mode == Mode::Automatic && Engine::ValidEnemy(target)) (void)CastR(target, mode, true);
@@ -256,8 +254,7 @@ inline void BuildMenu(Menu* root) {
     TacticsMenu = root->AddSubMenu(new Menu("Garen judgment tactics"));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("Garen resource-free farm"));
     TacticsMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies at Judgment body", 3, 0, 5));
-    TacticsMenu->Add(new MenuSlider("CourageHealth", "Use Courage below health percent", 62, 1, 100));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Manual cast protection (ms)", 650, 0, 2000));
+    TacticsMenu->Add(new MenuSlider("CourageHealth", "Use Courage below health percent", 62, 1, 100));
     TacticsMenu->Add(new MenuBool("PreserveAttacks", "Preserve attack windup", true));
     FarmMenu->Add(new MenuSlider("MinimumSpinTargets", "Minimum tracked bodies for farm spin", 1, 1, 5));
 }
@@ -267,7 +264,7 @@ inline void OnLoad() {
     CurrentCourage = CourageState::Ready;
     CurrentQ = DecisiveStrikeState::Ready;
     SpinStartTick = SpinTargetId = SpinBodyId = QArmTick = QTargetId = QSilenceUntil = WStartTick = 0;
-    ManualOwnershipUntil = IncomingThreatUntil = IncomingThreatTargetId = 0;
+    IncomingThreatUntil = IncomingThreatTargetId = 0;
     SpinBodyPosition = LastSpinTargetPosition = IncomingThreatEndpoint = {};
     PassiveReady = false;
     LastAutoTargetId = LastAutoTick = 0;
@@ -287,7 +284,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
             if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 0) { CurrentQ = DecisiveStrikeState::Armed; QArmTick = now; }
             if (slot == 1) { CurrentCourage = CourageState::Active; WStartTick = now; }
@@ -384,7 +380,7 @@ inline constexpr const char* Scenarios[] = {
     "selected-target precedence with orbwalker fallback and attack-windup preservation",
     "polling reconciliation for Q, W, E, passive and Judgment body lifetimes",
     "turret, wall, nearby-enemy and unsafe Judgment commit rejection",
-    "manual cast protection plus gapcloser and interrupt threat reactions",
+    "cast safety plus gapcloser and interrupt threat reactions/",
     "combo, harass, lane clear, jungle, last-hit, flee and automatic mode policies",
 };
 

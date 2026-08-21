@@ -21,14 +21,13 @@ inline constexpr ChampionProfile Nilah = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 35;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "NilahJoyUnending";
     p.ChannelBuff = "NilahR";
     p.UltimateBuff = "NilahR";
     p.TacticalSummary =
-        "Close-range skirmisher: preserve the selected target through AA windup, use Formless Blade to empower attacks, hide Nilah and an ally with Jubilant Veil, and reserve Apotheosis for safe multi-target damage or healing.";
+        "Close-range skirmisher: preserve the best reachable target through AA windup, use Formless Blade to empower attacks, hide Nilah and an ally with Jubilant Veil, and reserve Apotheosis for safe multi-target damage or healing.";
     p.ResearchSummary =
         "Riot 26.15 / CommunityDragon 16.15 Nilah review: Joy Unending shares allied healing and shielding and grants experience parity, Formless Blade empowers attacks and whips a line, Jubilant Veil evades attacks, Slipstream dashes through allies or enemies with a recast, and Apotheosis damages nearby enemies while healing Nilah and nearby allies.";
 

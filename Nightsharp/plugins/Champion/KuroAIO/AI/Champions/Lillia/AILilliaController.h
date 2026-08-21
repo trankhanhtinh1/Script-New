@@ -33,7 +33,6 @@ inline MarkState Marks{};
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCcUntil = 0;
 inline Mode LastMode = Mode::None;
@@ -55,8 +54,8 @@ inline bool Lethal(const AIHeroClient& target, int slot) {
     return player.CalculateMagicDamage(target, Engine::RuntimeSpells[slot]->GetDamage(target)) >=
         target.Health() + target.AllShield();
 }
-inline AIHeroClient Target(float range, const AIHeroClient& selected) {
-    return ControllerHelpers::PreferredEnemyTarget(selected, range);
+inline AIHeroClient Target(float range) {
+    return Engine::SelectTarget(range);
 }
 inline bool TargetMarked(const AIHeroClient& target) {
     return Engine::ValidEnemy(target) &&
@@ -71,7 +70,7 @@ inline bool SafePosition(const AIHeroClient& target, bool lethal = false,
     const SafetyContext context{
         Engine::ValidEnemy(target), lethal, defensive,
         Engine::UnderEnemyTurret(player.Position()), Orbwalker::IsWindingUp(),
-        ManualOwnershipUntil > Now(), enemies, Slider(RMenu, "MaxCommitEnemies", 3)};
+        enemies, Slider(RMenu, "MaxCommitEnemies", 3)};
     return SafeCommit(context);
 }
 inline bool ManaOkay(Mode mode, int slot) {
@@ -217,22 +216,20 @@ inline void ReconcileState() {
         const int observed = std::clamp(Dream.Stacks, 1, kMaxDreamStacks);
         Dream = ReconcileDream(Dream, observed, now);
     }
-    if (ManualOwnershipUntil <= now) ManualOwnershipUntil = 0;
     if (IncomingThreatUntil <= now) IncomingThreatUntil = 0;
     if (IncomingHardCcUntil <= now) IncomingHardCcUntil = 0;
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualOwnershipUntil > Now()) return true;
-    const auto target = Target(mode == Mode::Flee ? kRRange : kERange, selected);
+    const auto target = Target(mode == Mode::Flee ? kRRange : kERange);
     const auto player = GameObjects::Player();
     if (player.IsValid() && IncomingHardCcUntil > Now() && Engine::ValidEnemy(target))
         if (TargetMarked(target) && CastR(target, mode, true)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, kRRange)); break;
+    case Mode::Flee: Flee(NearestEnemyToPlayer({}, kRRange)); break;
     case Mode::LaneClear:
     case Mode::Jungle:
     case Mode::LastHit: Farm(mode); break;
@@ -253,8 +250,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
             LastCastTick[slot] = now;
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 600);
             if (slot == 0 || slot == 1 || slot == 2) Dream = ApplyDream(Dream, now);
         }
         return;
@@ -290,9 +285,6 @@ inline void OnBuffRemove(const SDK::Events::BuffEventArgs& args) {
             if (mark.TargetId == static_cast<int>(args.Sender.NetworkId)) mark = {};
     }
 }
-inline void OnBeforeAttack(SDK::OrbwalkingActionArgs& args) {
-    if (ManualOwnershipUntil > Now() && Bool(TacticsMenu, "ProtectManual", true)) args.Process = false;
-}
 inline void OnDraw() {
     if (!Bool(CoachMenu, "DrawRanges", false)) return;
     const auto player = GameObjects::Player();
@@ -304,8 +296,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("LilliaTactics", "Dream-Laden Bough tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 600, 180, 1400));
-    TacticsMenu->Add(new MenuBool("ProtectManual", "Protect manual spell ownership", true));
     QMenu = TacticsMenu->AddSubMenu(new Menu("LilliaQ", "Blooming Blows rings"));
     QMenu->Add(new MenuBool("PreferOuterRing", "Prefer outer true-damage ring", true));
     WMenu = TacticsMenu->AddSubMenu(new Menu("LilliaW", "Watch Out! Eep! center"));
@@ -326,7 +316,7 @@ inline void OnLoad() {
     Dream = {};
     Marks = {};
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
     IncomingThreatUntil = IncomingHardCcUntil = 0;
     LastMode = Mode::None;
     LastEAim = LastWAim = {};
@@ -347,8 +337,8 @@ inline constexpr const char* Scenarios[] = {
     "Cast Lilting Lullaby only on marked targets with lethal defensive or multi-target value",
     "Reject ordinary sleep casts under turret or excessive nearby-enemy pressure",
     "Use movement stacks and preferred distance for kiting and zone safety decisions",
-    "Prefer the selected target, then orbwalker target, for every champion route",
-    "Protect manual spell ownership and auto-attack windup from synthetic casts",
+    "Use autonomous Engine target selection for every champion route",
+    "Preserve attack windup through spell policy and safe commitment gates",
     "Support Combo Harass LaneClear Jungle LastHit Flee and Automatic modes distinctly",
     "Apply real damage, shield, resource, cooldown, prediction and target-validity gates",
     "Keep pure stacks marks rings projectile and safety mechanics in standalone geometry",
@@ -375,7 +365,6 @@ inline constexpr ChampionController Controller = [] {
     controller.OnBuffAdd = &OnBuffAdd;
     controller.OnBuffRemove = &OnBuffRemove;
 
-    controller.OnBeforeAttack = &OnBeforeAttack;
     controller.OnAfterAttack = &ControllerHelpers::CaptureAfterAttackEvent<&LastAutoTargetId, &LastAutoTick>;
     return controller;
 }();

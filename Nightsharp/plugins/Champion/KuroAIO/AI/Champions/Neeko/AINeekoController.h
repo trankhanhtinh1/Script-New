@@ -36,7 +36,6 @@ inline UltimateStage RStage = UltimateStage::Idle;
 inline int RChannelStartedTick = 0;
 inline int RChannelExpireTick = 0;
 inline int LastCastTick[4]{};
-inline int PlayerOverrideUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int InterruptTargetId = 0;
@@ -194,8 +193,7 @@ inline int EnemiesAtR(const Vector3& center) {
     }
     return count;
 }
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Ready(3, mode) || !Throttle(3, 150) || PreserveAttack(reactive) ||
         RStage != UltimateStage::Idle) return false;
@@ -204,7 +202,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const bool lethal = validTarget && Lethal(target, RDamage(target));
     const bool defensive = player.HealthPercent() <= Slider(RMenu, "DefensiveHP", 30) ||
         IncomingHardCCUntil > Now();
-    const UltimateContext context{true, validTarget, hits > 0, lethal, defensive, manual,
+    const UltimateContext context{true, validTarget, hits > 0, lethal, defensive,
         Orbwalker::IsWindingUp(), Engine::UnderEnemyTurret(player.Position()), hits,
         Slider(RMenu, "MinimumTargets", 2)};
     if (!ShouldStartUltimate(context)) return false;
@@ -221,7 +219,7 @@ inline bool TryKillSecure(const AIHeroClient& target, Mode mode) {
     if (!Engine::ValidEnemy(target)) return false;
     if (Lethal(target, QDamage(target, true)) && CastQ(target, mode, true)) return true;
     if (Lethal(target, EDamage(target)) && CastE(target, mode, true)) return true;
-    return Lethal(target, RDamage(target)) && CastR(target, mode, true, true);
+    return Lethal(target, RDamage(target)) && CastR(target, mode, true);
 }
 inline void Combo(const AIHeroClient& target) {
     if (!Engine::ValidEnemy(target)) return;
@@ -245,14 +243,13 @@ inline void Farm(Mode mode) {
     if (!player.IsValid() || player.ManaPercent() < Slider(FarmMenu, "Mana", 40)) return;
     (void)Engine::TryFarm(mode);
 }
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    const AIHeroClient target = ControllerHelpers::PreferredEnemyTarget(selected, mode == Mode::Flee ? 1000.0f : kERange);
-    if (PlayerOverrideUntil > Now()) return true;
+    const AIHeroClient target = Engine::SelectTarget(mode == Mode::Flee ? 1000.0f : kERange);
     if (RStage == UltimateStage::Channeling) {
         const bool abort = ShouldAbortUltimate(true, GameObjects::Player().IsDead(),
-            IncomingHardCCUntil > Now(), PlayerOverrideUntil > Now());
+            IncomingHardCCUntil > Now());
         if (abort) RStage = UltimateStage::Idle;
         return true;
     }
@@ -285,8 +282,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot))
-            PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
         LastCastTick[slot] = now;
         if (slot == 1) {
             Disguise.CloneActive = true;
@@ -357,7 +352,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("NeekoOneTrick", "Neeko disguise and bloom tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Blooming Burst"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Shapesplitter"));
     WMenu->Add(new MenuSlider("EmergencyHP", "Defensive W health (%)", 34, 10, 75));
@@ -377,7 +371,7 @@ inline void OnLoad() {
     Disguise = {};
     Disguise.PassiveReady = true;
     RStage = UltimateStage::Idle;
-    RChannelStartedTick = RChannelExpireTick = PlayerOverrideUntil = 0;
+    RChannelStartedTick = RChannelExpireTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = InterruptTargetId = InterruptExpireTick = 0;
     LastAutoTargetId = LastAutoTick = LastObjectId = 0;
     LastMode = Mode::None;
@@ -394,15 +388,15 @@ inline constexpr const char* Scenarios[] = {
     "Pin all values and behavior to Riot 26.15 / CommunityDragon 16.15",
     "Poll Neeko passive disguise, W stealth/clone and R channel buffs",
     "Reconcile passive and clone state from buff, spell and object events",
-    "Preserve selected target before orbwalker and selector fallback",
+    "Use autonomous Engine target selection for combat decisions",
     "Preserve AA windup unless a reactive or lethal cast justifies interruption",
     "Aim Q Blooming Burst at predicted landing position and honor bloom radius",
     "Use E Tangle-Barbs with 1000 range, 1300 speed and observed collision budget",
     "Reject E casts through unsafe endpoints, walls, or excessive collision bodies",
     "Use W clone and stealth for threat response, engage setup and fleeing",
-    "Start Pop Blossom only for lethal, defensive, manual or configured multi-target value",
+    "Start Pop Blossom only for lethal, defensive or configured multi-target value",
     "Track R channel duration and never silently recast while channeling",
-    "Abort an observed R channel only for death, hard crowd control or manual ownership",
+    "Abort an observed R channel only for death or hard crowd control",
     "Keep R landing policy conservative when target telemetry is stale",
     "Automatic mode is restricted to interrupt pressure, defense and kill secure",
     "Combo uses W stealth setup, E root, Q bloom and R landing in that order",

@@ -22,7 +22,6 @@ inline constexpr ChampionProfile RekSai = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 55;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "RekSaiPassive";
@@ -78,7 +77,7 @@ inline constexpr ChampionProfile RekSai = [] {
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireMark | StepRule::RequireTargetLow, 250, 1400));
     p.Flee = Plan("Burrowed tunnel retreat",
         Step(SDK::SpellSlot::W, StepRule::RequireSafePosition, 0, 450),
-        Step(SDK::SpellSlot::E, StepRule::RequireSafePosition | StepRule::ManualAssistOnly, 100, 900));
+        Step(SDK::SpellSlot::E, StepRule::RequireSafePosition, 100, 900));
     return p;
 }();
 

@@ -23,7 +23,6 @@ inline constexpr ChampionProfile Nautilus = [] {
     p.UltimateMinimumTargets = 2;
     p.MaximumCommitEnemies = 3;
     p.BaseHumanizerMs = 58;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "NautilusPassive";
@@ -32,7 +31,7 @@ inline constexpr ChampionProfile Nautilus = [] {
     p.ChannelBuff = "NautilusR";
     p.TacticalSummary =
         "Vanguard anchor: fire a collision-safe Dredge Line, preserve the first-hit root, "
-        "shield through a selected threat, pulse Riptide, and reserve Depth Charge for a "
+        "shield through a reachable threat, pulse Riptide, and reserve Depth Charge for a "
         "reachable priority target with safe channel and multi-target follow-through.";
     p.ResearchSummary =
         "Riot live 26.15 / CommunityDragon 16.15 Summoner's Rift values; Q terrain/target "

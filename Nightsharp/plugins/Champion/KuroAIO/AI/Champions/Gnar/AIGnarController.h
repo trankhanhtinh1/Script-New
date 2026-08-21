@@ -49,7 +49,6 @@ inline float Fury = 0.0f;
 inline int FormLastObservedTick = 0;
 inline int MegaExpireTick = 0;
 inline int TiredExpireTick = 0;
-inline int PlayerOverrideUntil = 0;
 inline int LastLocalSpellTick = 0;
 inline int LastQCastTick = 0;
 inline int LastWCastTick = 0;
@@ -198,10 +197,8 @@ inline void ReconcileForm() {
 
 inline AIHeroClient SelectTarget(const AIHeroClient& preferred,
                                  float range = 1300.0f) {
-    if (Engine::ValidEnemy(preferred, range)) return preferred;
-    const auto orbwalker = OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orbwalker, range)) return orbwalker;
-    return NearestEnemyToPlayer(preferred, range);
+    (void)preferred;
+    return Engine::SelectTarget(range);
 }
 
 inline bool TargetBlocked(const AIHeroClient& target) {
@@ -379,12 +376,6 @@ inline bool CastUltimate(const AIHeroClient& target, Mode mode,
     return true;
 }
 
-inline bool TryManualR(const AIHeroClient& selected) {
-    if (!Key(RMenu, "ManualR", false)) return false;
-    const AIHeroClient target = SelectTarget(selected, kGnarRadius + 100.0f);
-    return Engine::ValidEnemy(target) &&
-           CastUltimate(target, Mode::Automatic, false, false, true);
-}
 
 inline bool TryMegaCombo(const AIHeroClient& target) {
     if (CastUltimate(target, Mode::Combo, false, false)) return true;
@@ -451,7 +442,6 @@ inline bool TryAutomatic(const AIHeroClient& selected) {
     bool killSecure = Engine::ValidEnemy(target) && Ready(0) &&
         SpellDamage(0, target) >= target.Health() + target.AllShield();
     AutomaticContext gate{};
-    gate.ManualOwnership = PlayerOverrideUntil >= now;
     gate.Defensive = defensive;
     gate.Interrupt = interrupt;
     gate.KillSecure = killSecure;
@@ -467,15 +457,14 @@ inline bool TryAutomatic(const AIHeroClient& selected) {
     return killSecure && CastQ(target, Mode::Automatic, true);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient& ignoredTargetInput) {
+    (void)ignoredTargetInput;
     ReconcileForm();
-    const AIHeroClient target = SelectTarget(selected, 1350.0f);
+    const AIHeroClient target = Engine::SelectTarget(1350.0f);
     LastDecisionTargetId = target.IsValid()
         ? static_cast<int>(target.NetworkId()) : 0;
-    if (TryManualR(selected)) return true;
-    if (PlayerOverrideUntil >= Now()) return true;
     if (mode == Mode::Automatic) {
-        (void)TryAutomatic(selected);
+        (void)TryAutomatic(target);
     } else if (mode == Mode::Flee) {
         (void)TryFlee(target);
     } else if (mode == Mode::Combo && Engine::ValidEnemy(target)) {
@@ -524,9 +513,6 @@ inline void ObserveLocalSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         LastRCastTick = now;
         Form = FormState::Mega;
         MegaExpireTick = std::max(MegaExpireTick, now + kMegaDurationMs);
-    }
-    if (!controllerOwned) {
-        PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 520);
     }
 }
 
@@ -643,9 +629,7 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu(
-        "GnarOneTrick", "Gnar transform and displacement tactics"));
-    TacticsMenu->Add(new MenuSlider(
-        "ManualOwnershipMs", "Yield player spell (ms)", 520, 180, 1200));
+        "GnarOneTrick", "Transform and displacement"));
     RageMenu = TacticsMenu->AddSubMenu(new Menu("Rage", "Transform preparation"));
     RageMenu->Add(new MenuBool("PrepareMega", "Build rage for nearby objectives", true));
     RageMenu->Add(new MenuSlider("PrepareAtFury", "Prepare Mega from fury", 72, 40, 95));
@@ -665,12 +649,10 @@ inline void BuildMenu(Menu* root) {
         "GnarUltimate", "GNAR! wall and peel policy"));
     RMenu->Add(new MenuSlider("MinimumTargets", "Minimum proactive targets", 2, 1, 5));
     RMenu->Add(new MenuSlider("FleeMinimumTargets", "Minimum flee targets", 2, 1, 5));
-    RMenu->Add(new MenuKeyBind("ManualR", "Manual safe GNAR! [T]",
-                               SDK::Keys::T, KeyBindType::Press));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu(
         "Farm", "Rage-aware lane, jungle and last-hit"));
     FarmMenu->Add(new MenuSeparator(
-        "Policy", "Lane clear pauses before an unplanned transform"));
+        "Policy", "Pause before transform"));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu(
         "Coach", "Form and pickup visualization"));
     CoachMenu->Add(new MenuBool("DrawRanges", "Draw current Q, R and boulder", false));
@@ -680,7 +662,6 @@ inline void OnLoad() {
     Form = FormState::Mini;
     Fury = 0.0f;
     FormLastObservedTick = MegaExpireTick = TiredExpireTick = 0;
-    PlayerOverrideUntil = LastLocalSpellTick = 0;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     QMissileNetworkId = 0;
     QMissileMega = QInFlight = false;

@@ -420,6 +420,7 @@ inline void OrbwalkerBase::ReconcileRetainedObjects() {
 inline void OrbwalkerBase::OnGameUpdate() {
     NightSharpPerf::ScopedTimer timer("OrbwalkerKuro::OnGameUpdate");
     ReconcileRetainedObjects();
+    ExpireSettPunchState(Tick());
     if (!menu_.Enabled()) {
         ClearPendingAttackState();
         ClearPostFlashAttackGrace();
@@ -531,6 +532,9 @@ inline void OrbwalkerBase::OnDoCast(const Events::ProcessSpellEventArgs& args) {
 
     context_.lastAutoAttackTick = attackStartTick;
     ReadAttackTimingsFromMemory(player);
+    ObserveSettAttack(args.SpellName, now);
+    SetAttackReleaseSafeTick(
+        now + static_cast<int>(std::ceil(context_.attackWindupMs)));
 
     const AttackableUnit eventTarget = target.IsValid() ? target : context_.lastTarget;
     OrbwalkingActionArgs attackArgs(
@@ -663,6 +667,13 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
     const SDK::ChampionId playerChampionId = player.IsValid()
         ? SDK::ChampionIdFromName(player.CharacterName().c_str())
         : SDK::ChampionId::Unknown;
+    if (playerChampionId == SDK::ChampionId::Sett &&
+        !isAttack &&
+        OrbwalkingDetail::ResolveSpellSlot(args, player) ==
+            static_cast<int>(SpellSlot::Q)) {
+        context_.settNextPunchIsRight = false;
+        context_.settLastPunchTick = now;
+    }
     std::string spellNameStr = args.SpellName ? args.SpellName : "";
     for (auto& c : spellNameStr) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
     context_.lastAttackSpellName = spellNameStr;
@@ -726,6 +737,9 @@ inline void OrbwalkerBase::OnProcessSpell(const Events::ProcessSpellEventArgs& a
         context_.attackCastComplete = false;
     }
     ReadAttackTimingsFromMemory(player);
+    ObserveSettAttack(args.SpellName, now);
+    SetAttackReleaseSafeTick(
+        now + static_cast<int>(std::ceil(context_.attackWindupMs)));
 
     if (player.IsValid() && playerChampionId == SDK::ChampionId::Akshan) {
         const bool isAkshanSecondAttack =
@@ -838,6 +852,8 @@ inline void OrbwalkerBase::OnMissileCreate(const Events::ObjectEventArgs& args) 
     if (!IsLocalAutoAttackMissile(args)) {
         return;
     }
+    const int now = Tick();
+    SetAttackReleaseSafeTick(now);
 
     const AttackableUnit target = ResolveAttackTarget(args);
     if (target.IsValid()) {
@@ -1164,6 +1180,19 @@ inline void OrbwalkerBase::OnPlayAnimation(const Events::PlayAnimationEventArgs&
     const auto player = GameObjects::Player();
     if (!player.IsValid() || !Events::IsLocalPlayer(args.Sender)) {
         return;
+    }
+    if (SDK::ChampionIdFromName(player.CharacterName().c_str()) ==
+        SDK::ChampionId::Sett) {
+        const std::string animation(args.Animation);
+        if (animation == "Spell1_A") {
+            context_.settNextPunchIsRight = true;
+            context_.settLastPunchTick = Tick();
+        } else if (animation == "Spell1_B") {
+            context_.settNextPunchIsRight = false;
+            context_.settLastPunchTick = Tick();
+        } else {
+            ObserveSettAttack(args.Animation, Tick());
+        }
     }
 
     if (SDK::ChampionIdFromName(player.CharacterName().c_str()) == SDK::ChampionId::Rengar) {

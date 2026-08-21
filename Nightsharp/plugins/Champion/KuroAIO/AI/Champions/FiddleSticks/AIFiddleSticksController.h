@@ -40,7 +40,7 @@ inline std::array<int, 8> FearTargetId{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
 inline int LastCombatTick = 0;
-inline int PlayerOverrideUntil = 0;
+
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 inline int InterruptTargetId = 0;
@@ -203,7 +203,7 @@ inline bool CastQ(const AIHeroClient& target, Mode mode, bool reactive = false) 
     const auto player = GameObjects::Player();
     if (!player.IsValid() || RChannel || WChannel || !Engine::ValidEnemy(target, kQRange + 30.0f) ||
         TargetProtected(target) || !Ready(0, mode) || !Throttle(0) ||
-        PreserveAttack(reactive) || PlayerOverrideUntil > Now()) return false;
+        PreserveAttack(reactive)) return false;
     const FearGate gate{true, true, true, RecentlyFeared(target),
                         HasSpellShieldOrImmunity(target), Lethal(target, Engine::RuntimeSpells[0]->GetDamage(target))};
     if (!CanFear(gate)) return false;
@@ -257,7 +257,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool flee = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || WChannel || RChannel || RStormActive || !Engine::ValidEnemy(target, kRRange + 80.0f) ||
         TargetProtected(target) || !Ready(3, mode) || !Throttle(3, 170) ||
-        PreserveAttack(flee) || PlayerOverrideUntil > Now()) return false;
+        PreserveAttack(flee)) return false;
     const Vector3 requested = PredictPosition(target, kRDelay);
     const Vector3 destination = ClampRDestination(player.Position(), requested);
     if (!destination.IsValid() || destination.IsZero() || player.Position().Distance2D(destination) > kRRange + target.BoundingRadius() ||
@@ -374,8 +374,7 @@ inline void ReconcileChannels() {
 
 inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     LastMode = mode;
-    ReconcileChannels();
-    if (PlayerOverrideUntil > Now()) return true;
+    ReconcileChannels();
     if (WChannel || RChannel) return true;
     const AIHeroClient target = SelectTarget(selected, std::max(kRRange, kQRange));
     const bool threatened = IncomingThreatUntil > Now() || IncomingHardCCUntil > Now();
@@ -421,8 +420,7 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
         const int slot = args.Slot;
         if (slot >= 0 && slot < 4) {
             LastCastTick[static_cast<std::size_t>(slot)] = now;
-            if (!Engine::WasControllerCast(slot)) {
-                PlayerOverrideUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
+            if (!Engine::WasControllerCast(slot)) {
                 if (slot == static_cast<int>(SDK::SpellSlot::W)) WInterrupted = true;
                 if (slot == static_cast<int>(SDK::SpellSlot::R)) RInterrupted = true;
             }
@@ -520,10 +518,9 @@ inline void OnDraw() {
 
 inline void BuildMenu(Menu* root) {
     if (!root) return;
-    TacticsMenu = root->AddSubMenu(new Menu("FiddleSticksOneTrick", "Fiddlesticks channel and vision tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after manual spell (ms)", 650, 180, 1500));
+    TacticsMenu = root->AddSubMenu(new Menu("FiddleSticksOneTrick", "Fiddlesticks tactics"));
     FearMenu = TacticsMenu->AddSubMenu(new Menu("Terrify", "Fear and ambush gating"));
-    FearMenu->Add(new MenuBool("RequireAmbushForPassive", "Require brush/effigy for passive fear", true));
+    FearMenu->Add(new MenuBool("RequireAmbushForPassive", "Require brush/effigy for fear", true));
     DrainMenu = TacticsMenu->AddSubMenu(new Menu("BountifulHarvest", "Drain channel safety"));
     DrainMenu->Add(new MenuSlider("MinimumTargets", "Minimum champion drain targets", 1, 1, 4));
     DrainMenu->Add(new MenuSlider("EmergencyHp", "Emergency drain HP", 42, 10, 80));
@@ -542,7 +539,7 @@ inline void OnLoad() {
     std::fill(LastCastTick.begin(), LastCastTick.end(), 0);
     std::fill(FearExpireTick.begin(), FearExpireTick.end(), 0);
     std::fill(FearTargetId.begin(), FearTargetId.end(), 0);
-    LastAutoTargetId = LastAutoTick = LastCombatTick = PlayerOverrideUntil = 0;
+    LastAutoTargetId = LastAutoTick = LastCombatTick = 0;
     IncomingThreatUntil = IncomingHardCCUntil = InterruptTargetId = InterruptExpireTick = 0;
     EffigyObjectId = 0;
     EffigyPosition = {};
@@ -576,7 +573,7 @@ inline constexpr const char* Scenarios[] = {
     "Count predicted storm victims and cap enemy pressure at landing",
     "Handle distinct Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic modes",
     "Use W for jungle objectives and lane clusters rather than generic farm ordering",
-    "Preserve auto-attack windup and yield manual spell ownership",
+    "Preserve auto-attack windup and reconcile spell state/",
     "Track enemy fear, interruptable casts, gapclosers and threat windows by events and polling",
     "Complete every ChampionController callback without claiming item or summoner ownership",
 };

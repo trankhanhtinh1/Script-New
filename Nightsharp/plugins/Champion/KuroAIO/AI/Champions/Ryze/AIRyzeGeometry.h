@@ -4,7 +4,7 @@
 // buff/object discovery, NavMesh queries and casts belong to AIRyzeController.
 // This layer owns Overload first-body interception, Rune/Flux bookkeeping,
 // indirect E-Q bridges, branch-specific mana, auto-weave gates and safe
-// player-authorized Realm Warp policy so the difficult decisions are testable.
+// autonomous Realm Warp policy so the difficult decisions are testable.
 
 #include "../../AIGeometry.h"
 
@@ -557,7 +557,6 @@ enum class QPurpose : std::uint8_t {
     Interrupt,
     Clear,
     Objective,
-    ManualResetAssist,
 };
 
 struct QContext {
@@ -578,7 +577,6 @@ struct QContext {
     bool SpeedNeeded = false;
     bool PreserveTwoRuneSpeed = false;
     bool PriorityVictimHitByFluxSpread = false;
-    bool CursorAgrees = true;
     int RuneStacks = 0;
     int FluxVictims = 1;
     int NearbyEnemies = 1;
@@ -620,11 +618,6 @@ inline CastEvaluation EvaluateQ(const QContext& context) {
         result.Reason = "Q prediction below branch threshold";
         return result;
     }
-    if (!context.CursorAgrees && !urgent &&
-        context.Purpose != QPurpose::Clear) {
-        result.Reason = "Q conflicts with player cursor";
-        return result;
-    }
     if (context.PreserveTwoRuneSpeed && context.RuneStacks >= 2 &&
         !context.SpeedNeeded && !context.Lethal &&
         context.Purpose == QPurpose::Harass) {
@@ -651,7 +644,6 @@ inline CastEvaluation EvaluateQ(const QContext& context) {
     case QPurpose::FluxBurst: score += 170.0f; break;
     case QPurpose::RootFollowup: score += 145.0f; break;
     case QPurpose::Objective: score += 90.0f; break;
-    case QPurpose::ManualResetAssist: score += 115.0f; break;
     default: break;
     }
     result.Cast = score >= 300.0f;
@@ -983,7 +975,6 @@ inline bool ShouldWeaveAuto(const AutoWeaveContext& context) {
 }
 
 enum class WarpPurpose : std::uint8_t {
-    ManualCursor,
     EmergencyEscape,
     ObjectiveTransfer,
     WaveTransfer,
@@ -992,8 +983,6 @@ enum class WarpPurpose : std::uint8_t {
 struct WarpContext {
     bool Ready = false;
     bool HasMana = false;
-    bool ManualAuthorized = false;
-    bool AutomaticEmergencyOptIn = false;
     bool OriginValid = false;
     bool DestinationValid = false;
     bool DestinationNavigable = false;
@@ -1002,14 +991,12 @@ struct WarpContext {
     bool PlayerRootedOrGrounded = false;
     bool IncomingInterruptLikely = false;
     bool AllyChannelWouldBeBroken = false;
-    bool CursorAgrees = true;
-    bool AllowUnsafeManual = false;
     bool PlayerInLethalDanger = false;
     int AlliesAtDestination = 0;
     int EnemiesAtDestination = 0;
     int AlliesInPortal = 1;
     float Distance = 0.0f;
-    WarpPurpose Purpose = WarpPurpose::ManualCursor;
+    WarpPurpose Purpose = WarpPurpose::EmergencyEscape;
 };
 
 inline Vec3 ClampWarpDestination(const Vec3& origin,
@@ -1039,11 +1026,11 @@ inline CastEvaluation EvaluateWarp(const WarpContext& context) {
         result.Reason = "Realm Warp unavailable";
         return result;
     }
-    const bool emergencyAuthorized = context.Purpose ==
-        WarpPurpose::EmergencyEscape && context.AutomaticEmergencyOptIn &&
+    const bool emergencyAuthorized =
+        context.Purpose == WarpPurpose::EmergencyEscape &&
         context.PlayerInLethalDanger;
-    if (!context.ManualAuthorized && !emergencyAuthorized) {
-        result.Reason = "Realm Warp remains player-authorized";
+    if (!emergencyAuthorized) {
+        result.Reason = "Realm Warp emergency policy not met";
         return result;
     }
     if (context.Distance < kRealmWarpMinimumRange - 0.01f ||
@@ -1057,38 +1044,25 @@ inline CastEvaluation EvaluateWarp(const WarpContext& context) {
         return result;
     }
     if (context.AllyChannelWouldBeBroken && context.AlliesInPortal > 1) {
-        result.Reason = "do not abduct an allied protected channel";
+        result.Reason = "protected allied channel would be interrupted";
         return result;
     }
-    if (!context.AllowUnsafeManual &&
-        (context.DestinationUnderEnemyTurret ||
-         context.EnemiesAtDestination > context.AlliesAtDestination + 1 ||
-         (!context.DestinationHasVision && context.EnemiesAtDestination > 0))) {
+    if (context.DestinationUnderEnemyTurret ||
+        context.EnemiesAtDestination > context.AlliesAtDestination + 1 ||
+        (!context.DestinationHasVision && context.EnemiesAtDestination > 0)) {
         result.Reason = "unsafe or blind Realm Warp arrival";
         return result;
     }
-    if (!context.CursorAgrees && context.ManualAuthorized) {
-        result.Reason = "manual endpoint no longer agrees with cursor";
-        return result;
-    }
-
-    float score = context.ManualAuthorized ? 700.0f : 540.0f;
+    float score = 540.0f;
     score += static_cast<float>(context.AlliesAtDestination) * 95.0f;
     score -= static_cast<float>(context.EnemiesAtDestination) * 130.0f;
     score += context.DestinationHasVision ? 90.0f : -120.0f;
-    if (context.PlayerInLethalDanger) score += 320.0f;
-    if (context.DestinationUnderEnemyTurret)
-        score -= context.AllowUnsafeManual ? 150.0f : 800.0f;
-    switch (context.Purpose) {
-    case WarpPurpose::ObjectiveTransfer: score += 130.0f; break;
-    case WarpPurpose::EmergencyEscape: score += 240.0f; break;
-    case WarpPurpose::WaveTransfer: score += 45.0f; break;
-    default: break;
-    }
+    score += 320.0f;
+    score += 240.0f;
     result.Cast = score >= 520.0f;
     result.Score = score;
     result.Reason = result.Cast
-        ? "player-authorized safe Realm Warp"
+        ? "automatic safe Realm Warp"
         : "Realm Warp value below threshold";
     return result;
 }

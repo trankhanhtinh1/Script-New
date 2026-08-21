@@ -31,7 +31,6 @@ inline bool QActive = false;
 inline int TranscendentUntil = 0;
 inline int QActiveUntil = 0;
 inline int ObservedQResource = 0;
-inline int ManualUntil = 0;
 inline int LastQCastTick = 0;
 inline int LastWCastTick = 0;
 inline int LastECastTick = 0;
@@ -234,14 +233,12 @@ inline bool CastBaseE(Mode mode) {
     return true;
 }
 
-inline UltimateContext BuildRContext(const AIHeroClient& target,
-                                     bool manual) {
+inline UltimateContext BuildRContext(const AIHeroClient& target) {
     UltimateContext context{};
     const auto player = GameObjects::Player();
     context.Ready = Engine::RuntimeSpells[3] &&
         Engine::RuntimeSpells[3]->IsReady();
     context.AlreadyActive = Transcendent || RuntimeW2() || RuntimeE2();
-    context.Manual = manual;
     if (!player.IsValid() || !TargetUsable(target)) return context;
     const float distance = player.Position().Distance2D(target.Position());
     context.TargetReachable = distance <= kWRange + target.BoundingRadius() ||
@@ -262,13 +259,12 @@ inline UltimateContext BuildRContext(const AIHeroClient& target,
 }
 
 inline bool CastR(const AIHeroClient& target,
-                  Mode mode,
-                  bool manual = false) {
+                  Mode mode) {
     if (!Engine::RuntimeSpells[3] ||
         !Engine::RuntimeSpells[3]->IsReady() ||
         !CastThrottlePassed(LastRCastTick, 100)) return false;
-    if (!manual && !CanUse(3, mode, true)) return false;
-    const auto context = BuildRContext(target, manual);
+    if (!CanUse(3, mode, true)) return false;
+    const auto context = BuildRContext(target);
     if (!MayTranscend(context) || !Engine::ControllerCastSelf(3)) {
         return false;
     }
@@ -302,9 +298,9 @@ inline MarksmanTargeting::TargetContext TargetFacts(
     return context;
 }
 
-inline AIHeroClient SelectTarget(const AIHeroClient& preferred, Mode mode) {
+inline AIHeroClient SelectTarget(Mode mode) {
     return ControllerHelpers::SelectReachableEnemy(
-        preferred, kWRange + 100.0f,
+        {}, kWRange + 100.0f,
         [mode](const AIHeroClient& enemy) {
             return TargetFacts(enemy, mode);
         });
@@ -329,28 +325,23 @@ inline bool TryGapcloser() {
     return CastBaseE(Mode::Automatic);
 }
 
-inline bool TryKillSecure(const AIHeroClient& preferred) {
+inline bool TryKillSecure() {
     if (!Bool(Engine::AutomaticMenu, "KillSecure", true)) return false;
-    const auto target = SelectTarget(preferred, Mode::Automatic);
+    const auto target = SelectTarget(Mode::Automatic);
     if (!TargetUsable(target)) return false;
     SDK::PredictionOutput prediction{};
     auto w = BuildWContext(target, Mode::Automatic, false, prediction);
     if (w.Lethal && CastW(target, Mode::Automatic)) return true;
-    const auto r = BuildRContext(target, false);
+    const auto r = BuildRContext(target);
     return r.EmpoweredWLethal && CastR(target, Mode::Automatic);
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     LastMode = mode;
     ReconcileState();
-    if (ManualUntil > Now()) return false;
-
-    const auto target = SelectTarget(preferred,
+    const auto target = SelectTarget(
         mode == Mode::None ? Mode::Automatic : mode);
-    if (ManualUltimatePressed() && CastR(target, Mode::Automatic, true)) {
-        return true;
-    }
-    if (TryPendingRuin() || TryGapcloser() || TryKillSecure(preferred)) {
+    if (TryPendingRuin() || TryGapcloser() || TryKillSecure()) {
         return true;
     }
 
@@ -367,7 +358,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& preferred) {
             !LocalAttackReadySoon(target, 260)) return CastBaseE(mode);
     } else if (mode == Mode::Flee) {
         const auto threat = ControllerHelpers::NearestEnemyToPlayer(
-            preferred, kWRange + 100.0f);
+            {}, kWRange + 100.0f);
         if (CastEmpoweredE(threat, mode, true)) return true;
         if (CastW(threat, mode, true)) return true;
         return CastBaseE(mode);
@@ -419,9 +410,6 @@ inline void ObserveLocalSpell(
         Transcendent = QActive = true;
         TranscendentUntil = QActiveUntil = now + kRDurationMs;
     }
-    if (index >= 0 && !Engine::WasControllerCast(index)) {
-        ManualUntil = now + (index == 1 ? 700 : 420);
-    }
 }
 
 inline void UpdateBuffState(
@@ -454,20 +442,20 @@ inline void BuildMenu(Menu* root) {
     TranscendMenu = TacticsMenu->AddSubMenu(new Menu(
         "TranscendLogic", "Transcend One's Self"));
     TranscendMenu->Add(new MenuSlider(
-        "MinimumHealth", "Minimum health percent for automatic R", 32, 10, 80));
+        "MinimumHealth", "Min health for automatic R", 32, 10, 80));
     TranscendMenu->Add(new MenuSlider(
-        "MaximumEnemies", "Maximum nearby enemies for automatic R", 2, 1, 5));
+        "MaximumEnemies", "Max nearby enemies for auto R", 2, 1, 5));
     MobilityMenu = TacticsMenu->AddSubMenu(new Menu(
         "ShadowSafety", "Untouchable Shadow Safety"));
     MobilityMenu->Add(new MenuSlider(
         "MaximumEnemies", "Maximum enemies at E landing", 1, 0, 3));
     MobilityMenu->Add(new MenuSeparator(
-        "Conservative", "Unobserved R/E state disables dash automation"));
+        "Conservative", "Unknown R/E blocks dash"));
 }
 
 inline void OnLoad() {
     Transcendent = QActive = false;
-    TranscendentUntil = QActiveUntil = ObservedQResource = ManualUntil = 0;
+    TranscendentUntil = QActiveUntil = ObservedQResource = 0;
     LastQCastTick = LastWCastTick = LastECastTick = LastRCastTick = 0;
     LastAfterAttackTick = LastAfterAttackTargetId = 0;
     PendingRuinTargetId = PendingRuinUntil = 0;
@@ -500,10 +488,10 @@ inline constexpr const char* Scenarios[] = {
     "Use empowered E2 only to a clamped walkable 450-unit endpoint",
     "Reject E2 into new turret aggro, lockdown or excess enemies",
     "Use W/E conservatively against a committed gapcloser",
-    "Cooperate with selected and orbwalker targets without forced-target ownership",
+    "Use the engine-selected target with threat-aware gapcloser policy",
     "Reject Yunara projectile attacks across a projectile wall",
     "Run Combo, Harass, LaneClear, Jungle, LastHit, Flee and Automatic policies",
-    "Yield briefly after player-owned Q/W/E/R casts",
+    "Reconcile player Q/W/E/R casts from events without ownership delays",
     "Never automate summoners, items or an unobservable empowered form",
 };
 

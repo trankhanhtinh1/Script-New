@@ -33,10 +33,8 @@ inline Menu* CoachMenu = nullptr;
 inline std::array<int, 4> LastCastTick{};
 inline int LastAutoTargetId = 0;
 inline int LastAutoTick = 0;
-inline int SelectedAllyId = 0;
 inline int LastEnemyThreatUntil = 0;
 inline int LastHardCcThreatUntil = 0;
-inline int ManualOwnershipUntil = 0;
 inline int QChargeStartedTick = 0;
 inline int QLastReleaseTick = 0;
 inline int RActiveUntil = 0;
@@ -63,11 +61,7 @@ inline bool ProtectedTarget(const AIHeroClient& target) {
         HasSpellShieldOrImmunity(target);
 }
 
-inline AIHeroClient SelectEnemy(const AIHeroClient& selected,
-                                float range = kQMaxRange) {
-    if (Engine::ValidEnemy(selected, range)) return selected;
-    const auto orb = ControllerHelpers::OrbwalkerHeroTarget(range);
-    if (Engine::ValidEnemy(orb, range)) return orb;
+inline AIHeroClient SelectEnemy(float range = kQMaxRange) {
     return Engine::SelectTarget(range);
 }
 
@@ -79,18 +73,16 @@ inline AIHeroClient SelectAlly(bool defensive = false) {
     for (const auto& ally : GameObjects::AllyHeroes()) {
         if (!Engine::ValidAlly(ally, kERange) ||
             ally.NetworkId() == player.NetworkId()) continue;
-        const bool selected = static_cast<int>(ally.NetworkId()) == SelectedAllyId;
         const int nearby = Engine::CountEnemiesAt(ally.Position(), 700.0f);
         const float score = AllyPriority(ally.HealthPercent(),
                                          ally.TotalAttackDamage(), ally.AP(),
-                                         nearby, selected);
+                                         nearby, false);
         if (score > bestScore) {
             best = ally;
             bestScore = score;
         }
     }
     if (!best.IsValid() && defensive) return player;
-    if (best.IsValid()) SelectedAllyId = static_cast<int>(best.NetworkId());
     return best;
 }
 
@@ -184,7 +176,6 @@ inline bool CastE(const AIHeroClient& ally, Mode mode,
     if (!ShieldWorthwhile(ally.HealthPercent(), nearby, offensive,
                           static_cast<float>(Slider(EMenu, "ShieldHealth", 92)))) return false;
     if (!Engine::ControllerCastUnit(2, ally)) return false;
-    SelectedAllyId = static_cast<int>(ally.NetworkId());
     LastCastTick[2] = Now();
     return true;
 }
@@ -207,15 +198,14 @@ inline bool CastR(const AIHeroClient& threatTarget, Mode mode,
                      Engine::UnderEnemyTurret(player.Position()),
                      SDK::NavMesh::IsWall(player.Position()),
                      Slider(RMenu, "MaximumEnemies", 3))) return false;
-    if (defensive && Engine::ValidEnemy(threatTarget) &&
-        !CursorPeelSafe(player.Position(), Game::CursorPos(),
-                        threatTarget.Position(),
-                        static_cast<float>(Slider(RMenu, "CursorDot", 0)))) return false;
     if (!defensive && enemies < Slider(RMenu, "MinimumTargets", 2)) return false;
     if (!Engine::ControllerCastSelf(3)) return false;
     LastCastTick[3] = Now();
     RActiveUntil = Now() + static_cast<int>(kRDurationSeconds * 1000.0f);
-    LastRPeelDirection = PeelDirection(player.Position(), Game::CursorPos());
+    const Vector3 peelTarget = mode == Mode::Flee
+        ? Game::CursorPos()
+        : (Engine::ValidEnemy(threatTarget) ? threatTarget.Position() : player.Position());
+    LastRPeelDirection = PeelDirection(player.Position(), peelTarget);
     return true;
 }
 
@@ -287,14 +277,12 @@ inline void ReconcileState() {
     }
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
     const auto player = GameObjects::Player();
     if (!player.IsValid()) return true;
     if (RActiveUntil > Now()) return true;
-    if (ManualOwnershipUntil > Now()) return true;
-    const AIHeroClient target = SelectEnemy(selected,
-        mode == Mode::Flee ? kQMaxRange : kQMaxRange);
+    const AIHeroClient target = SelectEnemy(kQMaxRange);
     if (mode == Mode::Automatic && DefensiveAutomatic(target)) return true;
     switch (mode) {
     case Mode::Combo: Combo(target); break;
@@ -319,8 +307,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot >= 0 && slot < 4) {
-            if (!Engine::WasControllerCast(slot))
-                ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 560);
             LastCastTick[static_cast<std::size_t>(slot)] = now;
             if (slot == 0) {
                 const auto player = GameObjects::Player();
@@ -382,7 +368,6 @@ inline void OnDraw() {
 inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("JannaTactics", "Janna support tactics"));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 560, 180, 1200));
     TacticsMenu->Add(new MenuSlider("AllyHealth", "Automatic ally health threshold", 60, 10, 95));
     TacticsMenu->Add(new MenuSlider("PlayerHealth", "Automatic player health threshold", 40, 10, 95));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Howling Gale charge"));
@@ -395,7 +380,6 @@ inline void BuildMenu(Menu* root) {
     RMenu->Add(new MenuSlider("AllyHealth", "Monsoon ally health threshold", 55, 10, 95));
     RMenu->Add(new MenuSlider("MaximumEnemies", "Maximum enemies in zone", 3, 0, 5));
     RMenu->Add(new MenuSlider("MinimumTargets", "Minimum combo enemies", 2, 1, 5));
-    RMenu->Add(new MenuSlider("CursorDot", "Cursor peel alignment", 0, -100, 100));
     FarmMenu = TacticsMenu->AddSubMenu(new Menu("JannaFarm", "Farm resources"));
     FarmMenu->Add(new MenuSlider("Mana", "Minimum mana percent", 35, 0, 90));
     CoachMenu = TacticsMenu->AddSubMenu(new Menu("JannaCoach", "Visual coaching"));
@@ -404,8 +388,8 @@ inline void BuildMenu(Menu* root) {
 
 inline void OnLoad() {
     LastCastTick.fill(0);
-    LastAutoTargetId = LastAutoTick = SelectedAllyId = 0;
-    LastEnemyThreatUntil = LastHardCcThreatUntil = ManualOwnershipUntil = 0;
+    LastAutoTargetId = LastAutoTick = 0;
+    LastEnemyThreatUntil = LastHardCcThreatUntil = 0;
     QChargeStartedTick = QLastReleaseTick = RActiveUntil = 0;
     GapcloserTargetId = GapcloserExpireTick = InterruptTargetId = InterruptExpireTick = 0;
     GapcloserEndpoint = {};
@@ -421,22 +405,22 @@ inline void OnUnload() {
 
 inline constexpr const char* Scenarios[] = {
     "Pin all mechanics to Riot 26.15 and CommunityDragon 16.15 Janna metadata",
-    "Select explicit enemy before orbwalker fallback and preserve selected target",
+    "Select autonomous enemy targets while retaining orbwalker fallback",
     "Track Howling Gale initial cast, charge duration, direction and recast release",
     "Release Q at target reach or urgent interrupt timing with predicted position",
     "Reject Q through projectile walls and protected spell-shield targets",
     "Use Zephyr as a targeted slow only when poke, threat or disengage is worthwhile",
-    "Score Eye of the Storm allies by missing health, AD/AP, threat and selection",
+    "Score Eye of the Storm allies by missing health, AD/AP and threat",
     "Shield defensively or grant offensive AD without wasting a full-health cast",
     "Track Monsoon channel state and stop issuing casts while its heal zone is active",
     "Require Monsoon zone safety for enemy density, wall and turret conditions",
-    "Use cursor-aligned peel direction for defensive Monsoon knockback intent",
+    "Use cursor-directed peel only for Flee Monsoon movement",
     "Automatic mode shields threatened allies and reacts to observed enemy CC",
     "Combo prioritizes ally shield, charged tornado, Zephyr slow and defensive Monsoon",
     "Harass preserves mana floor while charging Q and using Zephyr selectively",
     "Flee shields an ally, releases tornado, slows pursuer and peels with Monsoon",
     "LaneClear Jungle and LastHit delegate only after Janna mana floor is met",
-    "Preserve auto-attack windup and yield ownership after manual spell casts",
+    "Preserve auto-attack windup while resuming autonomous spell decisions",
     "Reconcile Q/R buffs and runtime charging state through polling and events",
     "Expose complete load menu update draw spell buff attack and cast callbacks",
 };

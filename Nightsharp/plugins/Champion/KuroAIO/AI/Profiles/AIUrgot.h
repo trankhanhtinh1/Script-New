@@ -22,7 +22,6 @@ inline constexpr ChampionProfile Urgot = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 70;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "UrgotPassive";
@@ -83,10 +82,10 @@ inline constexpr ChampionProfile Urgot = [] {
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireSafePosition, 120, 1000),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget | StepRule::RequireMark, 250, 2200),
         Step(SDK::SpellSlot::R, StepRule::RequireTarget | StepRule::RequireTargetLow | StepRule::HoldForExecute, 500, 3200));
-    p.Flee = Plan("Disdain peel and manual harpoon",
+    p.Flee = Plan("Disdain peel and harpoon execute",
         Step(SDK::SpellSlot::E, StepRule::RequireTarget | StepRule::RequireSafePosition, 0, 850),
         Step(SDK::SpellSlot::W, StepRule::RequireTarget, 110, 1100),
-        Step(SDK::SpellSlot::R, StepRule::ManualAssistOnly | StepRule::RequireTargetLow, 180, 1400));
+        Step(SDK::SpellSlot::R, StepRule::RequireTargetLow | StepRule::HoldForExecute, 180, 1400));
     return p;
 }();
 

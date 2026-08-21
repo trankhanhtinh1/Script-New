@@ -17,7 +17,6 @@ using ControllerHelpers::AnalyzeEnemyCast;
 using ControllerHelpers::CaptureAfterAttack;
 using ControllerHelpers::HasSpellShieldOrImmunity;
 using ControllerHelpers::IsLocalPlayer;
-using ControllerHelpers::NearestEnemyToPlayer;
 using ControllerHelpers::PlayerMobilityLocked;
 using ControllerHelpers::PredictPosition;
 using ControllerHelpers::SpellEnabled;
@@ -50,7 +49,6 @@ inline int RExpireTick = 0;
 inline bool RHooked = false;
 inline bool RRecastReady = false;
 inline bool RChanneling = false;
-inline int ManualOwnershipUntil = 0;
 inline int IncomingThreatUntil = 0;
 inline int IncomingHardCCUntil = 0;
 
@@ -85,8 +83,7 @@ inline bool Marked(const AIHeroClient& target) {
 }
 
 inline bool PreserveWindup(bool reactive, bool lethal = false) {
-    return PreserveAttackWindup(Orbwalker::IsWindingUp(), reactive, lethal,
-                                ManualOwnershipUntil > Now()) &&
+    return PreserveAttackWindup(Orbwalker::IsWindingUp(), reactive, lethal) &&
         Bool(TacticsMenu, "PreserveAA", true);
 }
 
@@ -233,8 +230,7 @@ inline bool CastE(const AIHeroClient& target, Mode mode, bool reactive = false) 
     return true;
 }
 
-inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
-                  bool manual = false) {
+inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false) {
     const auto player = GameObjects::Player();
     if (!player.IsValid() || ProtectedTarget(target) || !Ready(3, mode) || !Throttle(3, 120)) return false;
     const int id = static_cast<int>(target.NetworkId());
@@ -249,7 +245,7 @@ inline bool CastR(const AIHeroClient& target, Mode mode, bool reactive = false,
     const bool lethal = Lethal(target, damage);
     const bool initialGate = RInitialCastAllowed(target.HealthPercent(), damage, target.Health(),
         target.AllShield(), static_cast<float>(Slider(RMenu, "InitialHP", 35)));
-    if (!ShouldCastR({true, true, true, initialGate, false, manual, lethal}) && !reactive) return false;
+    if (!ShouldCastR({true, true, true, initialGate, false, lethal}) && !reactive) return false;
     const auto prediction = Engine::RuntimeSpells[3]->GetPrediction(target);
     const Vec3 aim = prediction.GetCastPosition().IsValid() && !prediction.GetCastPosition().IsZero()
         ? prediction.GetCastPosition() : PredictPosition(target, kRDelay);
@@ -318,11 +314,10 @@ inline void ReconcileState() {
     for (auto& tick : LegReadyTick) if (tick < now - 60000) tick = now;
 }
 
-inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
+inline bool OnUpdate(Mode mode, const AIHeroClient&) {
     ReconcileState();
-    const auto target = ControllerHelpers::PreferredEnemyTarget(selected,
+    const auto target = Engine::SelectTarget(
         mode == Mode::Flee ? 1000.0f : kRRange + 100.0f);
-    if (ManualOwnershipUntil > Now()) return true;
     if (IncomingThreatUntil > Now() && Engine::ValidEnemy(target)) {
         if (CastE(target, mode, true)) return true;
         if (CastW(target, mode, true)) return true;
@@ -332,7 +327,7 @@ inline bool OnUpdate(Mode mode, const AIHeroClient& selected) {
     switch (mode) {
     case Mode::Combo: Combo(target); break;
     case Mode::Harass: Harass(target); break;
-    case Mode::Flee: Flee(NearestEnemyToPlayer(target, 1000.0f)); break;
+    case Mode::Flee: Flee(target); break;
     case Mode::LaneClear:
     case Mode::Jungle:
         if (ResourceReady(mode) && Engine::CountEnemiesAt(GameObjects::Player().Position(), kWRange) == 0)
@@ -357,7 +352,6 @@ inline void OnProcessSpell(const SDK::Events::ProcessSpellEventArgs& args) {
     if (IsLocalPlayer(args.Sender)) {
         const int slot = static_cast<int>(args.Slot);
         if (slot < 0 || slot > 3) return;
-        if (!Engine::WasControllerCast(slot)) ManualOwnershipUntil = now + Slider(TacticsMenu, "ManualOwnershipMs", 650);
         LastCastTick[slot] = now;
         if (slot == 1) { if (!Engine::WasControllerCast(slot)) WActive = !WActive; WCastTick = now; }
         if (slot == 3) { RCastTick = now; RExpireTick = now + kRRecastWindowMs; }
@@ -433,7 +427,6 @@ inline void BuildMenu(Menu* root) {
     if (!root) return;
     TacticsMenu = root->AddSubMenu(new Menu("UrgotOneTrick", "Urgot shotgun tactics"));
     TacticsMenu->Add(new MenuBool("PreserveAA", "Preserve passive leg windup", true));
-    TacticsMenu->Add(new MenuSlider("ManualOwnershipMs", "Yield after player spell (ms)", 650, 200, 1400));
     QMenu = TacticsMenu->AddSubMenu(new Menu("Q", "Corrosive Charge"));
     WMenu = TacticsMenu->AddSubMenu(new Menu("W", "Purge"));
     WMenu->Add(new MenuSlider("HarassMana", "Harass mana percent", 45, 10, 90));
@@ -455,7 +448,6 @@ inline void OnLoad() {
     LegReadyTick.fill(0); LastCastTick.fill(0); LastAutoTargetId = LastAutoTick = 0;
     QMarkedTargetId = QMarkExpireTick = WTargetId = WCastTick = WStopTick = 0;
     WActive = false; ETargetId = EStunExpireTick = 0; RTargetId = RCastTick = RExpireTick = 0;
-    RHooked = RRecastReady = RChanneling = false; ManualOwnershipUntil = 0;
     IncomingThreatUntil = IncomingHardCCUntil = 0;
 }
 inline void OnUnload() {
@@ -467,8 +459,7 @@ inline constexpr const char* Scenarios[] = {
     "Pin Corrosive Charge, Purge, Disdain and Fear Beyond Death to Riot 26.15 / CommunityDragon 16.15",
     "Track six passive shotgun legs and poll zone buffs without inventing a ready leg",
     "Start each leg cooldown from observed attacks and preserve a valuable passive window",
-    "Require Q prediction, range and first-collision ownership before applying slow/mark",
-    "Prefer the selected target, then orbwalker target, then selector fallback",
+    "Use the autonomous Engine target for mark, pressure and execute decisions",
     "Treat Purge as a toggle with explicit target lock, range, farm value and stop gates",
     "Do not cast over an ordinary AA windup unless reactive or lethal",
     "Use Disdain's real 475 range and shield value for engage or threat peel",

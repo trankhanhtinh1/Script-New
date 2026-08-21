@@ -19,7 +19,7 @@ inline constexpr ChampionProfile Taliyah = [] {
     p.Mechanics = Mechanic::ObjectTracking | Mechanic::Trap |
                   Mechanic::Terrain | Mechanic::WallInteraction |
                   Mechanic::Channel | Mechanic::AutoWeave;
-    p.Ultimate = UltimatePolicy::ManualAssist;
+    p.Ultimate = UltimatePolicy::Defensive;
 
     p.Spells[0] = Spell(
         SDK::SpellSlot::Q, "Threaded Volley", CastKind::Line,
@@ -123,7 +123,6 @@ inline constexpr ChampionProfile Taliyah = [] {
     p.UltimateMinimumTargets = 1;
     p.MaximumCommitEnemies = 2;
     p.BaseHumanizerMs = 31;
-    p.PreferSelectedTarget = true;
     p.AllowTurretDiveIfKillable = false;
     p.ProtectManualChannels = true;
     p.PassiveBuff = "TaliyahPassive";
@@ -135,7 +134,7 @@ inline constexpr ChampionProfile Taliyah = [] {
     p.ThemeTo = 0xFF62D6E8u;
     p.ThemeSpeed = 0.86f;
     p.TacticalSummary =
-        "Resolve accelerating/full-volley versus fixed-speed/boulder Q first body and AoE; track every Worked Ground zone; select E-W or W-E by dash, spacing, row timing and ally follow-up; choose W vectors that convert mines without saving the enemy or delivering a diver; reserve Weaver's Wall for an explicit player key and verified team partition.";
+        "Resolve accelerating/full-volley versus fixed-speed/boulder Q first body and AoE; track every Worked Ground zone; select E-W or W-E by dash, spacing, row timing and ally follow-up; choose W vectors that convert mines without saving the enemy or delivering a diver; cast Weaver's Wall only for a safe autonomous team partition and cursor-guided route.";
     p.ResearchSummary =
         "Pinned to CommunityDragon PC 16.14 (15 July 2026) and reconciled with Riot 12.9, 12.10, 13.9, 25.12, 25.18, 26.2, 26.5 and 26.9; cross-checked with current OP.GG order, TaliyahMains W-E/E-W discussions, Challenger Season-14/16 guides, KR OTP 26.3-26.4, EUW Challenger 26.13 and Faker/Chovy 2025 POVs.";
     return p;
